@@ -77,7 +77,7 @@ const HAM_DOI_TRANG_THAI = [
   "dispatchUnseal",
   // [S1.201 / S3.6a] Ngừng dùng hay dùng lại một nhóm hàng — route đòi `category.manage`, hàm hỏi lại cùng mã.
   "doiTrangThaiNhomHang",
-  // [S1.9101 / S3.3b / K4a] Lập và rút ngoại lệ cạnh tranh — route đòi `rfq.invite`, hàm hỏi lại cùng mã.
+  // [S1.265 / S3.3b / K4a] Lập và rút ngoại lệ cạnh tranh — route đòi `rfq.invite`, hàm hỏi lại cùng mã.
   "lapNgoaiLe",
   "rutNgoaiLe",
   // [S1.196 / S3.3a / K8a] Thu hồi xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
@@ -281,7 +281,7 @@ const HAM_DOC_CO_QUYEN = [
   // hạng chịu, và lời gọi đứng THẲNG trong thân `docTraoThau` (khoản 33).
   "docTraoThau",
   "listInvitations",
-  // [S1.9101 / S3.3b] Ngoại lệ cạnh tranh của một gói — một phần của danh sách mời, trong cùng băm người duyệt ký; cổng
+  // [S1.265 / S3.3b] Ngoại lệ cạnh tranh của một gói — một phần của danh sách mời, trong cùng băm người duyệt ký; cổng
   // `rfq.invite` đứng THẲNG trong thân `docNgoaiLe`, cùng cổng của `listInvitations`.
   "docNgoaiLe",
   // [mảnh 1 / màn xuất bằng chứng] Bộ bằng chứng mang MỌI hàng của MỌI lượt chấm — rộng hơn cả

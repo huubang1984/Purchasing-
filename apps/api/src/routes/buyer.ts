@@ -396,7 +396,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/exceptions",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.3b · spec S3 §4.4] Ngoại lệ cạnh tranh của gói, kèm lần rút. Cùng khuôn danh sách lời mời ngay trên — ngoại lệ là
+    // [S1.265 / S3.3b · spec S3 §4.4] Ngoại lệ cạnh tranh của gói, kèm lần rút. Cùng khuôn danh sách lời mời ngay trên — ngoại lệ là
     // một phần của danh sách ấy, nằm trong cùng băm mà người duyệt ký: cổng `rfq.invite` nằm THẲNG trong thân `docNgoaiLe` (rổ
     // `HAM_DOC_CO_QUYEN`), và KHÔNG `agent: true` — lý do vì sao gói không đủ cạnh tranh là dữ liệu kiểm soát của bên mua.
     agent: false,
@@ -1339,7 +1339,7 @@ const ghi: readonly BuyerWriteRoute[] = [
       },
     }),
   },
-  // [S1.9101 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh. Cổng của bộ điều phối là `rfq.invite` (ADR-084 ⑵), hàm gói hỏi lại
+  // [S1.265 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh. Cổng của bộ điều phối là `rfq.invite` (ADR-084 ⑵), hàm gói hỏi lại
   // cùng mã; trigger `ngoai_le_kiem` chặn ngoài DRAFT, và lần chặn ấy vào sổ `CONTROL_DENIED` (`K4A_NGOAI_LE_SAI_TRANG_THAI`). Chỉ
   // tổ chức đã bật S3.
   {

@@ -11342,15 +11342,15 @@ chặn; bộ đọc kiểm nhóm chính sách và `phuong_phap`. Chi tiết và 
 
 ---
 
-## ADR-9201 — S3.3b: ngoại lệ cạnh tranh — chỉ-ghi-thêm có hàng rút, chỉ đổi ở DRAFT, nằm trong băm danh sách người duyệt ký; tác giả CÒN SỐNG vào tập loại trừ; ai mời được thì đọc được
+## ADR-145 — S3.3b: ngoại lệ cạnh tranh — chỉ-ghi-thêm có hàng rút, chỉ đổi ở DRAFT, nằm trong băm danh sách người duyệt ký; tác giả CÒN SỐNG vào tập loại trừ; ai mời được thì đọc được
 
 **Ngày:** 2026-10-03 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29 năm điểm hình dạng và sàn giải trình của
 mã `OTHER` là 100 byte (⑴–⑸ dưới đây); ngày 2026-09-30 (ADR-121) vế *tác giả ngoại lệ* vào CHÍNH `rfq_tap_loai_tru`; ngày
 2026-10-03 hai câu, cả hai theo đề xuất: ⑹ tập loại trừ tính tác giả ngoại lệ CÒN SỐNG, ⑺ cổng đọc là `rfq.invite`. ⑻–⑽ là sửa
-của lượt soi hình dạng, trong phạm vi các lựa chọn ấy · **[S1.9101]** · **Liên quan:** ADR-080 (công tắc), ADR-082 ⑿ (tập loại
+của lượt soi hình dạng, trong phạm vi các lựa chọn ấy · **[S1.265]** · **Liên quan:** ADR-080 (công tắc), ADR-082 ⑿ (tập loại
 trừ), ADR-084 ⑵ ⑷ (mã quyền, `CONTROL_DENIED`), ADR-108 (từ chối có tên), ADR-114 (K4a vào sổ), ADR-115, ADR-117 (chữ ký mang
 ngân sách và lần nộp), ADR-118 (cổng đọc của người duyệt), ADR-121 (tập loại trừ một hàm) · **Spec:** S3 §4.4, §5.1 K4 K5 K12,
-§8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.265
 
 ### Bối cảnh
 

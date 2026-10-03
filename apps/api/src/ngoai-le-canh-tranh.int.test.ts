@@ -1,7 +1,7 @@
 // ==============================================================================================
-// [S1.9101 / S3.3b · spec S3 §4.4 · K4a · K4b · K12] NGOẠI LỆ CẠNH TRANH — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP VÀ DƯỚI `app_api`
+// [S1.265 / S3.3b · spec S3 §4.4 · K4a · K4b · K12] NGOẠI LỆ CẠNH TRANH — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP VÀ DƯỚI `app_api`
 //
-// Migration `9501_ngoai_le_canh_tranh`, gói `packages/invitation/src/ngoai-le.ts`, ba route của `apps/api`. Hợp đồng đo ở đây:
+// Migration `105_ngoai_le_canh_tranh`, gói `packages/invitation/src/ngoai-le.ts`, ba route của `apps/api`. Hợp đồng đo ở đây:
 //   ⑴ lập ở DRAFT: `201`, một hàng `LAP` của đúng người phiên, một hàng sổ `SOURCING_EXCEPTION_CREATED` mang loại và mã — không
 //      mang giải trình; đọc lại thấy còn sống;
 //   ⑵ băm danh sách (`rfq_bam_danh_sach`): gói KHÔNG ngoại lệ giữ đúng băm của `076`; ngoại lệ còn sống vào băm bằng đúng một
@@ -452,7 +452,7 @@ afterAll(async () => {
 // =============================================================================================
 // ⑴ ⑵ ⑶ — LẬP, BĂM, RÚT
 // =============================================================================================
-describe("[S1.9101 / S3.3b] ngoại lệ cạnh tranh — lập, băm, rút", () => {
+describe("[S1.265 / S3.3b] ngoại lệ cạnh tranh — lập, băm, rút", () => {
   it("[INV-K4a] ⑴ lập ở DRAFT: 201, MỘT hàng LAP của người phiên, sổ SOURCING_EXCEPTION_CREATED mang loại và mã (không giải trình); đọc lại thấy còn sống", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -558,7 +558,7 @@ describe("[S1.9101 / S3.3b] ngoại lệ cạnh tranh — lập, băm, rút", ()
 // =============================================================================================
 // ⑷ — K4a + K12: CHỈ Ở DRAFT, LẦN TỪ CHỐI VÀO SỔ; XẾP HÀNG VỚI LẦN NỘP DUYỆT
 // =============================================================================================
-describe("[S1.9101 / S3.3b / K4a · K12] lập hay rút ngoài DRAFT để lại MỘT hàng CONTROL_DENIED", () => {
+describe("[S1.265 / S3.3b / K4a · K12] lập hay rút ngoài DRAFT để lại MỘT hàng CONTROL_DENIED", () => {
   it("[INV-K4a] gói CHỜ DUYỆT: lập và rút ⇒ 422 mang câu của chốt; mỗi lần MỘT hàng CONTROL_DENIED {K4A_NGOAI_LE_SAI_TRANG_THAI} dưới người gọi; không hàng ngoại lệ mới", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -672,7 +672,7 @@ describe("[S1.9101 / S3.3b / K4a · K12] lập hay rút ngoài DRAFT để lại
 // =============================================================================================
 // ⑸ ⑹ ⑺ — HÌNH DẠNG, QUYỀN, CÔNG TẮC, CHỈ GHI THÊM, TỔ CHỨC KHÁC
 // =============================================================================================
-describe("[S1.9101 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm", () => {
+describe("[S1.265 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm", () => {
   it("[INV-K4a] ⑸ mã OTHER đòi giải trình ≥ 100 BYTE sau khi cắt: 99 byte bị từ chối ở gói (422 có tên) và ở CHECK; 100 byte qua — chữ có dấu đếm theo byte", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -804,7 +804,7 @@ describe("[S1.9101 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm"
 // =============================================================================================
 // ⑵ ⑻ — ĐỘT BIẾN CỦA BĂM VÀ TẬP LOẠI TRỪ
 // =============================================================================================
-describe("[S1.9101 / S3.3b] băm và tập loại trừ — đột biến", () => {
+describe("[S1.265 / S3.3b] băm và tập loại trừ — đột biến", () => {
   it("[INV-K4b] ĐỘT BIẾN: băm bỏ dòng NGOAI_LE thì lập ngoại lệ KHÔNG đổi băm — chữ ký trên danh sách không ngoại lệ đếm cho gói có ngoại lệ", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);

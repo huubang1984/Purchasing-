@@ -2073,8 +2073,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_bac_cua", chuKy: "uuid, numeric, text", migration: "072_bac_cua_goi.sql" },
     { ham: "to_chuc_da_bat_s3", chuKy: "uuid", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "chinh_sach_hieu_luc", chuKy: "uuid, timestamptz", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
-    // [S1.9101 / S3.3b] Thân hiện tại thêm dòng `NGOAI_LE|…` cho ngoại lệ còn sống — `076` định nghĩa, `9501` định nghĩa lại.
-    { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "9501_ngoai_le_canh_tranh.sql" },
+    // [S1.265 / S3.3b] Thân hiện tại thêm dòng `NGOAI_LE|…` cho ngoại lệ còn sống — `076` định nghĩa, `105` định nghĩa lại.
+    { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "105_ngoai_le_canh_tranh.sql" },
     // [S1.201 / S3.6a] Hai hàm của nhóm hàng: vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh —, và
     // câu hỏi trạng thái — một thân `SELECT true` cho gán nhóm đã ngừng dùng.
     { ham: "rfq_chot_nhom_hang", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
@@ -2119,8 +2119,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // `RETURNS SETOF …` vì tập loại trừ trả nhiều hàng.
   const HAM_ANH_XA: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "rfq_hang_muc_bam", chuKy: "uuid, uuid, integer", migration: "089_anh_xa_hang_muc.sql" },
-    // [S1.9101 / S3.3b] Thân hiện tại thêm vế tác giả ngoại lệ còn sống — `089` định nghĩa, `9501` định nghĩa lại.
-    { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "9501_ngoai_le_canh_tranh.sql" },
+    // [S1.265 / S3.3b] Thân hiện tại thêm vế tác giả ngoại lệ còn sống — `089` định nghĩa, `105` định nghĩa lại.
+    { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
   ];
 
   it("[S1.204] hai hàm trợ giúp của ánh xạ hạng mục: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2245,7 +2245,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_huy",
         "rfq_packages_kiem_nguoi_mo",
         "rfq_packages_kiem_nguoi_nop",
-        // [S1.9101 / S3.3b] Tác giả ngoại lệ cạnh tranh là dẫn xuất từ phiên.
+        // [S1.265 / S3.3b] Tác giả ngoại lệ cạnh tranh là dẫn xuất từ phiên.
         "rfq_sourcing_exceptions_kiem_danh_tinh",
         "rfq_tra_ve_kiem_danh_tinh",
         "supplier_contacts_kiem_danh_tinh",
@@ -2342,8 +2342,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
-    // [S1.9101 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
-    { ham: "ngoai_le_kiem", migration: "9501_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
+    // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
+    { ham: "ngoai_le_kiem", migration: "105_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },
     // [S1.166 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
     // `rfq_kiem_ngan_sach_khi_nop` thì cạnh nộp duyệt chỉ còn tầng gói canh — một câu UPDATE viết tay tắt được S3.
@@ -4138,8 +4138,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "103_benchmark_gia.sql",
         // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
         "104_ban_luu_benchmark.sql",
-        // [S1.9101 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
-        "9501_ngoai_le_canh_tranh.sql",
+        // [S1.265 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
+        "105_ngoai_le_canh_tranh.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8786,8 +8786,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "103_benchmark_gia.sql",
         // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
         "104_ban_luu_benchmark.sql",
-        // [S1.9101 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
-        "9501_ngoai_le_canh_tranh.sql",
+        // [S1.265 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
+        "105_ngoai_le_canh_tranh.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9114,8 +9114,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "103_benchmark_gia.sql",
         // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
         "104_ban_luu_benchmark.sql",
-        // [S1.9101 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
-        "9501_ngoai_le_canh_tranh.sql",
+        // [S1.265 / S3.3b / K4a · K4b] Ngoại lệ cạnh tranh: bảng chỉ-ghi-thêm kèm hàng rút, băm danh sách phủ ngoại lệ còn sống.
+        "105_ngoai_le_canh_tranh.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

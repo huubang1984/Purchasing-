@@ -24370,10 +24370,10 @@ chèn thẳng vào hộp thư: expected +0 to be 1"* — rồi xanh ở lượt 
 - Trên `d0d8d3fa`: `pnpm t0` xanh; `pnpm test` 149 tệp (147 đạt, 2 bỏ qua), 2502 ca đạt, 14 bỏ qua, 0 đỏ. `pnpm evidence` chạy
   song song với CI (máy đang có lượt evidence của một phiên khác — xếp hàng sau); kết quả ghi ở thân PR và thân commit merge.
 
-# §S1.9101 — S3.3b: NGOẠI LỆ CẠNH TRANH — LẬP VÀ RÚT CHỈ Ở DRAFT, NẰM TRONG BĂM DANH SÁCH NGƯỜI DUYỆT KÝ, TÁC GIẢ CÒN SỐNG VÀO TẬP LOẠI TRỪ — ADR-9201, KHOẢN 9401
+# §S1.265 — S3.3b: NGOẠI LỆ CẠNH TRANH — LẬP VÀ RÚT CHỈ Ở DRAFT, NẰM TRONG BĂM DANH SÁCH NGƯỜI DUYỆT KÝ, TÁC GIẢ CÒN SỐNG VÀO TẬP LOẠI TRỪ — ADR-145, KHOẢN 340
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (lần ký bật sau cờ tắt,
-ADR-105), và tổ chức chưa bật chạy nguyên MVP1. Một khoản mới: 9401 (đọc từ mã, đề xuất rổ B). Migration `9501`, ADR-9201.
+ADR-105), và tổ chức chưa bật chạy nguyên MVP1. Một khoản mới: 340 (đọc từ mã, đề xuất rổ B). Migration `105`, ADR-145.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-03: *"Tiếp S3.2"* — thẻ bước kế số 5 của sơ đồ trạng thái mang tên cũ, nội dung thẻ nói S3.1, S3.2 đã xong và
@@ -24395,7 +24395,7 @@ dở nằm ở `origin/s33b-wip` (`d72efd6e`, 2026-09-29), dựng trên `b8ca7b6
 ## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
 Không CAO. Ba TRUNG, sửa trong vòng:
 - **T1** — giải trình không có neo ngoài bảng (chủ CSDL tắt được `bid_chi_ghi_them`; không gì tính lại `approved_list_hash` ngoại
-  tuyến) ⇒ sổ `SOURCING_EXCEPTION_CREATED` mang `giaiTrinhSha256` — cùng băm với dòng `NGOAI_LE` — không mang văn bản (ADR-9201 ⑻).
+  tuyến) ⇒ sổ `SOURCING_EXCEPTION_CREATED` mang `giaiTrinhSha256` — cùng băm với dòng `NGOAI_LE` — không mang văn bản (ADR-145 ⑻).
 - **T2** — CHECK dùng `btrim` (chỉ dấu cách ASCII) trong khi gói dùng `String.trim` ⇒ câu thô lưu được giải trình chỉ là xuống dòng,
   hay 99 byte độn khoảng trắng qua sàn `OTHER` ⇒ CHECK có tên `rfq_sourcing_exceptions_giai_trinh_da_cat` đòi chuỗi đã cắt theo
   ĐÚNG tập của `String.trim`; sàn đếm trên chuỗi ấy (⑼).
@@ -24403,10 +24403,10 @@ Không CAO. Ba TRUNG, sửa trong vòng:
   sách ⇒ cả hai hàm chỉ đọc ba loại của danh sách mời (⑽).
 THẤP: **L1** thông điệp nội suy `loai` của người gọi (trigger chạy TRƯỚC CHECK) ⇒ bỏ nội suy; **L2** vị từ *còn sống* không lọc
 `hanh_dong = 'RUT'` ⇒ thêm, cùng một vị từ ở băm, tập loại trừ, trigger, hàm đọc; **L3** tính đơn ánh của băm dựa vào CHECK loại
-và mã (đều ở tập an ninh) — ghi nhận; **L4** tới S3.3c tác giả ngoại lệ có thể là người ký duy nhất — ghi ở ADR-9201 và STATE,
+và mã (đều ở tập an ninh) — ghi nhận; **L4** tới S3.3c tác giả ngoại lệ có thể là người ký duy nhất — ghi ở ADR-145 và STATE,
 không khai *"không bao giờ tự duyệt"*; **L5** (cho S3.3c) nếu K2 đọc ngoại lệ trong lần nộp dưới REPEATABLE READ thì ảnh chụp trước
 lần rút đếm một ngoại lệ đã rút — cần chốt chỉ-READ COMMITTED khuôn `097`; **L6** (cho S3.3e) `GET …/exceptions` chưa mang
-`lanNop`. Một phát hiện ngoài phạm vi: `/tao-thau` tự nạp danh sách mời ở mỗi lần đọc gói cho mọi người dùng — khoản 9401.
+`lanNop`. Một phát hiện ngoài phạm vi: `/tao-thau` tự nạp danh sách mời ở mỗi lần đọc gói cho mọi người dùng — khoản 340.
 Lời khai *"danh mục sổ đăng ký đủ"* của bản hình dạng rộng hơn phép đo — lượt soi kể thêm chín cổng; cả chín đã đi qua hay đã
 đúng sẵn ở lượt `pnpm test` đầu (chỉ P9b đỏ — số migration ở `Handoff.md`, dự kiến).
 
@@ -24415,12 +24415,12 @@ A — tập loại trừ: **chỉ ngoại lệ còn sống** (đề xuất). B �
 khớp mã đã chạy xanh trước khi hỏi.
 
 ## 5. Thay đổi
-- `db/migrations/9501_ngoai_le_canh_tranh.sql` — bảng, RLS + policy khách đóng hẳn, GRANT theo cột (không `id`), ba trigger
+- `db/migrations/105_ngoai_le_canh_tranh.sql` — bảng, RLS + policy khách đóng hẳn, GRANT theo cột (không `id`), ba trigger
   khuôn (danh tính, chỉ-ghi-thêm, chặn TRUNCATE), trigger `ngoai_le_kiem`; `rfq_bam_danh_sach`, `rfq_tap_loai_tru` định nghĩa lại.
   Ghim ở `hardening.always.sql` cùng commit: `BANG_TENANT_KHAI`, `TRIGGER_DUOC_PHEP`, sáu CHECK an ninh (chuỗi
   `pg_get_constraintdef` ĐO trên `postgres:16-alpine` 16.15), khối `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` (bản SỬA theo
   cách viết của migration, bản PHÁN XÉT theo dạng chuẩn), mục mới `ngoai_le_kiem` (mô tả in vân tay), hai mục định nghĩa hàm trỏ
-  `9501`. Thân PHÁN XÉT suy bằng script từ thân migration, không chép tay.
+  `105`. Thân PHÁN XÉT suy bằng script từ thân migration, không chép tay.
 - `packages/invitation/src/ngoai-le.ts` — `lapNgoaiLe`, `rutNgoaiLe` (cổng `rfq.invite` trong thân, kiểm hình dạng, bắt lời từ chối
   có tên ⇒ `CONTROL_DENIED`), `docNgoaiLe` (cổng `rfq.invite` trong thân). `packages/identity`: mã `K4A_NGOAI_LE_SAI_TRANG_THAI` ở
   `CHOT_VAO_SO`, `CHOT_THEO_RANG_BUOC`, `DANH_MUC_VE_CONG`.
@@ -24471,7 +24471,7 @@ chặn trước ở route — trước đó nó sẽ SỐNG.
 - Lối *"giặt"*: A rút, B lập lại cùng lời — cần người thứ hai giữ `rfq.invite`.
 - Hai lần rút đua nhau: lần sau nhận 409 trần của `UNIQUE`, không câu có tên.
 - Sàn đếm byte — NFD đạt sàn với ít ký tự hơn NFC.
-- Khoản 9401 (đọc từ mã, chưa đo bằng trình duyệt).
+- Khoản 340 (đọc từ mã, chưa đo bằng trình duyệt).
 
 ## 9. Số đo
 - Trên `47cce7cb` (nhánh đã gộp `master` #241 — S1.264 — ở lần gộp duy nhất của vòng; xung đột chỉ ở ba tệp sổ, giữ cả hai

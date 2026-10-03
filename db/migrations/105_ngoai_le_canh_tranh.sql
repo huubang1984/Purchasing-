@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_ngoai_le_canh_tranh — [S1.9101 / S3.3b của spec S3] NGOẠI LỆ CẠNH TRANH: LẬP VÀ RÚT Ở DRAFT, NẰM TRONG BĂM DANH
+-- 105_ngoai_le_canh_tranh — [S1.265 / S3.3b của spec S3] NGOẠI LỆ CẠNH TRANH: LẬP VÀ RÚT Ở DRAFT, NẰM TRONG BĂM DANH
 -- SÁCH MÀ NGƯỜI DUYỆT KÝ (K4a, K4b), TÁC GIẢ VÀO TẬP LOẠI TRỪ (ADR-082 ⑿)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.4, §5.1 (K4, K5, K12), §8.2, §9 (S3.3).

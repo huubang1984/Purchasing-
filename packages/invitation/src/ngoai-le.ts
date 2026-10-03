@@ -5,11 +5,11 @@ import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuCho
 import { InvitationError } from "./invitation.js";
 
 // =============================================================================================
-// [S1.9101 / S3.3b · spec S3 §4.4 · K4a · K4b] NGOẠI LỆ CẠNH TRANH
+// [S1.265 / S3.3b · spec S3 §4.4 · K4a · K4b] NGOẠI LỆ CẠNH TRANH
 //
 // Một ngoại lệ là LỜI GIẢI TRÌNH vì sao danh sách mời không đủ cạnh tranh — một nhà cung cấp (`SINGLE_SOURCE`), ít hơn ngưỡng
 // (`LIMITED_COMPETITION`), hay không thoả luân phiên (`ROTATION`). Nó là một phần của danh sách mời: nằm trong băm mà người
-// duyệt ký (`rfq_bam_danh_sach`, `9501`), nên người duyệt ký lên cả lời giải trình. Quyền lập là `rfq.invite` (ADR-084 ⑵) — chốt
+// duyệt ký (`rfq_bam_danh_sach`, `105`), nên người duyệt ký lên cả lời giải trình. Quyền lập là `rfq.invite` (ADR-084 ⑵) — chốt
 // không phải quyền lập mà là chữ ký độc lập; S3.3c nối K2 và K5 vào đây.
 //
 // Ba lớp, thứ tự như mọi hàm ghi của kho:
@@ -23,7 +23,7 @@ import { InvitationError } from "./invitation.js";
 // Chỉ ghi thêm: rút một ngoại lệ là một hàng `RUT` trỏ về nó, kèm lý do; không hàng nào bị sửa.
 // =============================================================================================
 
-/** Ba loại của danh sách mời — đường ghi của S3.3b. Hai loại còn lại của CHECK (`9501`) thuộc trao thầu (S3.5) và OPEN (S3.6c). */
+/** Ba loại của danh sách mời — đường ghi của S3.3b. Hai loại còn lại của CHECK (`105`) thuộc trao thầu (S3.5) và OPEN (S3.6c). */
 export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
 export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number];
 
@@ -39,7 +39,7 @@ export const MA_LY_DO_NGOAI_LE = [
 ] as const;
 export type MaLyDoNgoaiLe = (typeof MA_LY_DO_NGOAI_LE)[number];
 
-/** Trần giải trình và lý do rút, tính bằng BYTE UTF-8 — cùng số với CHECK của `9501`. */
+/** Trần giải trình và lý do rút, tính bằng BYTE UTF-8 — cùng số với CHECK của `105`. */
 export const TRAN_GIAI_TRINH_BYTE = 2000;
 /** Sàn giải trình của mã `OTHER`, BYTE UTF-8 sau khi cắt khoảng trắng — chủ dự án chốt 2026-09-29. */
 export const SAN_GIAI_TRINH_OTHER_BYTE = 100;

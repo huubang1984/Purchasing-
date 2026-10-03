@@ -144,7 +144,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
   "rfq_item_goi_y",
   "rfq_item_mappings",
-  // [S1.9101 / S3.3b] Ngoại lệ cạnh tranh — khuôn `061`: chỉ ghi thêm kèm hàng rút; sửa được một hàng là đổi lời giải trình mà
+  // [S1.265 / S3.3b] Ngoại lệ cạnh tranh — khuôn `061`: chỉ ghi thêm kèm hàng rút; sửa được một hàng là đổi lời giải trình mà
   // người duyệt đã ký.
   "rfq_sourcing_exceptions",
   // [S1.207 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
@@ -1726,7 +1726,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "rfq_packages",
   );
-  // [S1.9101 / S3.3b / K4a] Tổ chức đã bật, gói `rfqVe` vừa về DRAFT: `pm` (giữ `rfq.invite`) lập một ngoại lệ — nhân chứng của
+  // [S1.265 / S3.3b / K4a] Tổ chức đã bật, gói `rfqVe` vừa về DRAFT: `pm` (giữ `rfq.invite`) lập một ngoại lệ — nhân chứng của
   // `ngoai_le_kiem` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
   doiSoHang(
     await so.chung(

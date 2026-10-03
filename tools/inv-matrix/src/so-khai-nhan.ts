@@ -399,7 +399,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.198 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
   // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt
   // ở tổ chức đã bật (K4b).
-  // [S1.9101 / S3.3b] `ngoai-le-canh-tranh` đo ngoại lệ cạnh tranh qua HTTP và dưới `app_api`: chỉ lập/rút ở DRAFT, lần từ chối vào
+  // [S1.265 / S3.3b] `ngoai-le-canh-tranh` đo ngoại lệ cạnh tranh qua HTTP và dưới `app_api`: chỉ lập/rút ở DRAFT, lần từ chối vào
   // sổ, đua `FOR SHARE` với cạnh nộp duyệt (K4a); băm danh sách phủ ngoại lệ còn sống, chữ ký cũ không đếm sau lần rút (K4b); vế
   // tác giả ngoại lệ của tập loại trừ (L3) — mỗi vế một đột biến.
   K4a: [

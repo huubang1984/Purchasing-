@@ -3066,12 +3066,12 @@ $ham$;
          ('public', 'rfq_packages', 'rfq_da_dong_thi_co_moc_dong', '061_trao_thau', 'CHECK (((status <> ALL (ARRAY[''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text])) OR (closed_at IS NOT NULL)))'),
          ('public', 'rfq_packages', 'rfq_packages_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''DRAFT''::text, ''PENDING_APPROVAL''::text, ''OPEN''::text, ''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text, ''CANCELLED''::text])))'),
          ('public', 'rfq_packages', 'rfq_thu_tu_moc', '011_rfq_hardening', 'CHECK ((((opened_at IS NULL) OR (opened_at >= created_at)) AND ((closed_at IS NULL) OR (opened_at IS NULL) OR (closed_at >= opened_at))))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_giai_trinh_da_cat', '9501_ngoai_le_canh_tranh', 'CHECK (((giai_trinh !~ ''^[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]''::text) AND (giai_trinh !~ ''[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]$''::text)))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hanh_dong_check', '9501_ngoai_le_canh_tranh', 'CHECK ((hanh_dong = ANY (ARRAY[''LAP''::text, ''RUT''::text])))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hinh_dang', '9501_ngoai_le_canh_tranh', 'CHECK ((((hanh_dong = ''LAP''::text) AND (loai IS NOT NULL) AND (ma_ly_do IS NOT NULL) AND (ngoai_le_id IS NULL)) OR ((hanh_dong = ''RUT''::text) AND (loai IS NULL) AND (ma_ly_do IS NULL) AND (ngoai_le_id IS NOT NULL))))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_loai_check', '9501_ngoai_le_canh_tranh', 'CHECK (((loai IS NULL) OR (loai = ANY (ARRAY[''SINGLE_SOURCE''::text, ''LIMITED_COMPETITION''::text, ''ROTATION''::text, ''LOW_ACTUAL_COMPETITION''::text, ''LIST_NARROWED_BELOW_MIN''::text]))))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_ma_ly_do_check', '9501_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS NULL) OR (ma_ly_do = ANY (ARRAY[''PROPRIETARY_TECHNOLOGY''::text, ''EXISTING_CONTRACT''::text, ''EMERGENCY''::text, ''NO_ALTERNATIVE''::text, ''COMPATIBILITY''::text, ''REGULATORY''::text, ''OTHER''::text]))))'),
-         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_san_other', '9501_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS DISTINCT FROM ''OTHER''::text) OR (octet_length(giai_trinh) >= 100)))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_giai_trinh_da_cat', '105_ngoai_le_canh_tranh', 'CHECK (((giai_trinh !~ ''^[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]''::text) AND (giai_trinh !~ ''[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]$''::text)))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hanh_dong_check', '105_ngoai_le_canh_tranh', 'CHECK ((hanh_dong = ANY (ARRAY[''LAP''::text, ''RUT''::text])))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hinh_dang', '105_ngoai_le_canh_tranh', 'CHECK ((((hanh_dong = ''LAP''::text) AND (loai IS NOT NULL) AND (ma_ly_do IS NOT NULL) AND (ngoai_le_id IS NULL)) OR ((hanh_dong = ''RUT''::text) AND (loai IS NULL) AND (ma_ly_do IS NULL) AND (ngoai_le_id IS NOT NULL))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_loai_check', '105_ngoai_le_canh_tranh', 'CHECK (((loai IS NULL) OR (loai = ANY (ARRAY[''SINGLE_SOURCE''::text, ''LIMITED_COMPETITION''::text, ''ROTATION''::text, ''LOW_ACTUAL_COMPETITION''::text, ''LIST_NARROWED_BELOW_MIN''::text]))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_ma_ly_do_check', '105_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS NULL) OR (ma_ly_do = ANY (ARRAY[''PROPRIETARY_TECHNOLOGY''::text, ''EXISTING_CONTRACT''::text, ''EMERGENCY''::text, ''NO_ALTERNATIVE''::text, ''COMPATIBILITY''::text, ''REGULATORY''::text, ''OTHER''::text]))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_san_other', '105_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS DISTINCT FROM ''OTHER''::text) OR (octet_length(giai_trinh) >= 100)))'),
          ('public', 'sessions', 'sessions_agent_ttl_ngan', '051_phien_co_pham_vi', 'CHECK (((kind <> ''AGENT_READONLY''::text) OR (expires_at <= (created_at + ''01:00:00''::interval))))'),
          ('public', 'sessions', 'sessions_check', '006_sessions_and_mfa', 'CHECK ((expires_at > created_at))'),
          ('public', 'sessions', 'sessions_kind_hop_le', '051_phien_co_pham_vi', 'CHECK ((kind = ANY (ARRAY[''USER''::text, ''AGENT_READONLY''::text])))'),
@@ -3821,7 +3821,7 @@ $ham$;
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
-         ('public', 'rfq_sourcing_exceptions', '9501_ngoai_le_canh_tranh'),
+         ('public', 'rfq_sourcing_exceptions', '105_ngoai_le_canh_tranh'),
          ('public', 'rfq_tra_ve', '087_lan_nop_da_xem'),
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
@@ -9025,10 +9025,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm chinh_sach_hieu_luc(uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.185 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong. [S1.9101 / S3.3b] Than phu them ngoai le CON SONG: mot than bo dong NGOAI_LE cho doi hay rut ngoai le ma chu ky van dem.
+    -- [S1.185 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong. [S1.265 / S3.3b] Than phu them ngoai le CON SONG: mot than bo dong NGOAI_LE cho doi hay rut ngoai le ma chu ky van dem.
     ARRAY[
-      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (076_danh_sach_moi, thân từ 9501_ngoai_le_canh_tranh)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (076_danh_sach_moi, thân từ 105_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '105_ngoai_le_canh_tranh.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bam_danh_sach(p_rfq uuid) RETURNS bytea
   LANGUAGE sql
   STABLE
@@ -9737,10 +9737,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ncc_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3b / K4a] Luat ghi ngoai le canh tranh: to chuc da bat, nguoi giu rfq.invite, goi o DRAFT (rang buoc co ten), hang rut tro ve mot ngoai le chua rut cua cung goi. Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky.
+    -- [S1.265 / S3.3b / K4a] Luat ghi ngoai le canh tranh: to chuc da bat, nguoi giu rfq.invite, goi o DRAFT (rang buoc co ten), hang rut tro ve mot ngoai le chua rut cua cung goi. Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky.
     ARRAY[
-      $q$hàm + trigger ngoai_le_kiem (9501_ngoai_le_canh_tranh)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
+      $q$hàm + trigger ngoai_le_kiem (105_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '105_ngoai_le_canh_tranh.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -12170,10 +12170,10 @@ $ham$$q$,
                   'hàm public.rfq_hang_muc_bam(uuid, uuid, integer) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_hang_muc_bam(uuid, uuid, integer) hoặc SUPERUSER$q$
     ],
-    -- [S1.204 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET. [S1.9101 / S3.3b] Them tac gia ngoai le con song.
+    -- [S1.204 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET. [S1.265 / S3.3b] Them tac gia ngoai le con song.
     ARRAY[
-      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (089_anh_xa_hang_muc, thân từ 9501_ngoai_le_canh_tranh)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
+      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (089_anh_xa_hang_muc, thân từ 105_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '105_ngoai_le_canh_tranh.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_tap_loai_tru(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public

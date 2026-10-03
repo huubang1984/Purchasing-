@@ -233,7 +233,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
       "thu hồi được (K4a).",
   },
-  // [S1.9101 / S3.3b / spec S3 §4.4] Lời từ chối K4a thứ ba — trigger `ngoai_le_kiem` (`9501`) là lớp có thẩm quyền, tầng gói
+  // [S1.265 / S3.3b / spec S3 §4.4] Lời từ chối K4a thứ ba — trigger `ngoai_le_kiem` (`105`) là lớp có thẩm quyền, tầng gói
   // (`lapNgoaiLe`, `rutNgoaiLe`) bắt CHÍNH lỗi của nó theo tên ràng buộc, khuôn ADR-114.
   K4A_NGOAI_LE_SAI_TRANG_THAI: {
     chot: "K4a",
@@ -313,7 +313,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
   // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`093`).
   j5_luot_cham_khong_moi_nhat: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
-  // [S1.9101 / S3.3b] Nhánh DRAFT của `ngoai_le_kiem` (`9501_ngoai_le_canh_tranh`).
+  // [S1.265 / S3.3b] Nhánh DRAFT của `ngoai_le_kiem` (`105_ngoai_le_canh_tranh`).
   k4a_ngoai_le_sai_trang_thai: "K4A_NGOAI_LE_SAI_TRANG_THAI",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",

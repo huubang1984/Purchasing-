@@ -85,7 +85,7 @@ export class DenialAuditFailedError extends Error {
      * [S1.225 / khoản 179] VẾ đã từ chối — hằng của người gọi `throwAuditedDenial` (vế của cổng mở thầu trong `UNSEAL_CLAUSES`, vế của
      * worker lúc giải mã, trạng thái RFQ của A4, [S1.241 / khoản 279] mã chốt kiểm soát, mã từ chối trạng thái, [S1.245 / khoản 267] lý
      * do từ chối huỷ yêu cầu mở thầu), hay `null` khi người gọi không có vế nào để kể. Có mặt ở đây vì hàng sổ mang vế ấy CHÍNH LÀ hàng
-     * đã không ghi được — ba đường từ chối ghi cùng `action`/`resourceType` [S1.241 / khoản 279] (và ~~mười bảy~~ [S1.9101] mười chín mã chốt vào sổ chung một
+     * đã không ghi được — ba đường từ chối ghi cùng `action`/`resourceType` [S1.241 / khoản 279] (và ~~mười bảy~~ [S1.265] mười chín mã chốt vào sổ chung một
      * `CONTROL_DENIED`, chín mã lý do chung một `RFQ_STATE_DENIED`, [S1.245 / khoản 267] hai lý do chung một `UNSEAL_CANCEL_DENIED`),
      * nên không có nó dòng log không nói được vế nào của cổng đã chặn. Đi vào dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG`, không
      * nguyên văn.

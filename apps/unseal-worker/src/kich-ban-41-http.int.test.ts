@@ -907,7 +907,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // lời từ chối trạng thái có tên, luồng MVP1 ở lời từ chối *tổ chức chưa bật* — cả hai là 422 NGHIỆP VỤ, không đổi gói nào.
         case "POST /rfqs/:rfqId/return-to-draft":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "tra ve de quet" }, cookie: m };
-        // [S1.9101 / S3.3b / K4a] Hai route ngoại lệ trên gói hy sinh B — bảng route đặt chúng sau route huỷ, nên gói B đã HUỶ: luồng
+        // [S1.265 / S3.3b / K4a] Hai route ngoại lệ trên gói hy sinh B — bảng route đặt chúng sau route huỷ, nên gói B đã HUỶ: luồng
         // S3 dừng ở lời từ chối K4a có tên (422, vào sổ), luồng MVP1 ở lời từ chối *tổ chức chưa bật* (422). Rút một id không có:
         // trigger kiểm trạng thái gói TRƯỚC khi tìm ngoại lệ, nên cùng hai lời từ chối ấy. Không đổi gói nào của kịch bản.
         case "POST /rfqs/:rfqId/exceptions":
