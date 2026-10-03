@@ -11339,3 +11339,92 @@ Không CAO. Ba TRUNG: ⑴ lời hứa riêng tư bị `ngay` micro giây và ph�
 gian xuất sau BAFO — chủ dự án chốt ⑹, khoản 337. Năm THẤP sửa trong phạm vi: hàng ánh xạ và hàng chuẩn đã lưu nay đối chiếu với
 `giaDong.anhXaId`; lề một tháng bỏ; hàng sổ `EVIDENCE_BUNDLE_EXPORTED` mang `soDongBenchmark`, `soQuanSat`; phép bậc hai gỡ, số dài bị
 chặn; bộ đọc kiểm nhóm chính sách và `phuong_phap`. Chi tiết và đột biến: biên bản §S1.262.
+
+---
+
+## ADR-145 — S3.3b: ngoại lệ cạnh tranh — chỉ-ghi-thêm có hàng rút, chỉ đổi ở DRAFT, nằm trong băm danh sách người duyệt ký; tác giả CÒN SỐNG vào tập loại trừ; ai mời được thì đọc được
+
+**Ngày:** 2026-10-03 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29 năm điểm hình dạng và sàn giải trình của
+mã `OTHER` là 100 byte (⑴–⑸ dưới đây); ngày 2026-09-30 (ADR-121) vế *tác giả ngoại lệ* vào CHÍNH `rfq_tap_loai_tru`; ngày
+2026-10-03 hai câu, cả hai theo đề xuất: ⑹ tập loại trừ tính tác giả ngoại lệ CÒN SỐNG, ⑺ cổng đọc là `rfq.invite`. ⑻–⑽ là sửa
+của lượt soi hình dạng, trong phạm vi các lựa chọn ấy · **[S1.265]** · **Liên quan:** ADR-080 (công tắc), ADR-082 ⑿ (tập loại
+trừ), ADR-084 ⑵ ⑷ (mã quyền, `CONTROL_DENIED`), ADR-108 (từ chối có tên), ADR-114 (K4a vào sổ), ADR-115, ADR-117 (chữ ký mang
+ngân sách và lần nộp), ADR-118 (cổng đọc của người duyệt), ADR-121 (tập loại trừ một hàm) · **Spec:** S3 §4.4, §5.1 K4 K5 K12,
+§8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.265
+
+### Bối cảnh
+
+Spec S3 §4.4 dựng ngoại lệ cạnh tranh — lời giải trình vì sao danh sách mời không đủ cạnh tranh — làm một phần của danh sách
+mời: nằm trong băm mà người duyệt ký (K4), và tác giả của nó bị loại khỏi người ký (K5). Chủ dự án chia S3.3 năm PR ngày
+2026-09-29; S3.3b là ngoại lệ. Một bản dở (`s33b-wip`, 2026-09-29) dựng trên `master` cũ hơn 534 commit; phần khoản 255 của nó đã
+đóng ở S3.2d (ADR-114, `080`), và từ đó `master` thêm tập loại trừ một hàm (ADR-121) mà S3.3b phải mở rộng.
+
+### Quyết định
+
+⑴ **Bảng chỉ-ghi-thêm kèm hàng rút**, khuôn `rfq_awards` (`061`): hàng `LAP` mang loại, mã lý do, giải trình; hàng `RUT` trỏ về
+đúng một hàng `LAP` và mang lý do rút. Một ngoại lệ còn sống khi không hàng `RUT` nào trỏ về nó; `UNIQUE (org_id, ngoai_le_id)`
+giữ mỗi ngoại lệ một lần rút. Tác giả dẫn xuất từ phiên (ADR-016).
+
+⑵ **Lập và rút chỉ ở DRAFT, bởi người giữ `rfq.invite`, ở tổ chức đã bật S3** — trigger là lớp có thẩm quyền và khoá `FOR SHARE`
+hàng gói như trigger lời mời (`076`). Ở OPEN, nơi lời mời vẫn THÊM được, ngoại lệ không đổi. Nhánh DRAFT mang tên
+`k4a_ngoai_le_sai_trang_thai`; tầng gói bắt chính lỗi ấy và ghi `CONTROL_DENIED` `K4A_NGOAI_LE_SAI_TRANG_THAI` ở giao dịch độc
+lập — khuôn ADR-114.
+
+⑶ **CHECK nhận đủ năm loại, đường ghi chỉ mở ba loại của danh sách mời** (`SINGLE_SOURCE`, `LIMITED_COMPETITION`, `ROTATION`);
+`LOW_ACTUAL_COMPETITION` thuộc trao thầu (S3.5), `LIST_NARROWED_BELOW_MIN` thuộc thu hồi ở OPEN (S3.6c).
+
+⑷ **Băm danh sách phủ ngoại lệ còn sống**: `rfq_bam_danh_sach` thêm một dòng mỗi ngoại lệ — nhãn `NGOAI_LE`, id, loại, mã lý do và
+sha256 hex của giải trình —, xếp cùng dòng lời mời theo collation `"C"`. Ngoại lệ đã rút ra khỏi băm. Gói không ngoại lệ giữ
+ĐÚNG băm của `076`, nên lần deploy không làm chữ ký K4b nào mất hiệu lực.
+
+⑸ **Sàn giải trình của mã `OTHER` là 100 byte** — CHECK ở CSDL và kiểm ở tầng gói.
+
+⑹ **Tập loại trừ tính tác giả ngoại lệ CÒN SỐNG; người rút không vào.** Id ngoại lệ nằm trong băm, nên tập loại trừ lúc mở gói
+đúng bằng các tác giả mà chữ ký phủ. Rút một ngoại lệ chỉ siết cạnh tranh, không nới — khác người thu hồi lời mời, vốn ở trong tập.
+
+⑺ **Cổng đọc là `rfq.invite`**, đứng thẳng trong thân `docNgoaiLe` (rổ `HAM_DOC_CO_QUYEN`), cùng cổng danh sách lời mời mà ngoại
+lệ là một phần; route không mở cho agent.
+
+⑻ **Sổ `SOURCING_EXCEPTION_CREATED` mang sha256 của giải trình, không mang văn bản.** Bảng sửa được bởi chủ CSDL (tắt
+`bid_chi_ghi_them`), còn sổ chuỗi băm thì neo ra ngoài — sha256 trong sổ buộc đúng các byte mà dòng `NGOAI_LE` của băm danh sách
+mang. Văn bản không vào sổ: giải trình hay gọi tên nhà cung cấp, và nó chỉ đọc được dưới `rfq.invite`. Lý do rút vào sổ nguyên văn
+như lý do trả gói về soạn thảo (`077`).
+
+⑼ **Giải trình lưu đã cắt theo đúng tập của `String.prototype.trim`** (WhiteSpace và LineTerminator của ECMAScript, 25 điểm mã —
+đo bằng node trên cả BMP), viết bằng dạng thoát `\xHHHH` của PostgreSQL; không rỗng; sàn `OTHER` đếm trên chuỗi đã cắt. `btrim`
+chỉ cắt dấu cách ASCII, nên dưới nó một câu thô lưu được giải trình chỉ là xuống dòng, hay 99 byte chữ độn khoảng trắng để vượt
+sàn.
+
+⑽ **Băm và tập loại trừ chỉ đọc ba loại của danh sách mời**, và *còn sống* là MỘT vị từ ở ba nơi (băm, tập loại trừ, trigger):
+không hàng `RUT` nào trỏ về nó. Khi S3.5 hay S3.6c mở loại của chúng, hàng của chúng ghi SAU khi gói đã mở; để chúng lặng lẽ đổi
+băm danh sách (và băm mà K9 sẽ ghim) là một quyết định không ai đặt tên — hạng mục ấy sửa hai hàm nếu muốn.
+
+### Cái giá, nói thẳng
+
+- **Tới S3.3c, ngoại lệ chưa đòi chữ ký K5.** Sàn một chữ ký (ADR-085) chỉ loại người tạo gói, nên tác giả ngoại lệ — một người
+  giữ `rfq.invite` khác người tạo — vẫn có thể là người ký duy nhất. Câu *"một ngoại lệ không bao giờ tự duyệt"* của spec §4.4
+  chưa đúng tới S3.3c. Chưa có tổ chức thật nào bật S3 (lần ký bật vẫn sau cờ tắt, ADR-105), và K2 chưa sống nên ngoại lệ hôm nay
+  chưa mở được cánh nào.
+- **Dùng lại `rfq.invite`**: người mời và người lập ngoại lệ không tách được (cái giá ADR-084 đã ghi).
+- **Cổng đọc dựa vào một sự thật về vai**: hôm nay vai duy nhất giữ `rfq.approve` (`PROCUREMENT_MANAGER`) cũng giữ `rfq.invite`.
+  Một vai duyệt riêng về sau thì người duyệt không đọc được thứ mình ký — phải đổi sang cổng kiểu ADR-118.
+- **Lối "giặt" ngoại lệ**: A lập rồi rút, B lập lại đúng lời ấy — A ra khỏi tập loại trừ. Cần một người thứ hai giữ `rfq.invite`,
+  và B thì ở trong tập.
+- **Sàn đếm byte**: chữ Việt ở dạng NFD chiếm nhiều byte hơn NFC, nên đạt 100 byte với ít ký tự hơn. Trình duyệt gửi NFC; sàn là
+  giả định chờ pilot (spec §4.4).
+- **Lớp khoảng trắng viết cứng** theo ECMAScript hôm nay; một phiên bản Unicode thêm ký tự khoảng trắng thì hai tầng lệch nhau
+  cho tới khi lớp được sửa.
+
+### Phương án đã loại
+
+- **Không cổng đọc** (bản dở): mọi người dùng bên mua — `REQUESTER`, `TECHNICAL`, `FINANCE`, `DIRECTOR` — đọc được giải trình,
+  vốn hay gọi tên nhà cung cấp duy nhất: rộng hơn danh sách lời mời.
+- **Mọi tác giả kể cả đã rút** (khuôn lời mời): một ngoại lệ ghi nhầm loại tác giả của nó khỏi người ký gói ấy vĩnh viễn; tổ
+  chức ít người có thể kẹt gói.
+- **Băm phủ mọi loại**: hàng của trao thầu và của thu hồi ở OPEN sẽ đổi băm danh sách sau khi gói đã mở mà không ai quyết.
+- **`btrim` như tiền lệ**: hai tầng đếm trên hai chuỗi khác nhau.
+
+### Điều ADR này KHÔNG nói
+
+- K2, K5 (S3.3c), K3 (S3.3d), màn, `gieo:demo`, kịch bản 41, lượt đi thử (S3.3e), KPI tỷ lệ single-source.
+- Hai loại còn lại của CHECK có vào băm hay không — việc của S3.5, S3.6c.

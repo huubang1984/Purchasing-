@@ -617,6 +617,9 @@ describe("hình dạng file migration", () => {
       "rfq_items",
       "rfq_key_material",
       "rfq_packages",
+      // [S1.265 / S3.3b] Ngoại lệ cạnh tranh — chỉ-ghi-thêm kèm hàng rút, khoá ngoại hợp thành `(org_id, rfq_id)` tới
+      // `rfq_packages` và tự trỏ `(org_id, ngoai_le_id)`, policy khách ĐÓNG HẲN.
+      "rfq_sourcing_exceptions",
       // [S1.198 / khoản 257] Sổ trả về — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới `rfq_packages`, policy khách ĐÓNG HẲN.
       "rfq_tra_ve",
       "rfq_unsealed_bids",
