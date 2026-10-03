@@ -24328,3 +24328,42 @@ này không còn là trao thầu mới nhất của gói — gói đã đổi t�
   `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4585 khẳng định, 79/79 bất biến (57/57 nghiệp
   vụ + 22/22 hàng rào), 1987 giây; `evidence/INV-matrix.md` không đổi. Trên `4592fe57`: `pnpm t0`, `cap-so --kiem` xanh;
   `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ.
+
+# §S1.9101 — CA CHẬP CHỜN CỦA `composition.int` KHOẢN 277 Ý ③: TEST ĐẾM HỘP THƯ NGAY KHI JOB `DONE`, VIỆC GỬI ĐI SAU COMMIT — KHOẢN 9401
+
+**Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (không chặn kịch bản §11; chỉ tốn một vòng CI mỗi
+lần đỏ). Chỉ sửa test; không migration, không route, không ADR, mã sản xuất không đổi một dòng.
+
+## 1. Vòng này là gì
+Bước 3 của đề xuất sau §S1.263; chủ dự án, 2026-10-03: *"Làm 3: điều tra ca chập chờn composition.int"*. §S1.261 mục 6 ghi:
+CI lượt đầu của #237 (`9515a1a2`) đỏ T3 ở đúng một ca — `apps/api/src/composition.int.test.ts`, khoản 277, *"③ tin của job
+chèn thẳng vào hộp thư: expected +0 to be 1"* — rồi xanh ở lượt sau; cùng tệp xanh ở lượt evidence trên máy.
+
+## 2. Nguyên nhân
+- Handler `LOGIN_LINK_SEND` (`apps/api/src/outbox-api.ts`) phát token trong giao dịch và TRẢ VỀ hàm gửi; runner gọi hàm ấy SAU
+  khi token và dấu `DONE` đã commit, ngoài giao dịch (ADR-023, sổ nợ 53) — để link trong thư luôn trỏ tới một token đã tồn tại.
+  Thiết kế đúng.
+- Test chờ `DONE` bằng `doiXong` (đọc CSDL mỗi 50 ms) rồi đếm hộp thư NGAY. Khe giữa `DONE` commit và câu `rename` của hộp thư
+  dev là khe của test: dưới tải CI nó rộng hơn một kỳ đọc.
+- Vì sao chỉ ③ đỏ: ② xong ở kỳ poll lúc lên (~60 ms) rồi còn ~5 s chờ ③ — tin của ② đã kịp ra; ③ được đếm ngay sau `DONE` của
+  chính nó.
+
+## 3. Đo
+- **Tái lập:** tiêm `await new Promise((x) => setTimeout(x, 300))` trước câu `writeFile` của `apps/api/src/adapters/hop-thu-dev.ts`
+  (khôi phục kiểm sha256), chạy ba ca khoản 277 ⇒ đỏ đúng câu của CI: *"③ tin của job chèn thẳng vào hộp thư: expected +0 to
+  be 1"*. Đối chứng không tiêm ⇒ 3/3 xanh.
+- **Sau sửa:** `doiTinLinkDen(email, n, hanMs = 5000)` chờ tới khi hộp thư có đủ tin rồi trả số đếm; ② và ③ dùng nó. Cùng phép
+  tiêm ⇒ 3/3 xanh. Trọn `composition.int` 24/24.
+- **Răng còn nguyên:** đột biến handler không trả hàm gửi (`return;`) ⇒ ②, ③ đỏ (*"expected +0 to be 1"*) và ④ đỏ (*"tin cua
+  loi /auth/link o ④ chua ra"*).
+- **Lượt tìm cùng lớp:** tệp `*.int.test.ts` có cả phép chờ `DONE` lẫn lần đọc hộp thư dev — chỉ `composition.int`; trong tệp ấy
+  chỉ hai dòng ② ③ và mốc `tinTruoc` của ④ đọc hộp thư ngay sau `DONE` (mọi chỗ khác đã chờ bằng `doiHopThu`). Mốc của ④ nay đọc
+  sau lần chờ của ②.
+
+## 4. Giới hạn, nói ra
+- Phép chờ trả khi đủ `n` tin, nên một tin TRÙNG tới muộn hơn lúc đếm sẽ không bị thấy — cũng như trước vòng này. Một tin trùng
+  cần một job thứ hai, và dòng ngay trên đã đòi mỗi tổ chức đúng một job.
+- Chưa tìm ở `tools/pilot-gia-lap` (cũng đọc hộp thư dev, qua `hop-thu.ts`) — ngoài phạm vi các tệp int.
+
+## 5. Số đo
+- ‹SỐ-ĐO›
