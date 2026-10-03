@@ -24474,3 +24474,9 @@ chặn trước ở route — trước đó nó sẽ SỐNG.
 - Khoản 9401 (đọc từ mã, chưa đo bằng trình duyệt).
 
 ## 9. Số đo
+- Trên `47cce7cb` (nhánh đã gộp `master` #241 — S1.264 — ở lần gộp duy nhất của vòng; xung đột chỉ ở ba tệp sổ, giữ cả hai
+  vế, `cap-so --dem` tính lại `Handoff.md`): `pnpm t0` xanh; `pnpm test` 147 tệp, 2503 ca đạt, 0 đỏ; tập tích hợp chạm tới —
+  16 tệp, gồm `migrations.int`, `rls-coverage`, `hardening-suy-tu-tinh-chat`, `trigger-la-mac-dinh-dong`, kịch bản 41 qua HTTP,
+  `buyer.int`, `anh-xa.int`, `qt3-cu-phap`/`qt3-ngu-phap` — 589 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4650 khẳng
+  định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1683 giây; `evidence/INV-matrix.md` đổi đúng ba hàng — K4a 31 → 41
+  ca, K4b 50 → 56, L3 21 → 22.
