@@ -146,6 +146,26 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
+- [ ] **3.3b [2026-10-02 / khoản 336] Đối chứng dương ⑴ cho thao tác ghi ngoài `PutKeyPolicy`.** Apply lại stack 60 bằng lệnh
+      3.1 trước: ngoài thay đổi 3.1 đã nói (concurrency Lambda khi gỡ `tam_override.tf`), plan chỉ được đổi TẠI CHỖ ba
+      resource của ⑴ — `aws_cloudwatch_event_rule.put_key_policy_audit`,
+      `aws_cloudwatch_event_rule.put_key_policy_prod`, `aws_cloudwatch_event_target.put_key_policy_audit` — và không thay
+      resource nào (`0 to destroy`). Rồi, trên một khoá THỬ dựng riêng, không đụng khoá thật nào:
+      ```powershell
+      $k = aws kms create-key --profile tp-prod-keyadmin --description "tp-thu-canh-bao-336 (xoa duoc)" --query KeyMetadata.KeyId --output text
+      if ($LASTEXITCODE -eq 0 -and $k) {
+        aws kms create-alias --profile tp-prod-keyadmin --alias-name alias/tp-thu-canh-bao-336 --target-key-id $k
+        aws kms delete-alias --profile tp-prod-keyadmin --alias-name alias/tp-thu-canh-bao-336
+        aws kms schedule-key-deletion --profile tp-prod-keyadmin --key-id $k --pending-window-in-days 7
+        aws kms cancel-key-deletion --profile tp-prod-keyadmin --key-id $k
+        aws kms schedule-key-deletion --profile tp-prod-keyadmin --key-id $k --pending-window-in-days 7
+      } else { "create-key HONG - dung o day" }
+      ```
+      ⇒ sáu thư tới `email_canh_bao` trong vài phút, mỗi thư mở đầu bằng tên thao tác: `CreateKey`, `CreateAlias`,
+      `DeleteAlias`, `ScheduleKeyDeletion` (`so ngay cho xoa 7`), `CancelKeyDeletion`, `ScheduleKeyDeletion`. Lệnh cuối để khoá
+      thử tự xoá sau 7 ngày. Thiếu thư nào thì ⑴ chưa bắt thao tác ấy, dù `apply` xanh. `create-key` bị từ chối (một SCP của
+      tổ chức — nằm ngoài kho, chưa đo) thì khối lệnh dừng ở đó: lần bị từ chối vẫn phải ra một thư `CreateKey` có `errorCode`. Ghi giờ
+      các thư vào STATE khoản 336.
 - [ ] **3.4 Đối chứng dương ⑵**: ~~`aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
       ⇒ lời gọi lỗi nhưng **có thư**.~~ **[apply lần đầu 2026-09-30] Phép thử ấy KHÔNG BAO GIỜ có thư:** task definition
       `tp-unseal-worker` chưa tồn tại (stack 90 chưa apply) nên ECS từ chối ở bước kiểm đầu vào (`ClientException:
@@ -391,7 +411,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 9. Trước dữ liệu thật — kiểm lại
 
 - [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ.
-- [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.
+- [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. ~~Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.~~ **[sửa 2026-10-02]** Mã đã bắt cả 17 thao tác; khoản ấy vẫn ở rổ A tới khi stack 60 được apply lại và 3.3b có đủ sáu thư.
 - [ ] **[rà 2026-10-01]** Ít nhất một kênh OTP ngoài thư (SMS hay Zalo) đã bật — `pnpm kiem-truoc-apply` hết `[VANG] kenh_otp` (0.3).
 - [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2, **[rà 2026-10-01]** 8.1 (⑼).
 - [ ] Mọi alarm `tp-van-hanh-*`, `tp-dns-bi-chan`, `tp-canh-bao-thieu-moc-neo` đang **OK**.
@@ -407,6 +427,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | 3.1 | ⑷ thiếu mốc neo — ALARM | chưa có mốc neo nào; về OK ở 8.3 |
 | 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, ~~3.4,~~ 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
+| 3.3b | **[khoản 336]** ⑴ — sáu thư thao tác ghi trên khoá thử | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
 | 6.4 | **[S1.252]** ⑹ OK cho từng alarm `tp-van-hanh-*` mới — khoảng 19 (đếm trên mã); thêm một ở 6.6, một ở 8.2 | rule ⑹ bắt MỌI lần vào OK, kể cả lần đánh giá đầu từ INSUFFICIENT_DATA |
 | 6.4 → 6.8 | **[S1.252]** ⑸ `tp-dns-bi-chan` | bộ lọc đếm cả ALERT: mỗi tên ngoài danh sách là một lần đếm — đọc tên ở `/tp/dns`, thêm ở 6.8 |

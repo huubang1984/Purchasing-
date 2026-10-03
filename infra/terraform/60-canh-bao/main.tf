@@ -1,5 +1,6 @@
 # Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"), và hai cho job neo:
-#   ⑴ KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod.
+#   ⑴ KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod. [2026-10-02 / khoản 336] Và MỌI thao tác ghi khác mà KeyAdmin
+#      giữ: tắt/bật khoá, hẹn/huỷ xoá khoá, tạo/đổi/xoá alias, bật/tắt/xoay ngay, đổi mô tả, thẻ, tạo khoá.
 #   ⑵ Một task mang role WORKER chạy ngoài service chính thức `tp-unseal-worker`.
 #   ⑶ [ADR-072] Job neo `tp-neo` (lịch hằng ngày) dừng mà không thành công.
 #   ⑷ [ADR-073] 36 giờ không có mốc neo sổ kiểm toán mới nào trong bucket neo — bắt đúng ca ⑶ mù: lịch KHÔNG chạy
@@ -23,14 +24,24 @@
 # vĩnh viễn), nên về lý thuyết KeyAdmin tự gỡ lệnh Deny rồi tự cấp Decrypt trên alias/tp-org-wrap.
 # Không lớp nào CHẶN được đường ấy; stack này làm cho nó KHÔNG IM LẶNG (README, "Rủi ro còn lại").
 #
+# [2026-10-02 / khoản 336] PutKeyPolicy không phải thao tác phá duy nhất KeyAdmin làm được. Tắt `tp-org-wrap` thì mọi lượt mở
+# thầu dừng; hẹn xoá nó thì hết thời gian chờ (người gọi tự chọn, thấp nhất 7 ngày — `deletion_window_in_days` của stack 40/50
+# chỉ áp khi Terraform xoá) mọi phong bì chưa mở của mọi tổ chức mất vĩnh viễn; đổi hay xoá alias thì `api` hỏng ở lần ký hay
+# bọc kế tiếp. Nên mẫu bắt `local.su_kien_ghi_khoa`: mọi hành động KHÔNG ĐỌC mà KeyAdmin giữ — statement
+# `KeyAdminQuanTriKhongDung` của `modules/quan-tri-khoa` cộng permission set `QuanTriKhoa` của stack 20 —, ký tự đại diện
+# `Update*`/`Enable*`/`Disable*` khai triển theo danh mục thao tác KMS. Test
+# `tests/architecture/hinh-dang-canh-bao-khoa.test.ts` ghim điều ấy: trao KeyAdmin một quyền ghi mới mà quên thêm sự kiện ở
+# đây thì test đỏ. Còn lại, chưa đóng: AWS thêm một thao tác mới khớp `Update*`/`Enable*`/`Disable*` thì danh mục của test
+# chưa có nó (danh mục ghi ngày đọc). Tên hai rule giữ `...put-key-policy` từ trước khoản 336: đổi tên là thay rule.
+#
 # Cách đi, và vì sao cảnh báo nằm ở AUDIT:
-#   prod  — rule trên default bus bắt PutKeyPolicy, chuyển nguyên sự kiện sang default bus của audit.
-#   audit — rule bắt PutKeyPolicy (của chính audit, và của prod được chuyển sang) ⇒ SNS ⇒ email.
+#   prod  — rule trên default bus bắt thao tác ghi khoá, chuyển nguyên sự kiện sang default bus của audit.
+#   audit — rule bắt thao tác ghi khoá (của chính audit, và của prod được chuyển sang) ⇒ SNS ⇒ email.
 # Người có AdministratorAccess ở prod xoá được rule chuyển tiếp của prod, nhưng không chạm được
 # SNS/rule ở audit; và chính lần xoá ấy nằm trong CloudTrail tổ chức. KeyAdmin (chỉ quyền kms:*)
 # không sửa được cả hai phía.
 #
-# Bắt cả lần gọi THẤT BẠI (errorCode khác rỗng): một lần thử sửa policy bị từ chối cũng là tín hiệu.
+# Bắt cả lần gọi THẤT BẠI (errorCode khác rỗng): một lần thử sửa policy, tắt hay hẹn xoá khoá bị từ chối cũng là tín hiệu.
 #
 # ⑵ Role `tp-unseal-worker` là role duy nhất có kms:Decrypt trên tp-org-wrap, và `tp-deploy-worker`
 # PassRole được nó ⇒ pipeline ấy (hay ai chiếm được nó) chạy được MỘT TASK BẤT KỲ mang quyền giải
@@ -124,13 +135,35 @@ locals {
   prod   = module.chung.account.prod
   region = module.chung.region
 
-  # Một mẫu cho cả hai phía: mọi PutKeyPolicy trên KMS, thành công hay bị từ chối.
-  mau_put_key_policy = jsonencode({
+  # [khoản 336] Mọi hành động không đọc mà KeyAdmin giữ (key policy + permission set), ký tự đại diện đã khai triển — xếp
+  # theo chữ cái. Test hình dạng đòi tập này PHỦ tập ấy; thêm quyền cho KeyAdmin thì thêm tên ở đây.
+  su_kien_ghi_khoa = [
+    "CancelKeyDeletion",
+    "CreateAlias",
+    "CreateKey",
+    "DeleteAlias",
+    "DisableKey",
+    "DisableKeyRotation",
+    "EnableKey",
+    "EnableKeyRotation",
+    "PutKeyPolicy",
+    "RotateKeyOnDemand",
+    "ScheduleKeyDeletion",
+    "TagResource",
+    "UntagResource",
+    "UpdateAlias",
+    "UpdateCustomKeyStore",
+    "UpdateKeyDescription",
+    "UpdatePrimaryRegion",
+  ]
+
+  # Một mẫu cho cả hai phía: mọi thao tác ghi ấy trên KMS, thành công hay bị từ chối, bởi BẤT KỲ ai — không lọc người gọi.
+  mau_ghi_khoa = jsonencode({
     source      = ["aws.kms"]
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
       eventSource = ["kms.amazonaws.com"]
-      eventName   = ["PutKeyPolicy"]
+      eventName   = local.su_kien_ghi_khoa
     }
   })
 
@@ -349,8 +382,8 @@ resource "aws_sns_topic_subscription" "email" {
 resource "aws_cloudwatch_event_rule" "put_key_policy_audit" {
   provider      = aws.audit
   name          = "tp-canh-bao-put-key-policy"
-  description   = "PutKeyPolicy tren khoa KMS cua audit hoac prod (ADR-062, rui ro KeyAdmin)"
-  event_pattern = local.mau_put_key_policy
+  description   = "Moi thao tac ghi tren khoa KMS cua audit hoac prod (ADR-062, khoan 336, rui ro KeyAdmin)"
+  event_pattern = local.mau_ghi_khoa
 }
 
 resource "aws_cloudwatch_event_target" "put_key_policy_audit" {
@@ -358,16 +391,22 @@ resource "aws_cloudwatch_event_target" "put_key_policy_audit" {
   rule     = aws_cloudwatch_event_rule.put_key_policy_audit.name
   arn      = aws_sns_topic.canh_bao_khoa.arn
 
-  # Thư đọc được ngay, không phải một khối JSON: ai, tài khoản nào, khoá nào, có bị từ chối không.
+  # Thư đọc được ngay, không phải một khối JSON: thao tác gì, ai, tài khoản nào, khoá hay alias nào, có bị từ chối không.
+  # [khoản 336] Trường không có ở một thao tác (alias ở DisableKey, keyId ở DeleteAlias) ra rỗng — biến của đường dẫn vắng
+  # không được tạo, và thư vẫn đi: 3.3 đo một PutKeyPolicy THÀNH CÔNG (không có errorCode) ra thư.
   input_transformer {
     input_paths = {
+      lenh     = "$.detail.eventName"
       taiKhoan = "$.account"
       luc      = "$.time"
       ai       = "$.detail.userIdentity.arn"
       khoa     = "$.detail.requestParameters.keyId"
+      alias    = "$.detail.requestParameters.aliasName"
+      khoaDich = "$.detail.requestParameters.targetKeyId"
+      ngayCho  = "$.detail.requestParameters.pendingWindowInDays"
       loi      = "$.detail.errorCode"
     }
-    input_template = "\"[TrustProcure] PutKeyPolicy tren khoa KMS. Tai khoan <taiKhoan>, luc <luc>, boi <ai>, khoa <khoa>, errorCode <loi> (rong = THANH CONG). Neu day khong phai mot thay doi da duyet: kiem tra ngay key policy va CloudTrail.\""
+    input_template = "\"[TrustProcure] <lenh> tren khoa KMS. Tai khoan <taiKhoan>, luc <luc>, boi <ai>, khoa <khoa>, alias <alias>, khoa dich <khoaDich>, so ngay cho xoa <ngayCho>, errorCode <loi> (rong = THANH CONG). Neu day khong phai mot thay doi da duyet: DisableKey thi EnableKey, ScheduleKeyDeletion thi CancelKeyDeletion NGAY; roi kiem tra key policy, alias va CloudTrail.\""
   }
 }
 
@@ -421,7 +460,7 @@ resource "aws_cloudwatch_event_target" "neo_hong_audit" {
 }
 
 # ---------------------------------------------------------------------------------------------
-# PROD — chuyển PutKeyPolicy (⑴), task mang role worker (⑵) và job neo hỏng (⑶) sang audit
+# PROD — chuyển thao tác ghi khoá (⑴), task mang role worker (⑵) và job neo hỏng (⑶) sang audit
 # ---------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "events_assume" {
   provider = aws.prod
@@ -462,8 +501,8 @@ resource "aws_iam_role_policy" "chuyen_canh_bao" {
 resource "aws_cloudwatch_event_rule" "put_key_policy_prod" {
   provider      = aws.prod
   name          = "tp-chuyen-put-key-policy"
-  description   = "Chuyen PutKeyPolicy sang default bus cua audit (ADR-062, rui ro KeyAdmin)"
-  event_pattern = local.mau_put_key_policy
+  description   = "Chuyen moi thao tac ghi tren khoa KMS sang default bus cua audit (ADR-062, khoan 336, rui ro KeyAdmin)"
+  event_pattern = local.mau_ghi_khoa
 }
 
 resource "aws_cloudwatch_event_target" "put_key_policy_prod" {
