@@ -174,6 +174,9 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_key_material_wrapped_private_key_check: "DO_DAI",
   rfq_packages_early_close_reason_check: "DO_DAI",
   rfq_packages_title_check: "DO_DAI",
+  // [S1.9101 / S3.3b] Độ dài giải trình và lý do rút ngoại lệ — năm CHECK kia của bảng (hành động, loại, mã lý do, hình dạng, sàn
+  // `OTHER`) nằm ở tập an ninh.
+  rfq_sourcing_exceptions_giai_trinh_check: "DO_DAI",
   sessions_user_agent_check: "DO_DAI",
   supplier_contacts_email_check: "DO_DAI",
   supplier_contacts_full_name_check: "DO_DAI",

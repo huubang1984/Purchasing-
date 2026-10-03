@@ -69,6 +69,7 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
   | "J5_LUOT_CHAM_KHONG_MOI_NHAT"
+  | "K4A_NGOAI_LE_SAI_TRANG_THAI"
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
@@ -232,6 +233,17 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
       "thu hồi được (K4a).",
   },
+  // [S1.9101 / S3.3b / spec S3 §4.4] Lời từ chối K4a thứ ba — trigger `ngoai_le_kiem` (`9501`) là lớp có thẩm quyền, tầng gói
+  // (`lapNgoaiLe`, `rutNgoaiLe`) bắt CHÍNH lỗi của nó theo tên ràng buộc, khuôn ADR-114.
+  K4A_NGOAI_LE_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người lập hay rút ngoại lệ cạnh tranh của gói đã rời DRAFT. Ngoại lệ nằm trong băm danh sách mà người duyệt ký (spec " +
+      "§4.4), nên đổi nó sau khi nộp duyệt là đổi thứ người khác đã hay sắp ký lên — cùng lý do với hai lời từ chối K4a của " +
+      "lời mời. Người dùng làm việc ấy, không phải dữ liệu đổi dưới chân họ (ADR-060)",
+    thongDiep: "Ngoại lệ cạnh tranh chỉ lập hay rút được khi gói thầu còn soạn thảo; gói đã nộp duyệt thì trả về soạn thảo trước (K4a).",
+  },
   // [S1.196 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
   // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
   // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
@@ -301,6 +313,8 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
   // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`093`).
   j5_luot_cham_khong_moi_nhat: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
+  // [S1.9101 / S3.3b] Nhánh DRAFT của `ngoai_le_kiem` (`9501_ngoai_le_canh_tranh`).
+  k4a_ngoai_le_sai_trang_thai: "K4A_NGOAI_LE_SAI_TRANG_THAI",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.

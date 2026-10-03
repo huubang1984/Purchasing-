@@ -34,12 +34,15 @@ import {
   clearOtpLockout,
   createInvitation,
   danhDauDaGui,
+  docNgoaiLe,
   ducTokenKhiMoGoi,
   issueMagicLinkToken,
+  lapNgoaiLe,
   listInvitations,
   reissueInvitationLink,
   revokeInvitation,
   revokeMagicLinkToken,
+  rutNgoaiLe,
   CHANNELS,
   CUA_SO_LINK_MOI_GIAY,
   type Channel,
@@ -216,6 +219,7 @@ const rfqIdParam = (req: ApiRequest): string => uuidParam(req, "rfqId");
 const unsealIdParam = (req: ApiRequest): string => uuidParam(req, "unsealRequestId");
 const invitationIdParam = (req: ApiRequest): string => uuidParam(req, "invitationId");
 const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId");
+const exceptionIdParam = (req: ApiRequest): string => uuidParam(req, "exceptionId");
 const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
@@ -379,6 +383,27 @@ const doc: readonly BuyerReadRoute[] = [
       status: 200,
       body: {
         invitations: await listInvitations(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/exceptions",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.9101 / S3.3b · spec S3 §4.4] Ngoại lệ cạnh tranh của gói, kèm lần rút. Cùng khuôn danh sách lời mời ngay trên — ngoại lệ là
+    // một phần của danh sách ấy, nằm trong cùng băm mà người duyệt ký: cổng `rfq.invite` nằm THẲNG trong thân `docNgoaiLe` (rổ
+    // `HAM_DOC_CO_QUYEN`), và KHÔNG `agent: true` — lý do vì sao gói không đủ cạnh tranh là dữ liệu kiểm soát của bên mua.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        exceptions: await docNgoaiLe(
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
@@ -1309,6 +1334,60 @@ const ghi: readonly BuyerWriteRoute[] = [
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // [S1.9101 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh. Cổng của bộ điều phối là `rfq.invite` (ADR-084 ⑵), hàm gói hỏi lại
+  // cùng mã; trigger `ngoai_le_kiem` chặn ngoài DRAFT, và lần chặn ấy vào sổ `CONTROL_DENIED` (`K4A_NGOAI_LE_SAI_TRANG_THAI`). Chỉ
+  // tổ chức đã bật S3.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/exceptions",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_INVITE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        exception: await lapNgoaiLe(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            loai: chuoiBatBuoc(ctx.req.body, "loai"),
+            maLyDo: chuoiBatBuoc(ctx.req.body, "maLyDo"),
+            giaiTrinh: chuoiBatBuoc(ctx.req.body, "giaiTrinh"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/exceptions/:exceptionId/withdraw",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_INVITE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        exception: await rutNgoaiLe(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            exceptionId: exceptionIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
           ctx.auditPool,
         ),
       },

@@ -1832,6 +1832,7 @@ $ham$;
        ('public.rfq_items', ARRAY['rfq_items_cam_truncate', 'rfq_items_chi_sua_khi_soan', 'rfq_items_kiem_danh_tinh']),
        ('public.rfq_key_material', ARRAY['rfq_key_material_bat_bien', 'rfq_key_material_chi_sinh_luc_mo', 'rfq_key_material_chi_thu_hoi_khi_huy', 'rfq_key_material_kiem_danh_tinh', 'rfq_key_material_kiem_nguoi_thu_hoi', 'rfq_key_material_kiem_nguoi_xoa', 'rfq_key_material_phai_di_kem_lan_mo']),
        ('public.rfq_packages', ARRAY['rfq_packages_dem_lan_nop', 'rfq_packages_ghim_chinh_sach_khi_mo', 'rfq_packages_gia_han_khong_hoi_sinh', 'rfq_packages_kiem_chuyen_trang_thai', 'rfq_packages_kiem_danh_sach_khi_mo', 'rfq_packages_kiem_khoa_khi_mo', 'rfq_packages_kiem_ngan_sach_khi_nop', 'rfq_packages_kiem_nguoi_dong', 'rfq_packages_kiem_nguoi_huy', 'rfq_packages_kiem_nguoi_mo', 'rfq_packages_kiem_nguoi_nop', 'rfq_packages_kiem_nguoi_tao', 'rfq_packages_kiem_nguong_phe_duyet_kep', 'rfq_packages_kiem_nhom_hang_khi_nop', 'rfq_packages_kiem_tin_hieu_khi_mo', 'rfq_packages_kiem_yeu_cau_mo_thau', 'rfq_packages_nhom_hang', 'rfq_packages_tra_ve_nhap_chi_khi_bat_s3']),
+       ('public.rfq_sourcing_exceptions', ARRAY['rfq_sourcing_exceptions_chan_truncate', 'rfq_sourcing_exceptions_chi_ghi_them', 'rfq_sourcing_exceptions_kiem_danh_tinh', 'rfq_sourcing_exceptions_kiem_ngoai_le']),
        ('public.rfq_tra_ve', ARRAY['rfq_tra_ve_chan_truncate', 'rfq_tra_ve_chi_ghi_them', 'rfq_tra_ve_dat_lan_nop', 'rfq_tra_ve_kiem_danh_tinh', 'rfq_tra_ve_phai_di_kem_canh']),
        ('public.rfq_unsealed_bids', ARRAY['rfq_unsealed_bids_chan_truncate', 'rfq_unsealed_bids_chi_ghi_them', 'rfq_unsealed_bids_kiem_yeu_cau']),
        ('public.role_permissions', ARRAY['role_permissions_ma_tran_quyen', 'role_permissions_nguong_khong_cung_tay', 'role_permissions_quan_ly_du_lieu_mu_gia']),
@@ -3065,6 +3066,12 @@ $ham$;
          ('public', 'rfq_packages', 'rfq_da_dong_thi_co_moc_dong', '061_trao_thau', 'CHECK (((status <> ALL (ARRAY[''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text])) OR (closed_at IS NOT NULL)))'),
          ('public', 'rfq_packages', 'rfq_packages_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''DRAFT''::text, ''PENDING_APPROVAL''::text, ''OPEN''::text, ''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text, ''CANCELLED''::text])))'),
          ('public', 'rfq_packages', 'rfq_thu_tu_moc', '011_rfq_hardening', 'CHECK ((((opened_at IS NULL) OR (opened_at >= created_at)) AND ((closed_at IS NULL) OR (opened_at IS NULL) OR (closed_at >= opened_at))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_giai_trinh_da_cat', '9501_ngoai_le_canh_tranh', 'CHECK (((giai_trinh !~ ''^[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]''::text) AND (giai_trinh !~ ''[\t\n\v\f\r \xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]$''::text)))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hanh_dong_check', '9501_ngoai_le_canh_tranh', 'CHECK ((hanh_dong = ANY (ARRAY[''LAP''::text, ''RUT''::text])))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_hinh_dang', '9501_ngoai_le_canh_tranh', 'CHECK ((((hanh_dong = ''LAP''::text) AND (loai IS NOT NULL) AND (ma_ly_do IS NOT NULL) AND (ngoai_le_id IS NULL)) OR ((hanh_dong = ''RUT''::text) AND (loai IS NULL) AND (ma_ly_do IS NULL) AND (ngoai_le_id IS NOT NULL))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_loai_check', '9501_ngoai_le_canh_tranh', 'CHECK (((loai IS NULL) OR (loai = ANY (ARRAY[''SINGLE_SOURCE''::text, ''LIMITED_COMPETITION''::text, ''ROTATION''::text, ''LOW_ACTUAL_COMPETITION''::text, ''LIST_NARROWED_BELOW_MIN''::text]))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_ma_ly_do_check', '9501_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS NULL) OR (ma_ly_do = ANY (ARRAY[''PROPRIETARY_TECHNOLOGY''::text, ''EXISTING_CONTRACT''::text, ''EMERGENCY''::text, ''NO_ALTERNATIVE''::text, ''COMPATIBILITY''::text, ''REGULATORY''::text, ''OTHER''::text]))))'),
+         ('public', 'rfq_sourcing_exceptions', 'rfq_sourcing_exceptions_san_other', '9501_ngoai_le_canh_tranh', 'CHECK (((ma_ly_do IS DISTINCT FROM ''OTHER''::text) OR (octet_length(giai_trinh) >= 100)))'),
          ('public', 'sessions', 'sessions_agent_ttl_ngan', '051_phien_co_pham_vi', 'CHECK (((kind <> ''AGENT_READONLY''::text) OR (expires_at <= (created_at + ''01:00:00''::interval))))'),
          ('public', 'sessions', 'sessions_check', '006_sessions_and_mfa', 'CHECK ((expires_at > created_at))'),
          ('public', 'sessions', 'sessions_kind_hop_le', '051_phien_co_pham_vi', 'CHECK ((kind = ANY (ARRAY[''USER''::text, ''AGENT_READONLY''::text])))'),
@@ -3814,6 +3821,7 @@ $ham$;
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
+         ('public', 'rfq_sourcing_exceptions', '9501_ngoai_le_canh_tranh'),
          ('public', 'rfq_tra_ve', '087_lan_nop_da_xem'),
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
@@ -5208,6 +5216,17 @@ $ham$;
              CREATE TRIGGER governance_signal_acks_kiem_danh_tinh BEFORE INSERT ON governance_signal_acks FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
              ALTER TABLE public.governance_signal_acks ENABLE ALWAYS TRIGGER governance_signal_acks_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.rfq_sourcing_exceptions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                                 AND t.tgname = 'rfq_sourcing_exceptions_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_kiem_danh_tinh BEFORE INSERT ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_sourcing_exceptions_kiem_danh_tinh ON public.rfq_sourcing_exceptions;
+             CREATE TRIGGER rfq_sourcing_exceptions_kiem_danh_tinh BEFORE INSERT ON rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
+             ALTER TABLE public.rfq_sourcing_exceptions ENABLE ALWAYS TRIGGER rfq_sourcing_exceptions_kiem_danh_tinh;
+           END IF;
          END
          $fn51$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -5513,6 +5532,14 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER governance_signal_acks_kiem_danh_tinh BEFORE INSERT ON public.governance_signal_acks FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.rfq_sourcing_exceptions') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                               AND t.tgname = 'rfq_sourcing_exceptions_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_kiem_danh_tinh BEFORE INSERT ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
@@ -6618,6 +6645,28 @@ $ham$;
              CREATE TRIGGER rfq_tra_ve_chan_truncate BEFORE TRUNCATE ON rfq_tra_ve FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_chan_truncate;
            END IF;
+           IF to_regclass('public.rfq_sourcing_exceptions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                                 AND t.tgname = 'rfq_sourcing_exceptions_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_sourcing_exceptions_chi_ghi_them ON public.rfq_sourcing_exceptions;
+             CREATE TRIGGER rfq_sourcing_exceptions_chi_ghi_them BEFORE UPDATE OR DELETE ON rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_sourcing_exceptions ENABLE ALWAYS TRIGGER rfq_sourcing_exceptions_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_sourcing_exceptions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                                 AND t.tgname = 'rfq_sourcing_exceptions_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_chan_truncate BEFORE TRUNCATE ON public.rfq_sourcing_exceptions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_sourcing_exceptions_chan_truncate ON public.rfq_sourcing_exceptions;
+             CREATE TRIGGER rfq_sourcing_exceptions_chan_truncate BEFORE TRUNCATE ON rfq_sourcing_exceptions FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_sourcing_exceptions ENABLE ALWAYS TRIGGER rfq_sourcing_exceptions_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -6957,6 +7006,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_chan_truncate BEFORE TRUNCATE ON public.rfq_tra_ve FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_sourcing_exceptions') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                               AND t.tgname = 'rfq_sourcing_exceptions_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_sourcing_exceptions') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                               AND t.tgname = 'rfq_sourcing_exceptions_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_chan_truncate BEFORE TRUNCATE ON public.rfq_sourcing_exceptions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
@@ -6970,7 +7035,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_tra_ve, public.rfq_unsealed_bids, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_sourcing_exceptions, public.rfq_tra_ve, public.rfq_unsealed_bids, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -8960,10 +9025,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm chinh_sach_hieu_luc(uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.185 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong.
+    -- [S1.185 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong. [S1.9101 / S3.3b] Than phu them ngoai le CON SONG: mot than bo dong NGOAI_LE cho doi hay rut ngoai le ma chu ky van dem.
     ARRAY[
-      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (076_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (076_danh_sach_moi, thân từ 9501_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bam_danh_sach(p_rfq uuid) RETURNS bytea
   LANGUAGE sql
   STABLE
@@ -8973,11 +9038,19 @@ AS $ham$
     coalesce((SELECT string_agg(d.dong, E'\n' ORDER BY d.dong COLLATE "C")
                 FROM (SELECT 'MOI|' || i.supplier_id::text || '|' || i.contact_id::text || '|' || i.link_channel AS dong
                         FROM public.rfq_invitations i
-                       WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL) d), ''),
+                       WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL
+                      UNION ALL
+                      SELECT 'NGOAI_LE|' || e.id::text || '|' || e.loai || '|' || e.ma_ly_do || '|'
+                             || encode(sha256(convert_to(e.giai_trinh, 'UTF8')), 'hex') AS dong
+                        FROM public.rfq_sourcing_exceptions e
+                       WHERE e.rfq_id = p_rfq AND e.hanh_dong = 'LAP'
+                         AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION')
+                         AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                                          WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) d), ''),
     'UTF8'))
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$SELECT sha256(convert_to( coalesce((SELECT string_agg(d.dong, E'\n' ORDER BY d.dong COLLATE "C") FROM (SELECT 'MOI|' || i.supplier_id::text || '|' || i.contact_id::text || '|' || i.link_channel AS dong FROM public.rfq_invitations i WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL) d), ''), 'UTF8'))$than$
+                = $than$SELECT sha256(convert_to( coalesce((SELECT string_agg(d.dong, E'\n' ORDER BY d.dong COLLATE "C") FROM (SELECT 'MOI|' || i.supplier_id::text || '|' || i.contact_id::text || '|' || i.link_channel AS dong FROM public.rfq_invitations i WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL UNION ALL SELECT 'NGOAI_LE|' || e.id::text || '|' || e.loai || '|' || e.ma_ly_do || '|' || encode(sha256(convert_to(e.giai_trinh, 'UTF8')), 'hex') AS dong FROM public.rfq_sourcing_exceptions e WHERE e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) d), ''), 'UTF8'))$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -9662,6 +9735,113 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.ncc_kiem_xac_minh()')),
                   'hàm public.ncc_kiem_xac_minh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.ncc_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / S3.3b / K4a] Luat ghi ngoai le canh tranh: to chuc da bat, nguoi giu rfq.invite, goi o DRAFT (rang buoc co ten), hang rut tro ve mot ngoai le chua rut cua cung goi. Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky.
+    ARRAY[
+      $q$hàm + trigger ngoai_le_kiem (9501_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.ngoai_le_kiem()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.ngoai_le_kiem();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.ngoai_le_kiem() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RAISE EXCEPTION 'Chi to chuc da bat S3 moi lap hay rut ngoai le canh tranh (ADR-080)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT p.status INTO trang_thai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+     FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay goi thau cua ngoai le (K4a)'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF NOT EXISTS (SELECT 1
+                   FROM public.user_roles ur
+                   JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                  WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by
+                    AND rp.permission_code = 'rfq.invite') THEN
+    RAISE EXCEPTION 'Nguoi lap hay rut ngoai le phai giu rfq.invite (ADR-084)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF trang_thai <> 'DRAFT' THEN
+    RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai';
+  END IF;
+  IF NEW.hanh_dong = 'LAP' THEN
+    IF NEW.loai NOT IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN
+      RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NOT EXISTS (SELECT 1
+                   FROM public.rfq_sourcing_exceptions e
+                  WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id
+                    AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP') THEN
+    RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.rfq_sourcing_exceptions r
+              WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN
+    RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_sourcing_exceptions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                                 AND t.tgname = 'rfq_sourcing_exceptions_kiem_ngoai_le'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.ngoai_le_kiem()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_kiem_ngoai_le BEFORE INSERT ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION ngoai_le_kiem()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_sourcing_exceptions_kiem_ngoai_le ON public.rfq_sourcing_exceptions;
+             CREATE TRIGGER rfq_sourcing_exceptions_kiem_ngoai_le BEFORE INSERT ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION public.ngoai_le_kiem();
+             ALTER TABLE public.rfq_sourcing_exceptions ENABLE ALWAYS TRIGGER rfq_sourcing_exceptions_kiem_ngoai_le;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi lap hay rut ngoai le canh tranh (ADR-080)' USING ERRCODE = 'check_violation'; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua ngoai le (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'rfq.invite') THEN RAISE EXCEPTION 'Nguoi lap hay rut ngoai le phai giu rfq.invite (ADR-084)' USING ERRCODE = 'check_violation'; END IF; IF trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai'; END IF; IF NEW.hanh_dong = 'LAP' THEN IF NEW.loai NOT IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP') THEN RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_sourcing_exceptions')
+                           AND t.tgname = 'rfq_sourcing_exceptions_kiem_ngoai_le'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.ngoai_le_kiem()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_kiem_ngoai_le BEFORE INSERT ON public.rfq_sourcing_exceptions FOR EACH ROW EXECUTE FUNCTION ngoai_le_kiem()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.ngoai_le_kiem()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.ngoai_le_kiem()')),
+                  'hàm public.ngoai_le_kiem() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.ngoai_le_kiem() và bảng public.rfq_sourcing_exceptions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.198 / khoan 256] Dem lan nop o canh DRAFT->PENDING_APPROVAL. Than `RETURN NEW` giu lan nop dung yen: nop lai sau khi tra ve mang lai moc cu, va loi duyet tren lan xem truoc di qua.
@@ -11990,10 +12170,10 @@ $ham$$q$,
                   'hàm public.rfq_hang_muc_bam(uuid, uuid, integer) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_hang_muc_bam(uuid, uuid, integer) hoặc SUPERUSER$q$
     ],
-    -- [S1.204 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET.
+    -- [S1.204 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET. [S1.9101 / S3.3b] Them tac gia ngoai le con song.
     ARRAY[
-      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (089_anh_xa_hang_muc)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '089_anh_xa_hang_muc.sql')$q$,
+      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (089_anh_xa_hang_muc, thân từ 9501_ngoai_le_canh_tranh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ngoai_le_canh_tranh.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_tap_loai_tru(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -12019,6 +12199,13 @@ AS $ham$
       JOIN public.supplier_contacts c ON c.org_id = i.org_id AND c.id = i.contact_id
      WHERE i.org_id = p_org AND i.rfq_id = p_rfq
     UNION ALL
+    SELECT e.created_by
+      FROM public.rfq_sourcing_exceptions e
+     WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP'
+       AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION')
+       AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                        WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)
+    UNION ALL
     SELECT a.actor_id
       FROM public.audit_events a
      WHERE a.org_id = p_org
@@ -12030,7 +12217,7 @@ AS $ham$
   WHERE n IS NOT NULL
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$SELECT DISTINCT n FROM ( SELECT p.created_by AS n FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT p.submitted_by FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT i.invited_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT i.revoked_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT b.created_by FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq UNION ALL SELECT s.created_by FROM public.rfq_invitations i JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT c.created_by FROM public.rfq_invitations i JOIN public.supplier_contacts c ON c.org_id = i.org_id AND c.id = i.contact_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT a.actor_id FROM public.audit_events a WHERE a.org_id = p_org AND a.resource_type = 'rfq_package' AND a.resource_id = p_rfq AND a.actor_type = 'USER' AND a.action IN ('RFQ_SUBMITTED_FOR_APPROVAL', 'RFQ_BUDGET_SET') ) t WHERE n IS NOT NULL$than$
+                = $than$SELECT DISTINCT n FROM ( SELECT p.created_by AS n FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT p.submitted_by FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT i.invited_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT i.revoked_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT b.created_by FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq UNION ALL SELECT s.created_by FROM public.rfq_invitations i JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT c.created_by FROM public.rfq_invitations i JOIN public.supplier_contacts c ON c.org_id = i.org_id AND c.id = i.contact_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT e.created_by FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id) UNION ALL SELECT a.actor_id FROM public.audit_events a WHERE a.org_id = p_org AND a.resource_type = 'rfq_package' AND a.resource_id = p_rfq AND a.actor_type = 'USER' AND a.action IN ('RFQ_SUBMITTED_FOR_APPROVAL', 'RFQ_BUDGET_SET') ) t WHERE n IS NOT NULL$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']

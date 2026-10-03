@@ -1731,14 +1731,15 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // [S1.194 / S3.2d / khoản 255] Trigger K4a (`rfq_invitations_kiem_danh_sach`) cũng đặt tên ràng buộc — bảng có hai dòng `k4a_…`.
   // [S1.196 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`082`) đặt hai tên K8a — phép so gom cả năm thân.
   // [S1.253 / S4.5a] Và trigger L14: `rfq_evaluations_kiem_phien_ban_ghim` (`102`) đặt một tên — phép so gom cả sáu thân.
-  it("tên ràng buộc ở ba trigger J3/D2, trigger K4a, trigger K8a, trigger L14 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.9101 / S3.3b] Và trigger K4a thứ hai: `ngoai_le_kiem` (`9501`) đặt một tên — phép so gom cả bảy thân.
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, trigger K8a, trigger L14 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure, " +
-        "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure)",
+        "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure, 'public.ngoai_le_kiem()'::regprocedure)",
     );
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(7);
     const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });

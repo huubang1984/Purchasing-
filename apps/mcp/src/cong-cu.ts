@@ -10,7 +10,8 @@
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
 //   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
-//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ ~~[S1.216] MƯỜI TÁM~~ ~~[S1.234] MƯỜI CHÍN~~ [S1.214 — gộp #217] HAI MƯƠI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ ~~[S1.216] MƯỜI TÁM~~ ~~[S1.234] MƯỜI CHÍN~~ ~~[S1.214 — gộp #217] HAI MƯƠI~~
+//      [S1.9101] HAI MƯƠI BỐN — đếm lại: ba route của S1.251 và S1.260 vào bảng mà dòng này không đổi, cộng một của S3.3b — route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -97,6 +98,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "`agent: false` và dòng này khai vì sao; cổng quyền của nó là `rfq.invite`, tức AI MỜI ĐƯỢC " +
     "THÌ XEM ĐƯỢC, không rộng hơn. Đường thu hồi một lời mời gửi nhầm là việc của con người ở " +
     "giao diện người mua, không phải của một tác tử. [S1.98 / khoản 125]",
+  // [S1.9101 / S3.3b · spec S3 §4.4]
+  "/rfqs/:rfqId/exceptions":
+    "NGOẠI LỆ CẠNH TRANH của một gói — vì sao danh sách mời không đủ cạnh tranh, ai lập, ai rút, lý do. Nó là một phần của " +
+    "danh sách mời mà người duyệt ký (K4b), cùng cổng `rfq.invite` với danh sách lời mời ngay trên, vốn cũng không phơi cho " +
+    "tác tử chỉ-đọc: giải trình hay gọi tên nhà cung cấp duy nhất. Mở sau là một quyết định có tên.",
   "/rfqs/:rfqId/unseal":
     "YÊU CẦU MỞ THẦU ĐANG MỞ của một gói thầu — đường TÌM ĐƯỢC mà S1.90 mở cho người duyệt thứ " +
     "hai (ADR-045 ⑵). Nó khác ba dòng trên ở chỗ thứ nó trả về KHÔNG phải dữ liệu nhạy cảm: " +

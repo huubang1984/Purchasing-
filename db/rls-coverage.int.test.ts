@@ -857,6 +857,8 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      // [S1.9101 / S3.3b] Ngoại lệ cạnh tranh: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", quyen: "SELECT" },
       // [S1.198 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
       { grantee: "app_api", bang: "rfq_tra_ve", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
@@ -1548,6 +1550,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
+      // [S1.9101 / S3.3b] Ngoại lệ: CHỈ INSERT — `id`, `created_at` do CSDL đặt; tác giả là dẫn xuất từ phiên.
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "giai_trinh", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "hanh_dong", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "ma_ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "ngoai_le_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "rfq_id", quyen: "INSERT" },
       // [S1.198 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
       { grantee: "app_api", bang: "rfq_tra_ve", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_tra_ve", cot: "reason", quyen: "INSERT" },
@@ -2154,6 +2166,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
+      // [S1.9101 / S3.3b] Vì sao người mua không mời đủ nhà cung cấp là việc nội bộ — nhà cung cấp không đọc ngoại lệ.
+      "rfq_sourcing_exceptions",
       // [S1.198 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
       "rfq_tra_ve",
       "sessions", "supplier_contacts",
