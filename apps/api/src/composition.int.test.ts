@@ -976,6 +976,21 @@ describe("[S1.248 / khoản 277] tiến trình `api` khởi động lại tự n
 
   const tinLinkDen = (email: string): TinHopThuDev[] => docHopThu().filter((t) => t.loai === "LOGIN_LINK" && t.den === email);
 
+  /**
+   * [S1.264 / khoản 339] Số tin tới `email`, chờ tới khi đủ `n` — trần `hanMs`. `DONE` KHÔNG kéo theo "tin đã có": handler
+   * `LOGIN_LINK_SEND` trả về hàm gửi, và runner gọi nó SAU khi token và dấu `DONE` đã commit, ngoài giao dịch (ADR-023, sổ nợ 53).
+   * Đếm hộp thư ngay khi `doiXong` thấy `DONE` là đua với chính khe ấy: CI của #237 đỏ đúng một lần ở ③ (`expected +0 to be 1`);
+   * tiêm 300 ms trước câu ghi tệp của hộp thư dev tái lập nó mỗi lần.
+   */
+  async function doiTinLinkDen(email: string, n: number, hanMs = 5000): Promise<number> {
+    const het = Date.now() + hanMs;
+    for (;;) {
+      const so = tinLinkDen(email).length;
+      if (so >= n || Date.now() > het) return so;
+      await new Promise((x) => setTimeout(x, 50));
+    }
+  }
+
   /** Hạn chờ của ② và ③: BA kỳ poll 5 s — đủ để vế "không bao giờ" không lẫn với "chậm". */
   const HAN_MS = 15_000;
 
@@ -1046,8 +1061,9 @@ describe("[S1.248 / khoản 277] tiến trình `api` khởi động lại tự n
         [[orgR, orgS]],
       );
       expect(dem.map((d) => d.n), "không lời /auth/link nào ở ② và ③ — mỗi tổ chức vẫn đúng một job").toEqual([1, 1]);
-      expect.soft(tinLinkDen("k277@vidu.vn").length, "② tin của job khôi phục vào hộp thư").toBe(1);
-      expect.soft(tinLinkDen("k277-s@vidu.vn").length, "③ tin của job chèn thẳng vào hộp thư").toBe(1);
+      // [S1.264 / khoản 339] Chờ tin — gửi là việc SAU commit, xem `doiTinLinkDen`. Chờ cả ② để mốc `tinTruoc` của ④ đứng yên.
+      expect.soft(await doiTinLinkDen("k277@vidu.vn", 1), "② tin của job khôi phục vào hộp thư").toBe(1);
+      expect.soft(await doiTinLinkDen("k277-s@vidu.vn", 1), "③ tin của job chèn thẳng vào hộp thư").toBe(1);
 
       // ④ HỢP với `toChucDaThay` là chịu lực, và ranh giới của hàm hẹp nói ra bằng phép đo (khoản 307). Job `RUNNING` hết hạn thuê —
       // cảnh "tiến trình chết GIỮA handler" — là việc `CAU_CLAIM` nhặt lại, nhưng chỉ cho tổ chức CÓ trong danh sách. Tổ chức R vừa
