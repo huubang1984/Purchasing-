@@ -24329,7 +24329,7 @@ này không còn là trao thầu mới nhất của gói — gói đã đổi t�
   vụ + 22/22 hàng rào), 1987 giây; `evidence/INV-matrix.md` không đổi. Trên `4592fe57`: `pnpm t0`, `cap-so --kiem` xanh;
   `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ.
 
-# §S1.9101 — CA CHẬP CHỜN CỦA `composition.int` KHOẢN 277 Ý ③: TEST ĐẾM HỘP THƯ NGAY KHI JOB `DONE`, VIỆC GỬI ĐI SAU COMMIT — KHOẢN 9401
+# §S1.264 — CA CHẬP CHỜN CỦA `composition.int` KHOẢN 277 Ý ③: TEST ĐẾM HỘP THƯ NGAY KHI JOB `DONE`, VIỆC GỬI ĐI SAU COMMIT — KHOẢN 339
 
 **Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (không chặn kịch bản §11; chỉ tốn một vòng CI mỗi
 lần đỏ). Chỉ sửa test; không migration, không route, không ADR, mã sản xuất không đổi một dòng.
