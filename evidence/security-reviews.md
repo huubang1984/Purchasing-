@@ -24366,4 +24366,6 @@ chèn thẳng vào hộp thư: expected +0 to be 1"* — rồi xanh ở lượt 
 - Chưa tìm ở `tools/pilot-gia-lap` (cũng đọc hộp thư dev, qua `hop-thu.ts`) — ngoài phạm vi các tệp int.
 
 ## 5. Số đo
-- ‹SỐ-ĐO›
+- `cap-so` cấp S1.264 và khoản 339 (trailer `Cap-So` ở `d0d8d3fa`); `cap-so --kiem` sạch; Handoff 339 khoản, 54 còn mở.
+- Trên `d0d8d3fa`: `pnpm t0` xanh; `pnpm test` 149 tệp (147 đạt, 2 bỏ qua), 2502 ca đạt, 14 bỏ qua, 0 đỏ. `pnpm evidence` chạy
+  song song với CI (máy đang có lượt evidence của một phiên khác — xếp hàng sau); kết quả ghi ở thân PR và thân commit merge.
