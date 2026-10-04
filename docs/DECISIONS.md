@@ -11428,3 +11428,105 @@ băm danh sách (và băm mà K9 sẽ ghim) là một quyết định không ai 
 
 - K2, K5 (S3.3c), K3 (S3.3d), màn, `gieo:demo`, kịch bản 41, lượt đi thử (S3.3e), KPI tỷ lệ single-source.
 - Hai loại còn lại của CHECK có vào băm hay không — việc của S3.5, S3.6c.
+
+## ADR-9201 — S3.3c2: K2 đếm nhóm nhà cung cấp mà người chọn danh sách không dựng, ngoại lệ khớp chặt, nộp duyệt chỉ dưới READ COMMITTED; K5 đòi một chữ ký còn hiệu lực ngoài tập loại trừ khi bậc ký danh sách hay gói có ngoại lệ
+
+**Ngày:** 2026-10-04 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-04: *"Làm 1: S3.3c — K2 và K5"*; sau bản hình
+dạng, *"Hai PR: c1 dữ liệu test, c2 chốt"* (S3.3c1 — §S1.266, không ADR riêng: quyết định chia ghi ở đây); luật đếm của bản hình dạng
+(header `packages/test-support/src/nha-cung-cap-dem-duoc.ts`); ba câu trước lượt soi: ⑶ ngoại lệ khớp chặt, ⑷ số điện thoại so chín
+chữ số cuối, ⑵ *người mời* là mọi `invited_by` kể cả hàng đã thu hồi; bốn câu sau lượt soi, cả bốn theo đề xuất: ⑵ thêm người THU
+HỒI và vế người xác minh, ⑸ chốt READ COMMITTED ở MỌI tổ chức, ⑻ K5 nhường lời cho K4b khi chưa đủ chữ ký, ⑴ nhóm theo MỌI người
+liên hệ · **[S1.9101]** · **Liên quan:** ADR-058 ⑶, ADR-080, ADR-081 ⑵, ADR-082 ⑹ ⑺ ⑽ ⑿, ADR-084 ⑷, ADR-085, ADR-117, ADR-121,
+ADR-137 (`097`), ADR-145 · **Spec:** S3 §2.4 ⑹ ⑺, §4.4, §5.1 K2 K5, §8.10, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md`
+§S1.9101
+
+### Bối cảnh
+
+K2 và K5 là cặp trung tâm của S3 (spec §5): không ai một mình chọn được người dự thi của một gói vượt ngưỡng, và không ai đi được
+dưới ngưỡng cạnh tranh mà không để lại một lý do có người thứ hai ký. Trước vòng này: xác minh nội bộ có (K8a, `082`), ngoại lệ có
+và nằm trong băm danh sách (`105`), tập loại trừ là một hàm (`rfq_tap_loai_tru`, ADR-121) — nhưng không chốt nào ĐỌC chúng. Sàn một
+chữ ký (ADR-085) chỉ loại người tạo gói, nên người lập ngoại lệ có thể là người ký duy nhất (cái giá ADR-145 ghi). S3.3c1 đã chuyển
+mọi dữ liệu test và `gieo:demo --s3` sang nhà cung cấp đếm được, để PR này chỉ còn là chốt.
+
+### Quyết định
+
+⑴ **Một lời mời còn sống ĐẾM ĐƯỢC khi đủ sáu vế:** hồ sơ và MỌI người liên hệ của nhà cung cấp không do *người chọn danh sách* dựng;
+hồ sơ có MST; xác minh còn hiệu lực (`ncc_xac_minh_con_hieu_luc`, câu hỏi duy nhất của `082`); người làm hàng xác minh mới nhất
+không khai phiên bản ngân sách ghim (§2.4 ⑺) và không thuộc người chọn danh sách; người liên hệ được mời đang ACTIVE và có số điện
+thoại (OTP đi kênh khác link). K2 đếm NHÓM: hai lời mời chung MST gốc (mười chữ số đầu — mã chi nhánh `-NNN` gộp về gốc), chung một
+email hay chung chín chữ số cuối điện thoại của BẤT KỲ người liên hệ nào của hai nhà cung cấp thì cùng nhóm, bắc cầu. Nhóm dựng
+trên MỌI lời mời còn sống kể cả lời mời không đếm được — bắc cầu qua nó chỉ làm đếm thiếu. `rfq_dem_ncc_canh_tranh` cài bằng một CTE
+đệ quy trên tập (đại diện nhóm là id nhỏ nhất tới được).
+
+⑵ **Người chọn danh sách = người tạo gói ∪ MỌI `invited_by` ∪ MỌI `revoked_by`** — đọc mọi hàng, kể cả đã thu hồi. Lượt soi hình
+dạng đo được lỗ CAO của bản đầu (chỉ người tạo và người mời): một PM X dựng hai nhà vỏ, người mua trung thực tạo gói và mời cả nhà
+thật lẫn nhà vỏ, X thu hồi nhà thật ở DRAFT — nhà vỏ vẫn đếm, và khi bậc không ký danh sách X tự ký mở được. Đúng lỗ ADR-082 ⑿ đã
+đóng cho K5. Một hàng lời mời không rõ người mời hay người thu hồi (hàng trước `013`) ⇒ đếm 0: không biết ai chọn thì không biết ai
+bị loại.
+
+⑶ **Ngoại lệ khớp CHẶT với danh sách thật:** dưới ngưỡng, một lời mời còn sống ⇒ chỉ `SINGLE_SOURCE` cứu; từ hai ⇒ chỉ
+`LIMITED_COMPETITION`; danh sách rỗng không qua; `ROTATION` là của K3 (S3.3d) và không cứu K2. Ngoại lệ phải nói đúng danh sách người
+duyệt ký — và KPI tỷ lệ single-source (V2.1 §36) đếm thẳng từ bảng ngoại lệ, nên một gói một nhà cung cấp mang `LIMITED_COMPETITION`
+là KPI đếm thiếu.
+
+⑷ **Điện thoại so chín chữ số cuối** sau khi bỏ mọi ký tự không phải số: `+84901234567`, `84901234567`, `0901234567` là một đích. CSDL
+không chuẩn hoá số (`008`: chỉ hình dạng); so chín số cuối chỉ có thể gộp NHẦM (đếm thiếu), không đếm thừa.
+
+⑸ **Câu nộp duyệt chỉ nhận dưới READ COMMITTED, ở MỌI tổ chức** — vế đầu của trigger K2, trước câu hỏi *đã bật*. Trigger BEFORE ROW
+chạy sau khi câu UPDATE lấy khoá hàng gói, tức sau mọi `FOR SHARE` của trigger lời mời (`076`) và ngoại lệ (`105`); dưới READ
+COMMITTED câu gọi hàm vị từ trong một hàm plpgsql VOLATILE lấy ảnh chụp mới và thấy lần rút ngoại lệ hay thu hồi lời mời vừa commit.
+Dưới REPEATABLE READ ảnh chụp là của đầu giao dịch: nó đếm một ngoại lệ đã rút (L5 của §S1.265) — và vì câu hỏi *đã bật* cũng đọc
+ảnh chụp ấy, một câu nộp mở trước lần ký bật S3 thoát cả K1 lẫn K2 (khoản 286 ⑴). Chặn ở trigger K2 chặn luôn K1: cùng một câu
+UPDATE. Không đường ứng dụng nào nộp dưới REPEATABLE READ (`withTenant` mở `BEGIN` trần); tổ chức chưa bật chỉ đổi ở lối câu thô ấy.
+
+⑹ **Bậc đấu thầu chính thức không bao giờ qua K2** — kể cả đủ nhà cung cấp và có ngoại lệ; mã `K2_DAU_THAU_CHINH_THUC`. Phần tử bậc
+đọc qua `rfq_bac_ghim` (phần tử `tiers` có `tu_so_tien = rfq_budgets.tier_tu_so_tien` của phiên bản `policy_id`), NÉM khi không có;
+khoá bậc thiếu cũng NÉM (ADR-082 ⑽).
+
+⑺ **K5:** khi bậc mà ngân sách ghim bật `ky_danh_sach_moi` HOẶC gói có ngoại lệ còn sống, cạnh `PENDING_APPROVAL→OPEN` cần ít nhất
+một người ký CÒN HIỆU LỰC không thuộc `rfq_tap_loai_tru` và đang giữ `rfq.approve`. *Còn hiệu lực* là MỘT hàm,
+`rfq_chu_ky_con_hieu_luc` — bốn vế của phép đếm thứ ba ở `087` —, và phép đếm ấy của K4b nay đọc chính hàm này: khi K9 loại người
+khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi cùng nhau (lượt soi, T4). Vế `rfq.approve`: `rfq_kiem_nguoi_duyet` (`074`) chỉ
+hỏi người tạo và phiên, nên qua câu thô dưới `app_api` một người TECHNICAL hay FINANCE có thể là chữ ký "độc lập" (lượt soi, THẤP 6).
+
+⑻ **K5 nhường lời cho K4b khi chưa đủ chữ ký:** hàm vị từ cho qua khi số chữ ký còn hiệu lực dưới số cần (một, hay hai nếu cấp kép);
+trigger K4b — xếp trước — từ chối như hôm nay, không có hàng `CONTROL_DENIED`. Bấm *Mở gói* khi chưa ai ký là đi sai thứ tự, không
+phải lách chốt (ADR-060); bản đầu ghi một hàng `K5_THIEU_CHU_KY_DOC_LAP` cho lần ấy và che câu *"cần N chữ ký"*.
+
+⑼ **Khuôn K1/K10a:** mỗi chốt một hàm vị từ (`rfq_chot_canh_tranh`, `rfq_chot_chu_ky_doc_lap`) trả NULL hay một mã thuộc
+`CHOT_VAO_SO`; tầng gói hỏi TRƯỚC mọi tác dụng phụ — K2 sau K1 và nhóm hàng, K5 trước K10a và trước lần đúc khoá —; trigger RIÊNG
+ở cạnh hỏi lại làm lớp chặn cuối cho câu viết tay, mang tên ràng buộc (`k2_canh_tranh_toi_thieu`, `k5_chu_ky_doc_lap`) nhưng không
+qua bảng tên → mã. Ba mã, cả ba vào sổ: `K2_THIEU_CANH_TRANH`, `K2_DAU_THAU_CHINH_THUC`, `K5_THIEU_CHU_KY_DOC_LAP`. Tên trigger chọn
+theo thứ tự chạy: `…_kiem_so_ncc_khi_nop` sau K1 (khoá tư vấn và `submitted_at` đã đặt) và nhóm hàng; `…_kiem_doc_lap_khi_mo` sau
+K4b.
+
+### Cái giá, nói thẳng
+
+- **Gói đang chờ duyệt lúc deploy ở tổ chức đã bật không qua K2.** Khối chặn deploy kiểu `049` bị loại: dưới vai deploy mà RLS áp,
+  câu đối chiếu thấy 0 hàng (hồ sơ N3) — một khối luôn qua là một lời khai giả. Chưa tổ chức thật nào bật S3 (ADR-105).
+- **K5 không có chốt READ COMMITTED.** Đúng hôm nay — ở PENDING_APPROVAL danh sách, ngoại lệ, ngân sách đứng yên, lời duyệt chỉ chèn
+  thêm, nên ảnh chụp cũ chỉ đếm THIẾU. Hết đúng khi K9 cho chèn khai báo xung đột trong lúc chờ duyệt: hạng mục ấy thêm chốt.
+- **Xác minh và hồ sơ không khoá theo gói:** một lần thu hồi xác minh hay thêm người liên hệ commit sau lúc trigger K2 đọc là một thay
+  đổi SAU lần nộp — K2 là phép kiểm lúc nộp, K2b (S3.5) là hậu kiểm.
+- **Khớp loại đếm lời mời, không đếm nhóm:** hai lời mời cùng một MST gốc đi qua bằng `LIMITED_COMPETITION` dù thực chất là một
+  nguồn — quyết định của chủ dự án ⑶, nói ra.
+- **Lối hở của phép gộp:** số cố định tám chữ số không khớp dạng có mã vùng; bí danh email (`+tag`, dấu chấm của Gmail) và tên miền
+  riêng dùng chung không gộp.
+- **Vế MST (ii) dư với vế xác minh (iii):** `082` đòi MST lúc xác minh và băm hồ sơ phủ MST, nên một đột biến bỏ riêng vế MST không
+  đổi kết quả ở trạng thái nào tới được — đọc từ `082`, không đo; ca đo không MST đi qua cả hai vế. Giữ làm lớp phòng hai theo câu chữ
+  §2.4 ⑹.
+- **Số người tối thiểu tăng** (§8.10): gói bậc ký danh sách cần một PM không tạo, không mời, không thu hồi, không dựng nhà cung cấp
+  trên danh sách. Một quản trị viên tự tạo tài khoản thứ hai vẫn phá được K2 và K5 — cùng giới hạn ADR-058.
+
+### Phương án đã loại
+
+- **Người chọn = người tạo + người mời** (bản đầu): lỗ CAO ở ⑵.
+- **Gộp chỉ theo người liên hệ được mời:** nhà vỏ chung một người liên hệ phụ lọt; băm xác minh vốn phủ mọi người liên hệ.
+- **Chốt READ COMMITTED chỉ ở tổ chức đã bật:** câu hỏi *đã bật* đọc chính ảnh chụp cũ, nên câu nộp trước lần bật thoát.
+- **K5 trả mã khi chưa đủ chữ ký:** ghi một lần *đi sai thứ tự* thành lần lách chốt (ADR-060).
+- **Chép bốn vế *còn hiệu lực* vào thân K5:** hai bản viết cùng vế trôi khỏi nhau ở K9.
+
+### Điều ADR này KHÔNG nói
+
+- K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); K3 và khoản 234 (S3.3d); màn, kịch bản 41, lượt đi thử T4 (S3.3e).
+- Chuẩn hoá số điện thoại hay email ở lúc ghi.

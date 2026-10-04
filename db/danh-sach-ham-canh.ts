@@ -180,6 +180,11 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.rfq_kiem_tin_hieu_khi_mo",
   "public.tin_hieu_kiem_ghi",
   "public.tin_hieu_kiem_ghi_nhan",
+  // [S1.9101 / S3.3c2 / K2 · K5] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_so_ncc_khi_nop` (cạnh nộp duyệt) chỉ ngoài READ
+  // COMMITTED hay khi danh sách dưới ngưỡng cạnh tranh mà không ngoại lệ đúng loại; `rfq_kiem_doc_lap_khi_mo` (cạnh mở gói) chỉ khi
+  // bậc đòi mà mọi chữ ký còn hiệu lực đều của người chọn danh sách. `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.
+  "public.rfq_kiem_doc_lap_khi_mo",
+  "public.rfq_kiem_so_ncc_khi_nop",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",

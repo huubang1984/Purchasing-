@@ -402,6 +402,12 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.265 / S3.3b] `ngoai-le-canh-tranh` đo ngoại lệ cạnh tranh qua HTTP và dưới `app_api`: chỉ lập/rút ở DRAFT, lần từ chối vào
   // sổ, đua `FOR SHARE` với cạnh nộp duyệt (K4a); băm danh sách phủ ngoại lệ còn sống, chữ ký cũ không đếm sau lần rút (K4b); vế
   // tác giả ngoại lệ của tập loại trừ (L3) — mỗi vế một đột biến.
+  // K2 · K5 — [S1.9101 / S3.3c2] cạnh tranh tối thiểu ở cạnh nộp duyệt và chữ ký độc lập ở cạnh mở gói. `canh-tranh-toi-thieu` đo
+  // qua HTTP và dưới `app_api`: mỗi luật đếm một ca, nhóm (MST gốc, email, chín số cuối, bắc cầu), ngoại lệ khớp chặt, bậc đấu thầu
+  // chính thức, chỉ READ COMMITTED, đua với lần rút ngoại lệ, lớp chặn cuối; K5 mỗi nguồn của tập loại trừ, `rfq.approve`, bậc
+  // không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký — mỗi vế của hai hàm vị từ một đột biến.
+  K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
+  K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",
