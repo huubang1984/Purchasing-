@@ -399,15 +399,20 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.198 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
   // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt
   // ở tổ chức đã bật (K4b).
+  // [S1.265 / S3.3b] `ngoai-le-canh-tranh` đo ngoại lệ cạnh tranh qua HTTP và dưới `app_api`: chỉ lập/rút ở DRAFT, lần từ chối vào
+  // sổ, đua `FOR SHARE` với cạnh nộp duyệt (K4a); băm danh sách phủ ngoại lệ còn sống, chữ ký cũ không đếm sau lần rút (K4b); vế
+  // tác giả ngoại lệ của tập loại trừ (L3) — mỗi vế một đột biến.
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",
+    "apps/api/src/ngoai-le-canh-tranh.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
   K4b: [
     "apps/api/src/buyer.int.test.ts",
+    "apps/api/src/ngoai-le-canh-tranh.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
@@ -446,6 +451,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   L3: [
     "apps/api/src/anh-xa.int.test.ts",
     "apps/api/src/du-lieu.int.test.ts",
+    "apps/api/src/ngoai-le-canh-tranh.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
     "packages/identity/src/ma-tran-quyen.test.ts",

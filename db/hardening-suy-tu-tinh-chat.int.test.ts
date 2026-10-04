@@ -144,6 +144,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
   "rfq_item_goi_y",
   "rfq_item_mappings",
+  // [S1.265 / S3.3b] Ngoại lệ cạnh tranh — khuôn `061`: chỉ ghi thêm kèm hàng rút; sửa được một hàng là đổi lời giải trình mà
+  // người duyệt đã ký.
+  "rfq_sourcing_exceptions",
   // [S1.207 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
   // `ENABLE ALWAYS`. Trước vòng ấy bảng chỉ-ghi-thêm BẰNG QUYỀN: chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại.
   "rfq_tra_ve",
@@ -1722,6 +1725,32 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     }),
     1,
     "rfq_packages",
+  );
+  // [S1.265 / S3.3b / K4a] Tổ chức đã bật, gói `rfqVe` vừa về DRAFT: `pm` (giữ `rfq.invite`) lập một ngoại lệ — nhân chứng của
+  // `ngoai_le_kiem` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
+  doiSoHang(
+    await so.chung(
+      "public.rfq_sourcing_exceptions",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_sourcing_exceptions (org_id, rfq_id, hanh_dong, loai, ma_ly_do, giai_trinh, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, 'LAP', 'SINGLE_SOURCE', 'EMERGENCY', 'khan cap', $3, $4) " +
+          "RETURNING org_id, rfq_id, hanh_dong, loai, ma_ly_do, giai_trinh, created_by, created_by_session_id",
+        [org, rfqVe, pm.u, pm.s],
+        {
+          org_id: org,
+          rfq_id: rfqVe,
+          hanh_dong: "LAP",
+          loai: "SINGLE_SOURCE",
+          ma_ly_do: "EMERGENCY",
+          giai_trinh: "khan cap",
+          created_by: pm.u,
+          created_by_session_id: pm.s,
+        },
+      ),
+    ),
+    1,
+    "rfq_sourcing_exceptions",
   );
   // [S1.196 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
   // `rfq.invite`, không dựng hồ sơ) xác minh — nhân chứng của `ncc_kiem_xac_minh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).

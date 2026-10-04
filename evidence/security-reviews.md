@@ -24369,3 +24369,114 @@ chèn thẳng vào hộp thư: expected +0 to be 1"* — rồi xanh ở lượt 
 - `cap-so` cấp S1.264 và khoản 339 (trailer `Cap-So` ở `d0d8d3fa`); `cap-so --kiem` sạch; Handoff 339 khoản, 54 còn mở.
 - Trên `d0d8d3fa`: `pnpm t0` xanh; `pnpm test` 149 tệp (147 đạt, 2 bỏ qua), 2502 ca đạt, 14 bỏ qua, 0 đỏ. `pnpm evidence` chạy
   song song với CI (máy đang có lượt evidence của một phiên khác — xếp hàng sau); kết quả ghi ở thân PR và thân commit merge.
+
+# §S1.265 — S3.3b: NGOẠI LỆ CẠNH TRANH — LẬP VÀ RÚT CHỈ Ở DRAFT, NẰM TRONG BĂM DANH SÁCH NGƯỜI DUYỆT KÝ, TÁC GIẢ CÒN SỐNG VÀO TẬP LOẠI TRỪ — ADR-145, KHOẢN 340
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (lần ký bật sau cờ tắt,
+ADR-105), và tổ chức chưa bật chạy nguyên MVP1. Một khoản mới: 340 (đọc từ mã, đề xuất rổ B). Migration `105`, ADR-145.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-03: *"Tiếp S3.2"* — thẻ bước kế số 5 của sơ đồ trạng thái mang tên cũ, nội dung thẻ nói S3.1, S3.2 đã xong và
+S3.3a, S3.6a, S3.6b đã vào; hạng mục kế của nhánh S3 là S3.3b (spec S3 §9: chủ dự án chia S3.3 năm PR ngày 2026-09-29). Một bản
+dở nằm ở `origin/s33b-wip` (`d72efd6e`, 2026-09-29), dựng trên `b8ca7b6d` — cũ hơn `master` 534 commit.
+
+## 2. Đo trước — bản dở so với `master`
+- Phần khoản 255 của bản dở (hai tên ràng buộc K4a của lời mời, `createInvitation`/`revokeInvitation` nhận `auditPool`) đã đóng ở
+  S3.2d (`080_k4a_co_ten`, ADR-114, §S1.194). Bản dở còn ghi lần từ chối thu hồi vào `RFQ_INVITATION`, còn `master` ghi vào `RFQ`.
+  Bỏ cả phần ấy; vòng này không chạm `invitation.ts` lẫn `080`.
+- Từ ngày bản dở, `master` thêm: tập loại trừ một hàm `rfq_tap_loai_tru` (`089`, ADR-121 — chủ dự án chốt 2026-09-30 S3.3b thêm
+  vế tác giả ngoại lệ vào chính hàm ấy); nhóm hàng bắt buộc để rời DRAFT (S3.6a); lời duyệt mang lần nộp (`087`, ADR-117); danh
+  sách trắng trigger `TRIGGER_DUOC_PHEP`; mô tả hardening in vân tay thay cho `prosrc`; `danh-sach-ham-canh.ts`;
+  `DANH_MUC_VE_CONG`. Bộ test của bản dở thiếu nhóm hàng và `lanNopDaXem` nên không chạy được trên `master`.
+- Ba agent khảo sát song song: bảng vai — mã quyền (`005`…`085`): chỉ `PROCUREMENT_MANAGER` giữ `rfq.approve`, và vai ấy cũng giữ
+  `rfq.invite` (BUYER cũng giữ); danh mục sổ đăng ký phải sửa khi thêm bảng, hàm trigger, định nghĩa lại hai hàm ghim; thay đổi
+  của `master` từ ngày bản dở.
+
+## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
+Không CAO. Ba TRUNG, sửa trong vòng:
+- **T1** — giải trình không có neo ngoài bảng (chủ CSDL tắt được `bid_chi_ghi_them`; không gì tính lại `approved_list_hash` ngoại
+  tuyến) ⇒ sổ `SOURCING_EXCEPTION_CREATED` mang `giaiTrinhSha256` — cùng băm với dòng `NGOAI_LE` — không mang văn bản (ADR-145 ⑻).
+- **T2** — CHECK dùng `btrim` (chỉ dấu cách ASCII) trong khi gói dùng `String.trim` ⇒ câu thô lưu được giải trình chỉ là xuống dòng,
+  hay 99 byte độn khoảng trắng qua sàn `OTHER` ⇒ CHECK có tên `rfq_sourcing_exceptions_giai_trinh_da_cat` đòi chuỗi đã cắt theo
+  ĐÚNG tập của `String.trim`; sàn đếm trên chuỗi ấy (⑼).
+- **T3** — băm và tập loại trừ không lọc `loai`, nên khi S3.5/S3.6c mở hai loại còn lại, hàng ghi sau OPEN lặng lẽ đổi băm danh
+  sách ⇒ cả hai hàm chỉ đọc ba loại của danh sách mời (⑽).
+THẤP: **L1** thông điệp nội suy `loai` của người gọi (trigger chạy TRƯỚC CHECK) ⇒ bỏ nội suy; **L2** vị từ *còn sống* không lọc
+`hanh_dong = 'RUT'` ⇒ thêm, cùng một vị từ ở băm, tập loại trừ, trigger, hàm đọc; **L3** tính đơn ánh của băm dựa vào CHECK loại
+và mã (đều ở tập an ninh) — ghi nhận; **L4** tới S3.3c tác giả ngoại lệ có thể là người ký duy nhất — ghi ở ADR-145 và STATE,
+không khai *"không bao giờ tự duyệt"*; **L5** (cho S3.3c) nếu K2 đọc ngoại lệ trong lần nộp dưới REPEATABLE READ thì ảnh chụp trước
+lần rút đếm một ngoại lệ đã rút — cần chốt chỉ-READ COMMITTED khuôn `097`; **L6** (cho S3.3e) `GET …/exceptions` chưa mang
+`lanNop`. Một phát hiện ngoài phạm vi: `/tao-thau` tự nạp danh sách mời ở mỗi lần đọc gói cho mọi người dùng — khoản 340.
+Lời khai *"danh mục sổ đăng ký đủ"* của bản hình dạng rộng hơn phép đo — lượt soi kể thêm chín cổng; cả chín đã đi qua hay đã
+đúng sẵn ở lượt `pnpm test` đầu (chỉ P9b đỏ — số migration ở `Handoff.md`, dự kiến).
+
+## 4. Câu hỏi của chủ dự án (2026-10-03)
+A — tập loại trừ: **chỉ ngoại lệ còn sống** (đề xuất). B — ai đọc được ngoại lệ: **người giữ `rfq.invite`** (đề xuất). Cả hai
+khớp mã đã chạy xanh trước khi hỏi.
+
+## 5. Thay đổi
+- `db/migrations/105_ngoai_le_canh_tranh.sql` — bảng, RLS + policy khách đóng hẳn, GRANT theo cột (không `id`), ba trigger
+  khuôn (danh tính, chỉ-ghi-thêm, chặn TRUNCATE), trigger `ngoai_le_kiem`; `rfq_bam_danh_sach`, `rfq_tap_loai_tru` định nghĩa lại.
+  Ghim ở `hardening.always.sql` cùng commit: `BANG_TENANT_KHAI`, `TRIGGER_DUOC_PHEP`, sáu CHECK an ninh (chuỗi
+  `pg_get_constraintdef` ĐO trên `postgres:16-alpine` 16.15), khối `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` (bản SỬA theo
+  cách viết của migration, bản PHÁN XÉT theo dạng chuẩn), mục mới `ngoai_le_kiem` (mô tả in vân tay), hai mục định nghĩa hàm trỏ
+  `105`. Thân PHÁN XÉT suy bằng script từ thân migration, không chép tay.
+- `packages/invitation/src/ngoai-le.ts` — `lapNgoaiLe`, `rutNgoaiLe` (cổng `rfq.invite` trong thân, kiểm hình dạng, bắt lời từ chối
+  có tên ⇒ `CONTROL_DENIED`), `docNgoaiLe` (cổng `rfq.invite` trong thân). `packages/identity`: mã `K4A_NGOAI_LE_SAI_TRANG_THAI` ở
+  `CHOT_VAO_SO`, `CHOT_THEO_RANG_BUOC`, `DANH_MUC_VE_CONG`.
+- `apps/api` — ba route; `apps/mcp` — dòng `ROUTE_DOC_KHONG_PHOI` (và câu đếm đầu tệp: thiu từ trước, 20 so với 23 dòng thật, nay
+  24); kịch bản 41 qua HTTP — thân hợp lệ cho hai route ghi (gói hy sinh B đã huỷ ⇒ K4a ở luồng S3, *chưa bật* ở luồng MVP1).
+- Sổ đăng ký: `migrations.int` (ba danh sách, `HAM_51`, `HAM_56`, hai con trỏ hàm), `rls-coverage` (ACL bảng, ACL cột,
+  `POLICY_RESTRICTIVE_DA_KHAI`), `check-an-ninh` (`giai_trinh_check` miễn trừ độ dài), `migration-shape`,
+  `hardening-suy-tu-tinh-chat` (`BANG_CHI_GHI_THEM_THAT`, nhân chứng `dungKichBan()`), `danh-sach-ham-canh`, `rfq.int` (khớp tên
+  hai chiều, 6 → 7 thân), `barrel-exports`, `cong-quyen-route`, `so-khai-nhan`.
+- Lời khai đếm còn sống trong mã: *"mười bảy mã chốt"* (`rbac.ts`) — đã thiu ở 18 từ S1.253, nay 19.
+
+## 6. Phép đo — `apps/api/src/ngoai-le-canh-tranh.int.test.ts`, 26 ca trên Postgres 16, qua HTTP và dưới `app_api`
+⑴ lập ở DRAFT: 201, một hàng của người phiên, sổ mang loại, mã, sha256 giải trình; ⑵ băm: gói không ngoại lệ bằng công thức của
+`076`, công thức có ngoại lệ đúng từng byte, rút trả băm về; chữ ký ghim băm có ngoại lệ, trả về – rút – nộp lại ⇒ mở gói 422 (K4b),
+ký lại thì mở được; ⑶ rút: hàng `RUT`, sổ mang lý do đã cắt; lần hai, gói khác, trỏ vào hàng rút, id không có ⇒ 422 có tên, không
+vào sổ; ⑷ chờ duyệt và đã mở ⇒ 422 mang câu của chốt, mỗi lần một hàng `CONTROL_DENIED`; hai giao dịch chen nhau với lần nộp duyệt
+theo cả hai thứ tự; ⑸ sàn `OTHER` theo byte ở gói và ở CHECK; tập đóng; khoảng trắng Unicode ở đầu, cuối (gói cắt, câu thô bị CHECK
+chặn, kể cả lối độn qua sàn), ở giữa đi qua; ⑹ FINANCE: 403 và `PERMISSION_DENIED` ở cả lập, rút, đọc qua HTTP; gọi thẳng hàm gói
+⇒ `PermissionDeniedError`; câu thô ⇒ trigger chặn; BUYER đọc được; ⑺ tổ chức chưa bật ⇒ 422, không `CONTROL_DENIED`; chỉ ghi thêm
+cả với chủ CSDL; tổ chức khác và phiên khách không thấy; ⑻ tập loại trừ có tác giả còn sống, rút thì ra; người lập ngoại lệ còn
+sống rồi thành người quản lý dữ liệu bị `ghiAnhXa` từ chối `TRONG_TAP_LOAI_TRU`, ngoại lệ đã rút thì không (L3).
+
+## 7. Đột biến
+Tám ca đột biến CSDL trong chính tệp — mỗi ca áp lúc chạy (`ALTER … DISABLE TRIGGER` hay `CREATE OR REPLACE` thân đã thay ĐÚNG một
+chỗ, khẳng định đã áp, khôi phục và kiểm đã về) và đo kết quả đổi: gỡ `FOR SHARE` ⇒ ngoại lệ chen sau cạnh nộp duyệt; tắt
+`rfq_sourcing_exceptions_kiem_ngoai_le` ⇒ lập ở PENDING_APPROVAL đi lọt; bỏ vế `rfq.invite` ⇒ câu thô dưới FINANCE đi lọt; băm bỏ
+dòng `NGOAI_LE` ⇒ lập ngoại lệ không đổi băm; băm giữ ngoại lệ đã rút ⇒ rút không trả băm về; bỏ bộ lọc loại ⇒ hàng
+`LOW_ACTUAL_COMPETITION` đổi băm và vào tập; tập loại trừ bỏ vế ngoại lệ ⇒ tác giả còn sống ra khỏi tập; bỏ vế *đã rút* của trigger
+⇒ lần rút thứ hai rơi xuống `UNIQUE` (23505, 409) thay cho câu có tên.
+
+Sáu đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, so tập đỏ với tập dự kiến, khôi phục và tự kiểm sha256:
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | bỏ ghi `CONTROL_DENIED` khi trigger từ chối có tên | 2/26 — chờ duyệt, đã mở |
+| TS2 | bỏ cổng `rfq.invite` của `docNgoaiLe` | 1/26 — ⑹ |
+| TS3 | bỏ cổng `rfq.invite` trong thân hàm ghi (route vẫn chặn — chỉ phép gọi thẳng hàm gói bắt được) | 1/26 — ⑹ |
+| TS4 | bỏ sàn `OTHER` ở gói | 1/26 — ⑸ sàn |
+| TS5 | bỏ cắt khoảng trắng ở gói | 4/26 — ⑴, ⑶, ⑸ khoảng trắng, ⑸ sàn |
+| TS6 | sổ không mang sha256 giải trình | 1/26 — ⑴ |
+
+Sáu sống: 0. Khôi phục: sha256 khớp mọi tệp. TS3 chỉ bị giết nhờ phép gọi thẳng hàm gói thêm vào ⑹ sau khi nhận ra bộ điều phối
+chặn trước ở route — trước đó nó sẽ SỐNG.
+
+## 8. Giới hạn còn lại
+- Tới S3.3c, ngoại lệ chưa đòi chữ ký K5 và chưa đối chiếu loại với danh sách thật — ngoại lệ hôm nay không mở được cánh nào vì K2
+  chưa sống, nhưng tác giả có thể là người ký duy nhất.
+- Lối *"giặt"*: A rút, B lập lại cùng lời — cần người thứ hai giữ `rfq.invite`.
+- Hai lần rút đua nhau: lần sau nhận 409 trần của `UNIQUE`, không câu có tên.
+- Sàn đếm byte — NFD đạt sàn với ít ký tự hơn NFC.
+- Khoản 340 (đọc từ mã, chưa đo bằng trình duyệt).
+
+## 9. Số đo
+- Trên `47cce7cb` (nhánh đã gộp `master` #241 — S1.264 — ở lần gộp duy nhất của vòng; xung đột chỉ ở ba tệp sổ, giữ cả hai
+  vế, `cap-so --dem` tính lại `Handoff.md`): `pnpm t0` xanh; `pnpm test` 147 tệp, 2503 ca đạt, 0 đỏ; tập tích hợp chạm tới —
+  16 tệp, gồm `migrations.int`, `rls-coverage`, `hardening-suy-tu-tinh-chat`, `trigger-la-mac-dinh-dong`, kịch bản 41 qua HTTP,
+  `buyer.int`, `anh-xa.int`, `qt3-cu-phap`/`qt3-ngu-phap` — 589 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4650 khẳng
+  định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1683 giây; `evidence/INV-matrix.md` đổi đúng ba hàng — K4a 31 → 41
+  ca, K4b 50 → 56, L3 21 → 22.
