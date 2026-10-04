@@ -6,7 +6,7 @@ import { migrate } from "@trustprocure/db";
 import { KiemSoatError, ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, cancelRfq, createRfq, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 import { taoNhomHang } from "./nhom-hang.js";
@@ -86,7 +86,7 @@ interface ToChuc {
   readonly pm3: Nguoi;
   /** PROCUREMENT_MANAGER — người KHAI phiên bản chính sách mà gói ghim (§2.4 ⑺); giữ `rfq.approve`. */
   readonly pmCs: Nguoi;
-  /** FINANCE — giữ `category.manage`, không giữ `rfq.approve`. */
+  /** FINANCE — giữ `category.manage`, không giữ `rfq.approve`; [S1.266 / S3.3c1] người xác minh nhà cung cấp đếm được (K2). */
   readonly tc: Nguoi;
   /** Phiên bản 2 — có bậc, cửa sổ 30 ngày; `null` ở tổ chức chưa bật. */
   readonly v2: string | null;
@@ -156,7 +156,14 @@ async function taoNhom(t: ToChuc, ma: string): Promise<string> {
   return (await withTenant(apiPool, t.org, (c) => taoNhomHang(c, t.org, { ma, ten: `Nhom ${ma}`, actorSessionId: t.tc.s }, apiPool))).id;
 }
 
-/** Gói `pm` tạo, có ngân sách và một hạng mục, NỘP bởi `nguoiNop` (mặc định `pm`). */
+/**
+ * Gói `pm` tạo, có ngân sách và một hạng mục, NỘP bởi `nguoiNop` (mặc định `pm`).
+ *
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ BẬT: thêm đúng một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) trước lần
+ * nộp — hồ sơ do người nhập riêng của helper dựng (vai TECHNICAL, không giữ `rfq.approve`), `tc` xác minh (FINANCE, không giữ
+ * `rfq.approve`, không khai phiên bản — người khai là `pmCs`); câu chèn là câu của `createInvitation`, người mời `pm`. Không ai
+ * mới giữ `rfq.approve`, nên số người ghi nhận được mà khối [S3.6b2] khẳng định không đổi. Tổ chức chưa bật giữ gói không lời mời.
+ */
 async function goiDaNop(t: ToChuc, nhom: string | null, giaTri: string, nguoiNop: Nguoi = t.pm): Promise<string> {
   const id = await withTenant(apiPool, t.org, async (c) => {
     const r = await createRfq(c, t.org, { title: `Thep ${giaTri}`, deadlineAt: MAI_SAU, createdBySessionId: t.pm.s, categoryId: nhom });
@@ -164,6 +171,16 @@ async function goiDaNop(t: ToChuc, nhom: string | null, giaTri: string, nguoiNop
     await addRfqItem(c, t.org, { rfqId: r.id, lineNo: 1, description: "Thep tam", quantity: "10.0000", unit: "tam", actorSessionId: t.pm.s });
     return r.id;
   });
+  if (t.v2 !== null) {
+    const n = (await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc }))[0]!;
+    await withTenant(apiPool, t.org, (c) =>
+      c.query(
+        "INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+          "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6)",
+        [t.org, id, n.ncc, n.lh, t.pm.u, t.pm.s],
+      ),
+    );
+  }
   await withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId: id, actorSessionId: nguoiNop.s }, apiPool));
   return id;
 }

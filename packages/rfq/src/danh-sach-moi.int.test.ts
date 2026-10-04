@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, cancelRfq, createRfq, extendRfqDeadline, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
@@ -155,8 +155,35 @@ async function toChucDaBat(): Promise<ToChuc> {
   return t;
 }
 
-/** Một nhà cung cấp và một người liên hệ — câu dựng dưới chủ sở hữu, khuôn `invitation.int.test.ts`. */
+/**
+ * Một nhà cung cấp và một người liên hệ — câu dựng dưới chủ sở hữu, khuôn `invitation.int.test.ts`.
+ *
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
+ * `tc`: FINANCE, không khai phiên bản chính sách v2 mà ngân sách ghim, không tạo gói, không mời) — gói nộp duyệt được (bậc đòi
+ * một). Truyền `ncc` thì thêm một người liên hệ THỨ HAI cho nhà cung cấp ấy, cũng do người nhập riêng dựng, rồi `tc` xác minh
+ * LẠI: băm hồ sơ của xác minh phủ mọi người liên hệ (`082`), nên người liên hệ thêm sau làm xác minh cũ thôi hiệu lực. Tổ chức
+ * chưa bật: nguyên dạng MVP1, do PM dựng — K2 không áp, và xác minh K8a chỉ có ở tổ chức đã bật.
+ */
 async function nhaCungCap(t: ToChuc, ncc?: string): Promise<NhaCungCap> {
+  const daBat = (await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org])).rows[0]!.b;
+  if (daBat) {
+    if (ncc === undefined) {
+      const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+      return { ncc: n!.ncc, lh: n!.lh };
+    }
+    const nhap = await nguoiNhapNhaCungCap(db.pool, t.org);
+    const duoi = randomBytes(6).toString("hex");
+    const lh = await motId(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4, $5, $6) RETURNING id",
+      [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), nhap.u, nhap.s],
+    );
+    await db.pool.query(
+      "INSERT INTO supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4)",
+      [t.org, ncc, t.tc.u, t.tc.s],
+    );
+    return { ncc, lh };
+  }
   const id =
     ncc ??
     (await motId(
@@ -461,6 +488,8 @@ describe("S3.2a — K4a: lời mời chỉ đổi ở DRAFT; ở OPEN chỉ thê
 
     // ① Nộp duyệt trước, chưa COMMIT: câu thêm CHỜ, rồi đọc trạng thái MỚI và bị chặn.
     const g1 = await goiNhap(t);
+    // [S1.266 / S3.3c1] Một lời mời ĐÃ COMMIT tới nhà cung cấp đếm được, trước cuộc đua — K2 không cho gói không lời mời rời DRAFT.
+    await moi(t, g1, await nhaCungCap(t));
     const n1 = await nhaCungCap(t);
     const cNop = await moGiaoDich(t.org);
     const cThem = await moGiaoDich(t.org);
@@ -481,6 +510,9 @@ describe("S3.2a — K4a: lời mời chỉ đổi ở DRAFT; ở OPEN chỉ thê
 
     // ② Thêm trước, chưa COMMIT: cạnh nộp duyệt CHỜ; lời mời vào danh sách TRƯỚC khi gói rời DRAFT.
     const g2 = await goiNhap(t);
+    // [S1.266 / S3.3c1] Một lời mời ĐÃ COMMIT tới nhà cung cấp đếm được, trước cuộc đua: phép hỏi trước K2 của tầng gói chạy
+    // TRƯỚC câu UPDATE và không thấy lời mời chưa commit của `cThem2` — thiếu lời mời này thì nó từ chối trước khi chờ khoá.
+    await moi(t, g2, await nhaCungCap(t));
     const n2 = await nhaCungCap(t);
     const cThem2 = await moGiaoDich(t.org);
     const cNop2 = await moGiaoDich(t.org);
@@ -499,16 +531,19 @@ describe("S3.2a — K4a: lời mời chỉ đổi ở DRAFT; ở OPEN chỉ thê
       cNop2.release();
     }
     expect(await trangThaiGoi(g2)).toBe("PENDING_APPROVAL");
-    const { rows } = await db.pool.query<{ n: string }>(
-      "SELECT count(*) AS n FROM rfq_invitations WHERE rfq_id = $1 AND revoked_at IS NULL",
-      [g2],
+    // [S1.266 / S3.3c1] Hai lời mời sống: một của dàn cảnh K2, một CHEN VÀO — phép đo là lời chen vào nằm trong danh sách.
+    const { rows } = await db.pool.query<{ n: string; chen: string }>(
+      "SELECT count(*) AS n, count(*) FILTER (WHERE supplier_id = $2) AS chen FROM rfq_invitations WHERE rfq_id = $1 AND revoked_at IS NULL",
+      [g2, n2.ncc],
     );
-    expect(rows[0]?.n).toBe("1");
+    expect([rows[0]?.n, rows[0]?.chen]).toEqual(["2", "1"]);
   });
 
   it("[INV-K4a] ĐỘT BIẾN: gỡ `FOR SHARE` thì ở thứ tự ① câu thêm KHÔNG chờ, đọc DRAFT cũ và đi lọt — gói vào PENDING_APPROVAL mang một lời mời K4a cấm", async () => {
     const t = await toChucDaBat();
     const g = await goiNhap(t);
+    // [S1.266 / S3.3c1] Một lời mời ĐÃ COMMIT tới nhà cung cấp đếm được, trước đột biến — K2.
+    await moi(t, g, await nhaCungCap(t));
     const n = await nhaCungCap(t);
     await voiHamDotBien("public.rfq_invitations_kiem_danh_sach()", "FOR SHARE;", ";", async () => {
       const cNop = await moGiaoDich(t.org);
@@ -526,13 +561,19 @@ describe("S3.2a — K4a: lời mời chỉ đổi ở DRAFT; ở OPEN chỉ thê
       }
     });
     expect(await trangThaiGoi(g)).toBe("PENDING_APPROVAL");
-    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM rfq_invitations WHERE rfq_id = $1", [g]);
-    expect(rows[0]?.n, "lời mời chen vào sau cạnh nộp duyệt").toBe("1");
+    // [S1.266 / S3.3c1] Hai lời mời: một của dàn cảnh K2 (có từ DRAFT), một chen vào sau cạnh nộp duyệt — phép đo là lời sau.
+    const { rows } = await db.pool.query<{ n: string; chen: string }>(
+      "SELECT count(*) AS n, count(*) FILTER (WHERE supplier_id = $2) AS chen FROM rfq_invitations WHERE rfq_id = $1",
+      [g, n.ncc],
+    );
+    expect([rows[0]?.n, rows[0]?.chen], "lời mời chen vào sau cạnh nộp duyệt").toEqual(["2", "1"]);
   });
 
   it("[INV-K4a] ĐỘT BIẾN: tắt `rfq_invitations_kiem_danh_sach` thì thêm ở PENDING_APPROVAL đi lọt; trigger còn ENABLE ALWAYS thì bị chặn", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.266 / S3.3c1] Một lời mời tới nhà cung cấp đếm được — K2 không cho gói không lời mời rời DRAFT.
+    await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
     const n = await nhaCungCap(t);
     const khiTat = await trongDotBien(t.org, ["ALTER TABLE public.rfq_invitations DISABLE TRIGGER rfq_invitations_kiem_danh_sach"], (c) =>
@@ -725,6 +766,8 @@ describe("S3.2a — K6: không token cho gói chưa mở; lời mời chèn là 
   it("[INV-K6] ĐỘT BIẾN: tắt `rfq_invitations_kiem_danh_sach` thì lời mời thêm ở OPEN mang `SENT` và KHÔNG mang nhãn", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.266 / S3.3c1] Một lời mời tới nhà cung cấp đếm được, có từ DRAFT — K2. Phép đo chỉ đọc lời mời thêm ở OPEN.
+    await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
     await duyet(t, rfqId, t.pm2);
     await mo(t, rfqId);

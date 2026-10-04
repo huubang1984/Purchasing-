@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
@@ -75,7 +75,7 @@ interface ToChuc {
   /** Hai PROCUREMENT_MANAGER khác — người duyệt, giữ `rfq.approve`. */
   readonly pm2: Nguoi;
   readonly pm3: Nguoi;
-  /** FINANCE — người ký phiên bản chính sách. */
+  /** FINANCE — người ký phiên bản chính sách; [S1.266 / S3.3c1] và người xác minh nhà cung cấp đếm được (K2). */
   readonly tc: Nguoi;
 }
 interface NhaCungCap {
@@ -148,6 +148,12 @@ async function toChucDaBat(): Promise<ToChuc> {
 }
 
 async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
+  // [S1.266 / S3.3c1] Tổ chức ĐÃ BẬT: chốt K2 (S3.3c2) chỉ đếm nhà cung cấp KHÔNG do người tạo gói hay người mời dựng, có
+  // MST và xác minh còn hiệu lực của một FINANCE không khai phiên bản chính sách — `tc` (người khai là `pm`). Mỗi lời mời của tệp
+  // (`goiNhap`, `themLoiMoi`) vẫn là MỘT lời mời, cùng người mời `pm`: số lời mời, băm danh sách và lời từ chối mong đợi không
+  // đổi. Tổ chức chưa bật (đối chứng MVP1) giữ nhà cung cấp do PM dựng.
+  const daBat = (await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org])).rows[0]?.b === true;
+  if (daBat) return (await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc }))[0]!;
   const ncc = await motId(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
     [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],

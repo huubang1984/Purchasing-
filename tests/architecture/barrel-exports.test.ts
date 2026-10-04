@@ -1234,6 +1234,10 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   // kịch bản đo A3; chạy trên pool chủ cụm người gọi truyền vào.
   "RELKIND_QUET_GIA",
   "quetGiaMoiQuanHe",
+  // [S1.266 / S3.3c1] Nhà cung cấp đếm được cho K2: một người nhập riêng (vai TECHNICAL) dựng hồ sơ có MST và người liên hệ,
+  // người giữ `supplier.qualify` do bên gọi truyền vào xác minh — câu thô trên pool chủ cụm.
+  "nguoiNhapNhaCungCap",
+  "nhaCungCapDemDuoc",
 ];
 
 describe("bề mặt export công khai của bốn gói S0 còn lại", () => {

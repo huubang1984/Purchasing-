@@ -23,7 +23,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { CHOT_VAO_SO, HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -85,6 +85,18 @@ async function goi(method: string, path: string, ai: Nguoi | null, body?: unknow
   const res = await fetch(`${tai}${path}`, { method, headers, body: than });
   const text = await res.text();
   return { status: res.status, text, body: text === "" ? undefined : (JSON.parse(text) as unknown) };
+}
+
+/**
+ * [S1.266 / S3.3c1] Mời một nhà cung cấp ĐẾM ĐƯỢC cho K2 vào một gói DRAFT của tổ chức ĐÃ bật, qua route mời thật
+ * (`POST /rfqs/:rfqId/invitations`) dưới phiên `nguoiMoi` — người tạo gói, như mọi lần mời của tệp. Nhà cung cấp do
+ * `nhaCungCapDemDuoc` dựng (người nhập riêng vai TECHNICAL, MST và email riêng) và `nguoiXacMinh` xác minh: một FINANCE KHÔNG
+ * khai phiên bản chính sách mà ngân sách gói ghim. Không thêm người giữ `rfq.approve` nào, không hàng từ chối nào.
+ */
+async function moiNhaCungCapDemDuoc(org: string, rfqId: string, nguoiMoi: Nguoi, nguoiXacMinh: Nguoi): Promise<void> {
+  const [n] = await nhaCungCapDemDuoc(db.pool, org, { nguoiXacMinh: { u: nguoiXacMinh.id, s: nguoiXacMinh.sessionId } });
+  const moi = await goi("POST", `/rfqs/${rfqId}/invitations`, nguoiMoi, { supplierId: n!.ncc, contactId: n!.lh });
+  expect(moi.status, moi.text).toBe(201);
 }
 
 async function demTuChoi(userId: string): Promise<number> {
@@ -955,6 +967,9 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
     const dat = await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId });
     expect(dat.status, dat.text).toBe(200);
     expect((dat.body as { rfq: { categoryId: string } }).rfq.categoryId).toBe(nhomId);
+    // [S1.266 / S3.3c1] K2 hỏi SAU K1 và nhóm hàng: gói cần một nhà cung cấp đếm được để lần nộp đủ điều kiện đi qua — xác minh
+    // bởi `tc2` (`tc` khai phiên bản chính sách). Hai lần nộp trên đã dừng ở chốt trước nên danh sách hàng sổ dưới KHÔNG đổi.
+    await moiNhaCungCapDemDuoc(orgB, rfqId, pm, tc2);
     const lai = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(lai.status, lai.text).toBe(200);
     const { rows: chot } = await db.pool.query<{ ma: string }>(
@@ -979,8 +994,11 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
   });
 });
 
-/** Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên. */
-async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; rfqId: string }> {
+/**
+ * Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên.
+ * [S1.266 / S3.3c1] Trả thêm `tc2` — FINANCE ký phiên bản, KHÔNG khai nó — người xác minh nhà cung cấp đếm được cho K2.
+ */
+async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; tc2: Nguoi; rfqId: string }> {
   const org = (
     await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug])
   ).rows[0]?.id ?? "";
@@ -1028,10 +1046,12 @@ async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: 
     expect(nhom.status, nhom.text).toBe(201);
     const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
     expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId })).status).toBe(200);
+    // [S1.266 / S3.3c1] Và K2: một nhà cung cấp đếm được, PM mời, `tc2` xác minh (`tc` khai phiên bản chính sách).
+    await moiNhaCungCapDemDuoc(org, rfqId, pm, tc2);
   }
   const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
   expect(nop.status, nop.text).toBe(200);
-  return { org, pm, mua, rfqId };
+  return { org, pm, mua, tc2, rfqId };
 }
 
 describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
@@ -1129,7 +1149,7 @@ describe("[S1.200 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt 
   });
 
   it("[INV-K4b] người tạo gói là BUYER — chỉ giữ `rfq.create`, không giữ `rfq.approve`: đọc được ngân sách của gói mình đã nộp, không hàng từ chối (lượt soi F1)", async () => {
-    const { org, mua } = await goiDaNop("ns-doc-mua", true);
+    const { org, mua, tc2 } = await goiDaNop("ns-doc-mua", true);
     const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     const rfq = await goi("POST", "/rfqs", mua, { title: "Goi cua nguoi mua", deadlineAt: han });
     expect(rfq.status, rfq.text).toBe(201);
@@ -1138,6 +1158,8 @@ describe("[S1.200 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt 
     // [S1.200 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — gói nhận nhóm `goiDaNop` đã dựng cho tổ chức.
     const nhomId = (await db.pool.query<{ id: string }>("SELECT id FROM procurement_categories WHERE org_id = $1", [org])).rows[0]?.id ?? "";
     expect((await goi("PUT", `/rfqs/${rfqId}/category`, mua, { categoryId: nhomId })).status).toBe(200);
+    // [S1.266 / S3.3c1] K2: một nhà cung cấp đếm được — người mời là người tạo gói (BUYER giữ `rfq.invite`, không hàng từ chối).
+    await moiNhaCungCapDemDuoc(org, rfqId, mua, tc2);
     const nop = await goi("POST", `/rfqs/${rfqId}/submit`, mua);
     expect(nop.status, nop.text).toBe(200);
     const kq = await goi("GET", `/rfqs/${rfqId}/budget`, mua);
@@ -1442,6 +1464,9 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ qua HTTP — đọc, ghi nh�
       expect((await goi("PUT", `/rfqs/${id}/budget`, pm, { estimatedValue: giaTri, currency: "VND" })).status).toBe(200);
       expect((await goi("PUT", `/rfqs/${id}/category`, pm, { categoryId: nhomId })).status).toBe(200);
       expect((await goi("POST", `/rfqs/${id}/items`, pm, { lineNo: 1, description: "Thep tam", quantity: "10", unit: "tam" })).status).toBe(201);
+      // [S1.266 / S3.3c1] K2: một nhà cung cấp đếm được, PM mời, `tc2` xác minh (`tc` khai phiên bản chính sách). Người nhập hồ
+      // sơ của helper là TECHNICAL — không giữ `rfq.approve`, nên số người ghi nhận được bên dưới không đổi.
+      await moiNhaCungCapDemDuoc(org, id, pm, tc2);
       const nop = await goi("POST", `/rfqs/${id}/submit`, pm);
       expect(nop.status, nop.text).toBe(200);
       for (const ai of [pm2, pm3]) {

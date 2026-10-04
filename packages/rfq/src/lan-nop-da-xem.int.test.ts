@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   addRfqItem,
   approveRfq,
@@ -202,18 +202,32 @@ async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG): Promise<string> 
   return rfqId;
 }
 
-/** Một nhà cung cấp, một người liên hệ và một lời mời vào gói, do PM mời. */
+/**
+ * Một nhà cung cấp, một người liên hệ và một lời mời vào gói, do PM mời.
+ *
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
+ * `tc`: FINANCE, không khai phiên bản chính sách v2 mà ngân sách ghim, không tạo gói, không mời) — gói nộp duyệt được (bậc đòi
+ * một). Tổ chức chưa bật: nguyên dạng MVP1, do PM dựng — K2 không áp, và xác minh K8a chỉ có ở tổ chức đã bật. Hỏi trạng thái
+ * bật lúc mời (`daBat`, khối (6)): khối (6) bật tổ chức giữa ca bằng chữ ký, không qua `batS3`.
+ */
 async function moi(t: ToChuc, rfqId: string): Promise<void> {
-  const ncc = await motId(
-    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
-    [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],
-  );
-  const duoi = randomBytes(6).toString("hex");
-  const lh = await motId(
-    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4, $5, $6) RETURNING id",
-    [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), t.pm.u, t.pm.s],
-  );
+  let ncc: string;
+  let lh: string;
+  if (await daBat(t.org)) {
+    const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+    ({ ncc, lh } = n!);
+  } else {
+    ncc = await motId(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],
+    );
+    const duoi = randomBytes(6).toString("hex");
+    lh = await motId(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4, $5, $6) RETURNING id",
+      [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), t.pm.u, t.pm.s],
+    );
+  }
   await withTenant(apiPool, t.org, (c) =>
     c.query(
       "INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +

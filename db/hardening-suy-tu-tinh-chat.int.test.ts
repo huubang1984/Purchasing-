@@ -1667,6 +1667,40 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   );
   const rfqVe = await rfqSoan();
   const rfqVe2 = await rfqSoan();
+  // [S1.266 / S3.3c1 / K2] Ba gói nộp duyệt ở tổ chức đã bật — `rfqVe`, `rfqVe2`, `anhEm` — mỗi gói một nhà cung cấp ĐẾM ĐƯỢC
+  // (`so_ncc_toi_thieu` = 1): hồ sơ và người liên hệ do một người nhập riêng (TECHNICAL — không mời, không tạo gói) dựng, có MST,
+  // và `tc` (FINANCE, không khai phiên bản 2, không dựng hồ sơ) xác minh sau khi người liên hệ đã có. Câu DỰNG dữ liệu dưới chủ sở
+  // hữu: các bộ ba (bảng, sự kiện) ấy đã có nhân chứng ở trên.
+  const nhapNcc = await nguoi("TECHNICAL");
+  const nccDemDuoc: { readonly ncc: string; readonly lh: string }[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    const duoi = randomBytes(5).toString("hex");
+    const mst = String(1_000_000_000 + Math.floor(Math.random() * 8_999_999_999));
+    const nccD = await dungId(
+      "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [org, `NCC dem duoc ${duoi}`, mst, nhapNcc.u, nhapNcc.s],
+    );
+    const lhD = await dungId(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Nguoi ban hang', $3, $4, $5, $6) RETURNING id",
+      [org, nccD, `dem${duoi}@vidu.vn`, `09${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`, nhapNcc.u, nhapNcc.s],
+    );
+    await dungId(
+      "INSERT INTO supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'VERIFIED', $3, $4) RETURNING id",
+      [org, nccD, tc.u, tc.s],
+    );
+    nccDemDuoc.push({ ncc: nccD, lh: lhD });
+  }
+  const moiDemDuoc = async (goi: string, i: number, ai: { readonly u: string; readonly s: string }): Promise<void> => {
+    await dungId(
+      "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+      [org, goi, nccDemDuoc[i]!.ncc, nccDemDuoc[i]!.lh, ai.u, ai.s],
+    );
+  };
+  await moiDemDuoc(rfqVe, 0, pm);
+  await moiDemDuoc(rfqVe2, 1, pm);
   for (const goi of [rfqVe, rfqVe2]) {
     await so.chung(
       "public.rfq_budgets",
@@ -1849,6 +1883,8 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       "rfq_packages",
     );
   };
+  // [S1.266 / S3.3c1 / K2] Gói anh em mời nhà cung cấp đếm được thứ ba — người mời là người nộp (`pm2`).
+  await moiDemDuoc(anhEm, 2, pm2);
   await nopDuyet(anhEm, pm2);
   doiSoHang(
     await so.chung(

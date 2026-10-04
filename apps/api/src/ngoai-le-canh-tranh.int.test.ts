@@ -28,7 +28,7 @@ import { CHOT_VAO_SO } from "@trustprocure/identity";
 import { createInvitation, lapNgoaiLe, rutNgoaiLe } from "@trustprocure/invitation";
 import { addRfqItem, approveRfq, createProcurementPolicy, createRfq, returnRfqToDraft, setRfqBudget, submitRfqForApproval } from "@trustprocure/rfq";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
@@ -144,6 +144,9 @@ async function taoToChuc(): Promise<ToChuc> {
   return { org, pm, pm2, mua, tc };
 }
 
+/** [S1.266 / S3.3c1] Tổ chức đã bật trong tệp này — ở đó `nhaCungCapCuaGoi` dựng nhà cung cấp ĐẾM ĐƯỢC cho K2. */
+const DA_BAT = new Set<string>();
+
 /** BẬT S3 — khuôn `batS3` của `luong-moi-s3`: phiên bản có bậc, chữ ký thứ hai của một người khác. */
 async function batS3(t: ToChuc): Promise<void> {
   const v2 = (
@@ -166,6 +169,7 @@ async function batS3(t: ToChuc): Promise<void> {
   );
   const { rows } = await withTenant(apiPool, t.org, (c) => c.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org]));
   expect(rows[0]?.b, "dàn cảnh: tổ chức phải ĐÃ BẬT").toBe(true);
+  DA_BAT.add(t.org);
 }
 
 async function toChucDaBat(): Promise<ToChuc> {
@@ -205,6 +209,19 @@ async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
   return { ncc, lh };
 }
 
+/**
+ * [S1.266 / S3.3c1] Nhà cung cấp của lời mời trong một gói: ở tổ chức ĐÃ bật, một nhà cung cấp ĐẾM ĐƯỢC cho K2
+ * (`nhaCungCapDemDuoc`, xác minh bởi `tc` — FINANCE, không khai phiên bản chính sách mà ngân sách ghim, không tạo gói, không
+ * mời) — để các ca nộp duyệt KHÔNG có ngoại lệ sống (rút rồi nộp lại, nộp trần, đua với một câu lập chưa COMMIT) qua K2 bằng số
+ * đếm thay vì bằng ngoại lệ. Danh sách vẫn đúng MỘT nhà cung cấp, nên một `SINGLE_SOURCE` sống vẫn ĐÚNG loại: các ca đo ngoại
+ * lệ giữ nguyên ý nghĩa. Tổ chức CHƯA bật (đối chứng ⑺) giữ nhà cung cấp do `pm` dựng — xác minh đòi tổ chức đã bật.
+ */
+async function nhaCungCapCuaGoi(t: ToChuc): Promise<NhaCungCap> {
+  if (!DA_BAT.has(t.org)) return nhaCungCap(t);
+  const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+  return { ncc: n!.ncc, lh: n!.lh };
+}
+
 /** Gói DRAFT có ngân sách, một hạng mục và một lời mời — do `pm` dựng. */
 async function goiNhap(t: ToChuc): Promise<string> {
   const categoryId = await nhomCua(t);
@@ -215,7 +232,8 @@ async function goiNhap(t: ToChuc): Promise<string> {
     await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
     await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep tam SS400 3mm", quantity: "100.0000", unit: "tam", actorSessionId: t.pm.s });
   });
-  const n = await nhaCungCap(t);
+  // [S1.266 / S3.3c1] Ở tổ chức đã bật: nhà cung cấp đếm được (K2) — người mời vẫn là `pm`.
+  const n = await nhaCungCapCuaGoi(t);
   await withTenant(apiPool, t.org, (c) => createInvitation(c, t.org, { rfqId, supplierId: n.ncc, contactId: n.lh, actorSessionId: t.pm.s }, auditPool));
   return rfqId;
 }
@@ -882,7 +900,8 @@ describe("[S1.265 / S3.3b] băm và tập loại trừ — đột biến", () =>
         await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
         await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep van D12", quantity: "10.0000", unit: "kg", actorSessionId: t.pm.s });
       });
-      const n = await nhaCungCap(t);
+      // [S1.266 / S3.3c1] Nhà cung cấp đếm được: gói `daRut` nộp duyệt KHÔNG còn ngoại lệ sống, nên qua K2 bằng số đếm.
+      const n = await nhaCungCapCuaGoi(t);
       await withTenant(apiPool, t.org, (c) => createInvitation(c, t.org, { rfqId, supplierId: n.ncc, contactId: n.lh, actorSessionId: t.pm.s }, auditPool));
       return rfqId;
     };

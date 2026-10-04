@@ -198,6 +198,8 @@ const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "
 /**
  * [S1.174 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
  * bối cảnh demo khai đúng số mà bậc của chính nó đòi, để lúc K2 có mặt nó không gãy ở bước mời).
+ * [S1.266 / S3.3c1] K2 (cưỡng chế từ S3.3c2) đếm nhà cung cấp ĐẾM ĐƯỢC chứ không đếm lời mời: `--s3` dựng cả năm bằng
+ * người nhập riêng, có MST, và người tài chính thứ hai xác minh — xem `taoNccVaMoi` trong `chinh`.
  */
 const NHA_CUNG_CAP_THEM_S3: readonly string[] = ["Thep Hoa Sen", "Vat lieu Phu My"];
 
@@ -275,20 +277,25 @@ async function chinh(): Promise<void> {
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
     // [S1.199 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
     // §8.10): `DATA_STEWARD` không ghép được với vai nào ở đây.
-    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
+    // [S1.266 / S3.3c1] `--s3`: `nhapncc` — người NHẬP hồ sơ nhà cung cấp, một người MỚI vai TECHNICAL (chỉ `evaluation.perform`):
+    // K2 không đếm nhà cung cấp do người tạo gói hay một người mời dựng, và người này không giữ `rfq.invite` lẫn `rfq.approve` — không
+    // thành người mời, không đổi số người ghi nhận được tín hiệu chia nhỏ. Không `--s3`: không có người ấy.
+    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2", "nhapncc"] : [])]) {
       const email = `${ten}.${duoi}@vidu.vn`;
       const hoTen = ten.startsWith("soan")
         ? `Nguoi soan goi thau ${ten.slice(4)}`.trim()
         : ten.startsWith("duyet")
           ? `Nguoi duyet ${ten.slice(-1)}`
-          : ten === "dulieu" ? "Nguoi quan ly du lieu" : `Nguoi tai chinh ${ten.slice(-1)}`;
+          : ten === "dulieu"
+            ? "Nguoi quan ly du lieu"
+            : ten === "nhapncc" ? "Nguoi nhap nha cung cap" : `Nguoi tai chinh ${ten.slice(-1)}`;
       const id = (await q<{ id: string }>(
         "INSERT INTO public.users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id",
         [org, email, hoTen],
       )).id;
       const vai = ten.startsWith("soan")
         ? "PROCUREMENT_MANAGER"
-        : ten.startsWith("duyet") ? "DIRECTOR" : ten === "dulieu" ? "DATA_STEWARD" : "FINANCE";
+        : ten.startsWith("duyet") ? "DIRECTOR" : ten === "dulieu" ? "DATA_STEWARD" : ten === "nhapncc" ? "TECHNICAL" : "FINANCE";
       await pool.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vai]);
       // MỖI người một phiên riêng: mọi lần ghi có kiểm danh tính (013) đòi một phiên còn sống, và
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
@@ -397,18 +404,33 @@ async function chinh(): Promise<void> {
     // [S1.190 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
     // duyệt —, vì chữ ký duyệt gói mang băm của danh sách mời lúc ký (K4b) và gói chỉ mở khi người ký ký đúng danh sách ấy; lời mời
     // là `UNSENT`, KHÔNG token (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời sau khi mở, token ngay lúc mời.
+    // [S1.266 / S3.3c1] `--s3`: K2 (S3.3c2) đếm ở cạnh nộp duyệt — kể cả câu UPDATE thẳng phía dưới, vì trigger là ENABLE ALWAYS —
+    // và chỉ đếm nhà cung cấp mà hồ sơ và người liên hệ KHÔNG do người tạo gói hay người mời (soan) dựng, có MST, và có xác minh còn
+    // hiệu lực của người không khai phiên bản mà ngân sách ghim. Nên `nhapncc` dựng hồ sơ có MST (mỗi người một MST gốc) và người liên
+    // hệ, rồi `taichinh2` — người KÝ chứ không khai phiên bản — xác minh, SAU khi có người liên hệ (băm hồ sơ phủ nó). Người mời vẫn là
+    // soan. Không `--s3`: soan dựng, không MST, không xác minh — như trước (cột MST nhận NULL như khi không nêu).
+    const nhapNcc = S3 ? nguoiMua.find((n) => n.email.startsWith("nhapncc.")) : undefined;
+    const xacMinhNcc = S3 ? nguoiMua.find((n) => n.email.startsWith("taichinh2.")) : undefined;
+    if (S3 && (nhapNcc === undefined || xacMinhNcc === undefined)) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
+    const nguoiDungNcc = nhapNcc ?? { id: nguoiGieo, sessionId: phienGieo };
     const taoNccVaMoi = async (c: pg.PoolClient): Promise<(NhaCungCapGieo & { readonly invitationId: string })[]> => {
       const daMoi: (NhaCungCapGieo & { readonly invitationId: string })[] = [];
       for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
         const ncc = (await c.query<{ id: string }>(
-          "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
-          [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
+          "INSERT INTO public.suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+          [org, `${ten} ${duoi}`, S3 ? `03${soDienThoai}${String(i)}` : null, nguoiDungNcc.id, nguoiDungNcc.sessionId],
         )).rows[0]?.id ?? "";
         const lh = (await c.query<{ id: string }>(
           "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
             "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-          [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiGieo, phienGieo],
+          [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiDungNcc.id, nguoiDungNcc.sessionId],
         )).rows[0]?.id ?? "";
+        if (xacMinhNcc !== undefined) {
+          await c.query(
+            "INSERT INTO public.supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4)",
+            [org, ncc, xacMinhNcc.id, xacMinhNcc.sessionId],
+          );
+        }
         const lm = await createInvitation(c, org, {
           rfqId: rfq,
           supplierId: ncc,
@@ -519,6 +541,17 @@ async function chinh(): Promise<void> {
                 unit: "tam",
                 actorSessionId: soan.sessionId,
               });
+              // [S1.266 / S3.3c1] Bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một lời
+              // mời nào. soan mời ba người đầu của gói chính (nhapncc dựng, taichinh2 xác minh) ở DRAFT, trước lần nộp. Tín hiệu chia nhỏ
+              // đọc ngân sách và nhóm hàng, không đọc lời mời; soan2 ký và nằm ngoài tập loại trừ, nên K5 cho hai lần mở dưới qua.
+              for (const n of moiTruocKhiKy.slice(0, 3)) {
+                await createInvitation(
+                  c,
+                  org,
+                  { rfqId: r.id, supplierId: n.supplierId, contactId: n.contactId, linkChannel: "EMAIL", actorSessionId: soan.sessionId },
+                  pool,
+                );
+              }
               return r.id;
             });
             await withTenant(pool, org, (c) => submitRfqForApproval(c, org, { rfqId: id, actorSessionId: soan.sessionId }, pool));
@@ -597,7 +630,8 @@ async function chinh(): Promise<void> {
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
     ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
     ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
-    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh") && !n.email.startsWith("dulieu."))) {
+    // [S1.266 / S3.3c1] `nhapncc` (TECHNICAL, `--s3`) không làm gì ở /mo-thau — không in link của người ấy ở đây.
+    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh") && !n.email.startsWith("dulieu.") && !n.email.startsWith("nhapncc."))) {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
     }
     ra.push("");
@@ -616,6 +650,9 @@ async function chinh(): Promise<void> {
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
       }
+      // [S1.266 / S3.3c1] Nhà cung cấp đếm được của K2 — người dựng và người xác minh, nói ra cho người demo.
+      ra.push("  Năm nhà cung cấp của gói chính: nhapncc (TECHNICAL, không mời, không duyệt) nhập hồ sơ có MST và người liên hệ, taichinh2");
+      ra.push("  xác minh — K2 đếm đủ năm cho bậc 1 tỷ; ba người đầu được mời lại ở các gói nhỏ bên dưới.");
     }
     ra.push("");
     ra.push("LỊCH SỬ GIÁ (S4.4b) — ba gói đã mở niêm phong qua đường thật (niêm phong, nộp, đóng, mở thầu, worker giải mã), ba nhà");

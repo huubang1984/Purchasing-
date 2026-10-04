@@ -21,7 +21,7 @@ import {
   submitRfqForApproval,
 } from "@trustprocure/rfq";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 
 // =============================================================================================
 // [S1.186 / S3.2b1 / K6 · khoản 253] TOKEN ĐÚC KHI GÓI CHƯA MỞ THÔI DÙNG ĐƯỢC SAU KHI TỔ CHỨC BẬT S3 — ĐO Ở PHÍA DÙNG
@@ -197,6 +197,18 @@ async function loiMoi(t: ToChuc, rfqId: string): Promise<string> {
   );
 }
 
+/**
+ * [S1.266 / S3.3c1] Như `loiMoi`, nhưng nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc`, xác minh bởi `tc` — FINANCE, không
+ * khai phiên bản chính sách mà ngân sách ghim): gói của tổ chức ĐÃ bật nộp duyệt được (bậc đòi một). Người mời vẫn là `pm`.
+ */
+async function loiMoiDemDuoc(t: ToChuc, rfqId: string): Promise<string> {
+  const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+  const { ncc, lh } = n!;
+  return withTenant(apiPool, t.org, async (c) =>
+    (await createInvitation(c, t.org, { rfqId, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: t.pm.s }, apiPool)).id,
+  );
+}
+
 const ducToken = (t: ToChuc, invitationId: string): Promise<string> =>
   withTenant(apiPool, t.org, async (c) => (await issueMagicLinkToken(c, t.org, { invitationId, actorSessionId: t.pm.s })).token);
 
@@ -251,7 +263,8 @@ describe("S3.2b1 — K6 ở phía dùng: token đúc khi gói chưa mở thôi d
     const t = await taoToChuc();
     await batS3(t);
     const rfqId = await goiNhap(t);
-    const inv = await loiMoi(t, rfqId);
+    // [S1.266 / S3.3c1] Tổ chức đã bật: lời mời tới nhà cung cấp ĐẾM ĐƯỢC, không thì K2 chặn lần nộp trong `moGoi`.
+    const inv = await loiMoiDemDuoc(t, rfqId);
     await moGoi(t, rfqId);
     const token = await ducToken(t, inv);
     expect(await loi(doiLink(t, token))).toBeNull();
