@@ -356,7 +356,8 @@ export interface MocGhim {
 // [S1.251 / S4.4b] 76 -> 77: L6 vào sổ đăng ký với vế lịch sử giá (route đọc, đối chứng dương ở BAFO_OPEN và BAFO_CLOSED).
 // [S1.253 / S4.5a] 77 -> 78: L14 vào sổ đăng ký với vế lượt chấm (phiên bản chính sách hiệu lực lúc gói mở, trigger có tên).
 // [S1.256 / S4.5b] 78 -> 79: L7 vào sổ đăng ký cùng lõi và hai bảng của benchmark (tái lập, không tự so, ghi một lần).
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 79, coDanhSachToiDa: 0 };
+// [S1.9101 / S3.3c2] 79 -> 81: K2 và K5 vào sổ đăng ký (cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói).
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 81, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

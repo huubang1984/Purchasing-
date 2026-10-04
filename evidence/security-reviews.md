@@ -24532,3 +24532,128 @@ Trên `f78c9172` (nhánh dựng từ `master` `ff68d6b6`, không gộp thêm): `
 `pnpm evidence`: vitest thoát mã 0, 4655 khẳng định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1817 giây;
 `evidence/INV-matrix.md` không đổi — vòng này không thêm nhãn nào. `pnpm cap-so --kiem` sạch. Lượt `pnpm test` đầu đỏ hai cổng
 kiến trúc — QT3 và vế ⒞ của `duong-sql-ngoai-with-tenant` coi `packages/test-support/src` là mã chạy được — sửa ở mục 2.
+
+# §S1.9101 — S3.3c2: CẠNH TRANH TỐI THIỂU — K2 ĐẾM NHÓM NHÀ CUNG CẤP MÀ NGƯỜI CHỌN DANH SÁCH KHÔNG DỰNG, K5 ĐÒI CHỮ KÝ ĐỘC LẬP — ADR-9201
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (lần ký bật sau cờ tắt,
+ADR-105), và tổ chức chưa bật chạy nguyên MVP1 trừ một lối: câu nộp duyệt thô dưới REPEATABLE READ hay SERIALIZABLE nay bị chặn ở mọi
+tổ chức (ADR-9201 ⑸ — không đường ứng dụng nào đi lối ấy). Migration `9501`, ADR-9201. Không khoản mới; khoản 286 vế ⑴ đóng ở cạnh
+nộp duyệt.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-04: *"Tiếp S3.3"*. S3.3a, S3.3b, S3.3c1 đã vào; phần kế là S3.3c2 — chốt K2 và K5 (spec S3 §9; chủ dự án chia
+S3.3c hai PR cùng ngày, §S1.266). Luật đếm của K2 đã chốt ở bản hình dạng của phiên trước và nằm ở header
+`packages/test-support/src/nha-cung-cap-dem-duoc.ts`. Trước dòng mã đầu, chủ dự án chốt ba câu theo đề xuất: ngoại lệ khớp CHẶT,
+điện thoại so chín chữ số cuối, *người mời* gồm mọi `invited_by` kể cả hàng đã thu hồi.
+
+## 2. Đo trước
+Ba agent khảo sát song song: cạnh `DRAFT→PENDING_APPROVAL` (bảy trigger BEFORE, thứ tự theo tên, khuôn K1 `072`, chốt READ COMMITTED
+`097`); cạnh `PENDING_APPROVAL→OPEN` (`rfq_approvals`, sàn một chữ ký `068`, ba phép đếm K4b `087`, `rfq_tap_loai_tru` `105` — chưa
+ai gọi ở cạnh mở gói, chưa trigger nào đọc `ky_danh_sach_moi`, `rfq_kiem_nguoi_duyet` chỉ hỏi người tạo và phiên); dữ liệu nhà cung
+cấp (`created_by` trên hồ sơ và người liên hệ từ `013`, `UNIQUE (org_id, tax_code)` không gộp mã chi nhánh, điện thoại không chuẩn
+hoá, `ncc_xac_minh_con_hieu_luc` — câu hỏi duy nhất của `082` —, `082` không cấm tác giả phiên bản xác minh).
+
+## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
+Một CAO — dừng hỏi chủ dự án:
+- **C1** — K2 không loại người THU HỒI: PM X dựng hai nhà vỏ, người mua trung thực tạo gói và mời cả nhà thật lẫn nhà vỏ, X thu hồi
+  nhà thật ở DRAFT ⇒ nhà vỏ đếm đủ ngưỡng; bậc không ký danh sách thì K5 không chạy và X tự ký mở được ⇒ người chọn danh sách = người
+  tạo ∪ mọi người mời ∪ mọi người thu hồi (ADR-9201 ⑵). Đo ở ca *NGƯỜI THU HỒI là người chọn*.
+Bốn TRUNG: **T1** chốt READ COMMITTED đặt sau câu hỏi *đã bật* thì câu nộp RR với ảnh chụp trước lần bật thoát cả K1 lẫn K2 (khoản
+286 ⑴) ⇒ đặt trước, mọi tổ chức; **T2** người xác minh về sau thành người mời ⇒ thêm vế *người xác minh không thuộc người chọn*;
+**T3** K5 ghi `CONTROL_DENIED` cho lần mở chưa ai ký ⇒ nhường lời cho K4b khi chưa đủ chữ ký; **T4** chép bốn vế *còn hiệu lực* vào
+K5 sẽ trôi ở K9 ⇒ một hàm `rfq_chu_ky_con_hieu_luc` cho K4b và K5.
+THẤP, sửa trong vòng: thứ tự hỏi trước ở tầng gói theo thứ tự trigger (K5 trước K10a); nhóm theo MỌI người liên hệ (chủ dự án chọn);
+hàng lời mời không rõ người mời ⇒ đếm 0. Vế *người ký "độc lập" phải giữ `rfq.approve`* (THẤP 6) cài ở bản đầu rồi BỎ sau lượt
+`pnpm test:int` đầy đủ (mục 6). THẤP, ghi ở ADR: khối chặn deploy cho gói đang
+chờ duyệt (loại — dưới vai deploy chịu RLS nó thấy 0 hàng, khuôn `049`), K5 không chốt READ COMMITTED (hết đúng ở K9), khớp loại đếm
+lời mời không đếm nhóm, lối hở của phép gộp, tách K5/K5b ở sổ đăng ký, số người tối thiểu.
+Lượt soi xác nhận: lập luận READ COMMITTED của K2 (trigger BEFORE ROW chạy sau khoá hàng; hàm plpgsql VOLATILE lấy ảnh chụp mới mỗi câu);
+K5 an toàn không chốt ấy hôm nay; tên trigger K2 xếp cuối cạnh nộp duyệt; khoá bậc `so_ncc_toi_thieu`, `dau_thau_chinh_thuc` không NULL.
+
+## 4. Câu hỏi của chủ dự án (2026-10-04)
+Trước lượt soi: khớp ngoại lệ — **chặt**; điện thoại — **chín số cuối**; người mời — **mọi `invited_by`**. Sau lượt soi: người chọn —
+**thêm người thu hồi và vế người xác minh**; READ COMMITTED — **mọi tổ chức**; K5 khi thiếu chữ ký — **để K4b nói**; nhóm — **mọi
+người liên hệ**. Cả bảy theo đề xuất.
+
+## 5. Thay đổi
+- `db/migrations/9501_canh_tranh_toi_thieu.sql` — `rfq_bac_ghim`, `rfq_dem_ncc_canh_tranh` (CTE đệ quy trên tập), `rfq_chot_canh_tranh`,
+  trigger `rfq_packages_kiem_so_ncc_khi_nop` (chốt READ COMMITTED rồi vị từ, tên ràng buộc `k2_canh_tranh_toi_thieu`);
+  `rfq_chu_ky_con_hieu_luc`, `rfq_kiem_chu_ky_danh_sach_khi_mo` định nghĩa lại (phép đếm thứ ba đọc hàm ấy, ba câu báo giữ nguyên chữ);
+  `rfq_chot_chu_ky_doc_lap`, trigger `rfq_packages_kiem_doc_lap_khi_mo` (`k5_chu_ky_doc_lap`). Không bảng mới.
+- `hardening.always.sql` cùng commit: hai tên trigger ở `TRIGGER_DUOC_PHEP`; hai mục hàm + trigger (mục K2 phán xét
+  `provolatile = 'v'`), năm mục định nghĩa hàm, mục `rfq_kiem_chu_ky_danh_sach_khi_mo` trỏ `9501`. Mọi thân PHÁN XÉT suy bằng script
+  từ thân migration.
+- `@trustprocure/identity`: ba mã `K2_THIEU_CANH_TRANH`, `K2_DAU_THAU_CHINH_THUC`, `K5_THIEU_CHU_KY_DOC_LAP` — cả ba vào sổ —, ở
+  `CHOT_VAO_SO` và `DANH_MUC_VE_CONG`; lời khai đếm *"mười chín mã chốt vào sổ"* (`rbac.ts`) nay hai mươi hai.
+- `@trustprocure/rfq`: `CAU_CHOT_CANH_TRANH` hỏi ở `submitRfqForApproval` sau K1 và nhóm hàng; `CAU_CHOT_CHU_KY_DOC_LAP` ở `openRfq`
+  trước K10a và trước lần đúc khoá.
+- Sổ đăng ký: `migrations.int` (ba danh sách migration, bốn hàm trợ giúp, một hàm `SETOF`, hai hàm trigger, một con trỏ),
+  `danh-sach-ham-canh`, `so-khai-nhan` (K2, K5), `docs/TEST-PLAN.md` hai hàng K2, K5 (K2b, K5b ở S3.5).
+- Sửa test cũ: `bac-chinh-sach` khai `rfq_bac_ghim`, `rfq_dem_ncc_canh_tranh` ở cổng *một hàm chọn phiên bản* (`THEO_ID`);
+  `lan-nop-da-xem` (hai đột biến) và `rang-ngan-sach` (hai đột biến) áp đột biến ở `rfq_chu_ky_con_hieu_luc` — nơi phép đếm thứ ba
+  nay sống; nghĩa phép đo giữ nguyên.
+- Lượt `pnpm test` đầu đỏ đúng một cổng: `migration-shape` vế ⑷ — hai hàm trigger mới chưa khai ở `danh-sach-ham-canh` (dự kiến);
+  lượt sau đỏ P6, P8 của `[INV-H20]` — lời khai số bất biến ở STATE và `Handoff.md` (79 ⇒ 81, dự kiến).
+
+## 6. Phép đo — `apps/api/src/canh-tranh-toi-thieu.int.test.ts`, 36 ca trên Postgres 16, qua HTTP và dưới `app_api`
+⑴ K2 đối chứng dương; thiếu một nhóm ⇒ 422 câu của chốt, MỘT hàng `CONTROL_DENIED`, gói ở DRAFT; lớp chặn cuối cho câu viết tay;
+⑵ mỗi luật đếm một ca — người tạo, người mời, người THU HỒI (ca C1), người liên hệ phụ, không MST, không xác minh / đã thu hồi / băm
+đổi, tác giả phiên bản, người xác minh về sau thành người mời, người liên hệ không ACTIVE / không số, hàng lời mời không rõ người mời;
+⑶ nhóm — MST gốc, email ở người liên hệ phụ, chín số cuối, bắc cầu qua lời mời không đếm được; ⑷ ngoại lệ khớp chặt (một lời mời,
+hai lời mời, danh sách rỗng, đã rút, `ROTATION`); ⑸ bậc đấu thầu chính thức; ⑹ REPEATABLE READ và SERIALIZABLE bị chặn ở tổ chức đã
+bật và chưa bật, đua với lần rút ngoại lệ; ⑺ K5 — đối chứng dương, bốn nguồn của tập loại trừ (người mời, người thu hồi, người dựng nhà
+cung cấp trên danh sách, tác giả ngoại lệ), bậc không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký (không
+`CONTROL_DENIED`), lớp chặn cuối; gói không bậc ghim — K2 nhường lời cho K1, K5 coi như bậc đòi; ⑻ tổ chức chưa bật; tập mã hai hàm vị
+từ bằng các dòng K2, K5 của bảng. Lượt chạy đầu đỏ một ca — do chính K10a: hai gói 50 triệu cùng nhóm hàng cộng chạm cận 100 triệu;
+ca ấy dùng ước lượng 10 triệu.
+
+**Lượt `pnpm test:int` đầy đủ đầu tiên** (trên `e86478a`, 91 tệp): 2140 đạt, 23 đỏ ở 5 tệp — cả ba lớp đều là phát hiện về THIẾT KẾ,
+không phải test cũ sai:
+- `bac-chinh-sach` (4) và `danh-sach-moi` (1): `rfq_bac_ghim` bản đầu NÉM khi gói không bậc ghim. Ở bốn ca đột biến K1 (tắt xếp bậc,
+  cho qua khi thiếu ngân sách, tắt trigger K1) lời NÉM của K2 che lời của K1; ở ca lớp hai của khoản 261 (gói chờ duyệt có từ trước
+  `097`, ký lại bằng chữ ký độc lập) K5 chặn mở vĩnh viễn ⇒ hàm trả NULL cho gói không bậc, K2 nhường cho K1, K5 coi như bậc đòi
+  (ADR-9201 ⑹ ⑺). Cộng cổng *một hàm chọn phiên bản* thấy hai hàm mới đọc `org_procurement_policies` ⇒ khai.
+- `kich-ban-41` bản trong tiến trình (9, dây chuyền từ bước 2): hai giám đốc ký qua hàm gói, và vế `rfq.approve` của K5 không đếm họ;
+  lần từ chối còn không ghi được sổ — `CONTROL_DENIED` ở giao dịch độc lập chờ khoá chuỗi mà chính giao dịch duyệt-rồi-mở đang giữ
+  (`DenialAuditFailedError`) ⇒ bỏ vế ấy: CSDL không hỏi `rfq.approve` ở D2, K4b — một lớp riêng K5 có là lệch (ADR-9201 ⑺, *Cái giá*).
+- `lan-nop-da-xem` (2), `rang-ngan-sach` (2): đột biến cũ nhắm phép đếm thứ ba nay ở `rfq_chu_ky_con_hieu_luc` ⇒ dời chỗ áp.
+Sáu tệp ấy chạy lại trên `aed0cb9`: 187 ca đạt, 0 đỏ.
+
+## 7. Đột biến
+Hai mươi mốt đột biến CSDL trong chính tệp — mỗi ca áp trong một giao dịch rồi ROLLBACK (`CREATE OR REPLACE` thân đã thay ĐÚNG một chỗ,
+khẳng định khớp đúng một chỗ, hay `DISABLE TRIGGER`) và đo kết quả đổi: K2 — tắt trigger; bỏ người tạo, người mời, người thu hồi khỏi
+tập người chọn; bỏ vế người liên hệ; bỏ vế xác minh; bỏ vế tác giả; bỏ vế người xác minh thuộc người chọn; bỏ vế ACTIVE/số điện thoại;
+so nguyên MST; bỏ cạnh email; so nguyên chuỗi số điện thoại; nhận mọi loại ngoại lệ; bỏ vế ngoại lệ còn sống; bỏ vế đấu thầu chính
+thức; bỏ chốt READ COMMITTED. K5 — bỏ vế tập loại trừ; bỏ vế ngoại lệ; bỏ vế nhường lời cho K4b; coi bậc vắng là KHÔNG đòi; tắt
+trigger.
+
+Năm đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256:
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | bỏ lần hỏi trước K2 ở `submitRfqForApproval` | 11/36 |
+| TS2 | bỏ lần hỏi trước K5 ở `openRfq` | 6/36 |
+| TS3 | `K2_THIEU_CANH_TRANH` không vào sổ | 9/36 |
+| TS4 | `K5_THIEU_CHU_KY_DOC_LAP` không vào sổ | 5/36 |
+| TS5 | hỏi K5 SAU lần đúc khoá (khoản 31) | 6/36 |
+
+Năm sống: 0. Đối chứng sau khôi phục: 0/36 đỏ. Bảng là lượt trên mã của `aed0cb9`; lượt trên `e86478a` (còn vế `rfq.approve`) cho
+cùng kết quả trừ TS5 đỏ 7/36 — thêm đúng ca `rfq.approve` đã bỏ.
+
+## 8. Giới hạn còn lại
+- K2b, K5b — kiểm lại ở bậc cao hơn lúc trao — ở S3.5; K3 và khoản 234 ở S3.3d; màn, kịch bản 41, lượt đi thử T4 ở S3.3e.
+- Gói đang chờ duyệt lúc deploy ở tổ chức đã bật không qua K2 (không khối chặn deploy — ADR-9201).
+- Vế MST dư với vế xác minh: đọc từ `082`, không đo một đột biến riêng.
+- `gieo:demo --s3` không chạy lại trong vòng này (cần vai `app_unseal_login` dựng tay, như §S1.266): đọc từ mã — người ký `soan2`,
+  `soan3` là PM ngoài tập loại trừ của mọi gói, không lời mời nào bị thu hồi trước lần nộp, người xác minh `taichinh2` không thuộc
+  người chọn danh sách.
+- CSDL không hỏi người ký có giữ `rfq.approve` — ở D2, K4b lẫn K5 (rổ B; route hỏi).
+- Lối hở của phép gộp, số người tối thiểu, tài khoản thứ hai của quản trị viên — ADR-9201 *Cái giá*.
+
+## 9. Số đo
+Trên `aed0cb9` (nhánh dựng từ `master` `6fcc853`, không gộp thêm — `origin/master` không đổi trong vòng): `pnpm t0` xanh; `pnpm test`
+150 tệp, 2524 ca đạt, 1 bỏ qua, 0 đỏ (trên cây có tài liệu của vòng); `pnpm evidence`: vitest thoát mã 0, 240 tệp, 4694 khẳng định (4684 đạt,
+10 bỏ qua, 0 đỏ), 81/81 bất biến (59/59 nghiệp vụ + 22/22 hàng rào), 2293 giây; `evidence/INV-matrix.md` thêm đúng hai hàng — K2 25 ca,
+K5 12 ca — và đổi bốn con số đếm; mốc `MOC_GHIM.soPhuToiThieu` nâng tay 79 → 81 rồi bộ sinh chạy lại trên cùng báo cáo: *"Cổng
+evidence: XANH"*. Trong lượt ấy: `migrations.int` 128/128 (2291 giây), `hardening-suy-tu-tinh-chat` 38/38, hai kịch bản 41 32 + 85,
+`ngoai-le-canh-tranh` 26/26. `pnpm cap-so --kiem` CHƯA chạy: cây còn số tạm (`S1.9101`, `ADR-9201`, `9501_`) — cấp số lúc merge.
