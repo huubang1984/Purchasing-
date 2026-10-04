@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, cancelRfq, createRfq, datNhomHangChoGoi, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 import { doiTrangThaiNhomHang, lietKeNhomHang, taoNhomHang } from "./nhom-hang.js";
@@ -127,14 +127,38 @@ async function doiTrangThai(t: ToChuc, categoryId: string, conDung: boolean, ai:
   return withTenant(apiPool, t.org, (c) => doiTrangThaiNhomHang(c, t.org, { categoryId, conDung, actorSessionId: ai.s }, apiPool));
 }
 
-/** Gói đủ điều kiện K1 — ngân sách ghim phiên bản hiệu lực, một hạng mục — với nhóm hàng tuỳ chọn. */
+/**
+ * [S1.9101 / S3.3c1] Một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) — chỉ ở tổ chức ĐÃ BẬT. Hồ sơ do người
+ * nhập riêng của helper dựng, `tc` (FINANCE, không khai phiên bản — người khai là `pm`) xác minh; câu chèn là câu của
+ * `createInvitation`, người mời `pm`. Tệp này đo nhóm hàng: không có lời mời này thì gói thiếu nhà cung cấp và K2 — đứng SAU nhóm
+ * hàng ở cả tầng gói lẫn thứ tự trigger — từ chối mọi ca nộp lẽ ra đi qua.
+ */
+async function moiNccDemDuoc(t: ToChuc, rfqId: string): Promise<void> {
+  const n = (await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc }))[0]!;
+  await withTenant(apiPool, t.org, (c) =>
+    c.query(
+      "INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6)",
+      [t.org, rfqId, n.ncc, n.lh, t.pm.u, t.pm.s],
+    ),
+  );
+}
+
+/**
+ * Gói đủ điều kiện K1 — ngân sách ghim phiên bản hiệu lực, một hạng mục — với nhóm hàng tuỳ chọn. [S1.9101 / S3.3c1] Ở tổ chức
+ * đã bật, thêm đúng một lời mời đếm được (`moiNccDemDuoc`): gói chỉ còn thiếu thứ mà ca đang đo. Tổ chức chưa bật lúc dựng gói
+ * (đối chứng MVP1, hai ca ĐUA và *rời DRAFT trước lần bật*) giữ gói không lời mời như cũ.
+ */
 async function goiSanSang(t: ToChuc, categoryId: string | null = null): Promise<string> {
-  return withTenant(apiPool, t.org, async (c) => {
+  const rfqId = await withTenant(apiPool, t.org, async (c) => {
     const rfq = await createRfq(c, t.org, { title: "Mua thep tam", deadlineAt: MAI_SAU, createdBySessionId: t.pm.s, categoryId });
     await setRfqBudget(c, t.org, { rfqId: rfq.id, estimatedValue: "50000000.00", currency: "VND", actorSessionId: t.pm.s });
     await addRfqItem(c, t.org, { rfqId: rfq.id, lineNo: 1, description: "Thep tam SS400", quantity: "10.0000", unit: "tam", actorSessionId: t.pm.s });
     return rfq.id;
   });
+  const daBat = (await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org])).rows[0]?.b === true;
+  if (daBat) await moiNccDemDuoc(t, rfqId);
+  return rfqId;
 }
 
 /** Nộp duyệt qua ĐƯỜNG SẢN XUẤT — `null` khi đi qua, còn không thì chính lỗi. */
@@ -508,6 +532,8 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     const rfqId = await withTenant(apiPool, t.org, async (c) =>
       (await createRfq(c, t.org, { title: "Goi trong", deadlineAt: MAI_SAU, createdBySessionId: t.pm.s })).id,
     );
+    // [S1.9101 / S3.3c1] Một lời mời đếm được: gói thiếu ĐÚNG hai thứ ca này đo — ngân sách và nhóm hàng —, không thiếu nhà cung cấp.
+    await moiNccDemDuoc(t, rfqId);
     expect((await nop(t, rfqId)) as ChotKiemSoatError).toMatchObject({ lyDo: "THIEU_NGAN_SACH" });
   });
 
@@ -518,6 +544,8 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     const kichBan = async (coKhoa: boolean) => {
       const t = await taoToChuc();
       const rfqId = await goiSanSang(t); // chưa bật: ngân sách ghim bản 1, không nhóm hàng
+      // [S1.9101 / S3.3c1] Không lời mời (xác minh K8a chỉ có ở tổ chức đã bật), và K2 không chạm ca này: trigger K2 xếp SAU K1 —
+      // chân có khoá bị K1 chặn sau lần chờ; chân gỡ khoá nộp trên ảnh chụp CHƯA bật, nơi trigger K2 trả NEW.
       const v2 = await chenPhienBan2(t, true, 30);
       const ky = await moGiaoDich(t.org);
       const nopTay = await moGiaoDich(t.org);

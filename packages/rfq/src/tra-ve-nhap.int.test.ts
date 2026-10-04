@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
@@ -148,7 +148,17 @@ async function toChucDaBat(): Promise<ToChuc> {
   return t;
 }
 
+/**
+ * [S1.9101 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
+ * `tc`: FINANCE, không khai phiên bản chính sách v2 mà ngân sách ghim, không tạo gói, không mời) — gói nộp duyệt được (bậc đòi
+ * một). Tổ chức chưa bật: nguyên dạng MVP1, do PM dựng — K2 không áp, và xác minh K8a chỉ có ở tổ chức đã bật.
+ */
 async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
+  const daBat = (await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org])).rows[0]!.b;
+  if (daBat) {
+    const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+    return { ncc: n!.ncc, lh: n!.lh };
+  }
   const ncc = await motId(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
     [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],
@@ -328,6 +338,8 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] người giữ `rfq.approve` KHÁC người tạo trả về được; BUYER không phải người tạo ⇒ từ chối VÀO SỔ trên `rfq.approve`; FINANCE cũng thế", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được: K2 không cho gói không lời mời rời DRAFT.
+    await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
 
     for (const ai of [t.mua, t.tc]) {
@@ -353,6 +365,8 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] BUYER là người TẠO thì trả về được — nhánh người tạo đòi `rfq.create`, không đòi `rfq.approve`", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t, GOI_THUONG, t.mua);
+    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được (người mời như mọi lời mời của tệp: PM) — K2.
+    await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId, t.mua);
     await traVe(t, rfqId, t.mua);
     expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
@@ -361,6 +375,8 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] lý do rỗng ⇒ từ chối có tên, gói ở nguyên, không hàng sổ nào", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được — K2.
+    await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
     for (const lyDo of ["", "   "]) {
       const l = await loi(traVe(t, rfqId, t.pm, lyDo));

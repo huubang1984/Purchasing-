@@ -37,7 +37,7 @@ import {
   submitRfqForApproval,
 } from "@trustprocure/rfq";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
 import type { ApiResponse } from "./http.js";
 import type { ApiServices, BuyerContext, BuyerReadRoute, Route } from "./route-types.js";
@@ -213,6 +213,9 @@ async function taoToChuc(): Promise<ToChuc> {
   return { org, pm, pm2, tc };
 }
 
+/** [S1.9101 / S3.3c1] Tổ chức đã bật trong tệp này — ở đó `nhaCungCap` dựng nhà cung cấp ĐẾM ĐƯỢC cho K2. */
+const DA_BAT = new Set<string>();
+
 /** BẬT S3 — khuôn `batS3` của `danh-sach-moi.int.test.ts`: phiên bản có bậc, chữ ký thứ hai của một người khác. */
 async function batS3(t: ToChuc): Promise<void> {
   const v2 = (
@@ -235,6 +238,7 @@ async function batS3(t: ToChuc): Promise<void> {
   );
   const { rows } = await withTenant(apiPool, t.org, (c) => c.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org]));
   expect(rows[0]?.b, "dàn cảnh: tổ chức phải ĐÃ BẬT").toBe(true);
+  DA_BAT.add(t.org);
 }
 
 async function toChucDaBat(): Promise<ToChuc> {
@@ -286,6 +290,14 @@ async function nopVaDuyet(t: ToChuc, rfqId: string): Promise<void> {
 }
 
 async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
+  // [S1.9101 / S3.3c1] Tổ chức đã bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — hồ sơ và người liên hệ do người nhập
+  // riêng dựng, MST và email riêng, xác minh bởi `tc`: FINANCE, không khai phiên bản chính sách mà ngân sách ghim, không tạo gói,
+  // không mời). Mỗi lời mời vẫn tới một người liên hệ có email RIÊNG — bộ gửi điều khiển theo đích như trước. Tổ chức CHƯA bật
+  // (đối chứng MVP1) giữ nhà cung cấp do `pm` dựng — xác minh đòi tổ chức đã bật.
+  if (DA_BAT.has(t.org)) {
+    const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc });
+    return { supplierId: n!.ncc, contactId: n!.lh, email: n!.email };
+  }
   const supplierId = await motId(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
     [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],
@@ -666,10 +678,13 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
   it("[INV-K6] ⑸ mời THÊM ở OPEN: gửi được ⇒ 201 SENT có nhãn; gửi hỏng ⇒ 201 lời mời UNSENT còn sống, token thu hồi, KHÔNG 500, KHÔNG INVITATION_REVOKED; gửi lại ⇒ SENT", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.9101 / S3.3c1] Một lời mời ở DRAFT tới một nhà cung cấp đếm được: gói không lời mời nào không qua K2 ở lần nộp. Nó gửi
+    // được lúc mở (SENT, không nhãn) — phép đo vẫn là hai lời mời THÊM ở OPEN.
+    const dau = await moi(t, rfqId);
     await nopVaDuyet(t, rfqId);
     const mo = await goi(goc, "POST", `/rfqs/${rfqId}/open`, t.pm.cookie);
     expect(mo.status, mo.text).toBe(200);
-    expect(mo.body.unsentInvitationIds, "gói không lời mời: danh sách rỗng").toEqual([]);
+    expect(mo.body.unsentInvitationIds, "lời mời ở DRAFT gửi được: danh sách chưa gửi rỗng").toEqual([]);
 
     const duoc = await moiQuaRoute(t, rfqId);
     expect(duoc.r.status, duoc.r.text).toBe(201);
@@ -699,7 +714,9 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
     expect(sk[2]?.payload).toEqual({ invitationId: hong.loiMoi.id, reason: "LINK_SEND_FAILED" });
     expect(log.log.filter((l) => l.includes("sau-commit"))).toHaveLength(1);
     // [S1.193 / S3.2c] Danh sách mà màn đọc mang nhãn *mời sau khi ký* của CẢ HAI, và trạng thái thật của từng lời mời.
+    // [S1.9101 / S3.3c1] Đứng đầu là lời mời ở DRAFT thêm cho K2 — gửi lúc mở, KHÔNG nhãn.
     expect(await danhSach(t, rfqId)).toEqual([
+      { id: dau.id, status: "SENT", moiSauKhiKy: false },
       { id: duoc.loiMoi.id, status: "SENT", moiSauKhiKy: true },
       { id: hong.loiMoi.id, status: "UNSENT", moiSauKhiKy: true },
     ]);
@@ -847,6 +864,9 @@ describe("S3.2d — K4a vào sổ: thêm hay thu hồi lời mời sai trạng t
   it("[INV-K4a] ĐỘT BIẾN: trigger mất TÊN ràng buộc ⇒ lần mời vẫn bị chặn (23514) nhưng KHÔNG hàng sổ nào — tầng gói nhận ra lời từ chối bằng tên, không bằng câu", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    // [S1.9101 / S3.3c1] Một lời mời ở DRAFT (K4a cho phép, không vào sổ) tới nhà cung cấp đếm được: gói không lời mời nào không
+    // qua K2 ở lần nộp. Lần mời đang đo vẫn là lần ở PENDING_APPROVAL.
+    await moi(t, rfqId);
     await nopVaDuyet(t, rfqId);
     const n = await nhaCungCap(t);
     const { rows } = await db.pool.query<{ d: string }>(

@@ -24480,3 +24480,52 @@ chặn trước ở route — trước đó nó sẽ SỐNG.
   `buyer.int`, `anh-xa.int`, `qt3-cu-phap`/`qt3-ngu-phap` — 589 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4650 khẳng
   định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1683 giây; `evidence/INV-matrix.md` đổi đúng ba hàng — K4a 31 → 41
   ca, K4b 50 → 56, L3 21 → 22.
+
+# §S1.9101 — S3.3c1: DỮ LIỆU TEST VÀ `gieo:demo --s3` SANG NHÀ CUNG CẤP *ĐẾM ĐƯỢC* — CHUẨN BỊ CHO CHỐT K2, KHÔNG CHỐT MỚI
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi. Không migration, không mã sản xuất; ngoài test chỉ
+`tools/gieo-demo` (công cụ gieo dữ liệu demo). Không khoản mới, không ADR mới — quyết định chia hai PR ghi ở ADR của S3.3c2.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-04: *"Làm 1: S3.3c — K2 và K5"*; sau bản hình dạng, chọn *"Hai PR: c1 dữ liệu test, c2 chốt"*. K2 (S3.3c2)
+chỉ đếm một nhà cung cấp khi hồ sơ và người liên hệ của nó KHÔNG do người tạo gói hay một người mời dựng, có MST, có xác minh còn
+hiệu lực (K8a) của người không khai phiên bản chính sách mà ngân sách ghim. Trước vòng này mọi test và `gieo:demo --s3` dựng nhà
+cung cấp bằng CHÍNH người tạo gói, không MST, không xác minh — nên khi K2 sống, mọi lần nộp duyệt ở tổ chức đã bật bị từ chối.
+Vòng này đổi dữ liệu trước, trên mã `master`, để PR chốt chỉ còn là chốt.
+
+## 2. Thay đổi
+- `packages/test-support/src/nha-cung-cap-dem-duoc.ts` (mới) — `nguoiNhapNhaCungCap` (người nhập riêng mỗi tổ chức, vai
+  `TECHNICAL`: không giữ `rfq.invite` nên không thành người mời, không giữ `rfq.approve` nên không đổi số người ký hay người ghi
+  nhận được tín hiệu mà test khác khẳng định) và `nhaCungCapDemDuoc` (hồ sơ có MST mười chữ số ngẫu nhiên, người liên hệ có email
+  và số điện thoại riêng, xác minh SAU khi có người liên hệ — băm hồ sơ phủ mọi người liên hệ). Barrel và `barrel-exports`;
+  hai cổng coi gói là mã chạy được: câu SQL ghim đủ bốn trục (`[INV-H21]` QT3 — mốc giờ của phiên tính ở JS thay cho
+  `now() + interval`), và một dòng khai ở vế ⒞ của `duong-sql-ngoai-with-tenant` (ba câu trên pool chủ cụm, kèm lý do).
+- Mười bốn tệp test tích hợp — bốn ở `apps/api` (`buyer`, `luong-moi-s3`, `ngoai-le-canh-tranh`, `token-goi-da-mo`), hai kịch bản
+  41, `hardening-suy-tu-tinh-chat` (`dungKichBan()`: ba gói nộp duyệt ở tổ chức đã bật, mỗi gói một nhà cung cấp đếm được), bảy ở
+  `packages/rfq` (`bac-chinh-sach`, `danh-sach-moi`, `lan-nop-da-xem`, `nhom-hang`, `rang-ngan-sach`, `tin-hieu-chia-nho`,
+  `tra-ve-nhap`): mỗi gói nộp duyệt ở tổ chức ĐÃ bật mời đủ `so_ncc_toi_thieu` nhà cung cấp đếm được, ở DRAFT; tổ chức chưa bật
+  không đổi; số lời mời, thứ tự, băm và lời từ chối mà các ca đo giữ nguyên. Kịch bản 41 dựng nhà cung cấp qua hàm gói
+  (`createSupplier`, `addSupplierContact`, `xacMinhNhaCungCap`) ở bản trong tiến trình, qua HTTP ở bản HTTP (người dựng là
+  `pm3`, `taiChinh2` xác minh); ba gói 480/470/490 triệu nay mời ba nhà cung cấp — trước vòng này không một lời mời nào.
+- `tools/gieo-demo --s3`: người `nhapncc` (TECHNICAL) dựng năm nhà cung cấp có MST, `taichinh2` — người KÝ phiên bản, không
+  khai — xác minh; ba gói chia nhỏ mời ba người đầu ở DRAFT. Chế độ mặc định giữ nguyên giá trị ghi.
+- Bốn agent chuyển dữ liệu theo một bản hướng dẫn chung (luật đếm, giữ nghĩa phép đo, không thêm người giữ `rfq.approve`, không
+  sửa mã sản xuất); người tích hợp đọc lại diff từng tệp.
+- **Ghi nhận khi đọc lại, không sửa trong vòng:** `createSupplier` không hỏi `supplier.manage` trong thân — chỉ route hỏi; bản
+  trong tiến trình của kịch bản 41 dựng nhà cung cấp dưới người TECHNICAL, thứ route không cho. Không phải lỗ của K2 — người dựng
+  vẫn là người khác người mời —, nhưng mô hình số người của §8.10 dựa vào câu *"chỉ PM dựng được hồ sơ"*, và câu ấy chỉ đúng ở
+  đường HTTP.
+
+## 3. Đo
+- Trên mã `master` `ff68d6b6` — chưa có K2 —: các tệp đổi chạy xanh: 14 tệp, 404 ca đạt, 0 đỏ, 445 giây — gồm `hardening-suy-tu-tinh-chat` (38 ca, 434 giây) và cả hai kịch bản 41 (32 + 85 ca).
+- Cùng các tệp, trên mã có K2 (nhánh của S3.3c2): xanh — số ở §S1.9102.
+- `gieo:demo` không có test đầu-cuối: agent chạy nó trên một `postgres:16-alpine` dùng một lần — `--s3` thoát 0, gói chính 9 tỷ
+  OPEN, K2 đếm 5; ba gói chia nhỏ đếm 3 mỗi gói; 0 hàng `CONTROL_DENIED`; chế độ mặc định thoát 0. Lần chạy cần
+  `TRUSTPROCURE_KEY_ADAPTER=local-dev` và một vai `app_unseal_login` dựng tay — không tái lập nguyên văn từ kho.
+
+## 4. Giới hạn
+- Phần lớn dữ liệu dựng bằng câu thô dưới chủ cụm, không qua route; mọi trigger của xác minh vẫn kiểm đủ luật.
+- Vai TECHNICAL của người nhập không có ở đường HTTP (mục 2).
+
+## 5. Số đo
+Điền sau `pnpm t0`, `pnpm test` và `pnpm evidence` trên HEAD của nhánh.

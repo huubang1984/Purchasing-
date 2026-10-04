@@ -37,8 +37,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { createSupplier, addSupplierContact } from "@trustprocure/supplier";
+import { nguoiNhapNhaCungCap, quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { createSupplier, addSupplierContact, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import {
   addRfqItem,
   approveRfq,
@@ -147,6 +147,13 @@ let sTc1: string, sTc2: string;
  * chính sách: người ghi nhận tín hiệu chia nhỏ ĐỘC LẬP của bước 16. Hai giám đốc không giữ `rfq.approve`, người mua là người gây ra.
  */
 let uPmDl: string, sPmDl: string;
+/**
+ * [S1.9101 / S3.3c1] Luồng S3: phiên của người NHẬP hồ sơ nhà cung cấp — người dùng riêng vai `TECHNICAL` của
+ * `@trustprocure/test-support` (không giữ `rfq.invite` hay `rfq.approve`, nên không thành người mời và không đổi số người ghi nhận
+ * được của bước 16). K2 không đếm nhà cung cấp do người tạo gói hay người mời dựng; cổng `supplier.manage` đứng ở route, không ở
+ * hàm gói mà tệp này gọi.
+ */
+let sNhapNcc: string;
 let boKy: ReceiptSigner;
 let khoaKyCongKhai: Uint8Array;
 const pepper = new PepperRing("pepper-2026-09", { "pepper-2026-09": randomBytes(32) });
@@ -216,6 +223,7 @@ async function dungToChuc(batS3: boolean): Promise<void> {
   sTc2 = batS3 ? await taoPhien(await taoNguoi("tc2@vidu.vn", "FINANCE")) : "";
   uPmDl = batS3 ? await taoNguoi("pm-doc-lap@vidu.vn", "PROCUREMENT_MANAGER") : "";
   sPmDl = batS3 ? await taoPhien(uPmDl) : "";
+  sNhapNcc = batS3 ? (await nguoiNhapNhaCungCap(db.pool, orgA)).s : "";
   Object.assign(trangThai, trangThaiMoi());
 
   expect([orgA, uMua, uGd1, uGd2, sMua, sGd1, sGd2].filter((x) => x === "")).toEqual([]);
@@ -247,13 +255,38 @@ interface TrangThaiKichBan {
 const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], tokenKhiMo: new Map(), phienKhach: [], bienNhan: [], unsealRequestId: "" });
 const trangThai: TrangThaiKichBan = trangThaiMoi();
 
+/** [S1.9101 / S3.3c1] Số thứ tự MST của luồng S3 — mỗi nhà cung cấp một MST gốc riêng (K2 đếm theo 10 số đầu). */
+let soMst = 0;
+
 /**
- * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3 gọi ở
- * DRAFT, trước khi nộp duyệt (K4b: chữ ký mang danh sách mời lúc ký); luồng MVP1 gọi sau khi mở, như trước.
+ * [S1.9101 / S3.3c1] Luồng S3: một nhà cung cấp ĐẾM ĐƯỢC cho K2, qua cửa công khai của gói như mọi bước khác — hồ sơ có MST và
+ * người liên hệ do người nhập riêng (`sNhapNcc`) dựng, rồi người tài chính THỨ HAI xác minh: `tc2` không khai phiên bản chính sách
+ * mà ngân sách ghim (`tc1` khai), không giữ `rfq.invite`, không dựng hồ sơ. Người liên hệ có TRƯỚC lần xác minh (băm hồ sơ phủ nó),
+ * với email và số điện thoại suy từ id hồ sơ như luồng MVP1 — khác nhau giữa các nhà cung cấp, nên K2 đếm đủ đích.
  */
-async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readonly gia: string }): Promise<{ invitationId: string; supplierId: string; status: string; moiSauKhiKy: boolean }> {
+async function dungNccDemDuoc(c: pg.PoolClient, ten: string): Promise<{ supplierId: string; contactId: string }> {
+  soMst += 1;
   const s = await createSupplier(c, orgA, {
-    legalName: ncc.ten,
+    legalName: ten,
+    taxCode: `03${String(soMst).padStart(8, "0")}`,
+    actorSessionId: sNhapNcc,
+  });
+  const lh = await addSupplierContact(c, orgA, {
+    supplierId: s.id,
+    fullName: "Nguoi ban hang",
+    email: `${s.id.slice(0, 8)}@vidu.vn`,
+    phone: `09${s.id.replace(/\D/g, "").slice(0, 8).padEnd(8, "0")}`,
+    actorSessionId: sNhapNcc,
+  });
+  const xm = await xacMinhNhaCungCap(c, orgA, { supplierId: s.id, actorSessionId: sTc2 }, apiPool);
+  expect(xm.conHieuLuc, `luồng S3: xác minh của ${ten} còn hiệu lực`).toBe(true);
+  return { supplierId: s.id, contactId: lh.id };
+}
+
+/** Luồng MVP1, như trước S3.3c: người mua dựng hồ sơ không MST và người liên hệ của nó. */
+async function dungNccCuaNguoiMua(c: pg.PoolClient, ten: string): Promise<{ supplierId: string; contactId: string }> {
+  const s = await createSupplier(c, orgA, {
+    legalName: ten,
     actorSessionId: sMua,
   });
   const lh = await addSupplierContact(c, orgA, {
@@ -263,15 +296,26 @@ async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readon
     phone: `09${s.id.replace(/\D/g, "").slice(0, 8).padEnd(8, "0")}`,
     actorSessionId: sMua,
   });
+  return { supplierId: s.id, contactId: lh.id };
+}
+
+/**
+ * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3 gọi ở
+ * DRAFT, trước khi nộp duyệt (K4b: chữ ký mang danh sách mời lúc ký); luồng MVP1 gọi sau khi mở, như trước.
+ * [S1.9101 / S3.3c1] Và khác NGƯỜI DỰNG hồ sơ: luồng S3 mời một nhà cung cấp đếm được (`dungNccDemDuoc`) — K2 chặn lần nộp gói
+ * 1 tỷ khi dưới năm. Người mời vẫn là người mua ở cả hai luồng.
+ */
+async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readonly gia: string }, batS3: boolean): Promise<{ invitationId: string; supplierId: string; status: string; moiSauKhiKy: boolean }> {
+  const { supplierId, contactId } = batS3 ? await dungNccDemDuoc(c, ncc.ten) : await dungNccCuaNguoiMua(c, ncc.ten);
   const lm = await createInvitation(c, orgA, {
     rfqId: trangThai.rfqId,
-    supplierId: s.id,
-    contactId: lh.id,
+    supplierId,
+    contactId,
     linkChannel: "EMAIL",
     actorSessionId: sMua,
   }, apiPool);
-  trangThai.loiMoi.push({ invitationId: lm.id, supplierId: s.id, ten: ncc.ten, gia: ncc.gia });
-  return { invitationId: lm.id, supplierId: s.id, status: lm.status, moiSauKhiKy: lm.moiSauKhiKy };
+  trangThai.loiMoi.push({ invitationId: lm.id, supplierId, ten: ncc.ten, gia: ncc.gia });
+  return { invitationId: lm.id, supplierId, status: lm.status, moiSauKhiKy: lm.moiSauKhiKy };
 }
 
 /** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
@@ -359,9 +403,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     if (batS3) {
       // [S1.190 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt: năm lời mời `UNSENT`,
       // không nhãn *mời sau khi ký*, và không một token nào — K6 chặn lần đúc khi gói chưa từng mở.
+      // [S1.9101 / S3.3c1] Năm nhà cung cấp ĐẾM ĐƯỢC — đúng `so_ncc_toi_thieu` của bậc 1 tỷ —, nên K2 cho lần nộp dưới đây qua.
       await withTenant(apiPool, orgA, async (c) => {
         for (const ncc of NHA_CUNG_CAP) {
-          const lm = await taoNccVaMoi(c, ncc);
+          const lm = await taoNccVaMoi(c, ncc, true);
           expect({ status: lm.status, moiSauKhiKy: lm.moiSauKhiKy }).toEqual({ status: "UNSENT", moiSauKhiKy: false });
         }
       });
@@ -409,7 +454,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     // [S1.190 / S3.2c1] Luồng S3: năm lời mời đã có từ DRAFT, token từ lần mở gói. Luồng MVP1: mời bây giờ, token ngay lúc mời.
     for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
       await withTenant(apiPool, orgA, async (c) => {
-        const lm = batS3 ? trangThai.loiMoi[i] : await taoNccVaMoi(c, ncc);
+        const lm = batS3 ? trangThai.loiMoi[i] : await taoNccVaMoi(c, ncc, false);
         if (lm === undefined) throw new Error("luong S3: thieu loi moi dung o DRAFT");
         const s = { id: lm.supplierId };
 
@@ -773,6 +818,17 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     const nhomHang = batS3
       ? (await withTenant(apiPool, orgA, (c) => taoNhomHang(c, orgA, { ma: "THEP-CT", ten: "Thep tam cho cong trinh", actorSessionId: sTc1 }, apiPool))).id
       : null;
+    // [S1.9101 / S3.3c1] Luồng S3: mỗi gói ở bậc từ 100 triệu, và bậc ấy đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói
+    // nộp duyệt KHÔNG một lời mời nào. Ba nhà cung cấp riêng của bước, dựng một lần; người mua mời cả ba vào mỗi gói ở DRAFT, trước
+    // lần nộp (chữ ký mang danh sách lúc ký, K4b). Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc lời mời: bước này kể đúng
+    // câu chuyện cũ. Người ký `gd1` nằm ngoài tập loại trừ của mỗi gói, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua.
+    const nccBuoc16 = batS3
+      ? await withTenant(apiPool, orgA, async (c) => {
+          const ra: { supplierId: string; contactId: string }[] = [];
+          for (const ten of ["Thep cong trinh Mot", "Thep cong trinh Hai", "Thep cong trinh Ba"]) ra.push(await dungNccDemDuoc(c, ten));
+          return ra;
+        })
+      : [];
     const moGoi = (rfqId: string): Promise<unknown> =>
       withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: sMua, orgKeys: boBoc }, apiPool)).then(
         () => null,
@@ -797,6 +853,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         });
         const ns = await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: sMua });
         expect(ns.requiresDualApproval, "dưới ngưỡng kép 500 triệu — một chữ ký").toBe(false);
+        for (const n of nccBuoc16) {
+          await createInvitation(c, orgA, { rfqId: r.id, supplierId: n.supplierId, contactId: n.contactId, linkChannel: "EMAIL", actorSessionId: sMua }, apiPool);
+        }
         return r.id;
       });
       const nop = await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId: id, actorSessionId: sMua }, apiPool));

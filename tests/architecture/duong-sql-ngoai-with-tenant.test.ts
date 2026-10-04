@@ -353,6 +353,14 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     cau: 0,
     lyDo: "hạ tầng test — pg.Client dựng CSDL của cụm thử",
   },
+  "packages/test-support/src/nha-cung-cap-dem-duoc.ts": {
+    lay: 0,
+    cau: 3,
+    lyDo:
+      "[S1.9101 / S3.3c1] hạ tầng test — nhà cung cấp ĐẾM ĐƯỢC cho K2: ba câu trên pool CHỦ CỤM người gọi truyền vào dựng người " +
+      "nhập riêng (người dùng, vai, phiên), hồ sơ, người liên hệ và hàng xác minh — đúng thứ `app_api` không có quyền ghi (vai, " +
+      "phiên, cột `created_by`), và trigger của mọi bảng ấy vẫn chạy",
+  },
   "packages/test-support/src/quet-gia.ts": {
     lay: 0,
     cau: 1,

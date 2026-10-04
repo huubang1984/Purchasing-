@@ -406,6 +406,11 @@ const trangThai: {
   duLieu: Nguoi;
   /** [S1.251 / S4.4b] Hàng chuẩn của dòng 1 — khoá của lịch sử giá. */
   hangChuanId: string;
+  /**
+   * [S1.9101 / S3.3c1] Luồng S3: ba nhà cung cấp ĐẾM ĐƯỢC phụ — dựng ở bộ quét, mời vào hai gói hy sinh và ba gói của bước 16 (K2
+   * đòi hai ở bậc 0, ba ở bậc từ 100 triệu). Không ai trong số họ được mời vào gói chính.
+   */
+  nccPhu: { supplierId: string; contactId: string }[];
 } = trangThaiMoi();
 
 /** [S1.174 / S3.1d] Trạng thái rỗng của MỘT luồng — `dungToChuc` dựng lại nó trước mỗi luồng. */
@@ -430,6 +435,7 @@ function trangThaiMoi(): typeof trangThai {
   cham: { id: "", cookie: "" },
   duLieu: { id: "", cookie: "" },
   hangChuanId: "",
+  nccPhu: [],
   };
 }
 
@@ -488,18 +494,47 @@ afterAll(async () => {
 });
 
 /**
- * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3
- * gọi ở DRAFT, trước khi nộp duyệt (K4b); luồng MVP1 gọi sau khi mở, như trước. Trả thân `201` của lời mời.
+ * [S1.9101 / S3.3c1] Một hồ sơ nhà cung cấp và người liên hệ của nó qua HTTP, dưới cookie `nguoiDung` (người giữ `supplier.manage`
+ * — chỉ PROCUREMENT_MANAGER); luồng S3 thêm lần XÁC MINH qua route của người tài chính thứ hai. Trả hai id.
+ *
+ * K2 chỉ đếm nhà cung cấp mà hồ sơ và người liên hệ KHÔNG do người tạo gói hay một người mời dựng, có MST và một xác minh còn hiệu
+ * lực mà người xác minh không khai phiên bản chính sách gói ghim. Nên luồng S3 dựng bằng `pm3` — PM không tạo, không mời, không
+ * nộp gói nào; ký đúng một gói (gói chính) mà `pm2` cũng ký, nên K5 của gói ấy vẫn có một chữ ký ngoài tập loại trừ — và xác minh
+ * bằng `taiChinh2`: `taiChinh` khai phiên bản 1, `taiChinh2` chỉ ký nó. Người liên hệ có TRƯỚC lần xác minh (băm hồ sơ phủ nó).
  */
-async function taoNccVaMoi(i: number): Promise<{ supplierId: string; invitation: { id: string; status: string; moiSauKhiKy: boolean } }> {
-  const m = trangThai.mua.cookie;
-  const ncc = NHA_CUNG_CAP[i]!;
-  const s = await goi("POST", "/suppliers", m, { legalName: ncc.ten, taxCode: `03000000${i}${i}` });
+async function dungNccQuaHttp(
+  nguoiDung: Nguoi,
+  ncc: { readonly ten: string; readonly mst: string; readonly lienHe: string; readonly email: string; readonly phone: string },
+  xacMinh: boolean,
+): Promise<{ supplierId: string; contactId: string }> {
+  const s = await goi("POST", "/suppliers", nguoiDung.cookie, { legalName: ncc.ten, taxCode: ncc.mst });
   expect(s.status, s.text).toBe(201);
   const supplierId = (s.body as { supplier: { id: string } }).supplier.id;
-  const c = await goi("POST", `/suppliers/${supplierId}/contacts`, m, { fullName: `Kinh doanh ${i}`, email: `kd${i}@ncc.vn`, phone: `090000000${i}` });
+  const c = await goi("POST", `/suppliers/${supplierId}/contacts`, nguoiDung.cookie, { fullName: ncc.lienHe, email: ncc.email, phone: ncc.phone });
   expect(c.status, c.text).toBe(201);
   const contactId = (c.body as { contact: { id: string } }).contact.id;
+  if (xacMinh) {
+    const xm = await goi("POST", `/suppliers/${supplierId}/verify`, trangThai.taiChinh2.cookie);
+    expect(xm.status, xm.text).toBe(201);
+    expect((xm.body as { verification: { conHieuLuc: boolean } }).verification.conHieuLuc, `xác minh của ${ncc.ten} còn hiệu lực`).toBe(true);
+  }
+  return { supplierId, contactId };
+}
+
+/**
+ * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3
+ * gọi ở DRAFT, trước khi nộp duyệt (K4b); luồng MVP1 gọi sau khi mở, như trước. Trả thân `201` của lời mời.
+ * [S1.9101 / S3.3c1] Và khác NGƯỜI DỰNG hồ sơ: luồng S3 dựng nhà cung cấp ĐẾM ĐƯỢC (`dungNccQuaHttp` bằng `pm3`, xác minh) — K2 chặn
+ * lần nộp gói 1 tỷ khi dưới năm; luồng MVP1 giữ nguyên người mua. MST, người liên hệ và người mời không đổi ở cả hai luồng.
+ */
+async function taoNccVaMoi(i: number, batS3: boolean): Promise<{ supplierId: string; invitation: { id: string; status: string; moiSauKhiKy: boolean } }> {
+  const m = trangThai.mua.cookie;
+  const ncc = NHA_CUNG_CAP[i]!;
+  const { supplierId, contactId } = await dungNccQuaHttp(
+    batS3 ? trangThai.pm3 : trangThai.mua,
+    { ten: ncc.ten, mst: `03000000${i}${i}`, lienHe: `Kinh doanh ${i}`, email: `kd${i}@ncc.vn`, phone: `090000000${i}` },
+    batS3,
+  );
   const lm = await goi("POST", `/rfqs/${trangThai.rfqId}/invitations`, m, { supplierId, contactId });
   expect(lm.status, lm.text).toBe(201);
   return { supplierId, invitation: (lm.body as { invitation: { id: string; status: string; moiSauKhiKy: boolean } }).invitation };
@@ -591,7 +626,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // lúc ký (K4b): mỗi lần mời trả `201` với lời mời `UNSENT`, không nhãn *mời sau khi ký*, và bộ gửi KHÔNG được gọi.
       const truoc = dv.loiMoiDaGui.length;
       for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
-        const { supplierId, invitation } = await taoNccVaMoi(i);
+        const { supplierId, invitation } = await taoNccVaMoi(i, true);
         expect({ status: invitation.status, moiSauKhiKy: invitation.moiSauKhiKy }).toEqual({ status: "UNSENT", moiSauKhiKy: false });
         trangThai.loiMoi.push({ invitationId: invitation.id, supplierId, ten: ncc.ten, gia: ncc.gia, cookie: "" });
       }
@@ -651,7 +686,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         continue;
       }
       const truoc = dv.loiMoiDaGui.length;
-      const { supplierId, invitation } = await taoNccVaMoi(i);
+      const { supplierId, invitation } = await taoNccVaMoi(i, false);
       expect(dv.loiMoiDaGui).toHaveLength(truoc + 1);
       const cookie = await moPhienKhach(dv.loiMoiDaGui.at(-1)!.token);
       trangThai.loiMoi.push({ invitationId: invitation.id, supplierId, ten: ncc.ten, gia: ncc.gia, cookie });
@@ -761,6 +796,25 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hyA = await taoRfqHy("RFQ hy sinh A (mo)");
     expect((await goi("POST", `/rfqs/${hyA}/items`, m, { lineNo: 1, description: "Vat tu hy sinh", quantity: "1.0000", unit: "cai" })).status).toBe(201);
     expect((await goi("PUT", `/rfqs/${hyA}/budget`, m, { estimatedValue: "10000000.00", currency: "VND" })).status).toBe(200);
+    // [S1.9101 / S3.3c1] Luồng S3: K2 đòi HAI nhà cung cấp đếm được ở bậc 0 của hai gói hy sinh (và BA ở bậc từ 100 triệu của ba gói
+    // bước 16) — trước vòng này hai gói hy sinh nộp duyệt không một lời mời nào. Ba nhà cung cấp PHỤ, dựng một lần như năm người của
+    // gói chính (`pm3` dựng, `taiChinh2` xác minh), mời ở DRAFT bởi người mua. Lời mời hy sinh SAU lần mở (dưới) giữ nguyên: nó là
+    // đích của route mời và route phát lại link. MST và số điện thoại xa mọi giá của bộ quét.
+    if (batS3) {
+      for (const k of [1, 2, 3]) {
+        trangThai.nccPhu.push(
+          await dungNccQuaHttp(
+            trangThai.pm3,
+            { ten: `NCC phu ${k}`, mst: `037700000${k}`, lienHe: `Kinh doanh phu ${k}`, email: `phu${k}@ncc.vn`, phone: `093770000${k}` },
+            true,
+          ),
+        );
+      }
+      for (const n of trangThai.nccPhu.slice(0, 2)) {
+        const lm = await goi("POST", `/rfqs/${hyA}/invitations`, m, n);
+        expect(lm.status, lm.text).toBe(201);
+      }
+    }
     const nopHyA = await goi("POST", `/rfqs/${hyA}/submit`, m);
     expect(nopHyA.status).toBe(200);
     const mocHyA = batS3 ? { lanNop: (nopHyA.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
@@ -785,6 +839,14 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: GIA_MOI, currency: "VND" })),
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
+    // [S1.9101 / S3.3c1] Luồng S3: hai nhà cung cấp phụ cho gói hy sinh B, ở DRAFT — route nộp của bộ quét đi qua K2 như trước vòng
+    // này đi qua mọi chốt, và chuỗi duyệt → mở → huỷ phía sau giữ nguyên.
+    if (batS3) {
+      for (const n of trangThai.nccPhu.slice(0, 2)) {
+        const lm = await goi("POST", `/rfqs/${hyB}/invitations`, m, n);
+        expect(lm.status, lm.text).toBe(201);
+      }
+    }
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
     // [S1.199 / S4.2b] Người quản lý dữ liệu HY SINH: tám route ghi dữ liệu nền đòi `item.manage`, và chỉ `DATA_STEWARD` giữ
     // mã ấy — gọi bằng `m` thì dừng ở 403 của cổng, tức route không đi tới nghiệp vụ.
@@ -2173,6 +2235,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       const ns = await goi("PUT", `/rfqs/${id}/budget`, m, { estimatedValue: giaTri, currency: "VND" });
       expect(ns.status, ns.text).toBe(200);
       expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval, "dưới ngưỡng kép 500 triệu").toBe(false);
+      // [S1.9101 / S3.3c1] Luồng S3: bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một
+      // lời mời nào. Người mua mời ba nhà cung cấp phụ của bộ quét ở DRAFT. Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc
+      // lời mời; `pm2` ký và nằm ngoài tập loại trừ, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua. Luồng MVP1: danh sách rỗng.
+      for (const n of trangThai.nccPhu) {
+        const lm = await goi("POST", `/rfqs/${id}/invitations`, m, n);
+        expect(lm.status, lm.text).toBe(201);
+      }
       const nop = await goi("POST", `/rfqs/${id}/submit`, m);
       expect(nop.status, nop.text).toBe(200);
       const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;

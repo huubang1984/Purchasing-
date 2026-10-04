@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, cancelRfq, createRfq, openRfq, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, getActiveProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 import { CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
@@ -243,9 +243,29 @@ async function taoGoi(t: ToChuc): Promise<string> {
   );
 }
 
+/**
+ * [S1.9101 / S3.3c1] Một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) — chỉ gọi ở tổ chức ĐÃ BẬT (xác minh K8a
+ * đòi nó). Hồ sơ do người nhập riêng của helper dựng, `tc` (FINANCE) xác minh — mọi phiên bản mà ngân sách của một gói nộp duyệt
+ * ghim đều do `pm` khai (`chenPhienBan` mặc định), nên `tc` không là tác giả của nó. Câu chèn là câu của `createInvitation`, người
+ * mời `pm` (người tạo gói). Tệp này đo K1: không có lời mời này thì mọi gói thiếu nhà cung cấp và K2 — hỏi SAU K1 ở tầng gói,
+ * trigger xếp SAU K1 — từ chối mọi ca nộp lẽ ra đi qua; mọi lời từ chối K1 mà tệp chờ vẫn đứng trước.
+ */
+async function moiNccDemDuoc(t: ToChuc, rfqId: string): Promise<void> {
+  const n = (await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc }))[0]!;
+  await withTenant(apiPool, t.org, (c) =>
+    c.query(
+      "INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6)",
+      [t.org, rfqId, n.ncc, n.lh, t.pm.u, t.pm.s],
+    ),
+  );
+}
+
 /** Một gói đi trọn đường sản xuất tới HUỶ — khoá đã sinh và đã bị THU HỒI. Mỗi bước một giao dịch. */
 async function goiDaHuy(t: ToChuc): Promise<string> {
   const rfqId = await taoGoi(t);
+  // [S1.9101 / S3.3c1] Tổ chức đã bật: một lời mời đếm được, để K2 cho gói rời DRAFT. Chưa bật: nguyên đường MVP1.
+  if (await daBat(t)) await moiNccDemDuoc(t, rfqId);
   await withTenant(apiPool, t.org, async (c) => {
     await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
     await addRfqItem(c, t.org, {
@@ -1130,6 +1150,7 @@ describe("S3.1b — K1: bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`)", ()
   it("[INV-K1] ĐỘT BIẾN: tắt `rfq_budgets_xep_bac` thì bậc KHÔNG được đặt và cạnh nộp duyệt chặn `BAC_LECH_HAM_PHAN_BAC`; bỏ thêm vế bậc khỏi `rfq_chot_ngan_sach` thì gói bậc NULL rời DRAFT", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được
     const veBac =
       "  IF ns.tier_tu_so_tien IS DISTINCT FROM public.rfq_bac_cua(ns.policy_id, ns.estimated_value, ns.currency) THEN\n" +
       "    RETURN 'BAC_LECH_HAM_PHAN_BAC';\n  END IF;\n";
@@ -1158,6 +1179,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("[INV-K1] tổ chức ĐÃ BẬT: gói không ngân sách không rời DRAFT — lời từ chối CÓ TÊN và ĐÚNG MỘT hàng `CONTROL_DENIED` mang mã và người; tổ chức chưa bật thì đi như MVP1", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được: gói chỉ thiếu ngân sách
     const e = await nop(t, rfqId);
     expect(e).toBeInstanceOf(ChotKiemSoatError);
     expect(e).toMatchObject({ lyDo: "THIEU_NGAN_SACH", message: CHOT_VAO_SO.THIEU_NGAN_SACH.thongDiep });
@@ -1179,6 +1201,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("[INV-K1] lớp CSDL: câu nộp VIẾT TAY dưới `app_api` bị trigger ở cạnh chặn với cùng mã; tắt trigger thì gói không ngân sách rời DRAFT", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được: gói chỉ thiếu ngân sách
     const e = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_NOP_TAY, [rfqId, t.pm.u, t.pm.s])));
     expect(e?.message).toMatch(/Goi thau chua roi DRAFT duoc \(K1\): THIEU_NGAN_SACH/u);
     expect(e?.where).toMatch(/function rfq_kiem_ngan_sach_khi_nop\(/u);
@@ -1195,6 +1218,8 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
     expect(await bacDaLuu(t, rfqId)).toBeNull();
     const v2 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
     await ky(t, v2, t.tc);
+    // [S1.9101 / S3.3c1] Lời mời đếm được thêm SAU lần bật — xác minh K8a chỉ có ở tổ chức đã bật.
+    await moiNccDemDuoc(t, rfqId);
     expect(await nop(t, rfqId)).toMatchObject({ name: "ChotKiemSoatError", lyDo: "NGAN_SACH_GHIM_BAN_CU" });
     await datNganSach(t, rfqId, "150000000.00");
     expect(await bacDaLuu(t, rfqId)).toBe("100000000.00");
@@ -1202,6 +1227,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
 
     // ⑵ Chính sách đổi SAU khi đặt ngân sách: v3 hạ biên bậc 1 xuống 50 triệu, nên gói 60 triệu lên bậc.
     const r2 = await taoGoi(t);
+    await moiNccDemDuoc(t, r2); // [S1.9101 / S3.3c1]
     await datNganSach(t, r2, "60000000.00");
     expect(await bacDaLuu(t, r2)).toBe("0.00");
     const v3 = await chenPhienBan(t, {
@@ -1218,6 +1244,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("ĐỘT BIẾN: bỏ vế *ghim đúng phiên bản hiệu lực* khỏi `rfq_chot_ngan_sach` thì gói ghim bản ĐÃ HẾT hiệu lực rời DRAFT — ở cả tầng gói lẫn trigger, vì hai lớp hỏi cùng một hàm", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được
     await datNganSach(t, rfqId, "150000000.00");
     const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
     await ky(t, v3, t.tc);
@@ -1239,6 +1266,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("ĐỘT BIẾN: cho qua khi thiếu ngân sách thì gói không ngân sách rời DRAFT; quên rẽ nhánh theo hàm *đã bật* thì tổ chức CHƯA bật không nộp được gói không ngân sách (§8.11)", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được: gói chỉ thiếu ngân sách
     const choQua = await defDotBien(HAM_CHOT, "    RETURN 'THIEU_NGAN_SACH';", "    RETURN NULL;");
     expect(
       await trongDotBien(t.org, [choQua], (c) =>
@@ -1292,6 +1320,7 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("[INV-K1] ĐỘT BIẾN — chặn lần ghi `CONTROL_DENIED` thì lời từ chối GÃY ỒN ÀO (`DenialAuditFailedError`), không im lặng đi qua", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được: gói chỉ thiếu ngân sách
     let e: unknown;
     try {
       await db.pool.query(
@@ -1331,6 +1360,7 @@ describe("S3.1b — K1 dưới tranh chấp: khoá chia sẻ và mốc giờ", (
   it("[INV-K1] mốc nộp do CSDL đóng: `submitted_at` nằm giữa hai lần đọc đồng hồ quanh lần nộp, ở cả tổ chức chưa bật; `app_api` không ghi được nó (42501)", async () => {
     const { t } = await toChucDaBat();
     const rfqId = await taoGoi(t);
+    await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được
     await datNganSach(t, rfqId, "150000000.00");
     const h = await taoToChuc();
     const r2 = await taoGoi(h);
@@ -1358,6 +1388,9 @@ describe("S3.1b — K1 dưới tranh chấp: khoá chia sẻ và mốc giờ", (
     const kichBan = async (coKhoa: boolean) => {
       const { t, v2 } = await toChucDaBat();
       const rfqId = await taoGoi(t);
+      // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được: chân gỡ khoá đi qua K2 trên ảnh chụp ghim v2; chân có khoá bị K1 chặn sau
+      // lần chờ (trigger K2 xếp SAU K1, không lời từ chối nào đứng trước lần chờ ấy).
+      await moiNccDemDuoc(t, rfqId);
       await datNganSach(t, rfqId, "150000000.00");
       const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
       const ky3 = await moGiaoDich(t.org);
@@ -1399,6 +1432,7 @@ describe("S3.1b — K1 dưới tranh chấp: khoá chia sẻ và mốc giờ", (
     const kichBan = async () => {
       const { t, v2 } = await toChucDaBat();
       const rfqId = await taoGoi(t);
+      await moiNccDemDuoc(t, rfqId); // [S1.9101 / S3.3c1] K2 có nhà cung cấp đếm được
       await datNganSach(t, rfqId, "150000000.00");
       const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
       const ky3 = await moGiaoDich(t.org); // giao dịch ký BẮT ĐẦU ở đây: `now()` của nó đứng ở mốc này
