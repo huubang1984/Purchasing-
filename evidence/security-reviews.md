@@ -24528,4 +24528,7 @@ Vòng này đổi dữ liệu trước, trên mã `master`, để PR chốt ch�
 - Vai TECHNICAL của người nhập không có ở đường HTTP (mục 2).
 
 ## 5. Số đo
-Điền sau `pnpm t0`, `pnpm test` và `pnpm evidence` trên HEAD của nhánh.
+Trên `f78c9172` (nhánh dựng từ `master` `ff68d6b6`, không gộp thêm): `pnpm t0` xanh; `pnpm test` 148 tệp, 2508 ca đạt, 0 đỏ;
+`pnpm evidence`: vitest thoát mã 0, 4655 khẳng định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1817 giây;
+`evidence/INV-matrix.md` không đổi — vòng này không thêm nhãn nào. `pnpm cap-so --kiem` sạch. Lượt `pnpm test` đầu đỏ hai cổng
+kiến trúc — QT3 và vế ⒞ của `duong-sql-ngoai-with-tenant` coi `packages/test-support/src` là mã chạy được — sửa ở mục 2.
