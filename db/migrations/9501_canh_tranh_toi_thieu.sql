@@ -8,8 +8,9 @@
 -- cũng không thuộc tập ấy; chốt chỉ-READ COMMITTED ở cạnh nộp duyệt áp MỌI tổ chức; K5 nhường lời từ chối cho K4b khi chưa đủ
 -- chữ ký; gộp nhóm theo MỌI người liên hệ của nhà cung cấp.
 --
--- (1) `rfq_bac_ghim(org, gói)` — phần tử bậc mà ngân sách của gói ghim (`tier_tu_so_tien` trên phiên bản `policy_id`). NÉM khi
---     không có (ADR-082 ⑽: hàm theo bậc NÉM khi gặp NULL).
+-- (1) `rfq_bac_ghim(org, gói)` — phần tử bậc mà ngân sách của gói ghim (`tier_tu_so_tien` trên phiên bản `policy_id`). Gói KHÔNG
+--     bậc ghim — không ngân sách, hay bậc NULL: gói rời DRAFT trước lần bật (dữ liệu trước `097`) — trả NULL, và mỗi chốt nói nó
+--     làm gì với NULL ấy; bậc đã lưu mà không có trong phiên bản ghim là dữ liệu hỏng ⇒ NÉM (ADR-082 ⑽).
 -- (2) `rfq_dem_ncc_canh_tranh(org, gói)` — số NHÓM nhà cung cấp đếm được trên danh sách mời còn sống. Một lời mời đếm được khi:
 --     hồ sơ và MỌI người liên hệ của nhà cung cấp không do *người chọn danh sách* dựng; có MST; xác minh còn hiệu lực (`082`,
 --     câu hỏi duy nhất `ncc_xac_minh_con_hieu_luc`); người làm hàng xác minh mới nhất không là người khai phiên bản ngân sách
@@ -18,7 +19,8 @@
 --     chữ số cuối điện thoại của BẤT KỲ người liên hệ nào của hai nhà cung cấp thì cùng nhóm, bắc cầu. Nhóm dựng trên MỌI lời
 --     mời còn sống, kể cả lời mời không đếm được — bắc cầu qua nó chỉ làm đếm thiếu, không đếm thừa. Một hàng lời mời không rõ
 --     người mời hay người thu hồi (hàng có trước `013`) ⇒ 0: không biết ai chọn thì không biết ai bị loại.
--- (3) `rfq_chot_canh_tranh(org, gói)` — hàm vị từ của K2 (khuôn K1): bậc đấu thầu chính thức không bao giờ qua; đủ
+-- (3) `rfq_chot_canh_tranh(org, gói)` — hàm vị từ của K2 (khuôn K1): gói không bậc ghim thì lời từ chối là của K1 (`THIEU_NGAN_SACH`,
+--     `BAC_LECH_HAM_PHAN_BAC` — tầng gói hỏi K1 trước, trigger K1 xếp trước), K2 không nói thay; bậc đấu thầu chính thức không bao giờ qua; đủ
 --     `so_ncc_toi_thieu` nhóm thì qua; thiếu thì chỉ một ngoại lệ còn sống ĐÚNG loại cứu — một lời mời còn sống ⇒
 --     `SINGLE_SOURCE`, từ hai ⇒ `LIMITED_COMPETITION`; danh sách rỗng không qua; `ROTATION` là của K3 (S3.3d).
 -- (4) TRIGGER K2 ở cạnh `DRAFT→PENDING_APPROVAL`, tên xếp SAU K1 và nhóm hàng (trigger BEFORE chạy theo thứ tự tên): khoá tư vấn
@@ -32,7 +34,9 @@
 --     một vị từ, hai chỗ dùng: khi K9 loại người khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi cùng nhau.
 -- (6) `rfq_chot_chu_ky_doc_lap(org, gói)` — hàm vị từ của K5: khi bậc bật `ky_danh_sach_moi` HOẶC gói có ngoại lệ còn sống, và
 --     số chữ ký còn hiệu lực đã đủ (một, hay hai nếu cấp kép), phải có ít nhất một người ký còn hiệu lực KHÔNG thuộc
---     `rfq_tap_loai_tru` (ADR-121, một tập một nơi) và đang giữ `rfq.approve`. Chưa đủ chữ ký thì cho qua để K4b nói: bấm mở
+--     `rfq_tap_loai_tru` (ADR-121, một tập một nơi). Gói không bậc ghim, hay bậc vắng khoá `ky_danh_sach_moi` (bậc đấu thầu chính
+--     thức), coi như bậc ĐÒI ký danh sách — fail-closed, không NÉM: gói chờ duyệt có từ trước `097` vẫn mở được bằng một chữ ký
+--     độc lập. Chưa đủ chữ ký thì cho qua để K4b nói: bấm mở
 --     sớm là đi sai thứ tự, không phải lách chốt (ADR-060). Không cần chốt READ COMMITTED: ở PENDING_APPROVAL danh sách, ngoại
 --     lệ và ngân sách đứng yên, lời duyệt chỉ chèn thêm — ảnh chụp cũ chỉ có thể THIẾU chữ ký, không thừa.
 -- (7) TRIGGER K5 ở cạnh `PENDING_APPROVAL→OPEN`; `rfq_kiem_chu_ky_danh_sach_khi_mo` (`076`, thân `087`) đếm phép thứ ba qua (5).
@@ -54,16 +58,23 @@ CREATE OR REPLACE FUNCTION public.rfq_bac_ghim(p_org uuid, p_rfq uuid) RETURNS j
   SET search_path = pg_catalog, public
 AS $ham$
 DECLARE
+  bac_luu numeric;
   bac jsonb;
 BEGIN
+  SELECT b.tier_tu_so_tien INTO bac_luu
+    FROM public.rfq_budgets b
+   WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  IF NOT FOUND OR bac_luu IS NULL THEN
+    RETURN NULL;
+  END IF;
   SELECT e INTO bac
     FROM public.rfq_budgets b
     JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id,
          jsonb_array_elements(p.tiers) e
    WHERE b.org_id = p_org AND b.rfq_id = p_rfq
-     AND (e ->> 'tu_so_tien')::numeric = b.tier_tu_so_tien;
+     AND (e ->> 'tu_so_tien')::numeric = bac_luu;
   IF bac IS NULL THEN
-    RAISE EXCEPTION 'Goi thau khong co bac ghim (ngan sach, phien ban co bac, bac khop) — ham theo bac khong tra loi duoc (ADR-082 (10))'
+    RAISE EXCEPTION 'Bac da luu cua goi khong co trong phien ban ngan sach ghim — ham theo bac khong tra loi duoc (ADR-082 (10))'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN bac;
@@ -179,6 +190,9 @@ BEGIN
     RETURN NULL;
   END IF;
   bac := public.rfq_bac_ghim(p_org, p_rfq);
+  IF bac IS NULL THEN
+    RETURN NULL;
+  END IF;
   IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN
     RETURN 'K2_DAU_THAU_CHINH_THUC';
   END IF;
@@ -321,11 +335,7 @@ BEGIN
     RETURN NULL;
   END IF;
   bac := public.rfq_bac_ghim(p_org, p_rfq);
-  ky := (bac ->> 'ky_danh_sach_moi')::boolean;
-  IF ky IS NULL THEN
-    RAISE EXCEPTION 'Bac ghim thieu ky_danh_sach_moi — ham theo bac khong tra loi duoc (K5, ADR-082 (10))'
-      USING ERRCODE = 'check_violation';
-  END IF;
+  ky := coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true);
   IF NOT ky
      AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e
                       WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP'
@@ -339,12 +349,7 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1
                FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq) k(n)
-              WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n)
-                AND EXISTS (SELECT 1
-                              FROM public.user_roles ur
-                              JOIN public.role_permissions rp ON rp.role_code = ur.role_code
-                             WHERE ur.org_id = p_org AND ur.user_id = k.n
-                               AND rp.permission_code = 'rfq.approve')) THEN
+              WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n)) THEN
     RETURN NULL;
   END IF;
   RETURN 'K5_THIEU_CHU_KY_DOC_LAP';

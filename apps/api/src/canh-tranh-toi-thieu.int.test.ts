@@ -18,8 +18,8 @@
 //      thấy; trigger là lớp chặn cuối cho câu viết tay;
 //   ⑺ K5 — bậc `ky_danh_sach_moi` hay gói có ngoại lệ: chữ ký còn hiệu lực của người chọn danh sách (người mời, người thu hồi,
 //      người dựng một nhà cung cấp trên danh sách, tác giả ngoại lệ) không mở được gói ⇒ `422` + `CONTROL_DENIED`; một người ký
-//      ngoài tập loại trừ, giữ `rfq.approve`, thì mở được; gói cấp kép cần hai chữ ký và ít nhất một độc lập; chưa đủ chữ ký thì
-//      K4b nói và KHÔNG có hàng `CONTROL_DENIED`;
+//      ngoài tập loại trừ thì mở được; gói cấp kép cần hai chữ ký và ít nhất một độc lập; chưa đủ chữ ký thì K4b nói và KHÔNG có
+//      hàng `CONTROL_DENIED`; gói không bậc ghim: K2 nhường lời cho K1, K5 coi như bậc đòi ký danh sách;
 //   ⑻ tổ chức chưa bật chạy như MVP1; tập mã của hai hàm vị từ BẰNG các dòng K2, K5 của `CHOT_VAO_SO`.
 // Mỗi vế của hai hàm vị từ có một ĐỘT BIẾN trong chính tệp này (áp trong một giao dịch rồi ROLLBACK, hay COMMIT rồi khôi phục).
 // ==============================================================================================
@@ -875,15 +875,6 @@ describe("[S1.9101 / S3.3c2 / K5] bậc ký danh sách hay gói có ngoại lệ
     expect(await trongDotBien(t.org, [dotBien], (c) => hoiK5(c, t.org, rfqId))).toBeNull();
   });
 
-  it("[INV-K5] người ký ngoài tập loại trừ mà KHÔNG giữ `rfq.approve` (FINANCE ký thẳng qua hàm gói) ⇒ không đếm là độc lập; ĐỘT BIẾN bỏ vế ấy ⇒ mở được", async () => {
-    const t = await taoToChuc();
-    const rfqId = await goiBac1(t, async (id) => void (await moi(t, id, await ncc(t), t.pm3)));
-    await duyet(t, rfqId, t.tc2);
-    expect((await mo(t, rfqId)).status).toBe(422);
-    const dotBien = await defDotBien(HAM_K5, "AND rp.permission_code = 'rfq.approve'", "");
-    expect(await trongDotBien(t.org, [dotBien], (c) => hoiK5(c, t.org, rfqId))).toBeNull();
-  });
-
   it("[INV-K5] bậc KHÔNG ký danh sách: không ngoại lệ ⇒ chữ ký của người mời mở được; CÓ ngoại lệ còn sống ⇒ 422 K5 — một ngoại lệ không bao giờ tự duyệt (spec §4.4); ĐỘT BIẾN bỏ vế ngoại lệ ⇒ mở được", async () => {
     const t = await taoToChuc();
     const khong = await goiNhap(t, GIA_NHO);
@@ -946,6 +937,35 @@ describe("[S1.9101 / S3.3c2 / K5] bậc ký danh sách hay gói có ngoại lệ
     );
     expect(e2?.constraint ?? "").not.toBe("k5_chu_ky_doc_lap");
     expect(e2, "không còn K5 thì câu dừng ở trigger khác (khoá C5)").not.toBeNull();
+  });
+});
+
+describe("[S1.9101 / S3.3c2 / K2 · K5] gói KHÔNG bậc ghim (bậc NULL — dữ liệu trước lần bật, hay trigger xếp bậc bị tắt)", () => {
+  it("[INV-K2] [INV-K5] K2 nhường lời cho K1 (`BAC_LECH_HAM_PHAN_BAC`); K5 coi như bậc ĐÒI ký danh sách — chữ ký của người mời không mở được; ĐỘT BIẾN coi bậc vắng là KHÔNG đòi ⇒ cho qua", async () => {
+    const t = await taoToChuc();
+    const nhap = await goiNhap(t);
+    await moiDemDuoc(t, nhap, 2);
+    const xoaBac = [
+      "ALTER TABLE public.rfq_budgets DISABLE TRIGGER USER",
+      `UPDATE public.rfq_budgets SET tier_tu_so_tien = NULL WHERE rfq_id = '${nhap}'`,
+    ];
+    const kq = await trongDotBien(t.org, xoaBac, async (c) => [
+      await hoiK2(c, t.org, nhap),
+      (await c.query<{ m: string | null }>("SELECT public.rfq_chot_ngan_sach($1, $2, pg_catalog.clock_timestamp()) AS m", [t.org, nhap])).rows[0]!.m,
+    ]);
+    expect(kq).toEqual([null, "BAC_LECH_HAM_PHAN_BAC"]);
+    // K5: gói bậc 0 (không ký danh sách), không ngoại lệ, người mời pm3 ký — bình thường cho qua. Băm ngân sách phủ bậc, nên bậc
+    // vắng mô phỏng bằng hàm bậc ghim trả NULL (chữ ký vẫn còn hiệu lực), không bằng xoá cột.
+    const cho = await goiNhap(t, GIA_NHO);
+    await moiDemDuoc(t, cho, 2);
+    await moi(t, cho, await ncc(t), t.pm3);
+    expect((await nop(t, cho)).status).toBe(200);
+    await duyet(t, cho, t.pm3);
+    expect(await trongDotBien(t.org, [], (c) => hoiK5(c, t.org, cho))).toBeNull();
+    const khongBac = await defDotBien("public.rfq_bac_ghim(uuid, uuid)", "IF NOT FOUND OR bac_luu IS NULL THEN", "IF true THEN");
+    expect(await trongDotBien(t.org, [khongBac], (c) => hoiK5(c, t.org, cho))).toBe("K5_THIEU_CHU_KY_DOC_LAP");
+    const voiVang = await defDotBien(HAM_K5, "coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true)", "coalesce((bac ->> 'ky_danh_sach_moi')::boolean, false)");
+    expect(await trongDotBien(t.org, [khongBac, voiVang], (c) => hoiK5(c, t.org, cho))).toBeNull();
   });
 });
 

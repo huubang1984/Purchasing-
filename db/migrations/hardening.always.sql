@@ -9919,23 +9919,30 @@ $ham$;
   SET search_path = pg_catalog, public
 AS $ham$
 DECLARE
+  bac_luu numeric;
   bac jsonb;
 BEGIN
+  SELECT b.tier_tu_so_tien INTO bac_luu
+    FROM public.rfq_budgets b
+   WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  IF NOT FOUND OR bac_luu IS NULL THEN
+    RETURN NULL;
+  END IF;
   SELECT e INTO bac
     FROM public.rfq_budgets b
     JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id,
          jsonb_array_elements(p.tiers) e
    WHERE b.org_id = p_org AND b.rfq_id = p_rfq
-     AND (e ->> 'tu_so_tien')::numeric = b.tier_tu_so_tien;
+     AND (e ->> 'tu_so_tien')::numeric = bac_luu;
   IF bac IS NULL THEN
-    RAISE EXCEPTION 'Goi thau khong co bac ghim (ngan sach, phien ban co bac, bac khop) — ham theo bac khong tra loi duoc (ADR-082 (10))'
+    RAISE EXCEPTION 'Bac da luu cua goi khong co trong phien ban ngan sach ghim — ham theo bac khong tra loi duoc (ADR-082 (10))'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN bac;
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE bac jsonb; BEGIN SELECT e INTO bac FROM public.rfq_budgets b JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id, jsonb_array_elements(p.tiers) e WHERE b.org_id = p_org AND b.rfq_id = p_rfq AND (e ->> 'tu_so_tien')::numeric = b.tier_tu_so_tien; IF bac IS NULL THEN RAISE EXCEPTION 'Goi thau khong co bac ghim (ngan sach, phien ban co bac, bac khop) — ham theo bac khong tra loi duoc (ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; RETURN bac; END$than$
+                = $than$DECLARE bac_luu numeric; bac jsonb; BEGIN SELECT b.tier_tu_so_tien INTO bac_luu FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq; IF NOT FOUND OR bac_luu IS NULL THEN RETURN NULL; END IF; SELECT e INTO bac FROM public.rfq_budgets b JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id, jsonb_array_elements(p.tiers) e WHERE b.org_id = p_org AND b.rfq_id = p_rfq AND (e ->> 'tu_so_tien')::numeric = bac_luu; IF bac IS NULL THEN RAISE EXCEPTION 'Bac da luu cua goi khong co trong phien ban ngan sach ghim — ham theo bac khong tra loi duoc (ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; RETURN bac; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -10079,6 +10086,9 @@ BEGIN
     RETURN NULL;
   END IF;
   bac := public.rfq_bac_ghim(p_org, p_rfq);
+  IF bac IS NULL THEN
+    RETURN NULL;
+  END IF;
   IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN
     RETURN 'K2_DAU_THAU_CHINH_THUC';
   END IF;
@@ -10105,7 +10115,7 @@ BEGIN
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE bac jsonb; nguong integer; so_moi integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'DRAFT') THEN RETURN NULL; END IF; bac := public.rfq_bac_ghim(p_org, p_rfq); IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN RETURN 'K2_DAU_THAU_CHINH_THUC'; END IF; nguong := (bac ->> 'so_ncc_toi_thieu')::integer; IF nguong IS NULL THEN RAISE EXCEPTION 'Bac ghim thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K2, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; IF public.rfq_dem_ncc_canh_tranh(p_org, p_rfq) >= nguong THEN RETURN NULL; END IF; SELECT count(*)::integer INTO so_moi FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL; IF so_moi >= 1 AND EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = CASE WHEN so_moi = 1 THEN 'SINGLE_SOURCE' ELSE 'LIMITED_COMPETITION' END AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; RETURN 'K2_THIEU_CANH_TRANH'; END$than$
+                = $than$DECLARE bac jsonb; nguong integer; so_moi integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'DRAFT') THEN RETURN NULL; END IF; bac := public.rfq_bac_ghim(p_org, p_rfq); IF bac IS NULL THEN RETURN NULL; END IF; IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN RETURN 'K2_DAU_THAU_CHINH_THUC'; END IF; nguong := (bac ->> 'so_ncc_toi_thieu')::integer; IF nguong IS NULL THEN RAISE EXCEPTION 'Bac ghim thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K2, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; IF public.rfq_dem_ncc_canh_tranh(p_org, p_rfq) >= nguong THEN RETURN NULL; END IF; SELECT count(*)::integer INTO so_moi FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL; IF so_moi >= 1 AND EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = CASE WHEN so_moi = 1 THEN 'SINGLE_SOURCE' ELSE 'LIMITED_COMPETITION' END AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; RETURN 'K2_THIEU_CANH_TRANH'; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -10161,7 +10171,7 @@ $ham$$q$,
                   'hàm public.rfq_chu_ky_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K5] Ham vi tu cua chot K5 — tang goi va trigger o canh mo goi cung hoi no. Mot than `RETURN NULL` cho nguoi lap ngoai le hay nguoi moi tu ky mo goi.
+    -- [S1.9101 / S3.3c2 / K5] Ham vi tu cua chot K5 — tang goi va trigger o canh mo goi cung hoi no. Mot than `RETURN NULL` cho nguoi lap ngoai le hay nguoi moi tu ky mo goi; mot than coi bac vang la KHONG doi cho goi khong bac ghim mo bang chu ky cua nguoi chon.
     ARRAY[
       $q$định nghĩa hàm rfq_chot_chu_ky_doc_lap(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
@@ -10185,11 +10195,7 @@ BEGIN
     RETURN NULL;
   END IF;
   bac := public.rfq_bac_ghim(p_org, p_rfq);
-  ky := (bac ->> 'ky_danh_sach_moi')::boolean;
-  IF ky IS NULL THEN
-    RAISE EXCEPTION 'Bac ghim thieu ky_danh_sach_moi — ham theo bac khong tra loi duoc (K5, ADR-082 (10))'
-      USING ERRCODE = 'check_violation';
-  END IF;
+  ky := coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true);
   IF NOT ky
      AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e
                       WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP'
@@ -10203,19 +10209,14 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1
                FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq) k(n)
-              WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n)
-                AND EXISTS (SELECT 1
-                              FROM public.user_roles ur
-                              JOIN public.role_permissions rp ON rp.role_code = ur.role_code
-                             WHERE ur.org_id = p_org AND ur.user_id = k.n
-                               AND rp.permission_code = 'rfq.approve')) THEN
+              WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n)) THEN
     RETURN NULL;
   END IF;
   RETURN 'K5_THIEU_CHU_KY_DOC_LAP';
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE can integer; bac jsonb; ky boolean; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT CASE WHEN r.requires_dual_approval THEN 2 ELSE 1 END INTO can FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'PENDING_APPROVAL'; IF NOT FOUND THEN RETURN NULL; END IF; bac := public.rfq_bac_ghim(p_org, p_rfq); ky := (bac ->> 'ky_danh_sach_moi')::boolean; IF ky IS NULL THEN RAISE EXCEPTION 'Bac ghim thieu ky_danh_sach_moi — ham theo bac khong tra loi duoc (K5, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; IF NOT ky AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; IF (SELECT count(*) FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq)) < can THEN RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq) k(n) WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n) AND EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = p_org AND ur.user_id = k.n AND rp.permission_code = 'rfq.approve')) THEN RETURN NULL; END IF; RETURN 'K5_THIEU_CHU_KY_DOC_LAP'; END$than$
+                = $than$DECLARE can integer; bac jsonb; ky boolean; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT CASE WHEN r.requires_dual_approval THEN 2 ELSE 1 END INTO can FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'PENDING_APPROVAL'; IF NOT FOUND THEN RETURN NULL; END IF; bac := public.rfq_bac_ghim(p_org, p_rfq); ky := coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true); IF NOT ky AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; IF (SELECT count(*) FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq)) < can THEN RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_chu_ky_con_hieu_luc(p_org, p_rfq) k(n) WHERE NOT EXISTS (SELECT 1 FROM public.rfq_tap_loai_tru(p_org, p_rfq) t(n) WHERE t.n = k.n)) THEN RETURN NULL; END IF; RETURN 'K5_THIEU_CHU_KY_DOC_LAP'; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']

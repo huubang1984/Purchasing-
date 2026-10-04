@@ -11480,14 +11480,21 @@ Dưới REPEATABLE READ ảnh chụp là của đầu giao dịch: nó đếm m�
 UPDATE. Không đường ứng dụng nào nộp dưới REPEATABLE READ (`withTenant` mở `BEGIN` trần); tổ chức chưa bật chỉ đổi ở lối câu thô ấy.
 
 ⑹ **Bậc đấu thầu chính thức không bao giờ qua K2** — kể cả đủ nhà cung cấp và có ngoại lệ; mã `K2_DAU_THAU_CHINH_THUC`. Phần tử bậc
-đọc qua `rfq_bac_ghim` (phần tử `tiers` có `tu_so_tien = rfq_budgets.tier_tu_so_tien` của phiên bản `policy_id`), NÉM khi không có;
-khoá bậc thiếu cũng NÉM (ADR-082 ⑽).
+đọc qua `rfq_bac_ghim` (phần tử `tiers` có `tu_so_tien = rfq_budgets.tier_tu_so_tien` của phiên bản `policy_id`). Gói KHÔNG bậc ghim
+— không ngân sách, hay bậc NULL: gói rời DRAFT trước lần bật, dữ liệu trước `097` — hàm trả NULL và mỗi chốt nói nó làm gì: K2 nhường
+lời cho K1 (`THIEU_NGAN_SACH`, `BAC_LECH_HAM_PHAN_BAC` — tầng gói hỏi K1 trước, trigger K1 xếp trước), K5 coi như bậc ĐÒI ký danh
+sách (⑺). Bậc đã lưu mà không có trong phiên bản ghim là dữ liệu hỏng ⇒ NÉM; khoá `so_ncc_toi_thieu` vắng ở bậc thường cũng NÉM
+(ADR-082 ⑽). Bản đầu NÉM cả khi gói không bậc: lượt `pnpm test:int` đầy đủ đo nó che lời của K1 ở bốn ca đột biến K1 và chặn gói chờ
+duyệt có từ trước `097` mở bằng chữ ký độc lập (ca lớp hai của khoản 261).
 
 ⑺ **K5:** khi bậc mà ngân sách ghim bật `ky_danh_sach_moi` HOẶC gói có ngoại lệ còn sống, cạnh `PENDING_APPROVAL→OPEN` cần ít nhất
-một người ký CÒN HIỆU LỰC không thuộc `rfq_tap_loai_tru` và đang giữ `rfq.approve`. *Còn hiệu lực* là MỘT hàm,
-`rfq_chu_ky_con_hieu_luc` — bốn vế của phép đếm thứ ba ở `087` —, và phép đếm ấy của K4b nay đọc chính hàm này: khi K9 loại người
-khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi cùng nhau (lượt soi, T4). Vế `rfq.approve`: `rfq_kiem_nguoi_duyet` (`074`) chỉ
-hỏi người tạo và phiên, nên qua câu thô dưới `app_api` một người TECHNICAL hay FINANCE có thể là chữ ký "độc lập" (lượt soi, THẤP 6).
+một người ký CÒN HIỆU LỰC không thuộc `rfq_tap_loai_tru`. Gói không bậc ghim, hay bậc vắng khoá `ky_danh_sach_moi` (bậc đấu thầu chính
+thức), coi như bậc ĐÒI — fail-closed, không NÉM. *Còn hiệu lực* là MỘT hàm, `rfq_chu_ky_con_hieu_luc` — bốn vế của phép đếm thứ ba ở
+`087` —, và phép đếm ấy của K4b nay đọc chính hàm này: khi K9 loại người khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi cùng
+nhau (lượt soi, T4). K5 KHÔNG hỏi người ký có giữ `rfq.approve`: bản đầu có hỏi (lượt soi, THẤP 6), và lượt `pnpm test:int` đầy đủ đo
+nó tạo một lớp mà sàn D2 không có — `rfq_kiem_nguoi_duyet` (`074`) chỉ hỏi người tạo và phiên, nên một chữ ký không giữ quyền vẫn
+đếm cho D2 và K4b mà không đếm cho K5 (bản trong tiến trình của kịch bản 41 ký bằng hai giám đốc qua hàm gói và gãy ở đó). Quyền ký
+là việc của route (`rfq.approve`) — giới hạn ghi ở *Cái giá*.
 
 ⑻ **K5 nhường lời cho K4b khi chưa đủ chữ ký:** hàm vị từ cho qua khi số chữ ký còn hiệu lực dưới số cần (một, hay hai nếu cấp kép);
 trigger K4b — xếp trước — từ chối như hôm nay, không có hàng `CONTROL_DENIED`. Bấm *Mở gói* khi chưa ai ký là đi sai thứ tự, không
@@ -11504,6 +11511,9 @@ K4b.
 
 - **Gói đang chờ duyệt lúc deploy ở tổ chức đã bật không qua K2.** Khối chặn deploy kiểu `049` bị loại: dưới vai deploy mà RLS áp,
   câu đối chiếu thấy 0 hàng (hồ sơ N3) — một khối luôn qua là một lời khai giả. Chưa tổ chức thật nào bật S3 (ADR-105).
+- **CSDL không hỏi người ký có giữ `rfq.approve`** — ở sàn D2, K4b lẫn K5: qua câu thô dưới `app_api` (rổ B) một người TECHNICAL hay
+  FINANCE ngoài tập loại trừ là chữ ký "độc lập". Route duyệt hỏi `rfq.approve`; vá ở CSDL là đổi `rfq_kiem_nguoi_duyet` cho mọi chữ ký,
+  không riêng K5.
 - **K5 không có chốt READ COMMITTED.** Đúng hôm nay — ở PENDING_APPROVAL danh sách, ngoại lệ, ngân sách đứng yên, lời duyệt chỉ chèn
   thêm, nên ảnh chụp cũ chỉ đếm THIẾU. Hết đúng khi K9 cho chèn khai báo xung đột trong lúc chờ duyệt: hạng mục ấy thêm chốt.
 - **Xác minh và hồ sơ không khoá theo gói:** một lần thu hồi xác minh hay thêm người liên hệ commit sau lúc trigger K2 đọc là một thay
@@ -11524,6 +11534,8 @@ K4b.
 - **Gộp chỉ theo người liên hệ được mời:** nhà vỏ chung một người liên hệ phụ lọt; băm xác minh vốn phủ mọi người liên hệ.
 - **Chốt READ COMMITTED chỉ ở tổ chức đã bật:** câu hỏi *đã bật* đọc chính ảnh chụp cũ, nên câu nộp trước lần bật thoát.
 - **K5 trả mã khi chưa đủ chữ ký:** ghi một lần *đi sai thứ tự* thành lần lách chốt (ADR-060).
+- **Hàm bậc ghim NÉM khi gói không bậc** (bản đầu): che lời của K1 và chặn gói chờ duyệt có từ trước `097` (⑹).
+- **K5 đòi người ký giữ `rfq.approve`** (bản đầu): một lớp riêng K5 có mà D2, K4b không (⑺).
 - **Chép bốn vế *còn hiệu lực* vào thân K5:** hai bản viết cùng vế trôi khỏi nhau ở K9.
 
 ### Điều ADR này KHÔNG nói
