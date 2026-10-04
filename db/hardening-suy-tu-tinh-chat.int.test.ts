@@ -1667,7 +1667,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   );
   const rfqVe = await rfqSoan();
   const rfqVe2 = await rfqSoan();
-  // [S1.9101 / S3.3c1 / K2] Ba gói nộp duyệt ở tổ chức đã bật — `rfqVe`, `rfqVe2`, `anhEm` — mỗi gói một nhà cung cấp ĐẾM ĐƯỢC
+  // [S1.266 / S3.3c1 / K2] Ba gói nộp duyệt ở tổ chức đã bật — `rfqVe`, `rfqVe2`, `anhEm` — mỗi gói một nhà cung cấp ĐẾM ĐƯỢC
   // (`so_ncc_toi_thieu` = 1): hồ sơ và người liên hệ do một người nhập riêng (TECHNICAL — không mời, không tạo gói) dựng, có MST,
   // và `tc` (FINANCE, không khai phiên bản 2, không dựng hồ sơ) xác minh sau khi người liên hệ đã có. Câu DỰNG dữ liệu dưới chủ sở
   // hữu: các bộ ba (bảng, sự kiện) ấy đã có nhân chứng ở trên.
@@ -1883,7 +1883,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       "rfq_packages",
     );
   };
-  // [S1.9101 / S3.3c1 / K2] Gói anh em mời nhà cung cấp đếm được thứ ba — người mời là người nộp (`pm2`).
+  // [S1.266 / S3.3c1 / K2] Gói anh em mời nhà cung cấp đếm được thứ ba — người mời là người nộp (`pm2`).
   await moiDemDuoc(anhEm, 2, pm2);
   await nopDuyet(anhEm, pm2);
   doiSoHang(

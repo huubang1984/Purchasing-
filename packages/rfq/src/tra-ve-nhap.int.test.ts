@@ -149,7 +149,7 @@ async function toChucDaBat(): Promise<ToChuc> {
 }
 
 /**
- * [S1.9101 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
  * `tc`: FINANCE, không khai phiên bản chính sách v2 mà ngân sách ghim, không tạo gói, không mời) — gói nộp duyệt được (bậc đòi
  * một). Tổ chức chưa bật: nguyên dạng MVP1, do PM dựng — K2 không áp, và xác minh K8a chỉ có ở tổ chức đã bật.
  */
@@ -338,7 +338,7 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] người giữ `rfq.approve` KHÁC người tạo trả về được; BUYER không phải người tạo ⇒ từ chối VÀO SỔ trên `rfq.approve`; FINANCE cũng thế", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
-    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được: K2 không cho gói không lời mời rời DRAFT.
+    // [S1.266 / S3.3c1] Một lời mời tới nhà cung cấp đếm được: K2 không cho gói không lời mời rời DRAFT.
     await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
 
@@ -365,7 +365,7 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] BUYER là người TẠO thì trả về được — nhánh người tạo đòi `rfq.create`, không đòi `rfq.approve`", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t, GOI_THUONG, t.mua);
-    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được (người mời như mọi lời mời của tệp: PM) — K2.
+    // [S1.266 / S3.3c1] Một lời mời tới nhà cung cấp đếm được (người mời như mọi lời mời của tệp: PM) — K2.
     await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId, t.mua);
     await traVe(t, rfqId, t.mua);
@@ -375,7 +375,7 @@ describe("S3.2b1 — K4a: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chứ
   it("[INV-K4a] lý do rỗng ⇒ từ chối có tên, gói ở nguyên, không hàng sổ nào", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
-    // [S1.9101 / S3.3c1] Một lời mời tới nhà cung cấp đếm được — K2.
+    // [S1.266 / S3.3c1] Một lời mời tới nhà cung cấp đếm được — K2.
     await moi(t, rfqId, await nhaCungCap(t));
     await nop(t, rfqId);
     for (const lyDo of ["", "   "]) {

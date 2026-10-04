@@ -205,7 +205,7 @@ async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG): Promise<string> 
 /**
  * Một nhà cung cấp, một người liên hệ và một lời mời vào gói, do PM mời.
  *
- * [S1.9101 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ bật: nhà cung cấp ĐẾM ĐƯỢC cho K2 (`nhaCungCapDemDuoc` — người nhập riêng, MST, xác minh bởi
  * `tc`: FINANCE, không khai phiên bản chính sách v2 mà ngân sách ghim, không tạo gói, không mời) — gói nộp duyệt được (bậc đòi
  * một). Tổ chức chưa bật: nguyên dạng MVP1, do PM dựng — K2 không áp, và xác minh K8a chỉ có ở tổ chức đã bật. Hỏi trạng thái
  * bật lúc mời (`daBat`, khối (6)): khối (6) bật tổ chức giữa ca bằng chữ ký, không qua `batS3`.

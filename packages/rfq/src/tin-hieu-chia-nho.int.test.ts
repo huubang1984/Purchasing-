@@ -86,7 +86,7 @@ interface ToChuc {
   readonly pm3: Nguoi;
   /** PROCUREMENT_MANAGER — người KHAI phiên bản chính sách mà gói ghim (§2.4 ⑺); giữ `rfq.approve`. */
   readonly pmCs: Nguoi;
-  /** FINANCE — giữ `category.manage`, không giữ `rfq.approve`; [S1.9101 / S3.3c1] người xác minh nhà cung cấp đếm được (K2). */
+  /** FINANCE — giữ `category.manage`, không giữ `rfq.approve`; [S1.266 / S3.3c1] người xác minh nhà cung cấp đếm được (K2). */
   readonly tc: Nguoi;
   /** Phiên bản 2 — có bậc, cửa sổ 30 ngày; `null` ở tổ chức chưa bật. */
   readonly v2: string | null;
@@ -159,7 +159,7 @@ async function taoNhom(t: ToChuc, ma: string): Promise<string> {
 /**
  * Gói `pm` tạo, có ngân sách và một hạng mục, NỘP bởi `nguoiNop` (mặc định `pm`).
  *
- * [S1.9101 / S3.3c1] Tổ chức ĐÃ BẬT: thêm đúng một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) trước lần
+ * [S1.266 / S3.3c1] Tổ chức ĐÃ BẬT: thêm đúng một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) trước lần
  * nộp — hồ sơ do người nhập riêng của helper dựng (vai TECHNICAL, không giữ `rfq.approve`), `tc` xác minh (FINANCE, không giữ
  * `rfq.approve`, không khai phiên bản — người khai là `pmCs`); câu chèn là câu của `createInvitation`, người mời `pm`. Không ai
  * mới giữ `rfq.approve`, nên số người ghi nhận được mà khối [S3.6b2] khẳng định không đổi. Tổ chức chưa bật giữ gói không lời mời.

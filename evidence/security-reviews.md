@@ -24481,7 +24481,7 @@ chặn trước ở route — trước đó nó sẽ SỐNG.
   định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 1683 giây; `evidence/INV-matrix.md` đổi đúng ba hàng — K4a 31 → 41
   ca, K4b 50 → 56, L3 21 → 22.
 
-# §S1.9101 — S3.3c1: DỮ LIỆU TEST VÀ `gieo:demo --s3` SANG NHÀ CUNG CẤP *ĐẾM ĐƯỢC* — CHUẨN BỊ CHO CHỐT K2, KHÔNG CHỐT MỚI
+# §S1.266 — S3.3c1: DỮ LIỆU TEST VÀ `gieo:demo --s3` SANG NHÀ CUNG CẤP *ĐẾM ĐƯỢC* — CHUẨN BỊ CHO CHỐT K2, KHÔNG CHỐT MỚI
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi. Không migration, không mã sản xuất; ngoài test chỉ
 `tools/gieo-demo` (công cụ gieo dữ liệu demo). Không khoản mới, không ADR mới — quyết định chia hai PR ghi ở ADR của S3.3c2.
@@ -24518,7 +24518,7 @@ Vòng này đổi dữ liệu trước, trên mã `master`, để PR chốt ch�
 
 ## 3. Đo
 - Trên mã `master` `ff68d6b6` — chưa có K2 —: các tệp đổi chạy xanh: 14 tệp, 404 ca đạt, 0 đỏ, 445 giây — gồm `hardening-suy-tu-tinh-chat` (38 ca, 434 giây) và cả hai kịch bản 41 (32 + 85 ca).
-- Cùng các tệp, trên mã có K2 (nhánh của S3.3c2): xanh — số ở §S1.9102.
+- Cùng các tệp, trên mã có K2 (nhánh của S3.3c2): xanh — số ở biên bản của S3.3c2.
 - `gieo:demo` không có test đầu-cuối: agent chạy nó trên một `postgres:16-alpine` dùng một lần — `--s3` thoát 0, gói chính 9 tỷ
   OPEN, K2 đếm 5; ba gói chia nhỏ đếm 3 mỗi gói; 0 hàng `CONTROL_DENIED`; chế độ mặc định thoát 0. Lần chạy cần
   `TRUSTPROCURE_KEY_ADAPTER=local-dev` và một vai `app_unseal_login` dựng tay — không tái lập nguyên văn từ kho.

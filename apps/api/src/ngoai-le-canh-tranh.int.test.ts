@@ -144,7 +144,7 @@ async function taoToChuc(): Promise<ToChuc> {
   return { org, pm, pm2, mua, tc };
 }
 
-/** [S1.9101 / S3.3c1] Tổ chức đã bật trong tệp này — ở đó `nhaCungCapCuaGoi` dựng nhà cung cấp ĐẾM ĐƯỢC cho K2. */
+/** [S1.266 / S3.3c1] Tổ chức đã bật trong tệp này — ở đó `nhaCungCapCuaGoi` dựng nhà cung cấp ĐẾM ĐƯỢC cho K2. */
 const DA_BAT = new Set<string>();
 
 /** BẬT S3 — khuôn `batS3` của `luong-moi-s3`: phiên bản có bậc, chữ ký thứ hai của một người khác. */
@@ -210,7 +210,7 @@ async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
 }
 
 /**
- * [S1.9101 / S3.3c1] Nhà cung cấp của lời mời trong một gói: ở tổ chức ĐÃ bật, một nhà cung cấp ĐẾM ĐƯỢC cho K2
+ * [S1.266 / S3.3c1] Nhà cung cấp của lời mời trong một gói: ở tổ chức ĐÃ bật, một nhà cung cấp ĐẾM ĐƯỢC cho K2
  * (`nhaCungCapDemDuoc`, xác minh bởi `tc` — FINANCE, không khai phiên bản chính sách mà ngân sách ghim, không tạo gói, không
  * mời) — để các ca nộp duyệt KHÔNG có ngoại lệ sống (rút rồi nộp lại, nộp trần, đua với một câu lập chưa COMMIT) qua K2 bằng số
  * đếm thay vì bằng ngoại lệ. Danh sách vẫn đúng MỘT nhà cung cấp, nên một `SINGLE_SOURCE` sống vẫn ĐÚNG loại: các ca đo ngoại
@@ -232,7 +232,7 @@ async function goiNhap(t: ToChuc): Promise<string> {
     await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
     await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep tam SS400 3mm", quantity: "100.0000", unit: "tam", actorSessionId: t.pm.s });
   });
-  // [S1.9101 / S3.3c1] Ở tổ chức đã bật: nhà cung cấp đếm được (K2) — người mời vẫn là `pm`.
+  // [S1.266 / S3.3c1] Ở tổ chức đã bật: nhà cung cấp đếm được (K2) — người mời vẫn là `pm`.
   const n = await nhaCungCapCuaGoi(t);
   await withTenant(apiPool, t.org, (c) => createInvitation(c, t.org, { rfqId, supplierId: n.ncc, contactId: n.lh, actorSessionId: t.pm.s }, auditPool));
   return rfqId;
@@ -900,7 +900,7 @@ describe("[S1.265 / S3.3b] băm và tập loại trừ — đột biến", () =>
         await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
         await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep van D12", quantity: "10.0000", unit: "kg", actorSessionId: t.pm.s });
       });
-      // [S1.9101 / S3.3c1] Nhà cung cấp đếm được: gói `daRut` nộp duyệt KHÔNG còn ngoại lệ sống, nên qua K2 bằng số đếm.
+      // [S1.266 / S3.3c1] Nhà cung cấp đếm được: gói `daRut` nộp duyệt KHÔNG còn ngoại lệ sống, nên qua K2 bằng số đếm.
       const n = await nhaCungCapCuaGoi(t);
       await withTenant(apiPool, t.org, (c) => createInvitation(c, t.org, { rfqId, supplierId: n.ncc, contactId: n.lh, actorSessionId: t.pm.s }, auditPool));
       return rfqId;

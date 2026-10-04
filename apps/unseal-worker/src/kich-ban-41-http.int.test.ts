@@ -407,7 +407,7 @@ const trangThai: {
   /** [S1.251 / S4.4b] Hàng chuẩn của dòng 1 — khoá của lịch sử giá. */
   hangChuanId: string;
   /**
-   * [S1.9101 / S3.3c1] Luồng S3: ba nhà cung cấp ĐẾM ĐƯỢC phụ — dựng ở bộ quét, mời vào hai gói hy sinh và ba gói của bước 16 (K2
+   * [S1.266 / S3.3c1] Luồng S3: ba nhà cung cấp ĐẾM ĐƯỢC phụ — dựng ở bộ quét, mời vào hai gói hy sinh và ba gói của bước 16 (K2
    * đòi hai ở bậc 0, ba ở bậc từ 100 triệu). Không ai trong số họ được mời vào gói chính.
    */
   nccPhu: { supplierId: string; contactId: string }[];
@@ -494,7 +494,7 @@ afterAll(async () => {
 });
 
 /**
- * [S1.9101 / S3.3c1] Một hồ sơ nhà cung cấp và người liên hệ của nó qua HTTP, dưới cookie `nguoiDung` (người giữ `supplier.manage`
+ * [S1.266 / S3.3c1] Một hồ sơ nhà cung cấp và người liên hệ của nó qua HTTP, dưới cookie `nguoiDung` (người giữ `supplier.manage`
  * — chỉ PROCUREMENT_MANAGER); luồng S3 thêm lần XÁC MINH qua route của người tài chính thứ hai. Trả hai id.
  *
  * K2 chỉ đếm nhà cung cấp mà hồ sơ và người liên hệ KHÔNG do người tạo gói hay một người mời dựng, có MST và một xác minh còn hiệu
@@ -524,7 +524,7 @@ async function dungNccQuaHttp(
 /**
  * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3
  * gọi ở DRAFT, trước khi nộp duyệt (K4b); luồng MVP1 gọi sau khi mở, như trước. Trả thân `201` của lời mời.
- * [S1.9101 / S3.3c1] Và khác NGƯỜI DỰNG hồ sơ: luồng S3 dựng nhà cung cấp ĐẾM ĐƯỢC (`dungNccQuaHttp` bằng `pm3`, xác minh) — K2 chặn
+ * [S1.266 / S3.3c1] Và khác NGƯỜI DỰNG hồ sơ: luồng S3 dựng nhà cung cấp ĐẾM ĐƯỢC (`dungNccQuaHttp` bằng `pm3`, xác minh) — K2 chặn
  * lần nộp gói 1 tỷ khi dưới năm; luồng MVP1 giữ nguyên người mua. MST, người liên hệ và người mời không đổi ở cả hai luồng.
  */
 async function taoNccVaMoi(i: number, batS3: boolean): Promise<{ supplierId: string; invitation: { id: string; status: string; moiSauKhiKy: boolean } }> {
@@ -796,7 +796,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hyA = await taoRfqHy("RFQ hy sinh A (mo)");
     expect((await goi("POST", `/rfqs/${hyA}/items`, m, { lineNo: 1, description: "Vat tu hy sinh", quantity: "1.0000", unit: "cai" })).status).toBe(201);
     expect((await goi("PUT", `/rfqs/${hyA}/budget`, m, { estimatedValue: "10000000.00", currency: "VND" })).status).toBe(200);
-    // [S1.9101 / S3.3c1] Luồng S3: K2 đòi HAI nhà cung cấp đếm được ở bậc 0 của hai gói hy sinh (và BA ở bậc từ 100 triệu của ba gói
+    // [S1.266 / S3.3c1] Luồng S3: K2 đòi HAI nhà cung cấp đếm được ở bậc 0 của hai gói hy sinh (và BA ở bậc từ 100 triệu của ba gói
     // bước 16) — trước vòng này hai gói hy sinh nộp duyệt không một lời mời nào. Ba nhà cung cấp PHỤ, dựng một lần như năm người của
     // gói chính (`pm3` dựng, `taiChinh2` xác minh), mời ở DRAFT bởi người mua. Lời mời hy sinh SAU lần mở (dưới) giữ nguyên: nó là
     // đích của route mời và route phát lại link. MST và số điện thoại xa mọi giá của bộ quét.
@@ -839,7 +839,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: GIA_MOI, currency: "VND" })),
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
-    // [S1.9101 / S3.3c1] Luồng S3: hai nhà cung cấp phụ cho gói hy sinh B, ở DRAFT — route nộp của bộ quét đi qua K2 như trước vòng
+    // [S1.266 / S3.3c1] Luồng S3: hai nhà cung cấp phụ cho gói hy sinh B, ở DRAFT — route nộp của bộ quét đi qua K2 như trước vòng
     // này đi qua mọi chốt, và chuỗi duyệt → mở → huỷ phía sau giữ nguyên.
     if (batS3) {
       for (const n of trangThai.nccPhu.slice(0, 2)) {
@@ -2235,7 +2235,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       const ns = await goi("PUT", `/rfqs/${id}/budget`, m, { estimatedValue: giaTri, currency: "VND" });
       expect(ns.status, ns.text).toBe(200);
       expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval, "dưới ngưỡng kép 500 triệu").toBe(false);
-      // [S1.9101 / S3.3c1] Luồng S3: bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một
+      // [S1.266 / S3.3c1] Luồng S3: bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một
       // lời mời nào. Người mua mời ba nhà cung cấp phụ của bộ quét ở DRAFT. Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc
       // lời mời; `pm2` ký và nằm ngoài tập loại trừ, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua. Luồng MVP1: danh sách rỗng.
       for (const n of trangThai.nccPhu) {

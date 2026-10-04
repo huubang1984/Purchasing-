@@ -198,7 +198,7 @@ const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "
 /**
  * [S1.174 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
  * bối cảnh demo khai đúng số mà bậc của chính nó đòi, để lúc K2 có mặt nó không gãy ở bước mời).
- * [S1.9101 / S3.3c1] K2 (cưỡng chế từ S3.3c2) đếm nhà cung cấp ĐẾM ĐƯỢC chứ không đếm lời mời: `--s3` dựng cả năm bằng
+ * [S1.266 / S3.3c1] K2 (cưỡng chế từ S3.3c2) đếm nhà cung cấp ĐẾM ĐƯỢC chứ không đếm lời mời: `--s3` dựng cả năm bằng
  * người nhập riêng, có MST, và người tài chính thứ hai xác minh — xem `taoNccVaMoi` trong `chinh`.
  */
 const NHA_CUNG_CAP_THEM_S3: readonly string[] = ["Thep Hoa Sen", "Vat lieu Phu My"];
@@ -277,7 +277,7 @@ async function chinh(): Promise<void> {
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
     // [S1.199 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
     // §8.10): `DATA_STEWARD` không ghép được với vai nào ở đây.
-    // [S1.9101 / S3.3c1] `--s3`: `nhapncc` — người NHẬP hồ sơ nhà cung cấp, một người MỚI vai TECHNICAL (chỉ `evaluation.perform`):
+    // [S1.266 / S3.3c1] `--s3`: `nhapncc` — người NHẬP hồ sơ nhà cung cấp, một người MỚI vai TECHNICAL (chỉ `evaluation.perform`):
     // K2 không đếm nhà cung cấp do người tạo gói hay một người mời dựng, và người này không giữ `rfq.invite` lẫn `rfq.approve` — không
     // thành người mời, không đổi số người ghi nhận được tín hiệu chia nhỏ. Không `--s3`: không có người ấy.
     for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2", "nhapncc"] : [])]) {
@@ -404,7 +404,7 @@ async function chinh(): Promise<void> {
     // [S1.190 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
     // duyệt —, vì chữ ký duyệt gói mang băm của danh sách mời lúc ký (K4b) và gói chỉ mở khi người ký ký đúng danh sách ấy; lời mời
     // là `UNSENT`, KHÔNG token (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời sau khi mở, token ngay lúc mời.
-    // [S1.9101 / S3.3c1] `--s3`: K2 (S3.3c2) đếm ở cạnh nộp duyệt — kể cả câu UPDATE thẳng phía dưới, vì trigger là ENABLE ALWAYS —
+    // [S1.266 / S3.3c1] `--s3`: K2 (S3.3c2) đếm ở cạnh nộp duyệt — kể cả câu UPDATE thẳng phía dưới, vì trigger là ENABLE ALWAYS —
     // và chỉ đếm nhà cung cấp mà hồ sơ và người liên hệ KHÔNG do người tạo gói hay người mời (soan) dựng, có MST, và có xác minh còn
     // hiệu lực của người không khai phiên bản mà ngân sách ghim. Nên `nhapncc` dựng hồ sơ có MST (mỗi người một MST gốc) và người liên
     // hệ, rồi `taichinh2` — người KÝ chứ không khai phiên bản — xác minh, SAU khi có người liên hệ (băm hồ sơ phủ nó). Người mời vẫn là
@@ -541,7 +541,7 @@ async function chinh(): Promise<void> {
                 unit: "tam",
                 actorSessionId: soan.sessionId,
               });
-              // [S1.9101 / S3.3c1] Bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một lời
+              // [S1.266 / S3.3c1] Bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một lời
               // mời nào. soan mời ba người đầu của gói chính (nhapncc dựng, taichinh2 xác minh) ở DRAFT, trước lần nộp. Tín hiệu chia nhỏ
               // đọc ngân sách và nhóm hàng, không đọc lời mời; soan2 ký và nằm ngoài tập loại trừ, nên K5 cho hai lần mở dưới qua.
               for (const n of moiTruocKhiKy.slice(0, 3)) {
@@ -630,7 +630,7 @@ async function chinh(): Promise<void> {
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
     ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
     ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
-    // [S1.9101 / S3.3c1] `nhapncc` (TECHNICAL, `--s3`) không làm gì ở /mo-thau — không in link của người ấy ở đây.
+    // [S1.266 / S3.3c1] `nhapncc` (TECHNICAL, `--s3`) không làm gì ở /mo-thau — không in link của người ấy ở đây.
     for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh") && !n.email.startsWith("dulieu.") && !n.email.startsWith("nhapncc."))) {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
     }
@@ -650,7 +650,7 @@ async function chinh(): Promise<void> {
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
       }
-      // [S1.9101 / S3.3c1] Nhà cung cấp đếm được của K2 — người dựng và người xác minh, nói ra cho người demo.
+      // [S1.266 / S3.3c1] Nhà cung cấp đếm được của K2 — người dựng và người xác minh, nói ra cho người demo.
       ra.push("  Năm nhà cung cấp của gói chính: nhapncc (TECHNICAL, không mời, không duyệt) nhập hồ sơ có MST và người liên hệ, taichinh2");
       ra.push("  xác minh — K2 đếm đủ năm cho bậc 1 tỷ; ba người đầu được mời lại ở các gói nhỏ bên dưới.");
     }

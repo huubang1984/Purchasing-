@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.3c1] NHÀ CUNG CẤP *ĐẾM ĐƯỢC* CHO CHỐT K2 — dàn cảnh dùng chung của mọi test nộp duyệt gói ở tổ chức đã bật S3
+// [S1.266 / S3.3c1] NHÀ CUNG CẤP *ĐẾM ĐƯỢC* CHO CHỐT K2 — dàn cảnh dùng chung của mọi test nộp duyệt gói ở tổ chức đã bật S3
 //
 // K2 (spec S3 §5.1, §2.4 ⑹; ADR-082 ⑹ ⑺) chỉ đếm một nhà cung cấp khi: hồ sơ và MỌI người liên hệ của nó KHÔNG do người tạo
 // gói hay một người mời của gói dựng; nhà cung cấp có MST và một xác minh còn hiệu lực (K8a, `082`); xác minh ấy không do người

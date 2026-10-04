@@ -128,7 +128,7 @@ async function doiTrangThai(t: ToChuc, categoryId: string, conDung: boolean, ai:
 }
 
 /**
- * [S1.9101 / S3.3c1] Một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) — chỉ ở tổ chức ĐÃ BẬT. Hồ sơ do người
+ * [S1.266 / S3.3c1] Một lời mời tới một nhà cung cấp ĐẾM ĐƯỢC cho chốt K2 (S3.3c2) — chỉ ở tổ chức ĐÃ BẬT. Hồ sơ do người
  * nhập riêng của helper dựng, `tc` (FINANCE, không khai phiên bản — người khai là `pm`) xác minh; câu chèn là câu của
  * `createInvitation`, người mời `pm`. Tệp này đo nhóm hàng: không có lời mời này thì gói thiếu nhà cung cấp và K2 — đứng SAU nhóm
  * hàng ở cả tầng gói lẫn thứ tự trigger — từ chối mọi ca nộp lẽ ra đi qua.
@@ -145,7 +145,7 @@ async function moiNccDemDuoc(t: ToChuc, rfqId: string): Promise<void> {
 }
 
 /**
- * Gói đủ điều kiện K1 — ngân sách ghim phiên bản hiệu lực, một hạng mục — với nhóm hàng tuỳ chọn. [S1.9101 / S3.3c1] Ở tổ chức
+ * Gói đủ điều kiện K1 — ngân sách ghim phiên bản hiệu lực, một hạng mục — với nhóm hàng tuỳ chọn. [S1.266 / S3.3c1] Ở tổ chức
  * đã bật, thêm đúng một lời mời đếm được (`moiNccDemDuoc`): gói chỉ còn thiếu thứ mà ca đang đo. Tổ chức chưa bật lúc dựng gói
  * (đối chứng MVP1, hai ca ĐUA và *rời DRAFT trước lần bật*) giữ gói không lời mời như cũ.
  */
@@ -532,7 +532,7 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     const rfqId = await withTenant(apiPool, t.org, async (c) =>
       (await createRfq(c, t.org, { title: "Goi trong", deadlineAt: MAI_SAU, createdBySessionId: t.pm.s })).id,
     );
-    // [S1.9101 / S3.3c1] Một lời mời đếm được: gói thiếu ĐÚNG hai thứ ca này đo — ngân sách và nhóm hàng —, không thiếu nhà cung cấp.
+    // [S1.266 / S3.3c1] Một lời mời đếm được: gói thiếu ĐÚNG hai thứ ca này đo — ngân sách và nhóm hàng —, không thiếu nhà cung cấp.
     await moiNccDemDuoc(t, rfqId);
     expect((await nop(t, rfqId)) as ChotKiemSoatError).toMatchObject({ lyDo: "THIEU_NGAN_SACH" });
   });
@@ -544,7 +544,7 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     const kichBan = async (coKhoa: boolean) => {
       const t = await taoToChuc();
       const rfqId = await goiSanSang(t); // chưa bật: ngân sách ghim bản 1, không nhóm hàng
-      // [S1.9101 / S3.3c1] Không lời mời (xác minh K8a chỉ có ở tổ chức đã bật), và K2 không chạm ca này: trigger K2 xếp SAU K1 —
+      // [S1.266 / S3.3c1] Không lời mời (xác minh K8a chỉ có ở tổ chức đã bật), và K2 không chạm ca này: trigger K2 xếp SAU K1 —
       // chân có khoá bị K1 chặn sau lần chờ; chân gỡ khoá nộp trên ảnh chụp CHƯA bật, nơi trigger K2 trả NEW.
       const v2 = await chenPhienBan2(t, true, 30);
       const ky = await moGiaoDich(t.org);

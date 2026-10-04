@@ -75,7 +75,7 @@ interface ToChuc {
   /** Hai PROCUREMENT_MANAGER khác — người duyệt, giữ `rfq.approve`. */
   readonly pm2: Nguoi;
   readonly pm3: Nguoi;
-  /** FINANCE — người ký phiên bản chính sách; [S1.9101 / S3.3c1] và người xác minh nhà cung cấp đếm được (K2). */
+  /** FINANCE — người ký phiên bản chính sách; [S1.266 / S3.3c1] và người xác minh nhà cung cấp đếm được (K2). */
   readonly tc: Nguoi;
 }
 interface NhaCungCap {
@@ -148,7 +148,7 @@ async function toChucDaBat(): Promise<ToChuc> {
 }
 
 async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {
-  // [S1.9101 / S3.3c1] Tổ chức ĐÃ BẬT: chốt K2 (S3.3c2) chỉ đếm nhà cung cấp KHÔNG do người tạo gói hay người mời dựng, có
+  // [S1.266 / S3.3c1] Tổ chức ĐÃ BẬT: chốt K2 (S3.3c2) chỉ đếm nhà cung cấp KHÔNG do người tạo gói hay người mời dựng, có
   // MST và xác minh còn hiệu lực của một FINANCE không khai phiên bản chính sách — `tc` (người khai là `pm`). Mỗi lời mời của tệp
   // (`goiNhap`, `themLoiMoi`) vẫn là MỘT lời mời, cùng người mời `pm`: số lời mời, băm danh sách và lời từ chối mong đợi không
   // đổi. Tổ chức chưa bật (đối chứng MVP1) giữ nhà cung cấp do PM dựng.
