@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 9501_xoay_vong — [S1.9101 / S3.3d của spec S3] K3: XOAY VÒNG NHÀ CUNG CẤP Ở CẠNH NỘP DUYỆT VÀ CẠNH MỞ GÓI; ĐÓNG KHOẢN 234
+-- 108_xoay_vong — [S1.270 / S3.3d của spec S3] K3: XOAY VÒNG NHÀ CUNG CẤP Ở CẠNH NỘP DUYỆT VÀ CẠNH MỞ GÓI; ĐÓNG KHOẢN 234
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.5 ⒀, §5 K3, §5.1 K3, §9 (S3.3). ADR-058 ⑶(b),
--- ADR-082 ⑹ ⒀, ADR-147, ADR-9201. Khoản 234 ⒝ (⒜ là K2, ⒞ là K5 — `107`). Chủ dự án chốt ngày 2026-10-05: K3 kiểm ở CẢ hai cạnh;
+-- ADR-082 ⑹ ⒀, ADR-147, ADR-148. Khoản 234 ⒝ (⒜ là K2, ⒞ là K5 — `107`). Chủ dự án chốt ngày 2026-10-05: K3 kiểm ở CẢ hai cạnh;
 -- *cùng một nhà cung cấp* theo khoá nhóm; một PR; sau lượt soi hình dạng: chỉ gói CÙNG LOẠI chiếm suất của cửa sổ, người chọn như K2,
 -- chặn `opened_at` do người gọi đặt ở tổ chức đã bật (khoản 319), một mã vào sổ ở cả hai cạnh.
 --
@@ -30,7 +30,7 @@
 --     của cạnh mở: cửa sổ chỉ đếm gói ĐÃ MỞ, nên các gói nộp song song cùng một bộ nhà cung cấp đều qua lúc nộp.
 --
 -- THỨ MIGRATION NÀY KHÔNG LÀM: K2b, K5b (S3.5); màn, kịch bản 41 bản màn, lượt đi thử (S3.3e); chỉ mục cho cửa sổ (quy mô pilot —
--- ADR-9201); khoản 319 ở tổ chức chưa bật.
+-- ADR-148); khoản 319 ở tổ chức chưa bật.
 --
 -- Mọi hàm và trigger mới hay đổi thân ghim ở `hardening.always.sql` trong CÙNG commit (S1.96).
 -- ==============================================================================================

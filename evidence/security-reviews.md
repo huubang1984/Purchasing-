@@ -24662,11 +24662,11 @@ trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm
 evidence trước đó trên cùng commit hỏng vì môi trường — Docker daemon mất sau khi container phiên khởi động lại: 7 phút, 136 đỏ, 2021
 bỏ qua, không test tích hợp nào dựng được Postgres —; bản ma trận của lượt ấy bỏ, không commit.
 
-# §S1.9101 — S3.3d: K3 — XOAY VÒNG NHÀ CUNG CẤP Ở CẠNH NỘP DUYỆT VÀ CẠNH MỞ GÓI; KHOẢN 234 ĐÓNG — ADR-9201
+# §S1.270 — S3.3d: K3 — XOAY VÒNG NHÀ CUNG CẤP Ở CẠNH NỘP DUYỆT VÀ CẠNH MỞ GÓI; KHOẢN 234 ĐÓNG — ADR-148
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và tổ chức chưa
 bật chạy nguyên MVP1 (K3 trả NULL; vế `opened_at` chỉ ở tổ chức đã bật). Một thay đổi chạm MỌI tổ chức: `openRfq` lấy khoá chính sách
-của tổ chức TRƯỚC lần đúc khoá thay vì trong trigger `102` — cùng khoá, sớm hơn. Migration `9501`, ADR-9201. Khoản 234 ĐÓNG; khoản 319
+của tổ chức TRƯỚC lần đúc khoá thay vì trong trigger `102` — cùng khoá, sớm hơn. Migration `108`, ADR-148. Khoản 234 ĐÓNG; khoản 319
 đóng cho tổ chức đã bật.
 
 ## 1. Vòng này là gì
@@ -24683,7 +24683,7 @@ Cửa sổ của spec (§5.1, ADR-082 ⒀): gói đã `opened_at`, `opened_at DE
 ## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
 Một CAO — dừng hỏi chủ dự án:
 - **C1** — lời mời thêm SAU KHI KÝ cho chiếm suất: `076` cho thêm lời mời ở gói đã mở, route chỉ hỏi `rfq.invite`; một lời mời rác vào
-  N gói đã mở của đồng nghiệp đẩy gói có nhóm quen ra khỏi cửa sổ, không cần chữ ký ⇒ suất chỉ tính lời mời trước ký (ADR-9201 ⑷).
+  N gói đã mở của đồng nghiệp đẩy gói có nhóm quen ra khỏi cửa sổ, không cần chữ ký ⇒ suất chỉ tính lời mời trước ký (ADR-148 ⑷).
 Năm TRUNG: **T1** gói đệm (bậc nhỏ, mở rồi huỷ) chiếm suất ⇒ chủ dự án chọn chỉ gói cùng loại chiếm suất, gói khác trong khoảng vẫn góp
 nhà cung cấp cũ (⑶); **T2** `opened_at` do người gọi đặt (khoản 319) ⇒ chủ dự án chọn chặn ở tổ chức đã bật (⑹); **T3** khoá nhà cung
 cấp cũ đọc từ hàng sửa được — **ĐO là SAI**: `011` `REVOKE UPDATE` ở mức bảng thu luôn quyền cột của `008` (trên Postgres 16:
@@ -24703,12 +24703,12 @@ người tích hợp tự chọn theo chiều chặt hơn: nhà cung cấp mời
 suất) — không thì nhóm quen tham gia mãi bằng lời mời sau khi ký.
 
 ## 5. Thay đổi
-- `db/migrations/9501_xoay_vong.sql` — `rfq_loi_moi_dem_duoc` (SQL, `SETOF uuid`; sáu vế của `107` nguyên văn), `rfq_dem_ncc_canh_tranh`
+- `db/migrations/108_xoay_vong.sql` — `rfq_loi_moi_dem_duoc` (SQL, `SETOF uuid`; sáu vế của `107` nguyên văn), `rfq_dem_ncc_canh_tranh`
   định nghĩa lại (nhóm trên mọi lời mời sống, đếm qua hàm mới), `rfq_ncc_moi_xoay_vong`, `rfq_chot_xoay_vong`, hai trigger
   `rfq_packages_kiem_xoay_vong_khi_nop` (chốt READ COMMITTED riêng, `k3_xoay_vong`) và `rfq_packages_kiem_xoay_vong_khi_mo` (`opened_at`
   là `now()` ở tổ chức đã bật, READ COMMITTED, khoá chính sách seed 2). Không bảng mới, không chỉ mục.
 - `hardening.always.sql` cùng commit: hai tên trigger ở `TRIGGER_DUOC_PHEP`; hai mục hàm + trigger (`provolatile = 'v'`), ba mục định
-  nghĩa hàm, mục `rfq_dem_ncc_canh_tranh` thân từ `9501`. Thân PHÁN XÉT suy bằng script từ thân migration.
+  nghĩa hàm, mục `rfq_dem_ncc_canh_tranh` thân từ `108`. Thân PHÁN XÉT suy bằng script từ thân migration.
 - `@trustprocure/identity`: mã `K3_KHONG_XOAY_VONG` (vào sổ) ở `CHOT_VAO_SO` và `DANH_MUC_VE_CONG`; lời khai *"hai mươi hai mã chốt"*
   nay hai mươi ba.
 - `@trustprocure/rfq`: `CAU_CHOT_XOAY_VONG_NOP` (sau K2) và `CAU_CHOT_XOAY_VONG_MO` (sau K10a, dưới khoá chính sách lấy trước lần đúc
@@ -24743,7 +24743,7 @@ Mười chín đột biến CSDL trong chính tệp — mỗi ca áp trong một
 suất; bỏ vế `opened_at` (fail-open); cho gói bậc 0 chiếm suất; cho gói huỷ chiếm suất; bỏ vế `moi_sau_khi_ky` của suất; chỉ tính lời mời
 trước ký ở nhà cung cấp cũ; bỏ vế thu hồi; bỏ vế người tạo; bỏ vế người thu hồi; bỏ khoá MST, khoá email, khoá điện thoại; bỏ vế *đếm
 được*; bỏ vế ROTATION; bỏ vế N = 0 (hàm cửa sổ NÉM); tắt trigger mở (cùng câu mở năm 2100 đi qua); bỏ chốt READ COMMITTED ở trigger nộp
-và ở trigger mở. Sống, có lý do: khoá `S|` (dư bởi MST bất biến — ADR-9201); lần lấy lại khoá chính sách trong trigger mở (dư bởi `102`
+và ở trigger mở. Sống, có lý do: khoá `S|` (dư bởi MST bất biến — ADR-148); lần lấy lại khoá chính sách trong trigger mở (dư bởi `102`
 và bởi `openRfq`).
 
 Năm đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256:

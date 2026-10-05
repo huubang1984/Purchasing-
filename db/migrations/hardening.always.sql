@@ -9960,10 +9960,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bac_ghim(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.269 / S3.3c2 / K2] So nhom nha cung cap dem duoc. Mot than tra hang so lon thi moi goi qua K2 bang nha cung cap vo.
-    -- [S1.9101 / S3.3d] Than tu 9501_xoay_vong.sql: ve *dem duoc* doc `rfq_loi_moi_dem_duoc`; nhom van dung tren moi loi moi song.
+    -- [S1.270 / S3.3d] Than tu 108_xoay_vong.sql: ve *dem duoc* doc `rfq_loi_moi_dem_duoc`; nhom van dung tren moi loi moi song.
     ARRAY[
-      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_dem_ncc_canh_tranh(p_org uuid, p_rfq uuid) RETURNS integer
   LANGUAGE plpgsql
   STABLE
@@ -10265,10 +10265,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_doc_lap_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3d / K2 K3] Vi tu *dem duoc* cua K2 - K2 va K3 cung doc. Mot than tra moi loi moi song cho nha cung cap vo dem du nguong va thanh nha cung cap moi cua K3.
+    -- [S1.270 / S3.3d / K2 K3] Vi tu *dem duoc* cua K2 - K2 va K3 cung doc. Mot than tra moi loi moi song cho nha cung cap vo dem du nguong va thanh nha cung cap moi cua K3.
     ARRAY[
-      $q$định nghĩa hàm rfq_loi_moi_dem_duoc(uuid, uuid) (9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$định nghĩa hàm rfq_loi_moi_dem_duoc(uuid, uuid) (108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_loi_moi_dem_duoc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -10335,10 +10335,10 @@ $ham$$q$,
                   'hàm public.rfq_loi_moi_dem_duoc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_loi_moi_dem_duoc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3d / K3] So loi moi moi so voi cua so cua nguoi chon. Mot than tra hang so duong cho nhom quen xoay vong mai.
+    -- [S1.270 / S3.3d / K3] So loi moi moi so voi cua so cua nguoi chon. Mot than tra hang so duong cho nhom quen xoay vong mai.
     ARRAY[
-      $q$định nghĩa hàm rfq_ncc_moi_xoay_vong(uuid, uuid, integer) (9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$định nghĩa hàm rfq_ncc_moi_xoay_vong(uuid, uuid, integer) (108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_ncc_moi_xoay_vong(p_org uuid, p_rfq uuid, p_n integer) RETURNS integer
   LANGUAGE plpgsql
   STABLE
@@ -10449,10 +10449,10 @@ $ham$$q$,
                   'hàm public.rfq_ncc_moi_xoay_vong(uuid, uuid, integer) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_ncc_moi_xoay_vong(uuid, uuid, integer) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3d / K3] Ham vi tu cua chot - tang goi va hai trigger cung hoi no. Mot than `RETURN NULL` tat K3 o CA BA cho.
+    -- [S1.270 / S3.3d / K3] Ham vi tu cua chot - tang goi va hai trigger cung hoi no. Mot than `RETURN NULL` tat K3 o CA BA cho.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_xoay_vong(uuid, uuid) (9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_xoay_vong(uuid, uuid) (108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_xoay_vong(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -10511,10 +10511,10 @@ $ham$$q$,
                   'hàm public.rfq_chot_xoay_vong(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chot_xoay_vong(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3d / K3] Canh DRAFT->PENDING_APPROVAL: chi duoi READ COMMITTED roi ham vi tu K3. Than `RETURN NEW` cho goi chi moi nhom quen di qua.
+    -- [S1.270 / S3.3d / K3] Canh DRAFT->PENDING_APPROVAL: chi duoi READ COMMITTED roi ham vi tu K3. Than `RETURN NEW` cho goi chi moi nhom quen di qua.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_xoay_vong_khi_nop (9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$hàm + trigger rfq_kiem_xoay_vong_khi_nop (108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -10583,10 +10583,10 @@ $ham$;
                   'hàm public.rfq_kiem_xoay_vong_khi_nop() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_xoay_vong_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3d / K3] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: opened_at la gio mo (khoan 319), READ COMMITTED, khoa chinh sach doc quyen, ham vi tu K3. Than `RETURN NEW` cho cac goi nop song song cung mot bo nha cung cap deu mo.
+    -- [S1.270 / S3.3d / K3] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: opened_at la gio mo (khoan 319), READ COMMITTED, khoa chinh sach doc quyen, ham vi tu K3. Than `RETURN NEW` cho cac goi nop song song cung mot bo nha cung cap deu mo.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_xoay_vong_khi_mo (9501_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xoay_vong.sql')$q$,
+      $q$hàm + trigger rfq_kiem_xoay_vong_khi_mo (108_xoay_vong)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

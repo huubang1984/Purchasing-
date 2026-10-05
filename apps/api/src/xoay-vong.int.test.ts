@@ -1,8 +1,8 @@
 // ==============================================================================================
-// [S1.9101 / S3.3d · spec S3 §2.5 ⒀, §5 K3, §5.1 K3 · ADR-058 ⑶(b) · K3 · K12] XOAY VÒNG NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16,
+// [S1.270 / S3.3d · spec S3 §2.5 ⒀, §5 K3, §5.1 K3 · ADR-058 ⑶(b) · K3 · K12] XOAY VÒNG NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16,
 // QUA HTTP VÀ DƯỚI `app_api`
 //
-// Migration `9501_xoay_vong`, ba lần hỏi của `packages/rfq` (`submitRfqForApproval`, `openRfq` kèm khoá chính sách). Bậc 1 của tệp
+// Migration `108_xoay_vong`, ba lần hỏi của `packages/rfq` (`submitRfqForApproval`, `openRfq` kèm khoá chính sách). Bậc 1 của tệp
 // này có `xoay_vong_n` = 2, `so_ncc_toi_thieu` = 1, không ký danh sách; bậc 0 có `xoay_vong_n` = 0. Hợp đồng đo ở đây:
 //   ⑴ đối chứng dương: gói mời lại nhà cung cấp của gói trước ⇒ `422` mang câu của chốt, MỘT hàng `CONTROL_DENIED {K3_KHONG_XOAY_VONG}`;
 //      thêm một nhà cung cấp mới ⇒ đi;
@@ -451,7 +451,7 @@ async function choKhoaTuVan(pid: number): Promise<void> {
 // =============================================================================================
 // ⑴ ĐỐI CHỨNG DƯƠNG VÀ LỜI TỪ CHỐI CÓ TÊN
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] danh sách phải có một nhà cung cấp mới", () => {
+describe("[S1.270 / S3.3d / K3] danh sách phải có một nhà cung cấp mới", () => {
   it("[INV-K3] mời lại nhà cung cấp của gói vừa mở ⇒ 422 mang câu của chốt và MỘT hàng CONTROL_DENIED; thêm một nhà cung cấp mới ⇒ 200, không hàng nào", async () => {
     const t = await taoToChuc();
     const g = await ncc(t);
@@ -482,7 +482,7 @@ describe("[S1.9101 / S3.3d / K3] danh sách phải có một nhà cung cấp m�
 // =============================================================================================
 // ⑵ CỬA SỔ
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] cửa sổ: N suất gần nhất của người chọn, chỉ gói đã mở", () => {
+describe("[S1.270 / S3.3d / K3] cửa sổ: N suất gần nhất của người chọn, chỉ gói đã mở", () => {
   it("[INV-K3] N = 2: G ở suất thứ ba trở về trước là mới; X ở suất thứ hai là cũ; ĐỘT BIẾN nới cửa sổ thêm một suất ⇒ G cũ", async () => {
     const t = await taoToChuc();
     const [g, x, y] = [await ncc(t), await ncc(t), await ncc(t)];
@@ -591,7 +591,7 @@ describe("[S1.9101 / S3.3d / K3] cửa sổ: N suất gần nhất của ngườ
 // =============================================================================================
 // ⑶ NGƯỜI CHỌN
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] người chọn: người tạo, người mời, người thu hồi", () => {
+describe("[S1.270 / S3.3d / K3] người chọn: người tạo, người mời, người thu hồi", () => {
   it("[INV-K3] NGƯỜI TẠO nhờ đồng nghiệp bấm mời: gói trước của người tạo (G do pm3 mời) làm G cũ dù người mời lần này (pm4) chưa từng mời G; ĐỘT BIẾN bỏ vế người tạo ⇒ mới", async () => {
     const t = await taoToChuc();
     const g = await ncc(t);
@@ -619,7 +619,7 @@ describe("[S1.9101 / S3.3d / K3] người chọn: người tạo, người mời
 // =============================================================================================
 // ⑷ KHOÁ NHÓM VÀ *ĐẾM ĐƯỢC*
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] cùng một nhà cung cấp theo khoá nhóm; nhà cung cấp mới phải đếm được", () => {
+describe("[S1.270 / S3.3d / K3] cùng một nhà cung cấp theo khoá nhóm; nhà cung cấp mới phải đếm được", () => {
   it("[INV-K3] bản ghi mới cùng MST gốc (mã chi nhánh), cùng email ở người liên hệ phụ, cùng chín số cuối điện thoại ⇒ cũ; ĐỘT BIẾN bỏ từng khoá ⇒ mới", async () => {
     const t = await taoToChuc();
     const mst = `${String(randomInt(1, 10))}${String(randomInt(0, 1e9)).padStart(9, "0")}`;
@@ -656,7 +656,7 @@ describe("[S1.9101 / S3.3d / K3] cùng một nhà cung cấp theo khoá nhóm; n
 // =============================================================================================
 // ⑸ NGOẠI LỆ ROTATION, N = 0
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] ngoại lệ ROTATION; bậc không xoay vòng", () => {
+describe("[S1.270 / S3.3d / K3] ngoại lệ ROTATION; bậc không xoay vòng", () => {
   it("[INV-K3] ROTATION còn sống ⇒ nộp và mở được (K5 đòi chữ ký độc lập — pm2); đã rút ⇒ 422; ĐỘT BIẾN bỏ vế ngoại lệ ⇒ K3 chặn", async () => {
     const t = await taoToChuc();
     const g = await ncc(t);
@@ -689,7 +689,7 @@ describe("[S1.9101 / S3.3d / K3] ngoại lệ ROTATION; bậc không xoay vòng"
 // =============================================================================================
 // ⑹ CẠNH MỞ GÓI
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] cạnh mở: nộp song song bị bắt lúc mở; khoá; opened_at; READ COMMITTED", () => {
+describe("[S1.270 / S3.3d / K3] cạnh mở: nộp song song bị bắt lúc mở; khoá; opened_at; READ COMMITTED", () => {
   it("[INV-K3] hai gói cùng nhóm quen nộp SONG SONG đều qua lúc nộp; mở cái đầu thì cái sau ⇒ 422 mang câu của chốt, MỘT hàng CONTROL_DENIED, không vật liệu khoá", async () => {
     const t = await taoToChuc();
     const g = await ncc(t);
@@ -790,7 +790,7 @@ describe("[S1.9101 / S3.3d / K3] cạnh mở: nộp song song bị bắt lúc m�
 // =============================================================================================
 // ⑺ ĐỐI CHỨNG MVP1 VÀ TỪ VỰNG
 // =============================================================================================
-describe("[S1.9101 / S3.3d / K3] tổ chức chưa bật chạy như MVP1; tập mã khớp bảng", () => {
+describe("[S1.270 / S3.3d / K3] tổ chức chưa bật chạy như MVP1; tập mã khớp bảng", () => {
   it("[INV-K3] tổ chức CHƯA bật: mời lại cùng nhà cung cấp ở gói kế, nộp và mở đi; hàm vị từ trả NULL; không CONTROL_DENIED", async () => {
     const t = await taoToChuc(false);
     const g = await ncc(t, { xacMinh: null });

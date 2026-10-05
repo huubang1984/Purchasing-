@@ -2088,14 +2088,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.269 / S3.3c2] Bốn hàm của K2 và K5: bậc ghim — một thân trả bậc khác đọc sai ngưỡng —, số nhóm nhà cung cấp đếm được — một
     // thân trả hằng lớn cho nhà cung cấp vỏ qua —, và hai vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh.
     { ham: "rfq_bac_ghim", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
-    // [S1.9101 / S3.3d] Thân `9501`: vế *đếm được* đọc `rfq_loi_moi_dem_duoc` — con trỏ dời theo.
-    { ham: "rfq_dem_ncc_canh_tranh", chuKy: "uuid, uuid", migration: "9501_xoay_vong.sql" },
+    // [S1.270 / S3.3d] Thân `108`: vế *đếm được* đọc `rfq_loi_moi_dem_duoc` — con trỏ dời theo.
+    { ham: "rfq_dem_ncc_canh_tranh", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
     { ham: "rfq_chot_canh_tranh", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
     { ham: "rfq_chot_chu_ky_doc_lap", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
-    // [S1.9101 / S3.3d] Hai hàm của K3: số lời mời mới so với cửa sổ — một thân trả hằng dương cho nhóm quen xoay vòng mãi —, và vị từ
+    // [S1.270 / S3.3d] Hai hàm của K3: số lời mời mới so với cửa sổ — một thân trả hằng dương cho nhóm quen xoay vòng mãi —, và vị từ
     // của chốt — một thân `RETURN NULL` tắt K3 ở tầng gói lẫn hai cạnh.
-    { ham: "rfq_ncc_moi_xoay_vong", chuKy: "uuid, uuid, integer", migration: "9501_xoay_vong.sql" },
-    { ham: "rfq_chot_xoay_vong", chuKy: "uuid, uuid", migration: "9501_xoay_vong.sql" },
+    { ham: "rfq_ncc_moi_xoay_vong", chuKy: "uuid, uuid, integer", migration: "108_xoay_vong.sql" },
+    { ham: "rfq_chot_xoay_vong", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];
 
   it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ [S1.269] mười lăm hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2 và K5: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2135,8 +2135,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
     { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
-    // [S1.9101 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
-    { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "9501_xoay_vong.sql" },
+    // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
+    { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];
 
   it("[S1.204] ~~hai~~ [S1.269] ba hàm trợ giúp của ánh xạ hạng mục và chữ ký còn hiệu lực: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2484,10 +2484,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // qua một câu UPDATE viết tay (và bỏ chốt READ COMMITTED); ở cái sau cho người chọn danh sách tự ký mở gói.
     { ham: "rfq_kiem_so_ncc_khi_nop", migration: "107_canh_tranh_toi_thieu.sql", trigger: ["rfq_packages_kiem_so_ncc_khi_nop"] },
     { ham: "rfq_kiem_doc_lap_khi_mo", migration: "107_canh_tranh_toi_thieu.sql", trigger: ["rfq_packages_kiem_doc_lap_khi_mo"] },
-    // [S1.9101 / S3.3d] K3 ở hai cạnh. Một thân `RETURN NEW` ở cái đầu cho gói chỉ mời nhóm quen đi qua câu nộp viết tay; ở cái sau
+    // [S1.270 / S3.3d] K3 ở hai cạnh. Một thân `RETURN NEW` ở cái đầu cho gói chỉ mời nhóm quen đi qua câu nộp viết tay; ở cái sau
     // cho các gói nộp song song cùng một bộ nhà cung cấp đều mở, và cho câu mở thô đặt `opened_at` tuỳ ý (khoản 319).
-    { ham: "rfq_kiem_xoay_vong_khi_nop", migration: "9501_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_nop"] },
-    { ham: "rfq_kiem_xoay_vong_khi_mo", migration: "9501_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_mo"] },
+    { ham: "rfq_kiem_xoay_vong_khi_nop", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_nop"] },
+    { ham: "rfq_kiem_xoay_vong_khi_mo", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_mo"] },
     // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ (L2, L3 vế hành vi, L13, §2.5 ⒁). Một thân `RETURN NEW` sớm cho gợi ý trên gói
     // còn soạn và chuẩn hoá hồi tố không `item.manage`; cho `TU_DONG` không bí danh, `NGUOI_DUYET` của chính người tạo gói, và ánh
     // xạ không lý do trên gói đã có bản rõ.
@@ -4167,8 +4167,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "105_ngoai_le_canh_tranh.sql",
         // [S1.269 / S3.3c2 / K2 · K5] Cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói (ADR-147).
         "107_canh_tranh_toi_thieu.sql",
-        // [S1.9101 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-9201).
-        "9501_xoay_vong.sql",
+        // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
+        "108_xoay_vong.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8819,8 +8819,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "105_ngoai_le_canh_tranh.sql",
         // [S1.269 / S3.3c2 / K2 · K5] Cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói (ADR-147).
         "107_canh_tranh_toi_thieu.sql",
-        // [S1.9101 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-9201).
-        "9501_xoay_vong.sql",
+        // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
+        "108_xoay_vong.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9151,8 +9151,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "105_ngoai_le_canh_tranh.sql",
         // [S1.269 / S3.3c2 / K2 · K5] Cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói (ADR-147).
         "107_canh_tranh_toi_thieu.sql",
-        // [S1.9101 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-9201).
-        "9501_xoay_vong.sql",
+        // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
+        "108_xoay_vong.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

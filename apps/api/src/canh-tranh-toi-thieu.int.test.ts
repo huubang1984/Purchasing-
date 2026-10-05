@@ -377,7 +377,7 @@ const hoiK5 = async (c: pg.PoolClient, org: string, rfqId: string): Promise<stri
   (await c.query<{ m: string | null }>("SELECT public.rfq_chot_chu_ky_doc_lap($1, $2) AS m", [org, rfqId])).rows[0]!.m;
 
 const HAM_DEM = "public.rfq_dem_ncc_canh_tranh(uuid, uuid)";
-/** [S1.9101 / S3.3d] Vị từ *đếm được* tách khỏi `rfq_dem_ncc_canh_tranh` (`9501_xoay_vong`) — các đột biến của sáu vế áp ở đây. */
+/** [S1.270 / S3.3d] Vị từ *đếm được* tách khỏi `rfq_dem_ncc_canh_tranh` (`108_xoay_vong`) — các đột biến của sáu vế áp ở đây. */
 const HAM_DEM_DUOC = "public.rfq_loi_moi_dem_duoc(uuid, uuid)";
 const HAM_K2 = "public.rfq_chot_canh_tranh(uuid, uuid)";
 const HAM_K5 = "public.rfq_chot_chu_ky_doc_lap(uuid, uuid)";
@@ -789,7 +789,7 @@ describe("[S1.269 / S3.3c2 / K2] chỉ READ COMMITTED; lần rút ngoại lệ c
       const qua = await trongDotBien(t.org, [], (c) => c.query(CAU_NOP_THO, [rfqId, t.pm.u, t.pm.s]));
       expect(qua.rowCount).toBe(1);
       const dotBien = await defDotBien("public.rfq_kiem_so_ncc_khi_nop()", "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN", "IF false THEN");
-      // [S1.9101 / S3.3d] Trigger K3 ở cùng cạnh mang chốt READ COMMITTED RIÊNG — gỡ cả hai thì câu RR mới đi qua.
+      // [S1.270 / S3.3d] Trigger K3 ở cùng cạnh mang chốt READ COMMITTED RIÊNG — gỡ cả hai thì câu RR mới đi qua.
       const dotBienK3 = await defDotBien("public.rfq_kiem_xoay_vong_khi_nop()", "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN", "IF false THEN");
       const rr = await trongDotBien(t.org, [dotBien, dotBienK3], (c) => c.query(CAU_NOP_THO, [rfqId, t.pm.u, t.pm.s]), "REPEATABLE READ");
       expect(rr.rowCount).toBe(1);

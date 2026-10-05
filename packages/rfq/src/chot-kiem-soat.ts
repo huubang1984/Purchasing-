@@ -74,7 +74,7 @@ export const CAU_CHOT_CHU_KY_DOC_LAP =
   "SELECT public.rfq_chot_chu_ky_doc_lap($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
 
 /**
- * [S1.9101 / S3.3d] Hai câu hỏi chốt K3 (`9501_xoay_vong`) — MỘT hàm vị từ, lọc trạng thái theo cạnh: câu của cạnh nộp chỉ thấy gói
+ * [S1.270 / S3.3d] Hai câu hỏi chốt K3 (`108_xoay_vong`) — MỘT hàm vị từ, lọc trạng thái theo cạnh: câu của cạnh nộp chỉ thấy gói
  * DRAFT, câu của cạnh mở chỉ thấy gói PENDING_APPROVAL; gói ở trạng thái khác thì không hàng nào, tức cho qua, và câu ghi của thao
  * tác nói lời từ chối trạng thái — không một hàng `CONTROL_DENIED` cho một lời gọi sai cạnh (lượt soi hình dạng, THẤP 1).
  */

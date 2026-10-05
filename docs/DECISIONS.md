@@ -11543,13 +11543,13 @@ K4b.
 - K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); K3 và khoản 234 (S3.3d); màn, kịch bản 41, lượt đi thử T4 (S3.3e).
 - Chuẩn hoá số điện thoại hay email ở lúc ghi.
 
-## ADR-9201 — S3.3d: K3 — xoay vòng theo cửa sổ N suất của người chọn danh sách, kiểm ở cạnh nộp duyệt VÀ cạnh mở gói; lời mời sau khi ký không chiếm suất; khoản 234 đóng
+## ADR-148 — S3.3d: K3 — xoay vòng theo cửa sổ N suất của người chọn danh sách, kiểm ở cạnh nộp duyệt VÀ cạnh mở gói; lời mời sau khi ký không chiếm suất; khoản 234 đóng
 
 **Ngày:** 2026-10-05 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-05: *"Tiếp S3.3d"*; trước lượt soi, ba câu theo đề
 xuất: ⑸ kiểm ở cả hai cạnh, ⑵ *cùng một nhà cung cấp* theo khoá nhóm, một PR; sau lượt soi, bốn câu theo đề xuất: ⑶ chỉ gói cùng loại
-chiếm suất, ⑴ người chọn như K2, ⑹ chặn `opened_at` do người gọi đặt ở tổ chức đã bật, ⑺ một mã vào sổ ở cả hai cạnh · **[S1.9101]** ·
+chiếm suất, ⑴ người chọn như K2, ⑹ chặn `opened_at` do người gọi đặt ở tổ chức đã bật, ⑺ một mã vào sổ ở cả hai cạnh · **[S1.270]** ·
 **Liên quan:** ADR-058 ⑶(b), ADR-060, ADR-082 ⑹ ⒀, ADR-084 ⑷, ADR-141 (`102`), ADR-145, ADR-147 · **Spec:** S3 §2.5 ⒀, §5 K3, §5.1 K3,
-§9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.270
 
 ### Bối cảnh
 

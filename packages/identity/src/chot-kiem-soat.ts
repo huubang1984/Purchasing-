@@ -47,9 +47,9 @@
 // Khuôn K1/K10a: hàm vị từ `rfq_chot_canh_tranh` và `rfq_chot_chu_ky_doc_lap` (`107_canh_tranh_toi_thieu`), tầng gói hỏi trước câu
 // ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Cả ba vào sổ (bản hình dạng S3.3c2, chủ dự án chốt 2026-10-04).
 //
-// [S1.9101 / S3.3d / ADR-9201] `K3_KHONG_XOAY_VONG` — gói có bậc `xoay_vong_n` > 0 mà danh sách không có nhà cung cấp *mới* so với
+// [S1.270 / S3.3d / ADR-148] `K3_KHONG_XOAY_VONG` — gói có bậc `xoay_vong_n` > 0 mà danh sách không có nhà cung cấp *mới* so với
 // cửa sổ của người chọn danh sách, không ngoại lệ `ROTATION`; ở cạnh nộp duyệt VÀ cạnh mở gói. Khuôn K1: hàm vị từ `rfq_chot_xoay_vong`
-// (`9501_xoay_vong`), tầng gói hỏi trước câu ghi, trigger hỏi lại. Chủ dự án chốt 2026-10-05: một mã, vào sổ ở cả hai cạnh.
+// (`108_xoay_vong`), tầng gói hỏi trước câu ghi, trigger hỏi lại. Chủ dự án chốt 2026-10-05: một mã, vào sổ ở cả hai cạnh.
 //
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG

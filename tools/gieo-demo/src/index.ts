@@ -523,7 +523,7 @@ async function chinh(): Promise<void> {
             taoNhomHang(c, org, { ma: "THEP-TAM", ten: "Thep tam cho cong trinh", actorSessionId: f1.sessionId }, pool),
           )).id;
           const han = new Date(Date.now() + 2 * 24 * 3600 * 1000);
-          // [S1.9101 / S3.3d / K3] Bậc từ 100 triệu xoay vòng (`xoay_vong_n` = 5): gói 9 tỷ — đã mở, một suất trong cửa sổ của soan — mời
+          // [S1.270 / S3.3d / K3] Bậc từ 100 triệu xoay vòng (`xoay_vong_n` = 5): gói 9 tỷ — đã mở, một suất trong cửa sổ của soan — mời
           // cả tám nhà cung cấp của gói chính, nên một gói chia nhỏ chỉ mời lại họ là không có nhà cung cấp MỚI. Mỗi gói thêm một người
           // mới của riêng nó, dựng như tám người kia (nhapncc dựng, taichinh2 xác minh SAU khi có người liên hệ); MST và số điện thoại
           // mang đầu `04`/`08`, khác đầu `03`/`09` của gói chính.
@@ -571,7 +571,7 @@ async function chinh(): Promise<void> {
               // [S1.266 / S3.3c1] Bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một lời
               // mời nào. soan mời ba người đầu của gói chính (nhapncc dựng, taichinh2 xác minh) ở DRAFT, trước lần nộp. Tín hiệu chia nhỏ
               // đọc ngân sách và nhóm hàng, không đọc lời mời; soan2 ký và nằm ngoài tập loại trừ, nên K5 cho hai lần mở dưới qua.
-              // [S1.9101 / S3.3d / K3] Hai người đầu của gói chính cộng người luân phiên thứ i — mới với cửa sổ của soan.
+              // [S1.270 / S3.3d / K3] Hai người đầu của gói chính cộng người luân phiên thứ i — mới với cửa sổ của soan.
               for (const n of [...moiTruocKhiKy.slice(0, 2), ...nccMoi.slice(i, i + 1)]) {
                 await createInvitation(
                   c,

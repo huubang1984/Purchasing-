@@ -822,7 +822,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     // nộp duyệt KHÔNG một lời mời nào. Ba nhà cung cấp riêng của bước, dựng một lần; người mua mời cả ba vào mỗi gói ở DRAFT, trước
     // lần nộp (chữ ký mang danh sách lúc ký, K4b). Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc lời mời: bước này kể đúng
     // câu chuyện cũ. Người ký `gd1` nằm ngoài tập loại trừ của mỗi gói, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua.
-    // [S1.9101 / S3.3d] Bậc ấy cũng xoay vòng (`xoay_vong_n` = 5, K3): gói sau mời lại hai nhà cung cấp đầu của gói trước, nên mỗi gói
+    // [S1.270 / S3.3d] Bậc ấy cũng xoay vòng (`xoay_vong_n` = 5, K3): gói sau mời lại hai nhà cung cấp đầu của gói trước, nên mỗi gói
     // thêm một nhà cung cấp MỚI của riêng nó — năm nhà cung cấp, gói i mời {Mot, Hai} cộng người thứ (3 + i).
     const nccBuoc16 = batS3
       ? await withTenant(apiPool, orgA, async (c) => {
