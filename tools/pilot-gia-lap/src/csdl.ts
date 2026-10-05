@@ -34,6 +34,31 @@ export class CsdlError extends Error {
   }
 }
 
+/**
+ * [S1.271 / khoản 341] Lỗi KHÔNG NỐI ĐƯỢC tới Postgres của `TRUSTPROCURE_SEED_DATABASE_URL` thành một câu người trình diễn đọc được;
+ * `null` khi lỗi không phải thế — kể cả `ECONNREFUSED` tới một cổng khác (api, web của cụm). Đo trên Windows thật: Docker tắt, khối
+ * lệnh của kế hoạch §4 dán vào PowerShell trong Windows Terminal (văn bản dán vào từng dòng), `throw` không dừng hai dòng sau và
+ * dòng cuối trên màn là `Error: connect ECONNREFUSED 127.0.0.1:55433`; khối bash (Linux/macOS) không có `throw` nên luôn kết thúc
+ * như thế khi Docker tắt.
+ */
+export function moTaKhongNoiDuocCsdl(e: unknown, url: string): string | null {
+  if (e === null || typeof e !== "object") return null;
+  const o = e as { readonly code?: unknown; readonly port?: unknown };
+  if (o.code !== "ECONNREFUSED") return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const cong = u.port === "" ? 5432 : Number(u.port);
+  if (typeof o.port === "number" && o.port !== cong) return null;
+  return (
+    `không nối được Postgres ở ${u.hostname}:${String(cong)} (TRUSTPROCURE_SEED_DATABASE_URL) — máy chủ CSDL chưa chạy. ` +
+    "Docker Desktop đã chạy chưa, và container Postgres của pilot đã lên chưa? Chạy lại khối lệnh ở kế hoạch pilot giả lập §4."
+  );
+}
+
 /** Chỉ nhận máy chủ CSDL CỤC BỘ: công cụ này tạo vai đăng nhập và đặt lại mật khẩu của chúng. */
 export function kiemUrlCucBo(url: string): URL {
   let u: URL;
