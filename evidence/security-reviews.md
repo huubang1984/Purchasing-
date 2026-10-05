@@ -24661,3 +24661,104 @@ trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm
 240 tệp, 4694 khẳng định (4684 đạt, 10 bỏ qua, 0 đỏ), 81/81, 2141 giây, *"Cổng evidence: XANH"*, `INV-matrix.md` không đổi. Một lượt
 evidence trước đó trên cùng commit hỏng vì môi trường — Docker daemon mất sau khi container phiên khởi động lại: 7 phút, 136 đỏ, 2021
 bỏ qua, không test tích hợp nào dựng được Postgres —; bản ma trận của lượt ấy bỏ, không commit.
+
+# §S1.9101 — BA GIỚI HẠN TỒN: KHỐI POWERSHELL DÁN VÀO CONSOLE (KHOẢN 9401), CHỜ KHOÁ HÀNG GÓI DƯỚI LƯỢT ĐỌC BENCHMARK (KHOẢN 9402), HỘP THƯ DEV CỦA `pilot-gia-lap`
+
+**Rổ và mảnh (ADR-043):** khoản 9401 sinh và đóng trong vòng — để mở thì rổ B (chỉ ở lần dựng cụm khi Docker tắt, trước buổi; không
+phải màn của kịch bản §11). Khoản 9402 mở, rổ đề xuất B (cần lượt đọc gối nhau liên tục; không chặn kịch bản §11). Không migration,
+không route, không ADR mới (đoạn bổ sung ở ADR-143); mã sản xuất của `apps/` và `packages/` không đổi một dòng — chỉ
+`tools/pilot-gia-lap`.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-05: *"xử lý nốt những giới hạn này đi"* — ba giới hạn nói ra mà chưa đo:
+- §S1.259 mục 6: khối dán vào console tương tác vẫn chưa đo;
+- §S1.263 mục 6: lần duyệt xếp hàng sau mọi đường giữ cùng hàng RFQ, kể cả lượt đọc benchmark giữ `FOR SHARE` — không đo thời gian
+  chờ dưới tải;
+- §S1.264 mục 4: chưa tìm ở `tools/pilot-gia-lap` chỗ đọc hộp thư dev ngay sau khi job `DONE`.
+
+## 2. Khối PowerShell dán vào cửa sổ console — khoản 9401
+- **Cách đo.** Mở *Windows PowerShell* trên Windows 11 ra Windows Terminal (mục console mặc định để "Windows tự chọn"); Windows
+  Terminal đưa văn bản dán vào như phím gõ, mỗi xuống dòng một Enter. Bộ đo: `powershell.exe` 5.1 (PSReadLine 2.0.0) chạy trong một
+  ConPTY thật (`CreatePseudoConsole`), khối gửi vào như phím gõ (`\r` cho mỗi xuống dòng), đầu ra đọc từ ConPTY. Docker "tắt" bằng
+  `DOCKER_HOST` trỏ vào một pipe không có — chỉ trong tiến trình ấy.
+- **Đối chứng.** Khối ba lệnh — `Write-Output`, `throw`, `Write-Output 'DONG-SAU-THROW-DA-CHAY'` — dán trần ⇒ dòng sau `throw` VẪN
+  chạy; bọc trong `& { … }` ⇒ không. Dấu tiếng Việt nguyên vẹn ở cả hai.
+- **Khối của `c8a369e0`, Docker tắt:** sau 84 giây câu *"Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?"* hiện
+  đúng dấu, rồi hai dòng sau vẫn chạy: `pnpm pilot:gia-lap` khởi động, dòng cuối trên màn là
+  `[pilot-gia-lap] Error: connect ECONNREFUSED 127.0.0.1:55433`, câu gợi ý nằm giữa 61 dòng *"failed to connect to the docker API"*.
+  Docker chạy ⇒ 10/10 ĐẠT: dán trần chỉ hỏng khi Docker tắt.
+- **Sửa.** Khối của kế hoạch §4 nằm trong `& { … }` (hai dòng chú thích nói vì sao, các dòng gốc thụt hai cách). Docker tắt ⇒ `throw`
+  dừng cả khối sau 79 giây, `pnpm` không chạy, dòng cuối là câu tiếng Việt; Docker chạy (container đang dừng) ⇒ 10/10 ĐẠT, cô lập
+  2/2, cụm sẵn sàng sau 73 giây, Ctrl+C dừng cụm và ba cổng trống. Cùng khối chạy bằng `-File` (cách của §S1.259), Docker tắt ⇒ dừng
+  ở câu ấy.
+- **Công cụ.** `moTaKhongNoiDuocCsdl` (`tools/pilot-gia-lap/src/csdl.ts`) đổi `ECONNREFUSED` tới ĐÚNG cổng của
+  `TRUSTPROCURE_SEED_DATABASE_URL` thành câu *"không nối được Postgres ở 127.0.0.1:55433 … máy chủ CSDL chưa chạy. Docker Desktop đã
+  chạy chưa…"*; cổng khác (api, web của cụm), mã lỗi khác, URL hỏng ⇒ giữ câu gốc. Lời gọi thật với Postgres tắt in đúng câu ấy. Bốn
+  ca mới ở `tools/pilot-gia-lap/src/phu-tro.test.ts`.
+- **Đột biến** (báo cáo JSON, khôi phục kiểm sha256): điểm vào in câu gốc; bỏ phép so cổng; nhận mọi mã lỗi; câu không nói phải làm
+  gì — 4/4 đỏ, mỗi đột biến đúng ca dự kiến.
+- **Tài liệu.** Kế hoạch §4: khối bọc; câu *"bash với `ECONNREFUSED` của công cụ"* gạch tại chỗ; một gạch đầu dòng mới mang các số
+  trên. `docs/BUOI-BAC-1.md` §1: dán NGUYÊN khối, kể cả dòng `& {` đầu và `}` cuối.
+- **Thấy thêm, không do vòng này:** sau Ctrl+C, dấu nhắc `PS` không hiện lại trong 60 giây ở bộ đo ConPTY — khối của `c8a369e0` y như
+  thế. Cụm đã dừng (ba cổng trống).
+
+## 3. Lần duyệt trao thầu dưới lượt đọc benchmark — khoản 338, khoản 9402
+- **Đọc từ mã trước.** `docBenchmark` và `docDaiBenchmark` khoá hàng gói `FOR SHARE` ở `kiemLaiDuoiKhoa` chỉ khi gói ở `UNSEALED`,
+  `EVALUATING` hay `BAFO_UNSEALED`; ở trạng thái khác chúng trả `KHONG_HIEN` (hay `VONG_CHAO_LAI_DANG_MO`) trước mọi khoá. Mọi lần
+  duyệt đứng ở `AWARDED` — lần đề xuất đặt `AWARDED`, `duyetTraoThau` đòi đề xuất là hàng mới nhất. Nên câu §S1.263 mục 6 *"lần duyệt
+  nay cũng chờ một lần đọc benchmark đang chạy"* chỉ đúng ở một khe: lượt đọc bắt đầu ở `EVALUATING`, tới `kiemLaiDuoiKhoa` sau khi
+  lần đề xuất commit — nó khoá, thấy `AWARDED`, trả `KHONG_HIEN` và giữ khoá tới hết giao dịch của chính nó. Các cạnh khoá hàng gói ở
+  ba trạng thái hiển thị: chấm thầu (`taoLuotDanhGia`, từ `UNSEALED`/`BAFO_UNSEALED`), mở vòng BAFO và đề xuất trao thầu (từ
+  `EVALUATING`).
+- **Đo.** Một khối test tạm gắn vào `packages/danh-gia/src/benchmark.int.test.ts` bằng script (không commit; khôi phục kiểm sha256):
+  gói một dòng vừa mở; `docBenchmark` thật dưới `app_api`; bên chiếm khoá chạy đúng câu khoá của `duyetTraoThau` trong giao dịch
+  riêng, với `SET LOCAL lock_timeout` và `statement_timeout` = 15 s như `createPool` sản xuất (pool test không đặt trần nào); N luồng
+  đọc liên tục trên bốn pool; 30 lần chiếm khoá mỗi mức, cách nhau 20 ms. Gói sang `AWARDED` bằng một câu `UPDATE` của siêu người
+  dùng, trigger của bảng tắt TRONG giao dịch và bật lại đúng chế độ cũ trước COMMIT (kiểm lại: cả 20 trigger về `A`).
+- **Kết quả** (30 lần chiếm khoá mỗi mức; máy rảnh trước và sau lượt):
+
+  | Trạng thái gói | Luồng đọc | Lần chiếm khoá | Hỏng ở trần 15 s | Lượt đọc trong lúc đo |
+  |---|---|---|---|---|
+  | `UNSEALED` | 0 | p50 0,7 · p95 0,9 · lâu nhất 1,1 ms | 0 | 0 |
+  | `UNSEALED` | 1 | p50 0,6 · p95 2,2 · lâu nhất 2,7 ms | 0 | 93 |
+  | `UNSEALED` | 2 | p50 0,7 · p95 3,8 · lâu nhất 5,3 ms | 0 | 214 |
+  | `UNSEALED` | 3 | p50 3,0 · p95 6,3 · lâu nhất 6,4 ms | 0 | 315 |
+  | `UNSEALED` | 6 | 25 lần xong: p50 2,8 s · p95 9,3 s · lâu nhất 13,4 s | 5 (`57014`) | 74 888 |
+  | `UNSEALED` | 12 | không lần nào xong | 30 (`57014`) | 246 400 |
+  | `AWARDED` | 0 | p50 0,6 · p95 0,7 · lâu nhất 0,7 ms | 0 | 0 |
+  | `AWARDED` | 6 | p50 0,5 · p95 0,7 · lâu nhất 0,7 ms | 0 | 631 |
+  | `AWARDED` | 12 | p50 0,6 · p95 0,7 · lâu nhất 0,8 ms | 0 | 607 |
+
+- **Một lượt đọc, cả giao dịch:** `UNSEALED` (bản lưu) p50 11,6 · p95 13,6 · lâu nhất 36,7 ms; `AWARDED` p50 7,2 · p95 8,4 · lâu nhất
+  9,5 ms. Một lượt đọc đang mở ở `UNSEALED` ⇒ `NOWAIT` của câu khoá gặp `55P03`; ở `AWARDED` ⇒ chiếm được.
+- **Hai lượt trước, bỏ số:** lượt đầu hỏng ở bước sang `AWARDED` (trigger chuyển trạng thái bật `ALWAYS`, `session_replication_role`
+  không bỏ được); lượt hai chồng với evidence của một phiên khác và chạy trên pool test không trần — 6 luồng ở `UNSEALED` chờ lâu
+  nhất 23,0 s. Lượt trên đợi 28 phút cho máy rảnh.
+- **Kết luận.** Lần duyệt trao thầu không chờ lượt đọc benchmark: ở `AWARDED` lượt đọc không khoá, và
+  12 luồng đọc không đổi lần chiếm khoá — khoản 338 nhận một con trỏ, không sửa. Cái giá của `FOR SHARE` từ §S1.260 rơi vào các cạnh ở
+  trạng thái hiển thị, và nó không có trần: tới ba luồng đọc liên tục, lần chờ dưới 7 ms; từ sáu luồng, các lượt đọc gối nhau không
+  chừa khe — Postgres không bắt một `FOR SHARE` mới chờ khi hàng chỉ đang bị khoá chia sẻ, kể cả lúc có bên ghi đang chờ — nên bên
+  ghi chờ hàng giây rồi hỏng ở `statement_timeout`. Chấm thầu, mở vòng BAFO và đề xuất trao thầu của gói ấy không đi được chừng nào
+  các lượt đọc còn gối nhau. Khoản 9402 mở, rổ đề xuất B; hướng sửa ở đó, chủ dự án chọn.
+
+## 4. `tools/pilot-gia-lap` và hộp thư dev
+Lượt tìm: mọi lời gọi tới `HopThu` trong `tools/pilot-gia-lap/src` (trừ tệp test), và mọi chữ `DONE` ở đó — công cụ không đọc trạng
+thái job outbox ở đâu cả. Sáu chỗ đọc hộp thư dev:
+- `HopThu.cho` (đọc lại mỗi 100 ms, trần 20 s) ở bốn chỗ: link mời (`chay-kich-ban.ts`), link đăng nhập của diễn viên và mã OTP tới
+  nhà cung cấp (`dien-vien.ts`), link đăng nhập của lệnh `dang-nhap` (`index.ts`);
+- `HopThu.xem` cho thông báo gia hạn (`chay-kich-ban.ts`) — trong một vòng đọc lại mỗi 300 ms, trần 15 s, tới khi mỗi lời mời có tin;
+- `HopThu.otpMoiNhat` của lệnh `otp` (`index.ts`) — đọc một lần, không chờ; người trình diễn gõ nó sau khi trang báo đã gửi mã.
+  Route `/guest/otp` gửi bằng `ctx.afterCommit`, và bộ điều phối chờ việc sau commit xong rồi mới trả phản hồi (`chaySauCommit`,
+  `apps/api/src/dispatch.ts`); hộp thư dev ghi tệp trong chính lần gửi ấy. `guest.int` đọc mã ngay sau phản hồi 200.
+Không chỗ nào cần sửa.
+
+## 5. Giới hạn, nói ra
+- Việc 1: chưa đo hộp thoại xác nhận dán nhiều dòng của Windows Terminal (bộ đo gửi phím, không qua hộp thoại), và cách một cửa sổ
+  `conhost` cũ vẽ câu tiếng Việt (Ctrl+V của PSReadLine đưa cả khối vào một lần — khối bọc vẫn là một lệnh). Khối bash của §4 chưa
+  chạy lại; câu của nó nay trỏ tới câu mới của công cụ.
+- Việc 2: N luồng đọc liên tục là tải tổng hợp, đo ở tầng hàm (`docBenchmark` gọi thẳng), không qua HTTP — số lượt đọc mỗi giây mà
+  các màn `/mo-thau` thật gây ra, và một vòng đọc qua route, chưa đo. Hướng sửa chưa làm (khoản 9402); bộ đo tạm không vào kho.
+- Việc 3: `HopThu.xem` trả khi mỗi lời mời đã có tin — một tin TRÙNG tới sau lần đếm không bị thấy, như §S1.264 mục 4.
+
+## 6. Số đo
+- Ghi ở commit số đo, sau lần cấp số.

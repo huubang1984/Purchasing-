@@ -11248,6 +11248,10 @@ Giới hạn nói thêm:
 - **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
   cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
 - **Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.
+- **[S1.9101 / khoản 9402] Lượt đọc gối nhau bỏ đói các cạnh trạng thái.** `FOR SHARE` của `kiemLaiDuoiKhoa` giữ tới hết giao dịch
+  đọc, và một `FOR SHARE` mới không chờ bên ghi đang xếp hàng; ở ba trạng thái hiển thị, chấm thầu, mở vòng BAFO và đề xuất trao thầu
+  chờ tới khi các lượt đọc có khe — đo bằng đúng câu khoá của `duyetTraoThau` dưới hai trần 15 s của pool sản xuất: tới ba luồng đọc liên tục lần chờ lâu nhất 6,4 ms; sáu luồng ⇒ p50 2,8 s, lâu nhất 13,4 s, 5/30 lần hỏng ở `statement_timeout` (`57014`); mười hai luồng ⇒ 30/30 lần hỏng. Ở `AWARDED` lượt đọc không khoá, nên lần duyệt trao thầu không chờ nó. Chưa sửa;
+  hướng đề xuất ở khoản 9402.
 
 ---
 

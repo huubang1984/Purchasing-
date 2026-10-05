@@ -31,7 +31,9 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
   Khối ấy đã đo trên PowerShell 7 cho Linux, ~~**chưa ai đo trên Windows PowerShell 5.1 và Docker Desktop**~~ **[S1.255] và
   trên một máy Windows 11 (Windows PowerShell 5.1, Docker Desktop 29.7.2): chưa có container, container đang chạy, container
   đã dừng — cả ba 10/10** (kế hoạch §4). **[S1.259]** Docker tắt thì khối dừng sau 69 giây với câu hỏi *"Docker Desktop đã
-  chạy chưa?"* — bật Docker Desktop rồi chạy lại khối. Đường dẫn và ACL vẫn là của từng máy, nên vẫn chạy một lần trên CHÍNH máy này. Lỗi
+  chạy chưa?"* — bật Docker Desktop rồi chạy lại khối. **[S1.9101]** Dán khối vào cửa sổ PowerShell được — dán NGUYÊN khối, kể cả dòng `& {` đầu và `}`
+  cuối: khối nằm trong `& { … }` nên chạy như MỘT lệnh, và khi Docker tắt nó dừng ở câu hỏi ấy thay vì chạy tiếp tới một lỗi
+  `ECONNREFUSED` (đo trên Windows Terminal qua ConPTY, kế hoạch §4). Đường dẫn và ACL vẫn là của từng máy, nên vẫn chạy một lần trên CHÍNH máy này. Lỗi
   lộ ra ở bước này thì sửa trước ngày gặp, không phải trong phòng họp.
 - [ ] **[S1.255] Máy có nhiều tài khoản Windows:** chạy `icacls` trên thư mục kho. Thấy `Users` hay `Authenticated Users`
   thì tài khoản khác trên máy đọc được `cum.json`, bí mật TOTP của người mua giả lập (`trang-thai.json`) và link đăng nhập

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CsdlError, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
+import { CsdlError, kiemUrlCucBo, moTaKhongNoiDuocCsdl, urlVaiDangNhap } from "./csdl.js";
 import { CONG_MAC_DINH, CumError, canhBaoAclWindows, kiemThuMucTrangThai, moiTruongSach, moiTruongTienTrinh, type BiMatCum } from "./cum.js";
 import { giaiMaBase32, maTotpHienTai } from "./dien-vien.js";
 import { HopThu, docTin, tokenTuLink } from "./hop-thu.js";
@@ -115,6 +115,38 @@ describe("trạng thái trình diễn", () => {
     expect(dau, "đối chứng: còn hàm chuanBiCum").toBeGreaterThan(0);
     const than = ma.slice(dau, ma.indexOf("\n}\n", dau));
     expect(than).toMatch(/const canhBao = canhBaoAclWindows\(process\.platform, thuMuc, homedir\(\)\);\s*if \(canhBao !== null\) bao\(canhBao\);/u);
+  });
+});
+
+// [S1.9101 / khoản 9401] Docker tắt ⇒ dòng cuối trên màn từng là `Error: connect ECONNREFUSED 127.0.0.1:55433` (đo trên Windows thật).
+describe("không nối được Postgres của pilot", () => {
+  const URL_PILOT = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap";
+  const tuChoi = (port?: number): Error => Object.assign(new Error(`connect ECONNREFUSED 127.0.0.1:${String(port)}`), { code: "ECONNREFUSED", address: "127.0.0.1", port });
+
+  it("ECONNREFUSED tới đúng cổng của TRUSTPROCURE_SEED_DATABASE_URL ⇒ câu nói máy chủ CSDL chưa chạy và phải làm gì", () => {
+    const cau = moTaKhongNoiDuocCsdl(tuChoi(55433), URL_PILOT);
+    expect(cau).toContain("127.0.0.1:55433");
+    expect(cau).toContain("Docker Desktop đã chạy chưa");
+    expect(cau).toContain("kế hoạch pilot giả lập §4");
+    expect(cau, "không lộ mật khẩu trong URL").not.toContain("pilot-gia-lap@");
+  });
+
+  it("URL không ghi cổng ⇒ cổng 5432; lỗi không mang cổng ⇒ vẫn nhận", () => {
+    expect(moTaKhongNoiDuocCsdl(tuChoi(5432), "postgres://u:p@localhost/db")).toContain("localhost:5432");
+    expect(moTaKhongNoiDuocCsdl({ code: "ECONNREFUSED" }, URL_PILOT)).toContain("127.0.0.1:55433");
+  });
+
+  it("ECONNREFUSED tới cổng KHÁC (api, web của cụm), lỗi khác, URL hỏng hay không phải đối tượng ⇒ null — giữ nguyên câu gốc", () => {
+    expect(moTaKhongNoiDuocCsdl(tuChoi(18080), URL_PILOT)).toBeNull();
+    expect(moTaKhongNoiDuocCsdl(Object.assign(new Error("x"), { code: "ENOTFOUND" }), URL_PILOT)).toBeNull();
+    expect(moTaKhongNoiDuocCsdl(tuChoi(55433), "")).toBeNull();
+    expect(moTaKhongNoiDuocCsdl("ECONNREFUSED", URL_PILOT)).toBeNull();
+    expect(moTaKhongNoiDuocCsdl(null, URL_PILOT)).toBeNull();
+  });
+
+  it("điểm vào của công cụ dùng nó trước câu gốc", () => {
+    const nguon = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(nguon).toMatch(/moTaKhongNoiDuocCsdl\(e, process\.env\.TRUSTPROCURE_SEED_DATABASE_URL \?\? ""\) \?\?/u);
   });
 });
 
