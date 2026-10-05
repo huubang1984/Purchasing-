@@ -42,6 +42,11 @@
 // hàm ghim tại đúng mốc, nên đường sản xuất không tới được; câu ghi nào tới được là một đường ghi thứ hai, và kiểm toán viên cần
 // thấy đúng lần ấy.
 //
+// [S1.269 / S3.3c2 / ADR-147] Hai dòng K2 — bậc đấu thầu chính thức, và danh sách dưới ngưỡng cạnh tranh mà không ngoại lệ đúng
+// loại — ở cạnh nộp duyệt; một dòng K5 — gói cần chữ ký độc lập mà mọi người ký còn hiệu lực đều thuộc tập loại trừ — ở cạnh mở gói.
+// Khuôn K1/K10a: hàm vị từ `rfq_chot_canh_tranh` và `rfq_chot_chu_ky_doc_lap` (`107_canh_tranh_toi_thieu`), tầng gói hỏi trước câu
+// ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Cả ba vào sổ (bản hình dạng S3.3c2, chủ dự án chốt 2026-10-04).
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -69,11 +74,14 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
   | "J5_LUOT_CHAM_KHONG_MOI_NHAT"
+  | "K2_DAU_THAU_CHINH_THUC"
+  | "K2_THIEU_CANH_TRANH"
   | "K4A_NGOAI_LE_SAI_TRANG_THAI"
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
+  | "K5_THIEU_CHU_KY_DOC_LAP"
   | "L14_PHIEN_BAN_KHONG_GHIM"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "K10A_TAC_GIA_CHINH_SACH"
@@ -155,6 +163,32 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "người tạo hay người nộp một gói nằm trong bằng chứng cố ghi nhận chính tín hiệu soi mình — mũi dò T5 mà spec §6 gọi tên. " +
       "Chủ dự án chốt ngày 2026-09-29: vào sổ, cùng khuôn người tạo tự duyệt gói (D2)",
     thongDiep: "Người tạo hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy.",
+  },
+  K2_DAU_THAU_CHINH_THUC: {
+    chot: "K2",
+    vaoSo: true,
+    lyDo:
+      "một người nộp duyệt một gói mà ước lượng rơi vào bậc ĐẤU THẦU CHÍNH THỨC (spec §5 K2): bậc ấy không bao giờ đi đường báo giá " +
+      "của nền tảng, và lần nộp là đúng lần cố đi tắt thủ tục ấy — kiểm toán viên hỏi tới nó",
+    thongDiep: "Ước lượng của gói thầu thuộc bậc đấu thầu chính thức: gói này không đi qua quy trình báo giá trên nền tảng.",
+  },
+  K2_THIEU_CANH_TRANH: {
+    chot: "K2",
+    vaoSo: true,
+    lyDo:
+      "một người nộp duyệt một gói có ít nhóm nhà cung cấp ĐẾM ĐƯỢC hơn ngưỡng của bậc mà không có ngoại lệ đúng loại (spec §2.4 ⑹, " +
+      "§4.4): đi dưới ngưỡng cạnh tranh mà không để lại lý do là đúng thứ ADR-058 ⑶ đòi chặn",
+    thongDiep:
+      "Danh sách mời chưa đủ nhà cung cấp đếm được cho bậc của gói: mời thêm nhà cung cấp có MST, đã xác minh, do người khác người tạo gói và người mời nhập — hoặc lập ngoại lệ đúng loại (một lời mời: SINGLE_SOURCE; từ hai: LIMITED_COMPETITION).",
+  },
+  K5_THIEU_CHU_KY_DOC_LAP: {
+    chot: "K5",
+    vaoSo: true,
+    lyDo:
+      "một người mở một gói mà bậc đòi ký danh sách mời hay gói có ngoại lệ, khi mọi chữ ký còn hiệu lực đều của người chọn danh sách " +
+      "(tập loại trừ ADR-082 ⑿): không ai một mình chọn người dự thi rồi tự duyệt — kiểm toán viên hỏi tới đúng lần mở ấy",
+    thongDiep:
+      "Gói thầu cần một chữ ký duyệt của người KHÔNG tạo gói, không nộp, không mời hay thu hồi lời mời, không đặt ngân sách, không nhập nhà cung cấp trên danh sách và không lập ngoại lệ (K5).",
   },
   K10A_TAC_GIA_CHINH_SACH: {
     chot: "K10a",

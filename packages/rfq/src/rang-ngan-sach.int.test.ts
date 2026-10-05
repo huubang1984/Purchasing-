@@ -585,26 +585,29 @@ describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () =
   });
 
   it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
+    // [S1.269 / S3.3c2] Phép đếm thứ ba nay ở `rfq_chu_ky_con_hieu_luc` (`107`): đột biến áp ở phép đếm thứ hai của trigger VÀ ở hàm ấy.
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
         "     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)\n     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)\n     AND a.approved_budget_hash",
         "     AND a.approved_budget_hash",
-        ghepBoBa,
-        2,
+        () =>
+          voiHamDotBien(
+            "public.rfq_chu_ky_con_hieu_luc(uuid, uuid)",
+            "     AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq)\n     AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq)\n     AND a.approved_budget_hash",
+            "     AND a.approved_budget_hash",
+            ghepBoBa,
+          ),
       ),
     ).toBe("OPEN");
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ phép đếm trên ngân sách ⇒ cả hai lỗ đo trên master mở lại", async () => {
     // [S1.198] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
+    // [S1.269 / S3.3c2] Phép đếm thứ ba đọc `rfq_chu_ky_con_hieu_luc` (`107`): một chỗ ở trigger, một chỗ ở hàm ấy.
     const boDem = <T>(viec: () => Promise<T>): Promise<T> =>
-      voiHamDotBien(
-        "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
-        "\n     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)",
-        "",
-        viec,
-        2,
+      voiHamDotBien("public.rfq_kiem_chu_ky_danh_sach_khi_mo()", "\n     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)", "", () =>
+        voiHamDotBien("public.rfq_chu_ky_con_hieu_luc(uuid, uuid)", "\n     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq)", "", viec),
       );
     expect(await boDem(nangCungBac), "nâng cùng bậc").toBe("OPEN");
     expect(await boDem(haBac), "hạ bậc cấp kép").toBe("OPEN");

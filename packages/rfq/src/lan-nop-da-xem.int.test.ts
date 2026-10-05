@@ -843,10 +843,11 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ vế *người ký chưa trả về* ⇒ chữ ký của chính người trả về vẫn mở gói", async () => {
     expect(
+      // [S1.269 / S3.3c2] Phép đếm thứ ba nay đọc `rfq_chu_ky_con_hieu_luc` (`107`) — đột biến áp ở đó; K5 đọc cùng hàm.
       await voiHamDotBien(
-        "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
-        "\n     AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r\n                      WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id\n                        AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem);",
-        ";",
+        "public.rfq_chu_ky_con_hieu_luc(uuid, uuid)",
+        "\n     AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r\n                      WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id\n                        AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)",
+        "",
         rutChuKy,
       ),
     ).toBe("OPEN");
@@ -861,8 +862,9 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
       duyetVoi(t, rfqId, t.pm2, undefined),
     );
     expect((await loi(mo(t, rfqId)))?.message, "bản thật: chữ ký không mang lần nộp không đếm").toBe(loiConHieuLuc(1, 0));
+    // [S1.269 / S3.3c2] Vế ấy nay ở `rfq_chu_ky_con_hieu_luc` (`107`).
     await voiHamDotBien(
-      "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
+      "public.rfq_chu_ky_con_hieu_luc(uuid, uuid)",
       "\n     AND a.lan_nop_da_xem IS NOT NULL",
       "",
       () => mo(t, rfqId),

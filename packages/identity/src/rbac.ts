@@ -85,7 +85,7 @@ export class DenialAuditFailedError extends Error {
      * [S1.225 / khoản 179] VẾ đã từ chối — hằng của người gọi `throwAuditedDenial` (vế của cổng mở thầu trong `UNSEAL_CLAUSES`, vế của
      * worker lúc giải mã, trạng thái RFQ của A4, [S1.241 / khoản 279] mã chốt kiểm soát, mã từ chối trạng thái, [S1.245 / khoản 267] lý
      * do từ chối huỷ yêu cầu mở thầu), hay `null` khi người gọi không có vế nào để kể. Có mặt ở đây vì hàng sổ mang vế ấy CHÍNH LÀ hàng
-     * đã không ghi được — ba đường từ chối ghi cùng `action`/`resourceType` [S1.241 / khoản 279] (và ~~mười bảy~~ [S1.265] mười chín mã chốt vào sổ chung một
+     * đã không ghi được — ba đường từ chối ghi cùng `action`/`resourceType` [S1.241 / khoản 279] (và ~~mười bảy~~ ~~[S1.265] mười chín~~ [S1.269] hai mươi hai mã chốt vào sổ chung một
      * `CONTROL_DENIED`, chín mã lý do chung một `RFQ_STATE_DENIED`, [S1.245 / khoản 267] hai lý do chung một `UNSEAL_CANCEL_DENIED`),
      * nên không có nó dòng log không nói được vế nào của cổng đã chặn. Đi vào dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG`, không
      * nguyên văn.
@@ -421,11 +421,14 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   "J3_NGUOI_TAO_DE_XUAT",
   "J3_PHIEN_DE_XUAT_DUYET",
   "J5_LUOT_CHAM_KHONG_MOI_NHAT",
+  "K2_DAU_THAU_CHINH_THUC",
+  "K2_THIEU_CANH_TRANH",
   "K4A_NGOAI_LE_SAI_TRANG_THAI",
   "K4A_THEM_SAI_TRANG_THAI",
   "K4A_THU_HOI_SAI_TRANG_THAI",
   "K8A_NGUOI_MOI_XAC_MINH",
   "K8A_NGUOI_TAO_TU_XAC_MINH",
+  "K5_THIEU_CHU_KY_DOC_LAP",
   "L14_PHIEN_BAN_KHONG_GHIM",
   "NGAN_SACH_GHIM_BAN_CU",
   "K10A_TAC_GIA_CHINH_SACH",

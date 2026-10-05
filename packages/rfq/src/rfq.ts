@@ -8,7 +8,14 @@ import {
   revokeRfqKeyMaterial,
   type OrgKeyProvisioner,
 } from "@trustprocure/sealed-envelope";
-import { CAU_CHOT_NGAN_SACH, CAU_CHOT_NHOM_HANG, CAU_CHOT_TIN_HIEU, kiemChot } from "./chot-kiem-soat.js";
+import {
+  CAU_CHOT_CANH_TRANH,
+  CAU_CHOT_CHU_KY_DOC_LAP,
+  CAU_CHOT_NGAN_SACH,
+  CAU_CHOT_NHOM_HANG,
+  CAU_CHOT_TIN_HIEU,
+  kiemChot,
+} from "./chot-kiem-soat.js";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -472,6 +479,9 @@ export async function submitRfqForApproval(
   // [S1.201 / S3.6a] Chốt nhóm hàng, cùng khuôn: hàm vị từ `rfq_chot_nhom_hang` hỏi trên hàng DRAFT, trigger ở cạnh hỏi lại
   // trên giá trị MỚI của cột. Sau K1: gói thiếu cả hai nhận lời từ chối về ngân sách trước.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NHOM_HANG, [orgId, input.rfqId]);
+  // [S1.269 / S3.3c2 / K2] Cạnh tranh tối thiểu, cùng khuôn — sau K1 vì hàm vị từ đọc bậc mà ngân sách ghim (gói thiếu ngân sách
+  // nhận lời từ chối của K1). Trigger `rfq_packages_kiem_so_ncc_khi_nop` hỏi lại dưới READ COMMITTED.
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CANH_TRANH, [orgId, input.rfqId]);
 
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái
@@ -707,6 +717,9 @@ export async function openRfq(
     },
     auditPool,
   );
+  // [S1.269 / S3.3c2 / K5] Chữ ký độc lập, cùng khuôn, TRƯỚC K10a — cùng thứ tự với hai trigger ở cạnh (tên `…_kiem_doc_lap_khi_mo`
+  // xếp trước `…_kiem_tin_hieu_khi_mo`).
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CHU_KY_DOC_LAP, [orgId, input.rfqId]);
   // [S1.203 / S3.6b1] K10a, cùng khuôn K1: hỏi hàm vị từ `rfq_chot_tin_hieu` TRƯỚC `issueRfqKeyPair` (khoản 31) — lần từ chối ghi
   // sổ ở giao dịch độc lập, và câu ghi sổ của lần đúc khoá giữ khoá chuỗi của tổ chức tới COMMIT. Trigger ở cạnh hỏi lại.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_TIN_HIEU, [orgId, input.rfqId]);
