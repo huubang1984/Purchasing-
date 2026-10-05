@@ -74,6 +74,20 @@ export const CAU_CHOT_CHU_KY_DOC_LAP =
   "SELECT public.rfq_chot_chu_ky_doc_lap($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
 
 /**
+ * [S1.9101 / S3.3d] Hai câu hỏi chốt K3 (`9501_xoay_vong`) — MỘT hàm vị từ, lọc trạng thái theo cạnh: câu của cạnh nộp chỉ thấy gói
+ * DRAFT, câu của cạnh mở chỉ thấy gói PENDING_APPROVAL; gói ở trạng thái khác thì không hàng nào, tức cho qua, và câu ghi của thao
+ * tác nói lời từ chối trạng thái — không một hàng `CONTROL_DENIED` cho một lời gọi sai cạnh (lượt soi hình dạng, THẤP 1).
+ */
+export const CAU_CHOT_XOAY_VONG_NOP =
+  "SELECT public.rfq_chot_xoay_vong(r.org_id, r.id) AS ly_do FROM public.rfq_packages r " +
+  "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
+  "AND r.status OPERATOR(pg_catalog.=) 'DRAFT'";
+export const CAU_CHOT_XOAY_VONG_MO =
+  "SELECT public.rfq_chot_xoay_vong(r.org_id, r.id) AS ly_do FROM public.rfq_packages r " +
+  "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
+  "AND r.status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL'";
+
+/**
  * Hỏi một hàm vị từ của chốt rồi ném theo bảng. Gọi TRƯỚC mọi tác dụng phụ của thao tác.
  *
  * `cau` là một câu SQL trả đúng một cột `ly_do` — NULL khi cho qua. Mã lạ ⇒ lỗi KHÔNG tên: hàm SQL và

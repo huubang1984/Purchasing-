@@ -377,6 +377,8 @@ const hoiK5 = async (c: pg.PoolClient, org: string, rfqId: string): Promise<stri
   (await c.query<{ m: string | null }>("SELECT public.rfq_chot_chu_ky_doc_lap($1, $2) AS m", [org, rfqId])).rows[0]!.m;
 
 const HAM_DEM = "public.rfq_dem_ncc_canh_tranh(uuid, uuid)";
+/** [S1.9101 / S3.3d] Vị từ *đếm được* tách khỏi `rfq_dem_ncc_canh_tranh` (`9501_xoay_vong`) — các đột biến của sáu vế áp ở đây. */
+const HAM_DEM_DUOC = "public.rfq_loi_moi_dem_duoc(uuid, uuid)";
 const HAM_K2 = "public.rfq_chot_canh_tranh(uuid, uuid)";
 const HAM_K5 = "public.rfq_chot_chu_ky_doc_lap(uuid, uuid)";
 
@@ -492,7 +494,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     // Người mời là `mua`, không phải người tạo — để đột biến chỉ gỡ ĐÚNG vế người tạo.
     const rfqId = await goiVoiBien(t, (x) => ncc(x, { nhap: x.pm }), { moi: t.mua });
     await khongDem(t, rfqId);
-    const n = await trongDotBien(t.org, [await defDotBien(HAM_DEM, "SELECT nguoi_tao AS n\n    UNION", "SELECT NULL::uuid AS n\n    UNION")], (c) => hoiDem(c, t.org, rfqId));
+    const n = await trongDotBien(t.org, [await defDotBien(HAM_DEM_DUOC, "SELECT g.nguoi_tao AS n FROM goc g\n    UNION", "SELECT NULL::uuid AS n FROM goc g\n    UNION")], (c) => hoiDem(c, t.org, rfqId));
     expect(n).toBe(2);
   });
 
@@ -502,7 +504,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     await khongDem(t, rfqId);
     const n = await trongDotBien(
       t.org,
-      [await defDotBien(HAM_DEM, "SELECT i.invited_by FROM public.rfq_invitations i WHERE", "SELECT NULL::uuid FROM public.rfq_invitations i WHERE")],
+      [await defDotBien(HAM_DEM_DUOC, "SELECT i.invited_by FROM public.rfq_invitations i WHERE", "SELECT NULL::uuid FROM public.rfq_invitations i WHERE")],
       (c) => hoiDem(c, t.org, rfqId),
     );
     expect(n).toBe(2);
@@ -521,7 +523,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     expect([r.status, r.body.error]).toEqual([422, TD_K2]);
     const m = await trongDotBien(
       t.org,
-      [await defDotBien(HAM_DEM, "SELECT i.revoked_by FROM public.rfq_invitations i\n     WHERE", "SELECT NULL::uuid FROM public.rfq_invitations i\n     WHERE")],
+      [await defDotBien(HAM_DEM_DUOC, "SELECT i.revoked_by FROM public.rfq_invitations i\n     WHERE", "SELECT NULL::uuid FROM public.rfq_invitations i\n     WHERE")],
       (c) => hoiK2(c, t.org, rfqId),
     );
     expect(m, "đột biến: hai nhà vỏ của người thu hồi được đếm").toBeNull();
@@ -533,7 +535,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     await khongDem(t, rfqId);
     const n = await trongDotBien(
       t.org,
-      [await defDotBien(HAM_DEM, "AND (k.created_by IS NULL OR EXISTS", "AND false AND (k.created_by IS NULL OR EXISTS")],
+      [await defDotBien(HAM_DEM_DUOC, "AND (k.created_by IS NULL OR EXISTS", "AND false AND (k.created_by IS NULL OR EXISTS")],
       (c) => hoiDem(c, t.org, rfqId),
     );
     expect(n).toBe(2);
@@ -564,7 +566,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     });
     expect(await dem(t, c3)).toBe(1);
     // Đột biến đo trên ca ĐÃ THU HỒI và ca băm đổi: ca chưa xác minh vẫn rơi ở vế người xác minh (không hàng xác minh nào).
-    const dotBien = [await defDotBien(HAM_DEM, "AND public.ncc_xac_minh_con_hieu_luc(p_org, s.id)", "")];
+    const dotBien = [await defDotBien(HAM_DEM_DUOC, "AND public.ncc_xac_minh_con_hieu_luc(p_org, s.id)", "")];
     expect(await trongDotBien(t.org, dotBien, (c) => hoiDem(c, t.org, b))).toBe(2);
     expect(await trongDotBien(t.org, dotBien, (c) => hoiDem(c, t.org, c3))).toBe(2);
   });
@@ -573,7 +575,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     const t = await taoToChuc();
     const rfqId = await goiVoiBien(t, (x) => ncc(x, { xacMinh: x.tc }));
     await khongDem(t, rfqId);
-    const n = await trongDotBien(t.org, [await defDotBien(HAM_DEM, "AND m.created_by IS DISTINCT FROM tac_gia", "")], (c) => hoiDem(c, t.org, rfqId));
+    const n = await trongDotBien(t.org, [await defDotBien(HAM_DEM_DUOC, "AND m.created_by IS DISTINCT FROM g.tac_gia", "")], (c) => hoiDem(c, t.org, rfqId));
     expect(n).toBe(2);
   });
 
@@ -596,7 +598,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     expect((await nop(t, rfqId)).status).toBe(422);
     const m = await trongDotBien(
       t.org,
-      [await defDotBien(HAM_DEM, "AND NOT EXISTS (SELECT 1 FROM chon WHERE chon.n = m.created_by)", "")],
+      [await defDotBien(HAM_DEM_DUOC, "AND NOT EXISTS (SELECT 1 FROM chon WHERE chon.n = m.created_by)", "")],
       (c) => hoiDem(c, t.org, rfqId),
     );
     expect(m).toBe(2);
@@ -608,7 +610,7 @@ describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
     await khongDem(t, a);
     const b = await goiVoiBien(t, (x) => ncc(x, { phone: null }));
     expect(await dem(t, b)).toBe(1);
-    const dotBien = [await defDotBien(HAM_DEM, "AND c.status = 'ACTIVE' AND c.phone IS NOT NULL", "")];
+    const dotBien = [await defDotBien(HAM_DEM_DUOC, "AND c.status = 'ACTIVE' AND c.phone IS NOT NULL", "")];
     expect(await trongDotBien(t.org, dotBien, (c) => hoiDem(c, t.org, a))).toBe(2);
     expect(await trongDotBien(t.org, dotBien, (c) => hoiDem(c, t.org, b))).toBe(2);
   });
@@ -787,7 +789,9 @@ describe("[S1.269 / S3.3c2 / K2] chỉ READ COMMITTED; lần rút ngoại lệ c
       const qua = await trongDotBien(t.org, [], (c) => c.query(CAU_NOP_THO, [rfqId, t.pm.u, t.pm.s]));
       expect(qua.rowCount).toBe(1);
       const dotBien = await defDotBien("public.rfq_kiem_so_ncc_khi_nop()", "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN", "IF false THEN");
-      const rr = await trongDotBien(t.org, [dotBien], (c) => c.query(CAU_NOP_THO, [rfqId, t.pm.u, t.pm.s]), "REPEATABLE READ");
+      // [S1.9101 / S3.3d] Trigger K3 ở cùng cạnh mang chốt READ COMMITTED RIÊNG — gỡ cả hai thì câu RR mới đi qua.
+      const dotBienK3 = await defDotBien("public.rfq_kiem_xoay_vong_khi_nop()", "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN", "IF false THEN");
+      const rr = await trongDotBien(t.org, [dotBien, dotBienK3], (c) => c.query(CAU_NOP_THO, [rfqId, t.pm.u, t.pm.s]), "REPEATABLE READ");
       expect(rr.rowCount).toBe(1);
     }
   });
