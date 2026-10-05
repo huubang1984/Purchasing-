@@ -24761,4 +24761,9 @@ Không chỗ nào cần sửa.
 - Việc 3: `HopThu.xem` trả khi mỗi lời mời đã có tin — một tin TRÙNG tới sau lần đếm không bị thấy, như §S1.264 mục 4.
 
 ## 6. Số đo
-- Ghi ở commit số đo, sau lần cấp số.
+- `cap-so` cấp S1.271, khoản 341 và 342 (trailer `Cap-So` ở `3e005cbd`); `cap-so --kiem` sạch; Handoff 342 khoản, 56 còn mở.
+- Trên `3e005cbd`, máy rảnh (không tiến trình vitest hay evidence nào khác lúc bắt đầu, và trước lượt evidence): `pnpm t0` xanh;
+  `pnpm test` 150 tệp (148 đạt, 2 bỏ qua), 2515 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 240 tệp, 4698 khẳng
+  định (4675 đạt, 23 bỏ qua, 0 đỏ), 81/81 bất biến (59/59 nghiệp vụ + 22/22 hàng rào), 1696 giây, *"Cổng evidence: XANH"*,
+  `evidence/INV-matrix.md` không đổi. 23 ca bỏ qua: 13 ca của `tests/deploy/khoi-tao-sh.test.ts` và `kiem-sau-deploy-sh.test.ts`
+  (`skipIf(win32)` — lượt §S1.269 chạy trên Linux nên chỉ có 10), một ca chỉ chạy trên CI, chín ca phong bì lớn bật bằng tay.
