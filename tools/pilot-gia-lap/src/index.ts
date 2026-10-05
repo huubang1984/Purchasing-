@@ -596,7 +596,7 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(GOC_KH
       process.exitCode = ma;
     },
     (e: unknown) => {
-      // [S1.9101 / khoản 9401] Không nối được Postgres của pilot ⇒ một câu nói phải làm gì, thay cho `ECONNREFUSED` trần.
+      // [S1.271 / khoản 341] Không nối được Postgres của pilot ⇒ một câu nói phải làm gì, thay cho `ECONNREFUSED` trần.
       bao(
         moTaKhongNoiDuocCsdl(e, process.env.TRUSTPROCURE_SEED_DATABASE_URL ?? "") ??
           (e instanceof Error ? `${e.name}: ${e.message}` : "lỗi không rõ"),

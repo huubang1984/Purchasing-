@@ -35,7 +35,7 @@ export class CsdlError extends Error {
 }
 
 /**
- * [S1.9101 / khoản 9401] Lỗi KHÔNG NỐI ĐƯỢC tới Postgres của `TRUSTPROCURE_SEED_DATABASE_URL` thành một câu người trình diễn đọc được;
+ * [S1.271 / khoản 341] Lỗi KHÔNG NỐI ĐƯỢC tới Postgres của `TRUSTPROCURE_SEED_DATABASE_URL` thành một câu người trình diễn đọc được;
  * `null` khi lỗi không phải thế — kể cả `ECONNREFUSED` tới một cổng khác (api, web của cụm). Đo trên Windows thật: Docker tắt, khối
  * lệnh của kế hoạch §4 dán vào PowerShell trong Windows Terminal (văn bản dán vào từng dòng), `throw` không dừng hai dòng sau và
  * dòng cuối trên màn là `Error: connect ECONNREFUSED 127.0.0.1:55433`; khối bash (Linux/macOS) không có `throw` nên luôn kết thúc

@@ -118,7 +118,7 @@ describe("trạng thái trình diễn", () => {
   });
 });
 
-// [S1.9101 / khoản 9401] Docker tắt ⇒ dòng cuối trên màn từng là `Error: connect ECONNREFUSED 127.0.0.1:55433` (đo trên Windows thật).
+// [S1.271 / khoản 341] Docker tắt ⇒ dòng cuối trên màn từng là `Error: connect ECONNREFUSED 127.0.0.1:55433` (đo trên Windows thật).
 describe("không nối được Postgres của pilot", () => {
   const URL_PILOT = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap";
   const tuChoi = (port?: number): Error => Object.assign(new Error(`connect ECONNREFUSED 127.0.0.1:${String(port)}`), { code: "ECONNREFUSED", address: "127.0.0.1", port });

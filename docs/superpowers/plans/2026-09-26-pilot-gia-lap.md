@@ -149,7 +149,7 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
 - khối PowerShell chạy bằng PowerShell 7.4.6 trên Linux, khối bash bằng bash;
 - mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
   ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
-  Docker Desktop đã chạy chưa, bash với ~~`ECONNREFUSED` của công cụ~~ **[S1.9101]** câu *"không nối được Postgres ở
+  Docker Desktop đã chạy chưa, bash với ~~`ECONNREFUSED` của công cụ~~ **[S1.271]** câu *"không nối được Postgres ở
   127.0.0.1:55433 … Docker Desktop đã chạy chưa…"* của công cụ (đo trên Windows bằng lời gọi thẳng khi Postgres tắt; khối
   bash chưa chạy lại);
 - ~~**chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
@@ -163,7 +163,7 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
   Desktop đã chạy chưa?"*, dấu tiếng Việt nguyên vẹn (khối chạy từ tệp `.ps1` UTF-8 có BOM). Bật lại Docker (`docker desktop
   start`, 10 giây) để container ở trạng thái dừng; khối chạy lại 10/10 trong 32 giây. Người trình diễn vẫn chạy khối một lần trên
   chính máy của buổi gặp — đường dẫn và ACL là của từng máy (đoạn *Thư mục trạng thái* dưới).
-- **[S1.9101] DÁN vào cửa sổ console — đo trên cùng máy, và bản trước hỏng ở đúng tình huống Docker tắt.** Mở *Windows
+- **[S1.271] DÁN vào cửa sổ console — đo trên cùng máy, và bản trước hỏng ở đúng tình huống Docker tắt.** Mở *Windows
   PowerShell* trên Windows 11 ra Windows Terminal (mục console mặc định để "Windows tự chọn"), và Windows Terminal đưa văn
   bản dán vào như phím gõ, mỗi xuống dòng một Enter — mỗi dòng của khối thành MỘT lệnh. Đo bằng `powershell.exe` 5.1
   (PSReadLine 2.0.0) chạy trong ConPTY thật, văn bản gửi vào như phím gõ (`\r` cho xuống dòng), Docker "tắt" bằng

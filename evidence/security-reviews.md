@@ -24662,10 +24662,10 @@ trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm
 evidence trước đó trên cùng commit hỏng vì môi trường — Docker daemon mất sau khi container phiên khởi động lại: 7 phút, 136 đỏ, 2021
 bỏ qua, không test tích hợp nào dựng được Postgres —; bản ma trận của lượt ấy bỏ, không commit.
 
-# §S1.9101 — BA GIỚI HẠN TỒN: KHỐI POWERSHELL DÁN VÀO CONSOLE (KHOẢN 9401), CHỜ KHOÁ HÀNG GÓI DƯỚI LƯỢT ĐỌC BENCHMARK (KHOẢN 9402), HỘP THƯ DEV CỦA `pilot-gia-lap`
+# §S1.271 — BA GIỚI HẠN TỒN: KHỐI POWERSHELL DÁN VÀO CONSOLE (KHOẢN 341), CHỜ KHOÁ HÀNG GÓI DƯỚI LƯỢT ĐỌC BENCHMARK (KHOẢN 342), HỘP THƯ DEV CỦA `pilot-gia-lap`
 
-**Rổ và mảnh (ADR-043):** khoản 9401 sinh và đóng trong vòng — để mở thì rổ B (chỉ ở lần dựng cụm khi Docker tắt, trước buổi; không
-phải màn của kịch bản §11). Khoản 9402 mở, rổ đề xuất B (cần lượt đọc gối nhau liên tục; không chặn kịch bản §11). Không migration,
+**Rổ và mảnh (ADR-043):** khoản 341 sinh và đóng trong vòng — để mở thì rổ B (chỉ ở lần dựng cụm khi Docker tắt, trước buổi; không
+phải màn của kịch bản §11). Khoản 342 mở, rổ đề xuất B (cần lượt đọc gối nhau liên tục; không chặn kịch bản §11). Không migration,
 không route, không ADR mới (đoạn bổ sung ở ADR-143); mã sản xuất của `apps/` và `packages/` không đổi một dòng — chỉ
 `tools/pilot-gia-lap`.
 
@@ -24676,7 +24676,7 @@ Chủ dự án, 2026-10-05: *"xử lý nốt những giới hạn này đi"* —
   chờ dưới tải;
 - §S1.264 mục 4: chưa tìm ở `tools/pilot-gia-lap` chỗ đọc hộp thư dev ngay sau khi job `DONE`.
 
-## 2. Khối PowerShell dán vào cửa sổ console — khoản 9401
+## 2. Khối PowerShell dán vào cửa sổ console — khoản 341
 - **Cách đo.** Mở *Windows PowerShell* trên Windows 11 ra Windows Terminal (mục console mặc định để "Windows tự chọn"); Windows
   Terminal đưa văn bản dán vào như phím gõ, mỗi xuống dòng một Enter. Bộ đo: `powershell.exe` 5.1 (PSReadLine 2.0.0) chạy trong một
   ConPTY thật (`CreatePseudoConsole`), khối gửi vào như phím gõ (`\r` cho mỗi xuống dòng), đầu ra đọc từ ConPTY. Docker "tắt" bằng
@@ -24702,7 +24702,7 @@ Chủ dự án, 2026-10-05: *"xử lý nốt những giới hạn này đi"* —
 - **Thấy thêm, không do vòng này:** sau Ctrl+C, dấu nhắc `PS` không hiện lại trong 60 giây ở bộ đo ConPTY — khối của `c8a369e0` y như
   thế. Cụm đã dừng (ba cổng trống).
 
-## 3. Lần duyệt trao thầu dưới lượt đọc benchmark — khoản 338, khoản 9402
+## 3. Lần duyệt trao thầu dưới lượt đọc benchmark — khoản 338, khoản 342
 - **Đọc từ mã trước.** `docBenchmark` và `docDaiBenchmark` khoá hàng gói `FOR SHARE` ở `kiemLaiDuoiKhoa` chỉ khi gói ở `UNSEALED`,
   `EVALUATING` hay `BAFO_UNSEALED`; ở trạng thái khác chúng trả `KHONG_HIEN` (hay `VONG_CHAO_LAI_DANG_MO`) trước mọi khoá. Mọi lần
   duyệt đứng ở `AWARDED` — lần đề xuất đặt `AWARDED`, `duyetTraoThau` đòi đề xuất là hàng mới nhất. Nên câu §S1.263 mục 6 *"lần duyệt
@@ -24739,7 +24739,7 @@ Chủ dự án, 2026-10-05: *"xử lý nốt những giới hạn này đi"* —
   trạng thái hiển thị, và nó không có trần: tới ba luồng đọc liên tục, lần chờ dưới 7 ms; từ sáu luồng, các lượt đọc gối nhau không
   chừa khe — Postgres không bắt một `FOR SHARE` mới chờ khi hàng chỉ đang bị khoá chia sẻ, kể cả lúc có bên ghi đang chờ — nên bên
   ghi chờ hàng giây rồi hỏng ở `statement_timeout`. Chấm thầu, mở vòng BAFO và đề xuất trao thầu của gói ấy không đi được chừng nào
-  các lượt đọc còn gối nhau. Khoản 9402 mở, rổ đề xuất B; hướng sửa ở đó, chủ dự án chọn.
+  các lượt đọc còn gối nhau. Khoản 342 mở, rổ đề xuất B; hướng sửa ở đó, chủ dự án chọn.
 
 ## 4. `tools/pilot-gia-lap` và hộp thư dev
 Lượt tìm: mọi lời gọi tới `HopThu` trong `tools/pilot-gia-lap/src` (trừ tệp test), và mọi chữ `DONE` ở đó — công cụ không đọc trạng
@@ -24757,7 +24757,7 @@ Không chỗ nào cần sửa.
   `conhost` cũ vẽ câu tiếng Việt (Ctrl+V của PSReadLine đưa cả khối vào một lần — khối bọc vẫn là một lệnh). Khối bash của §4 chưa
   chạy lại; câu của nó nay trỏ tới câu mới của công cụ.
 - Việc 2: N luồng đọc liên tục là tải tổng hợp, đo ở tầng hàm (`docBenchmark` gọi thẳng), không qua HTTP — số lượt đọc mỗi giây mà
-  các màn `/mo-thau` thật gây ra, và một vòng đọc qua route, chưa đo. Hướng sửa chưa làm (khoản 9402); bộ đo tạm không vào kho.
+  các màn `/mo-thau` thật gây ra, và một vòng đọc qua route, chưa đo. Hướng sửa chưa làm (khoản 342); bộ đo tạm không vào kho.
 - Việc 3: `HopThu.xem` trả khi mỗi lời mời đã có tin — một tin TRÙNG tới sau lần đếm không bị thấy, như §S1.264 mục 4.
 
 ## 6. Số đo
