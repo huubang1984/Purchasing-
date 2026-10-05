@@ -59,14 +59,14 @@ export const CAU_CHOT_TIN_HIEU =
   "AND r.status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL'";
 
 /**
- * [S1.9101 / S3.3c2] Câu hỏi chốt K2 ở cạnh nộp duyệt (`9501_canh_tranh_toi_thieu`): `$1` tổ chức, `$2` gói. Hàm vị từ đọc hàng gói
+ * [S1.269 / S3.3c2] Câu hỏi chốt K2 ở cạnh nộp duyệt (`107_canh_tranh_toi_thieu`): `$1` tổ chức, `$2` gói. Hàm vị từ đọc hàng gói
  * và tự cho qua khi gói không ở DRAFT — như K1: câu ghi của thao tác nói lời từ chối trạng thái.
  */
 export const CAU_CHOT_CANH_TRANH =
   "SELECT public.rfq_chot_canh_tranh($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
 
 /**
- * [S1.9101 / S3.3c2] Câu hỏi chốt K5 ở cạnh mở gói (`9501_canh_tranh_toi_thieu`): `$1` tổ chức, `$2` gói. Hàm vị từ tự cho qua khi
+ * [S1.269 / S3.3c2] Câu hỏi chốt K5 ở cạnh mở gói (`107_canh_tranh_toi_thieu`): `$1` tổ chức, `$2` gói. Hàm vị từ tự cho qua khi
  * gói không ở PENDING_APPROVAL, khi bậc không đòi và gói không có ngoại lệ còn sống, hay khi số chữ ký còn hiệu lực chưa đủ — lời
  * từ chối ấy là của K4b ở trigger, không phải lần lách chốt (ADR-060).
  */

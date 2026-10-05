@@ -9177,10 +9177,10 @@ $ham$;
     -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
     -- [S1.202 / K4b] Than tu 086_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
     -- [S1.198 / khoản 257] Than tu 087_lan_nop_da_xem.sql: them phep dem CHU KY CON HIEU LUC — bo no thi chu ky cua nguoi da tra goi ve van dem.
-    -- [S1.9101 / S3.3c2] Than tu 9501_canh_tranh_toi_thieu.sql: phep dem thu ba doc `rfq_chu_ky_con_hieu_luc` — mot vi tu cho K4b va K5.
+    -- [S1.269 / S3.3c2] Than tu 107_canh_tranh_toi_thieu.sql: phep dem thu ba doc `rfq_chu_ky_con_hieu_luc` — mot vi tu cho K4b va K5.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9837,10 +9837,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngoai_le_kiem() và bảng public.rfq_sourcing_exceptions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3c2 / K2] Canh DRAFT->PENDING_APPROVAL: chi duoi READ COMMITTED (moi to chuc), roi ham vi tu K2. Than `RETURN NEW` cho goi duoi nguong canh tranh di qua ma khong ngoai le; bo ve READ COMMITTED thi anh chup cu dem mot ngoai le da rut.
+    -- [S1.269 / S3.3c2 / K2] Canh DRAFT->PENDING_APPROVAL: chi duoi READ COMMITTED (moi to chuc), roi ham vi tu K2. Than `RETURN NEW` cho goi duoi nguong canh tranh di qua ma khong ngoai le; bo ve READ COMMITTED thi anh chup cu dem mot ngoai le da rut.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_so_ncc_khi_nop (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$hàm + trigger rfq_kiem_so_ncc_khi_nop (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9909,10 +9909,10 @@ $ham$;
                   'hàm public.rfq_kiem_so_ncc_khi_nop() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_so_ncc_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2] Bac ma ngan sach cua goi ghim — K2 va K5 doc no. Mot than tra bac khac thi nguong va co ky danh sach moi doc sai bac; tra NULL thay vi NEM thi chot theo bac lang le cho qua (ADR-082 (10)).
+    -- [S1.269 / S3.3c2] Bac ma ngan sach cua goi ghim — K2 va K5 doc no. Mot than tra bac khac thi nguong va co ky danh sach moi doc sai bac; tra NULL thay vi NEM thi chot theo bac lang le cho qua (ADR-082 (10)).
     ARRAY[
-      $q$định nghĩa hàm rfq_bac_ghim(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_bac_ghim(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bac_ghim(p_org uuid, p_rfq uuid) RETURNS jsonb
   LANGUAGE plpgsql
   STABLE
@@ -9959,10 +9959,10 @@ $ham$$q$,
                   'hàm public.rfq_bac_ghim(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_bac_ghim(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K2] So nhom nha cung cap dem duoc. Mot than tra hang so lon thi moi goi qua K2 bang nha cung cap vo.
+    -- [S1.269 / S3.3c2 / K2] So nhom nha cung cap dem duoc. Mot than tra hang so lon thi moi goi qua K2 bang nha cung cap vo.
     ARRAY[
-      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_dem_ncc_canh_tranh(p_org uuid, p_rfq uuid) RETURNS integer
   LANGUAGE plpgsql
   STABLE
@@ -10064,10 +10064,10 @@ $ham$$q$,
                   'hàm public.rfq_dem_ncc_canh_tranh(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_dem_ncc_canh_tranh(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K2] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K2 o CA HAI cho ma khong trigger nao doi.
+    -- [S1.269 / S3.3c2 / K2] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K2 o CA HAI cho ma khong trigger nao doi.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_canh_tranh(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_canh_tranh(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -10132,10 +10132,10 @@ $ham$$q$,
                   'hàm public.rfq_chot_canh_tranh(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chot_canh_tranh(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. Mot than bo ve tra ve thi chu ky cua nguoi da tra goi ve van dem o ca hai chot.
+    -- [S1.269 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. Mot than bo ve tra ve thi chu ky cua nguoi da tra goi ve van dem o ca hai chot.
     ARRAY[
-      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -10171,10 +10171,10 @@ $ham$$q$,
                   'hàm public.rfq_chu_ky_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K5] Ham vi tu cua chot K5 — tang goi va trigger o canh mo goi cung hoi no. Mot than `RETURN NULL` cho nguoi lap ngoai le hay nguoi moi tu ky mo goi; mot than coi bac vang la KHONG doi cho goi khong bac ghim mo bang chu ky cua nguoi chon.
+    -- [S1.269 / S3.3c2 / K5] Ham vi tu cua chot K5 — tang goi va trigger o canh mo goi cung hoi no. Mot than `RETURN NULL` cho nguoi lap ngoai le hay nguoi moi tu ky mo goi; mot than coi bac vang la KHONG doi cho goi khong bac ghim mo bang chu ky cua nguoi chon.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_chu_ky_doc_lap(uuid, uuid) (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_chu_ky_doc_lap(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_chu_ky_doc_lap(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -10233,10 +10233,10 @@ $ham$$q$,
                   'hàm public.rfq_chot_chu_ky_doc_lap(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chot_chu_ky_doc_lap(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.3c2 / K5] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: bac ky danh sach moi hay goi co ngoai le can mot chu ky con hieu luc ngoai tap loai tru. Than `RETURN NEW` mo goi bang chu ky cua chinh nguoi chon danh sach.
+    -- [S1.269 / S3.3c2 / K5] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: bac ky danh sach moi hay goi co ngoai le can mot chu ky con hieu luc ngoai tap loai tru. Than `RETURN NEW` mo goi bang chu ky cua chinh nguoi chon danh sach.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_doc_lap_khi_mo (9501_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_canh_tranh_toi_thieu.sql')$q$,
+      $q$hàm + trigger rfq_kiem_doc_lap_khi_mo (107_canh_tranh_toi_thieu)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

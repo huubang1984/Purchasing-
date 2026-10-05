@@ -1,8 +1,8 @@
 // ==============================================================================================
-// [S1.9101 / S3.3c2 · spec S3 §2.4 ⑹ ⑺, §4.4, §5.1 · K2 · K5 · K12] CẠNH TRANH TỐI THIỂU — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP
+// [S1.269 / S3.3c2 · spec S3 §2.4 ⑹ ⑺, §4.4, §5.1 · K2 · K5 · K12] CẠNH TRANH TỐI THIỂU — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP
 // VÀ DƯỚI `app_api`
 //
-// Migration `9501_canh_tranh_toi_thieu`, hai lần hỏi trước của `packages/rfq` (`submitRfqForApproval`, `openRfq`). Hợp đồng đo ở đây:
+// Migration `107_canh_tranh_toi_thieu`, hai lần hỏi trước của `packages/rfq` (`submitRfqForApproval`, `openRfq`). Hợp đồng đo ở đây:
 //   ⑴ K2 — đối chứng dương: đủ `so_ncc_toi_thieu` nhóm nhà cung cấp ĐẾM ĐƯỢC thì nộp duyệt đi qua; thiếu một ⇒ `422` mang câu của
 //      chốt, MỘT hàng `CONTROL_DENIED {K2_THIEU_CANH_TRANH}`, gói ở DRAFT;
 //   ⑵ luật đếm — mỗi vế một ca: hồ sơ hay MỘT người liên hệ do người tạo gói, người mời, hay người THU HỒI dựng (lượt soi hình
@@ -430,7 +430,7 @@ afterAll(async () => {
 // =============================================================================================
 // ⑴ K2 — ĐỐI CHỨNG DƯƠNG VÀ LỜI TỪ CHỐI CÓ TÊN
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] nộp duyệt cần đủ nhóm nhà cung cấp đếm được", () => {
+describe("[S1.269 / S3.3c2 / K2] nộp duyệt cần đủ nhóm nhà cung cấp đếm được", () => {
   it("[INV-K2] ĐỐI CHỨNG DƯƠNG: bậc cần 2, hai nhà cung cấp đếm được ⇒ nộp 200, đếm 2, không CONTROL_DENIED", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -473,7 +473,7 @@ describe("[S1.9101 / S3.3c2 / K2] nộp duyệt cần đủ nhóm nhà cung cấ
 // =============================================================================================
 // ⑵ LUẬT ĐẾM — MỖI VẾ MỘT CA, MỖI CA ĐỘT BIẾN ĐÚNG VẾ ẤY
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
+describe("[S1.269 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => {
   /** Gói bậc 0 (cần 2) với MỘT nhà cung cấp đếm được và một nhà cung cấp `bien` — đếm ra 1 thì nộp bị từ chối. */
   async function goiVoiBien(t: ToChuc, bien: (t: ToChuc) => Promise<Ncc>, ai: { readonly moi?: Nguoi; readonly moiBien?: Nguoi } = {}): Promise<string> {
     const rfqId = await goiNhap(t);
@@ -630,7 +630,7 @@ describe("[S1.9101 / S3.3c2 / K2] luật đếm — mỗi vế một ca", () => 
 // =============================================================================================
 // ⑶ NHÓM — MST GỐC, EMAIL, CHÍN SỐ CUỐI, BẮC CẦU
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] hai lời mời của cùng một thực thể đếm một lần", () => {
+describe("[S1.269 / S3.3c2 / K2] hai lời mời của cùng một thực thể đếm một lần", () => {
   it("[INV-K2] MST gốc: `0123456789` và `0123456789-001` là một nhóm ⇒ đếm 1, nộp 422; ĐỘT BIẾN so nguyên MST ⇒ đếm 2", async () => {
     const t = await taoToChuc();
     const goc0 = mstNgauNhien();
@@ -684,7 +684,7 @@ describe("[S1.9101 / S3.3c2 / K2] hai lời mời của cùng một thực thể
 // =============================================================================================
 // ⑷ NGOẠI LỆ KHỚP CHẶT
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] dưới ngưỡng thì chỉ ngoại lệ còn sống ĐÚNG loại cứu", () => {
+describe("[S1.269 / S3.3c2 / K2] dưới ngưỡng thì chỉ ngoại lệ còn sống ĐÚNG loại cứu", () => {
   it("[INV-K2] MỘT lời mời: `SINGLE_SOURCE` còn sống ⇒ nộp 200; `LIMITED_COMPETITION` hay `ROTATION` ⇒ 422; `SINGLE_SOURCE` đã rút ⇒ 422", async () => {
     const t = await taoToChuc();
     const ok = await goiNhap(t);
@@ -748,7 +748,7 @@ describe("[S1.9101 / S3.3c2 / K2] dưới ngưỡng thì chỉ ngoại lệ còn
 // =============================================================================================
 // ⑸ BẬC ĐẤU THẦU CHÍNH THỨC
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] bậc đấu thầu chính thức không bao giờ qua", () => {
+describe("[S1.269 / S3.3c2 / K2] bậc đấu thầu chính thức không bao giờ qua", () => {
   it("[INV-K2] ước lượng 20 tỷ, năm nhà cung cấp đếm được VÀ một ngoại lệ ⇒ 422 + CONTROL_DENIED {K2_DAU_THAU_CHINH_THUC}; ĐỘT BIẾN bỏ vế ấy ⇒ hàm theo bậc NÉM (bậc thiếu ngưỡng)", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t, GIA_DTCT);
@@ -769,7 +769,7 @@ describe("[S1.9101 / S3.3c2 / K2] bậc đấu thầu chính thức không bao g
 // =============================================================================================
 // ⑹ READ COMMITTED VÀ ĐUA
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K2] chỉ READ COMMITTED; lần rút ngoại lệ chen trước câu nộp được thấy", () => {
+describe("[S1.269 / S3.3c2 / K2] chỉ READ COMMITTED; lần rút ngoại lệ chen trước câu nộp được thấy", () => {
   it("[INV-K2] câu nộp dưới REPEATABLE READ hay SERIALIZABLE ⇒ trigger chặn ở tổ chức ĐÃ bật VÀ chưa bật (khoản 286 ⑴); READ COMMITTED đi qua; ĐỘT BIẾN bỏ vế ấy ⇒ RR đi qua", async () => {
     for (const daBat of [true, false]) {
       const t = await taoToChuc(daBat);
@@ -822,7 +822,7 @@ describe("[S1.9101 / S3.3c2 / K2] chỉ READ COMMITTED; lần rút ngoại lệ 
 // =============================================================================================
 // ⑺ K5 — CHỮ KÝ ĐỘC LẬP Ở CẠNH MỞ GÓI
 // =============================================================================================
-describe("[S1.9101 / S3.3c2 / K5] bậc ký danh sách hay gói có ngoại lệ cần một chữ ký ngoài tập loại trừ", () => {
+describe("[S1.269 / S3.3c2 / K5] bậc ký danh sách hay gói có ngoại lệ cần một chữ ký ngoài tập loại trừ", () => {
   /** Gói bậc 1 (cần 3, ký danh sách) đã nộp, do `pm` tạo; `chuanBi` thêm hành vi của người chọn trước khi nộp. */
   async function goiBac1(t: ToChuc, chuanBi?: (rfqId: string) => Promise<void>, giaTri = GIA_BAC1): Promise<string> {
     const rfqId = await goiNhap(t, giaTri);
@@ -940,7 +940,7 @@ describe("[S1.9101 / S3.3c2 / K5] bậc ký danh sách hay gói có ngoại lệ
   });
 });
 
-describe("[S1.9101 / S3.3c2 / K2 · K5] gói KHÔNG bậc ghim (bậc NULL — dữ liệu trước lần bật, hay trigger xếp bậc bị tắt)", () => {
+describe("[S1.269 / S3.3c2 / K2 · K5] gói KHÔNG bậc ghim (bậc NULL — dữ liệu trước lần bật, hay trigger xếp bậc bị tắt)", () => {
   it("[INV-K2] [INV-K5] K2 nhường lời cho K1 (`BAC_LECH_HAM_PHAN_BAC`); K5 coi như bậc ĐÒI ký danh sách — chữ ký của người mời không mở được; ĐỘT BIẾN coi bậc vắng là KHÔNG đòi ⇒ cho qua", async () => {
     const t = await taoToChuc();
     const nhap = await goiNhap(t);
@@ -972,7 +972,7 @@ describe("[S1.9101 / S3.3c2 / K2 · K5] gói KHÔNG bậc ghim (bậc NULL — d
 // =============================================================================================
 // ⑻ ĐỐI CHỨNG MVP1 VÀ TỪ VỰNG
 // =============================================================================================
-describe("[S1.9101 / S3.3c2] tổ chức chưa bật chạy như MVP1; tập mã khớp bảng", () => {
+describe("[S1.269 / S3.3c2] tổ chức chưa bật chạy như MVP1; tập mã khớp bảng", () => {
   it("[INV-K2] [INV-K5] tổ chức CHƯA bật: nộp không lời mời nào ⇒ 200; mở với chữ ký pm2 ⇒ 200; không CONTROL_DENIED; hai hàm vị từ trả NULL", async () => {
     const t = await taoToChuc(false);
     const rfqId = await goiNhap(t);

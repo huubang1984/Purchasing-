@@ -11429,16 +11429,16 @@ băm danh sách (và băm mà K9 sẽ ghim) là một quyết định không ai 
 - K2, K5 (S3.3c), K3 (S3.3d), màn, `gieo:demo`, kịch bản 41, lượt đi thử (S3.3e), KPI tỷ lệ single-source.
 - Hai loại còn lại của CHECK có vào băm hay không — việc của S3.5, S3.6c.
 
-## ADR-9201 — S3.3c2: K2 đếm nhóm nhà cung cấp mà người chọn danh sách không dựng, ngoại lệ khớp chặt, nộp duyệt chỉ dưới READ COMMITTED; K5 đòi một chữ ký còn hiệu lực ngoài tập loại trừ khi bậc ký danh sách hay gói có ngoại lệ
+## ADR-147 — S3.3c2: K2 đếm nhóm nhà cung cấp mà người chọn danh sách không dựng, ngoại lệ khớp chặt, nộp duyệt chỉ dưới READ COMMITTED; K5 đòi một chữ ký còn hiệu lực ngoài tập loại trừ khi bậc ký danh sách hay gói có ngoại lệ
 
 **Ngày:** 2026-10-04 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-04: *"Làm 1: S3.3c — K2 và K5"*; sau bản hình
 dạng, *"Hai PR: c1 dữ liệu test, c2 chốt"* (S3.3c1 — §S1.266, không ADR riêng: quyết định chia ghi ở đây); luật đếm của bản hình dạng
 (header `packages/test-support/src/nha-cung-cap-dem-duoc.ts`); ba câu trước lượt soi: ⑶ ngoại lệ khớp chặt, ⑷ số điện thoại so chín
 chữ số cuối, ⑵ *người mời* là mọi `invited_by` kể cả hàng đã thu hồi; bốn câu sau lượt soi, cả bốn theo đề xuất: ⑵ thêm người THU
 HỒI và vế người xác minh, ⑸ chốt READ COMMITTED ở MỌI tổ chức, ⑻ K5 nhường lời cho K4b khi chưa đủ chữ ký, ⑴ nhóm theo MỌI người
-liên hệ · **[S1.9101]** · **Liên quan:** ADR-058 ⑶, ADR-080, ADR-081 ⑵, ADR-082 ⑹ ⑺ ⑽ ⑿, ADR-084 ⑷, ADR-085, ADR-117, ADR-121,
+liên hệ · **[S1.269]** · **Liên quan:** ADR-058 ⑶, ADR-080, ADR-081 ⑵, ADR-082 ⑹ ⑺ ⑽ ⑿, ADR-084 ⑷, ADR-085, ADR-117, ADR-121,
 ADR-137 (`097`), ADR-145 · **Spec:** S3 §2.4 ⑹ ⑺, §4.4, §5.1 K2 K5, §8.10, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md`
-§S1.9101
+§S1.269
 
 ### Bối cảnh
 

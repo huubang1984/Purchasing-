@@ -899,7 +899,7 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       // lực lúc gói ra đời QUA hàm chọn — không tự xếp phiên bản.
       quan_sat_gia: "QUA_HAM",
       rfq_bac_cua: "THEO_ID",
-      // [S1.9101 / S3.3c2] Bậc mà gói ghim và số nhóm nhà cung cấp đếm được (tác giả phiên bản) đọc ĐÚNG phiên bản ngân sách ghim.
+      // [S1.269 / S3.3c2] Bậc mà gói ghim và số nhóm nhà cung cấp đếm được (tác giả phiên bản) đọc ĐÚNG phiên bản ngân sách ghim.
       rfq_bac_ghim: "THEO_ID",
       rfq_dem_ncc_canh_tranh: "THEO_ID",
       rfq_can_phe_duyet_kep: "THEO_ID",

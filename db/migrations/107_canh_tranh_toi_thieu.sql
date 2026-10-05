@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 9501_canh_tranh_toi_thieu — [S1.9101 / S3.3c2 của spec S3] CẠNH TRANH TỐI THIỂU: K2 Ở CẠNH NỘP DUYỆT, K5 Ở CẠNH MỞ GÓI
+-- 107_canh_tranh_toi_thieu — [S1.269 / S3.3c2 của spec S3] CẠNH TRANH TỐI THIỂU: K2 Ở CẠNH NỘP DUYỆT, K5 Ở CẠNH MỞ GÓI
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4 ⑹ ⑺, §4.4, §5.1 (K2, K5), §8.10, §9
--- (S3.3). ADR-082 ⑹ ⑽ ⑿, ADR-084 ⑷, ADR-121, ADR-145, ADR-9201. Chủ dự án chốt ngày 2026-10-04: luật đếm của bản hình dạng
+-- (S3.3). ADR-082 ⑹ ⑽ ⑿, ADR-084 ⑷, ADR-121, ADR-145, ADR-147. Chủ dự án chốt ngày 2026-10-04: luật đếm của bản hình dạng
 -- (header của `packages/test-support/src/nha-cung-cap-dem-duoc.ts`, S3.3c1); ngoại lệ khớp CHẶT với danh sách; số điện thoại so
 -- chín chữ số cuối; *người chọn danh sách* gồm người tạo gói, MỌI người mời VÀ MỌI người thu hồi (đọc mọi hàng); người xác minh
 -- cũng không thuộc tập ấy; chốt chỉ-READ COMMITTED ở cạnh nộp duyệt áp MỌI tổ chức; K5 nhường lời từ chối cho K4b khi chưa đủ
@@ -43,7 +43,7 @@
 --
 -- THỨ MIGRATION NÀY KHÔNG LÀM: K2b — hậu kiểm số báo giá lúc trao — và K5b — kiểm lại K2/K5 ở bậc cao hơn lúc trao (S3.5); K3
 -- (S3.3d); màn, kịch bản 41, lượt đi thử (S3.3e). Không khối chặn deploy cho gói đang chờ duyệt ở tổ chức đã bật: dưới vai deploy
--- mà RLS áp, câu đối chiếu thấy 0 hàng (`049`, hồ sơ N3) — một khối luôn qua là một lời khai giả; ADR-9201 ghi giới hạn.
+-- mà RLS áp, câu đối chiếu thấy 0 hàng (`049`, hồ sơ N3) — một khối luôn qua là một lời khai giả; ADR-147 ghi giới hạn.
 --
 -- Mọi hàm và trigger mới hay đổi thân ghim ở `hardening.always.sql` trong CÙNG commit (S1.96).
 -- ==============================================================================================

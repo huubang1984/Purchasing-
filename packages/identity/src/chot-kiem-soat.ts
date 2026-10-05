@@ -42,9 +42,9 @@
 // hàm ghim tại đúng mốc, nên đường sản xuất không tới được; câu ghi nào tới được là một đường ghi thứ hai, và kiểm toán viên cần
 // thấy đúng lần ấy.
 //
-// [S1.9101 / S3.3c2 / ADR-9201] Hai dòng K2 — bậc đấu thầu chính thức, và danh sách dưới ngưỡng cạnh tranh mà không ngoại lệ đúng
+// [S1.269 / S3.3c2 / ADR-147] Hai dòng K2 — bậc đấu thầu chính thức, và danh sách dưới ngưỡng cạnh tranh mà không ngoại lệ đúng
 // loại — ở cạnh nộp duyệt; một dòng K5 — gói cần chữ ký độc lập mà mọi người ký còn hiệu lực đều thuộc tập loại trừ — ở cạnh mở gói.
-// Khuôn K1/K10a: hàm vị từ `rfq_chot_canh_tranh` và `rfq_chot_chu_ky_doc_lap` (`9501_canh_tranh_toi_thieu`), tầng gói hỏi trước câu
+// Khuôn K1/K10a: hàm vị từ `rfq_chot_canh_tranh` và `rfq_chot_chu_ky_doc_lap` (`107_canh_tranh_toi_thieu`), tầng gói hỏi trước câu
 // ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Cả ba vào sổ (bản hình dạng S3.3c2, chủ dự án chốt 2026-10-04).
 //
 // ----------------------------------------------------------------------------------------------
