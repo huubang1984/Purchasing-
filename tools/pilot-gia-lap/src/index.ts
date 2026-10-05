@@ -26,7 +26,7 @@ import { join, resolve } from "node:path";
 import { stderr, stdout } from "node:process";
 import { dungBaoCaoJson, dungBaoCaoMarkdown, type KiemCoLap, type ToChucBaoCao } from "./bao-cao.js";
 import { chayKichBan, type BoiCanhChay, type DongBoCham, type KetQuaKichBan, type NhaCungCapChay, type ToChucChay } from "./chay-kich-ban.js";
-import { CsdlDacQuyen, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
+import { CsdlDacQuyen, kiemUrlCucBo, moTaKhongNoiDuocCsdl, urlVaiDangNhap } from "./csdl.js";
 import { CONG_MAC_DINH, GOC_KHO, canhBaoAclWindows, docBiMat, khoiDongCum, kiemThuMucTrangThai, taoBiMat, type Cum } from "./cum.js";
 import { NguoiMua, maTotpHienTai } from "./dien-vien.js";
 import { emailLienHe, emailNguoi, hoSo, type HoSoToChuc, type MaToChuc } from "./ho-so.js";
@@ -596,7 +596,11 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(GOC_KH
       process.exitCode = ma;
     },
     (e: unknown) => {
-      bao(e instanceof Error ? `${e.name}: ${e.message}` : "lỗi không rõ");
+      // [S1.271 / khoản 341] Không nối được Postgres của pilot ⇒ một câu nói phải làm gì, thay cho `ECONNREFUSED` trần.
+      bao(
+        moTaKhongNoiDuocCsdl(e, process.env.TRUSTPROCURE_SEED_DATABASE_URL ?? "") ??
+          (e instanceof Error ? `${e.name}: ${e.message}` : "lỗi không rõ"),
+      );
       process.exitCode = 1;
     },
   );

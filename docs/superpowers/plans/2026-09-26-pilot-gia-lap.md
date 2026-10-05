@@ -117,14 +117,17 @@ nó chạy `migrate()`, đặt lại mật khẩu hai vai đăng nhập và thê
 với mật khẩu viết trong tài liệu này không được nghe trên mạng của phòng trình diễn.
 
 ```powershell
-# Windows PowerShell — Postgres trong Docker
-docker start tp-pilot-gia-lap 2>$null
-if ($LASTEXITCODE -ne 0) { docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine }
-$n = 0
-do { Start-Sleep 1; $n++; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0 -or $n -ge 60)
-if ($LASTEXITCODE -ne 0) { throw "Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?" }
-$env:TRUSTPROCURE_SEED_DATABASE_URL = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap"
-pnpm pilot:gia-lap
+# Windows PowerShell — Postgres trong Docker. `& { … }` gói cả khối thành MỘT lệnh: dán vào cửa sổ nào (Windows Terminal đưa
+# văn bản dán vào từng dòng) thì `throw` vẫn dừng cả khối, không để `pnpm` chạy khi Postgres chưa lên.
+& {
+  docker start tp-pilot-gia-lap 2>$null
+  if ($LASTEXITCODE -ne 0) { docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine }
+  $n = 0
+  do { Start-Sleep 1; $n++; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0 -or $n -ge 60)
+  if ($LASTEXITCODE -ne 0) { throw "Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?" }
+  $env:TRUSTPROCURE_SEED_DATABASE_URL = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap"
+  pnpm pilot:gia-lap
+}
 ```
 
 ```bash
@@ -146,7 +149,9 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
 - khối PowerShell chạy bằng PowerShell 7.4.6 trên Linux, khối bash bằng bash;
 - mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
   ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
-  Docker Desktop đã chạy chưa, bash với `ECONNREFUSED` của công cụ;
+  Docker Desktop đã chạy chưa, bash với ~~`ECONNREFUSED` của công cụ~~ **[S1.271]** câu *"không nối được Postgres ở
+  127.0.0.1:55433 … Docker Desktop đã chạy chưa…"* của công cụ (đo trên Windows bằng lời gọi thẳng khi Postgres tắt; khối
+  bash chưa chạy lại);
 - ~~**chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
   chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.~~ **[S1.255] Đã đo trên Windows thật** (Windows 11,
   Windows PowerShell 5.1.26100, Docker Desktop 29.7.2, Node 24.18.0; khối chạy từ một tệp `.ps1` UTF-8 có BOM, không dán vào
@@ -158,6 +163,21 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
   Desktop đã chạy chưa?"*, dấu tiếng Việt nguyên vẹn (khối chạy từ tệp `.ps1` UTF-8 có BOM). Bật lại Docker (`docker desktop
   start`, 10 giây) để container ở trạng thái dừng; khối chạy lại 10/10 trong 32 giây. Người trình diễn vẫn chạy khối một lần trên
   chính máy của buổi gặp — đường dẫn và ACL là của từng máy (đoạn *Thư mục trạng thái* dưới).
+- **[S1.271] DÁN vào cửa sổ console — đo trên cùng máy, và bản trước hỏng ở đúng tình huống Docker tắt.** Mở *Windows
+  PowerShell* trên Windows 11 ra Windows Terminal (mục console mặc định để "Windows tự chọn"), và Windows Terminal đưa văn
+  bản dán vào như phím gõ, mỗi xuống dòng một Enter — mỗi dòng của khối thành MỘT lệnh. Đo bằng `powershell.exe` 5.1
+  (PSReadLine 2.0.0) chạy trong ConPTY thật, văn bản gửi vào như phím gõ (`\r` cho xuống dòng), Docker "tắt" bằng
+  `DOCKER_HOST` trỏ vào một pipe không có — chỉ trong tiến trình ấy:
+  - bản trước, Docker tắt: sau 84 giây câu *"Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?"* hiện
+    đúng dấu, rồi hai dòng sau VẪN chạy — `pnpm pilot:gia-lap` khởi động và dòng cuối trên màn là
+    `[pilot-gia-lap] Error: connect ECONNREFUSED 127.0.0.1:55433`, câu gợi ý bị đẩy lên giữa 61 dòng lỗi của Docker;
+  - bản trên (`& { … }`), Docker tắt: `throw` dừng cả khối sau 79 giây, `pnpm` không chạy, dòng cuối là câu tiếng Việt;
+  - bản trên, Docker chạy (container đang dừng): 10/10 ĐẠT, cô lập 2/2, cụm sẵn sàng sau 73 giây; Ctrl+C dừng cụm, ba
+    cổng trống. Sau Ctrl+C, dấu nhắc `PS` không hiện lại trong 60 giây ở bộ đo ConPTY — bản trước cũng y như thế, nên không
+    do `& { … }`; chưa rõ cửa sổ thật có vậy không. Cửa sổ ấy treo thì đóng nó: cụm đã dừng.
+  Công cụ nay cũng đổi `ECONNREFUSED` tới Postgres của `TRUSTPROCURE_SEED_DATABASE_URL` thành một câu nói phải làm gì
+  (`moTaKhongNoiDuocCsdl`, `tools/pilot-gia-lap/src/csdl.ts`). Chưa đo: hộp thoại xác nhận dán nhiều dòng của Windows
+  Terminal, và cách một cửa sổ `conhost` cũ (Ctrl+V của PSReadLine đưa cả khối vào một lần) vẽ câu tiếng Việt.
 
 Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:
 - xoá thư mục trạng thái mà giữ container: công cụ từ chối trước khi dựng cụm và nói cách sửa;
