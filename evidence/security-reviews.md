@@ -24763,3 +24763,15 @@ Năm sống: 0. Đối chứng sau khôi phục: 0/21 đỏ.
 - Gói bị chặn ở cạnh mở phải trả về soạn thảo, kể cả khi lý do là xác minh hết hạn sau lúc nộp.
 - Khoản 319 còn mở ở tổ chức chưa bật.
 - K2b, K5b — S3.5; màn, lượt đi thử T4 — S3.3e.
+
+## 9. Số đo
+Trên `4c0c818` (nhánh dựng từ `master` `c8a369e`, không gộp thêm — `origin/master` không đổi trong vòng; số đã cấp: vòng 270, ADR-148,
+migration `108`; một chỗ số tạm trần trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm test` 150 tệp, 2525 ca
+đạt, 1 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 241 tệp, 4716 khẳng định (4706 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60
+nghiệp vụ + 22/22 hàng rào), 2047 giây; `evidence/INV-matrix.md` thêm đúng hàng K3 — 20 khẳng định mang nhãn — và đổi các con số đếm;
+mốc `MOC_GHIM.soPhuToiThieu` nâng tay 81 → 82: *"Cổng evidence: XANH"*. Trong lượt ấy: `xoay-vong` 21/21, `canh-tranh-toi-thieu`
+36/36, `migrations.int` 128/128, `hardening-suy-tu-tinh-chat` 38/38, hai kịch bản 41 32 + 85, `bac-chinh-sach` 42/42.
+Một lượt evidence trước đó trên `4515903` (trước cấp số) đỏ 14 ca, cả 14 ở cổng sổ nợ `so-no-tu-doi-chieu` (H20) — tài liệu của vòng
+chưa xong: nhãn đóng của khoản 234 viết `~~**[MỞ]**~~ **[ĐÓNG — …]**` thay vì `**[ĐÓNG]**` đứng đầu thân (P2, P3), lời khai số ADR và
+số khoản mở chưa đếm lại (P5, P7, P12), con trỏ tới biên bản của vòng chưa có đầu mục (P11). Sửa ở `8c7d3c5`; cổng 45/45; bản ma trận của lượt ấy
+thay bằng bản này.
