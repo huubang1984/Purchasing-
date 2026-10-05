@@ -24656,4 +24656,8 @@ Trên `aed0cb9` (nhánh dựng từ `master` `6fcc853`, không gộp thêm — `
 10 bỏ qua, 0 đỏ), 81/81 bất biến (59/59 nghiệp vụ + 22/22 hàng rào), 2293 giây; `evidence/INV-matrix.md` thêm đúng hai hàng — K2 25 ca,
 K5 12 ca — và đổi bốn con số đếm; mốc `MOC_GHIM.soPhuToiThieu` nâng tay 79 → 81 rồi bộ sinh chạy lại trên cùng báo cáo: *"Cổng
 evidence: XANH"*. Trong lượt ấy: `migrations.int` 128/128 (2291 giây), `hardening-suy-tu-tinh-chat` 38/38, hai kịch bản 41 32 + 85,
-`ngoai-le-canh-tranh` 26/26. `pnpm cap-so --kiem` CHƯA chạy: cây còn số tạm (`S1.269`, `ADR-147`, `107_`) — cấp số lúc merge.
+`ngoai-le-canh-tranh` 26/26. Cấp số trên `eb3bf16` (`pnpm cap-so`: vòng 269, ADR-147, migration `107` — các số nhỏ hơn đã có nhánh giữ; năm chỗ số tạm trần
+trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm test` 150 tệp, 2524 ca đạt; `pnpm evidence`: vitest thoát mã 0,
+240 tệp, 4694 khẳng định (4684 đạt, 10 bỏ qua, 0 đỏ), 81/81, 2141 giây, *"Cổng evidence: XANH"*, `INV-matrix.md` không đổi. Một lượt
+evidence trước đó trên cùng commit hỏng vì môi trường — Docker daemon mất sau khi container phiên khởi động lại: 7 phút, 136 đỏ, 2021
+bỏ qua, không test tích hợp nào dựng được Postgres —; bản ma trận của lượt ấy bỏ, không commit.
