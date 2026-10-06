@@ -17,8 +17,13 @@ import {
   luaChonHangChuan,
   maHopLe,
   moTaQuyDoi,
+  docLoiLo,
+  khoangNgay,
+  moTaLoiDong,
   nhanGoiY,
   phanTram,
+  thanLoVuotTran,
+  TIEU_DE_MAU,
   vietThuocTinh,
 } from "./du-lieu.js";
 
@@ -179,5 +184,50 @@ describe("[S1.234 / S4.3b] hàng đợi ánh xạ", () => {
     expect(locHangDoi(DS, "gach").map((d) => d.moTa)).toEqual(["Gạch thẻ đỏ"]);
     expect(locHangDoi(DS, "QUY IV").map((d) => d.moTa)).toEqual(["Thép vằn D12"]);
     expect(locHangDoi(DS, "")).toHaveLength(2);
+  });
+});
+
+describe("[S1.272 / S4.6a] bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống", () => {
+  it("dòng tiêu đề mẫu của màn là ĐÚNG bộ cột của bộ đọc ở gói (`COT_THEO_LOAI` của `csv-ngoai.ts`) — sửa một bên là đỏ ở đây", () => {
+    const goi = nguon("packages/du-lieu-nen/src/csv-ngoai.ts");
+    const chung = /const COT_CHUNG = \[([^\]]+)\] as const;/u.exec(goi)?.[1];
+    const moc = /MOC_NGOAI: \[\.\.\.COT_CHUNG, ([^\]]+)\]/u.exec(goi)?.[1];
+    const lichSu = /LICH_SU_NGOAI: \[\.\.\.COT_CHUNG, ([^\]]+)\]/u.exec(goi)?.[1];
+    const tach = (x: string | undefined): string[] => (x ?? "").split(",").map((c) => c.trim().replace(/^"|"$/gu, "")).filter((c) => c !== "");
+    expect(tach(chung)).toHaveLength(5);
+    expect(TIEU_DE_MAU.MOC_NGOAI.split("\t").sort()).toEqual([...tach(chung), ...tach(moc)].sort());
+    expect(TIEU_DE_MAU.LICH_SU_NGOAI.split("\t").sort()).toEqual([...tach(chung), ...tach(lichSu)].sort());
+  });
+
+  it("thân 422 của lô bị từ chối thành câu theo dòng; dòng 1 là tiêu đề; một 422 khác (không `loi`) ⇒ null", () => {
+    expect(moTaLoiDong({ dong: 3, cot: "don_vi", ma: "DON_VI_RONG", cau: "đơn vị trống" })).toBe("Dòng 3, cột don_vi: đơn vị trống");
+    expect(moTaLoiDong({ dong: 1, cot: null, ma: "LO_RONG", cau: "lô rỗng" })).toBe("Dòng 1: lô rỗng");
+    expect(
+      docLoiLo({
+        error: "lô bị từ chối: 2 lỗi",
+        loi: [
+          { dong: 1, cot: "vat", ma: "COT_LA", cau: "cột không thuộc mẫu" },
+          { dong: 4, cot: null, ma: "SO_O_SAI", cau: "số ô khác tiêu đề" },
+          { dong: "x", cau: 1 },
+          null,
+        ],
+      }),
+    ).toEqual(["Dòng 1, cột vat: cột không thuộc mẫu", "Dòng 4: số ô khác tiêu đề"]);
+    expect(docLoiLo({ error: "thiếu trường \"vanBan\"" })).toBeNull();
+    expect(docLoiLo(null)).toBeNull();
+  });
+
+  it("trần thân của màn là trần của API; đếm BYTE của thân JSON, không đếm ký tự — chữ có dấu nặng gấp ba", () => {
+    expect(nguon("apps/api/src/router.ts")).toContain("export const TRAN_THAN_BYTE = 64 * 1024;");
+    const vua = "a".repeat(64 * 1024 - JSON.stringify({ vanBan: "" }).length);
+    expect(thanLoVuotTran(vua)).toBe(false);
+    expect(thanLoVuotTran(`${vua}a`)).toBe(true);
+    // "ạ" là 3 byte UTF-8: 22 000 ký tự ≈ 66 KB — vượt, dù chưa tới 64 × 1024 ký tự.
+    expect(thanLoVuotTran("ạ".repeat(22_000))).toBe(true);
+  });
+
+  it("khoảng ngày của một lô: một ngày khi hai đầu trùng", () => {
+    expect(khoangNgay("2025-11-20", "2025-12-05")).toBe("2025-11-20 → 2025-12-05");
+    expect(khoangNgay("2026-01-15", "2026-01-15")).toBe("2026-01-15");
   });
 });

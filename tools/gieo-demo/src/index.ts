@@ -55,7 +55,7 @@ import pg from "pg";
 import { ReceiptSigningKeyRing, createLocalDevReceiptSigner, type ReceiptKeyPair, type ReceiptSigner } from "@trustprocure/bidding";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
-import { NHOM_BENCHMARK_MAU, chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
+import { NHOM_BENCHMARK_MAU, chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, nhapDuLieuNgoai, taoHangChuan } from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import {
@@ -336,6 +336,28 @@ async function chinh(): Promise<void> {
         });
       }
     });
+
+    // [S1.272 / S4.6a] Một lô mốc giá ngoài và một lô lịch sử mua ngoài hệ thống, dán như người quản lý dữ liệu dán ở bước 7 của
+    // `/du-lieu` — để demo thấy hai lô (không cột giá) và đi được việc rút. Hai lô qua đúng đường gói: lỗi theo dòng thì gieo dừng.
+    // Lịch sử ngoài có một dòng tính theo TẤM — đơn vị đóng gói quy đổi riêng ở trên —, mốc ngoài theo kg.
+    for (const [loai, vanBan] of [
+      [
+        "MOC_NGOAI",
+        "ma_hang\tdon_gia\tdon_vi\ttien_te\tngay_hieu_luc\tnguon\n" +
+          "THEP-TAM-SS400-10\t18500\tkg\tVND\t2026-09-01\tBang gia nha may thang 9/2026\n" +
+          "THEP-HOP-MK-50X50-1.4\t21400\tkg\tVND\t2026-09-01\tBang gia nha may thang 9/2026\n",
+      ],
+      [
+        "LICH_SU_NGOAI",
+        "ma_hang\tdon_gia\tdon_vi\ttien_te\tngay_mua\tnha_cung_cap\tnguon\n" +
+          "THEP-TAM-SS400-10\t17900\tkg\tVND\t2025-11-20\tCong ty Thep Song Hong\tSo mua hang 2025\n" +
+          "THEP-TAM-SS400-10\t12600000\ttam\tVND\t2025-12-05\tCong ty Thep Phuong Nam\tSo mua hang 2025\n" +
+          "BU-LONG-NEO-M24-8.8\t46000\tcai\tVND\t2025-12-05\tCong ty Thep Phuong Nam\tSo mua hang 2025\n",
+      ],
+    ] as const) {
+      const kq = await withTenant(pool, org, (c) => nhapDuLieuNgoai(c, org, { loai, vanBan, actorSessionId: phienDuLieu }));
+      if (!kq.nhan) throw new GieoError(`lô ${loai} bị từ chối: ${kq.loi.map((l) => `dòng ${String(l.dong)} ${l.ma}`).join(", ")}`);
+    }
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
