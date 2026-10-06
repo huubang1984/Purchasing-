@@ -11226,9 +11226,13 @@ Không phát hiện CAO. Sửa:
 - **Cuộc đua với lần mở thầu:** lần mở thầu commit SAU lúc giao dịch đọc bắt đầu mà TRƯỚC câu bối cảnh có `unsealed_at ≥ now()` của người
   đọc; tính bây giờ thì `quan_sat_gia` không thấy các báo giá ấy (`<` chặt) — bản lưu ghi-một-lần mang `KHONG_DO_DUOC` mãi cho bản BAFO, hay
   vỡ `…_moc_truoc_ghi` ở vòng một. Trả trạng thái có tên **`THU_LAI`**, không ghi.
-- **Cuộc đua với cạnh trạng thái:** sau phép tính và trước khi ghi hay trả con số (ở cả `docBenchmark` lẫn `docDaiBenchmark`), khoá hàng gói
-  `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất bằng một câu RIÊNG (ảnh chụp mới dưới READ COMMITTED). Đã đổi ⇒ trạng thái mới
-  (không nhãn) hay `THU_LAI`. Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi.
+- **Cuộc đua với cạnh trạng thái:** sau phép tính và trước khi ghi hay trả con số (ở cả `docBenchmark` lẫn `docDaiBenchmark`), ~~khoá hàng gói
+  `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất bằng một câu RIÊNG (ảnh chụp mới dưới READ COMMITTED)~~ **[S1.274 / khoản 342]**
+  hỏi lại trạng thái và lần mở thầu mới nhất — lần đọc ĐẦU (ghi bản lưu) dưới khoá hàng gói `FOR SHARE`, bằng một câu RIÊNG sau câu khoá
+  (ảnh chụp mới dưới READ COMMITTED); lần đọc bản lưu và *Xem dải* bằng MỘT câu không khoá. Đã đổi ⇒ trạng thái mới (không nhãn) hay
+  `THU_LAI`. ~~Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi.~~ **[S1.274]** Ở
+  đường ghi, mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi; ở đường đọc, lượt
+  đọc đúng tại câu hỏi lại.
 - **`khopBanLuu` so cả NHÃN:** nhãn tính lại từ giá của chính dòng tại `ghi_luc` trên dải tính lại phải trùng nhãn đã lưu — một giá lịch
   sử sửa ngoài luật dời trung vị mà không đổi số đếm nào.
 - **Màn:** đọc gói khác xoá benchmark của gói trước; *Đọc benchmark* đọc benchmark TRƯỚC, bảng so sánh SAU, chỉ khi có nhãn, và LẠI mỗi lần
@@ -11247,11 +11251,23 @@ Giới hạn nói thêm:
 - **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước.
 - **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
   cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
-- **Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.
+- ~~**Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.~~ **[S1.274]** Đột biến M4 nay ĐỎ: luôn tính lại đưa mọi lượt đọc về
+  đường ghi, tức khoá hàng gói ở mỗi lượt — ca NOWAIT của lần đọc bản lưu bắt nó.
 - **[S1.271 / khoản 342] Lượt đọc gối nhau bỏ đói các cạnh trạng thái.** `FOR SHARE` của `kiemLaiDuoiKhoa` giữ tới hết giao dịch
   đọc, và một `FOR SHARE` mới không chờ bên ghi đang xếp hàng; ở ba trạng thái hiển thị, chấm thầu, mở vòng BAFO và đề xuất trao thầu
-  chờ tới khi các lượt đọc có khe — đo bằng đúng câu khoá của `duyetTraoThau` dưới hai trần 15 s của pool sản xuất: tới ba luồng đọc liên tục lần chờ lâu nhất 6,4 ms; sáu luồng ⇒ p50 2,8 s, lâu nhất 13,4 s, 5/30 lần hỏng ở `statement_timeout` (`57014`); mười hai luồng ⇒ 30/30 lần hỏng. Ở `AWARDED` lượt đọc không khoá, nên lần duyệt trao thầu không chờ nó. Chưa sửa;
-  hướng đề xuất ở khoản 342.
+  chờ tới khi các lượt đọc có khe — đo bằng đúng câu khoá của `duyetTraoThau` dưới hai trần 15 s của pool sản xuất: tới ba luồng đọc liên tục lần chờ lâu nhất 6,4 ms; sáu luồng ⇒ p50 2,8 s, lâu nhất 13,4 s, 5/30 lần hỏng ở `statement_timeout` (`57014`); mười hai luồng ⇒ 30/30 lần hỏng. Ở `AWARDED` lượt đọc không khoá, nên lần duyệt trao thầu không chờ nó. ~~Chưa sửa;
+  hướng đề xuất ở khoản 342.~~ **[S1.274]** Đã sửa — đoạn dưới.
+- **[S1.274 / khoản 342] Chỉ đường GHI khoá hàng gói.** Chủ dự án chọn 2026-10-06. Lần đọc đầu (tính rồi ghi bản lưu) giữ
+  `kiemLaiDuoiKhoa`; lần đọc bản lưu và *Xem dải* hỏi lại bằng MỘT câu không khoá (`kiemLaiKhongKhoa`): trạng thái và lần mở thầu mới
+  nhất trong cùng một ảnh chụp, cùng hàm phán quyết. Hệ quả nói ra: lượt đọc đúng tại câu hỏi lại, không tại lúc commit — một cạnh
+  commit sau câu ấy có thể đứng TRƯỚC hàng `BENCHMARK_READ`/`BENCHMARK_BAND_READ` của lượt đọc. Bảng so sánh, chuẩn *"bảng so sánh
+  mở"* của L6, đã chấp nhận đúng điều ấy cho dữ liệu nhạy hơn (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi
+  `COMPARISON_VIEWED`); không ai dựa vào thứ tự sổ của hai hàng ấy. Khoá còn lại ở đường ghi mở MỘT cửa sổ cho mỗi lần mở thầu (bản
+  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; xấu nhất ở
+  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.
+  Đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126). Đo, cạnh trọn (khoá hàng gói, một hàng sổ,
+  COMMIT), `UNSEALED`: sáu luồng đọc liên tục ⇒ lâu nhất 11,6 ms (trước 13,0 s, 6/30 hỏng), mười hai ⇒ 26,6 ms (trước 30/30 hỏng);
+  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274.
 
 ---
 

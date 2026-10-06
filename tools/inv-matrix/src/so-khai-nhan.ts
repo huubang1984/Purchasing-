@@ -488,7 +488,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "tests/architecture/ban-ro-liet-ke.test.ts",
     // [S1.260 / S4.5c1] vế benchmark. `benchmark` đo ở tầng gói: đóng ở `BAFO_OPEN`/`BAFO_CLOSED` (cả bản lưu lẫn *Xem dải*), bản lưu
     // của tầng CSDL buộc phiên bản ghim, và — sau rà soát — hai cuộc đua: cạnh trạng thái trong lúc tính (khoá hàng gói, đo bằng chờ
-    // khoá) và lần mở thầu commit sau lúc giao dịch đọc bắt đầu (`THU_LAI`). `benchmark-trang-thai-dong-bo` khoá tập trạng thái hiện
+    // khoá) và lần mở thầu commit sau lúc giao dịch đọc bắt đầu (`THU_LAI`). [S1.274 / khoản 342] Chỉ lần đọc ĐẦU khoá hàng gói; lần đọc
+    // bản lưu và *Xem dải* hỏi lại không khoá — đo bằng ma trận hỏi lại và ca NOWAIT. `benchmark-trang-thai-dong-bo` khoá tập trạng thái hiện
     // với tập của bảng so sánh.
     "packages/danh-gia/src/benchmark.int.test.ts",
     "tests/architecture/benchmark-trang-thai-dong-bo.test.ts",
