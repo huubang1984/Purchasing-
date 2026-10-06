@@ -414,7 +414,7 @@ async function chinh(): Promise<void> {
     const xacMinhNcc = S3 ? nguoiMua.find((n) => n.email.startsWith("taichinh2.")) : undefined;
     if (S3 && (nhapNcc === undefined || xacMinhNcc === undefined)) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
     const nguoiDungNcc = nhapNcc ?? { id: nguoiGieo, sessionId: phienGieo };
-    // [S1.9101 / S3.3e2] Xác minh đi ĐƯỜNG CỦA MÀN `/nha-cung-cap` (S3.3e1, lượt soi CAO-2): đọc băm hồ sơ như màn hiện, rồi
+    // [S1.275 / S3.3e2] Xác minh đi ĐƯỜNG CỦA MÀN `/nha-cung-cap` (S3.3e1, lượt soi CAO-2): đọc băm hồ sơ như màn hiện, rồi
     // `xacMinhNhaCungCap` ràng băm ấy — trigger `ncc_kiem_xac_minh` (`082`) tính lại lúc ghi, lệch thì ném. Trước vòng này công cụ
     // chèn thẳng hàng `VERIFIED`: trigger vẫn kiểm luật người, nhưng cổng quyền `supplier.qualify`, hàng sổ `SUPPLIER_VERIFIED` và
     // phép so băm-đã-xem không đi qua lượt demo nào. Gọi SAU khi hồ sơ có người liên hệ — băm hồ sơ phủ nó.
@@ -602,7 +602,7 @@ async function chinh(): Promise<void> {
         })()
       : [];
 
-    // [S1.9101 / S3.3e2 / K2 · K5] `--s3`: gói MỘT NGUỒN — người demo đi tay qua ngoại lệ cạnh tranh trên màn `/tao-thau`. Chủ dự án
+    // [S1.275 / S3.3e2 / K2 · K5] `--s3`: gói MỘT NGUỒN — người demo đi tay qua ngoại lệ cạnh tranh trên màn `/tao-thau`. Chủ dự án
     // chốt 2026-10-06: khuôn K10a — công cụ dựng tới cạnh bị chặn rồi dừng; đường demo đi K2 rồi K5. Gói 200 triệu ở bậc từ 100 triệu
     // (ba nhà cung cấp, ký danh sách, xoay vòng 5), nhóm hàng RIÊNG (`MOT-NGUON` — không gói anh em nào cho K10a). soan tạo và mời MỘT
     // nhà cung cấp đếm được, mới với cửa sổ K3 của soan (MST đầu `05`, điện thoại đầu `07` — khác `03`/`09` và `04`/`08` ở trên),

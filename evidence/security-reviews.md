@@ -25134,7 +25134,7 @@ mốc, cả hai biên bản, hàng 342 ĐÓNG của `master` cạnh hàng 344, d
 `pnpm cap-so --dem`; ma trận INV gộp tự động hai bộ con số (L6, L7 của `master`; D5, K2, K5, K8a của vòng này). Số đo trên cây gộp ở
 commit gộp.
 
-# §S1.9101 — S3.3e2: `gieo:demo --s3` ĐỂ GÓI MỘT NGUỒN CHỜ Ở CẠNH BỊ CHẶN (K2 → `SINGLE_SOURCE` → K5 → CHỮ KÝ ĐỘC LẬP); XÁC MINH CỦA CÔNG CỤ RÀNG BĂM; KỊCH BẢN 41 BƯỚC 17; S3.3 XONG
+# §S1.275 — S3.3e2: `gieo:demo --s3` ĐỂ GÓI MỘT NGUỒN CHỜ Ở CẠNH BỊ CHẶN (K2 → `SINGLE_SOURCE` → K5 → CHỮ KÝ ĐỘC LẬP); XÁC MINH CỦA CÔNG CỤ RÀNG BĂM; KỊCH BẢN 41 BƯỚC 17; S3.3 XONG
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi. Không migration, không route, không hàm gói mới; mã sản phẩm
 không đổi một dòng. Đổi: công cụ dev `tools/gieo-demo` (thêm phụ thuộc `@trustprocure/supplier`), hai tệp kịch bản 41, sổ khai nhãn.
