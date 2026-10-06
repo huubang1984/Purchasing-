@@ -185,6 +185,11 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // bậc đòi mà mọi chữ ký còn hiệu lực đều của người chọn danh sách. `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.
   "public.rfq_kiem_doc_lap_khi_mo",
   "public.rfq_kiem_so_ncc_khi_nop",
+  // [S1.270 / S3.3d / K3] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_xoay_vong_khi_nop` chỉ ngoài READ COMMITTED hay khi danh sách
+  // không có nhà cung cấp mới mà không ngoại lệ ROTATION; `rfq_kiem_xoay_vong_khi_mo` thêm vế `opened_at` là giờ của lần mở.
+  // `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.
+  "public.rfq_kiem_xoay_vong_khi_mo",
+  "public.rfq_kiem_xoay_vong_khi_nop",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
