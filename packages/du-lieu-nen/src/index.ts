@@ -113,22 +113,30 @@ export {
   type QuanSatBenchmark,
 } from "./benchmark.js";
 // [S1.260 / S4.5c1] Bản lưu của bảng so sánh (một bản mỗi lần mở thầu) và dải của một dòng khi bấm *Xem dải* (ADR-143).
+// [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài trong bản lưu, cờ mốc ngoài của bảng, dải ngoài và mốc ngoài của *Xem dải* (ADR-9201).
+// Bộ đọc SQL của hai bảng ngoài (`gia-ngoai.ts`) và lõi thuần (`dai-ngoai.ts`) không ra cửa: người dùng của chúng là các hàm dưới.
 export {
+  docCoMocNgoai,
   docQuanSatTaiMoc,
   ghiBanLuuBenchmark,
   ghiBenchmarkLuotCham,
   tinhBenchmarkGoi,
   tinhDaiDong,
   type BenchmarkGoi,
+  type CoMocNgoai,
   type DaiCuaGoi,
   type DaiDong,
+  type DaiNgoaiDong,
   type DocQuanSatTaiMocInput,
   type DongBenchmark,
+  type DongNgoai,
   type GhiBanLuuInput,
   type HangQuanSatTaiMoc,
   type GhiBenchmarkInput,
   type GiaQuyDoiCuaX,
   type KetQuaDaiDong,
+  type MocNgoaiDong,
   type TinhBenchmarkGoiInput,
   type TinhDaiDongInput,
 } from "./benchmark-goi.js";
+export type { SauMocNgoai } from "./dai-ngoai.js";

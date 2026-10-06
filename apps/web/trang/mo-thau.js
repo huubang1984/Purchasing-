@@ -11,7 +11,9 @@
 // ==============================================================================================
 
 import { tien } from "/lib/so-tien.js";
-import { chuDai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan } from "/lib/benchmark.js";
+import {
+  chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
+} from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
@@ -576,13 +578,22 @@ async function veBenchmark() {
       const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
       // `data-nhan`: trên màn hẹp bảng xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`, khuôn `hang-gia` của `/nop-thau`).
       const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
+      // [S1.9101 / S4.6b] Lịch sử ngoài: nhãn riêng của bản lưu; mốc ngoài: cờ theo (hàng chuẩn, tiền tệ) của dòng — không con số.
+      const doDuoc = d.nhan !== "KHONG_DO_DUOC";
+      const moc = doDuoc
+        ? (b.mocNgoai ?? []).find((m) => m.canonicalItemId === d.canonicalItemId && m.tienTe === d.tienTe)
+        : undefined;
+      const ngoai = (b.dongNgoai ?? []).find((x) => x.bidVersionId === d.bidVersionId && x.lineNo === lineNo);
       tr.append(
         o,
         coNhan(td(tenBaoGia(d.bidVersionId)), "Nhà cung cấp"),
         coNhan(td(gia === null ? "—" : tien(String(gia)), "so"), "Đơn giá chào"),
         coNhan(td(chuNhan(d)), "Benchmark"),
         coNhan(td(chuThanhPhan(d)), "Thành phần dải"),
+        coNhan(td(chuCotNgoai(b.dongNgoai ?? null, d.bidVersionId, lineNo, doDuoc), ngoai?.nhan === "LECH_CAO" ? "lech" : ""), "Lịch sử ngoài"),
+        coNhan(td(doDuoc ? chuCoMocNgoai(moc) : "—"), "Mốc ngoài"),
       );
+      // Tô cả hàng theo nhãn NỘI BỘ; nhãn ngoài lệch cao chỉ tô ô của nó (L15: hai nhãn không trộn).
       if (d.nhan === "LECH_CAO") tr.className = "lech";
       tbody.append(tr);
     }
@@ -606,12 +617,21 @@ async function veDai(lineNo) {
     hien($("khoi-dai"), true);
     return;
   }
+  // [S1.9101 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn).
+  const coMoc = (d.mocNgoai ?? []).some((m) => m.moc !== null);
   dienDl($("tt-dai"), [
     ...cu,
     ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),
+    ...(d.daiNgoai ?? []).map((x) => [
+      `Dòng ${String(lineNo)} — dải lịch sử mua ngoài hệ thống (${x.tienTe})`,
+      chuDaiNgoai(x, d.donViGoc),
+    ]),
+    ...(d.mocNgoai ?? []).map((m) => [`Dòng ${String(lineNo)} — mốc giá ngoài (${m.tienTe})`, chuMocNgoai(m, d.donViGoc)]),
     ...d.giaCuaGoi.map((g) => [
       `Đơn giá quy đổi — ${tenBaoGia(g.bidVersionId)}`,
-      g.donGiaQuyDoi === null ? `không quy đổi được (${g.trangThai})` : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}`,
+      g.donGiaQuyDoi === null
+        ? `không quy đổi được (${g.trangThai})`
+        : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}${coMoc ? ` · ${chuLech(g.lechMoc ?? null)} so với mốc ngoài` : ""}`,
     ]),
   ]);
   hien($("khoi-dai"), true);

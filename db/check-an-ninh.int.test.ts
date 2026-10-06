@@ -127,6 +127,16 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   price_benchmark_results_tien_te_mien: "MIEN",
   // [S1.260 / S4.5c1] Bản lưu của bảng so sánh: cùng miền, đủ bộ, số của `103`; mốc trước lúc ghi. Vế *"một lần mỗi lần mở thầu,
   // cùng giao dịch, phiên bản ghim"* là `UNIQUE` và hai khoá ngoại `…_cung_ban_luu_fk`, `…_phien_ban_ghim_fk`, không phải `CHECK`.
+  // [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài trong bản lưu: miền, số đếm, cửa sổ ngày. Vế *"cùng giao dịch, đúng dòng đo được"* là
+  // hai khoá ngoại `…_cung_ban_luu_fk`, `…_dong_do_duoc_fk`, không phải `CHECK`.
+  price_benchmark_snapshot_external_lines_chieu_khi_lech: "MOC",
+  price_benchmark_snapshot_external_lines_chieu_mien: "MIEN",
+  price_benchmark_snapshot_external_lines_co_dai: "SO",
+  price_benchmark_snapshot_external_lines_cua_so: "MOC",
+  price_benchmark_snapshot_external_lines_line_no_duong: "SO",
+  price_benchmark_snapshot_external_lines_nhan_mien: "MIEN",
+  price_benchmark_snapshot_external_lines_so_dem: "SO",
+  price_benchmark_snapshot_external_lines_tien_te_mien: "MIEN",
   price_benchmark_snapshot_lines_chieu_khi_lech: "MOC",
   price_benchmark_snapshot_lines_chieu_mien: "MIEN",
   price_benchmark_snapshot_lines_do_duoc_du_bo: "MOC",

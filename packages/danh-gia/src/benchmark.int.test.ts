@@ -15,6 +15,9 @@
 //      cổng và hàng sổ; vòng chào lại đang mở hay đã đóng ⇒ không nhãn, không dải; mở niêm phong vòng ấy ⇒ bản lưu MỚI cho lần mở thầu mới.
 //   ⑼ [S1.262 / S4.5c2] bộ bằng chứng mang lớp dữ liệu nền của gói X: bộ kiểm NGOẠI TUYẾN (CLI thật, `DATABASE_URL` đã xoá) tính lại
 //      đủ chín nhãn từ đơn giá đã quy đổi; định danh của gói khác và nhà cung cấp chỉ ra dạng băm, muối mỗi lần xuất; người ánh xạ.
+//   ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và mốc ngoài (L1, L15; ADR-9201): nhãn ngoài tính cùng lần đọc đầu và lưu (không số tiền),
+//      cờ mốc ngoài ở bảng, số của dải ngoài + mốc + độ lệch ở *Xem dải*; L1 tại mốc mở giá (ghi/rút sau mốc chỉ được đếm, quy đổi
+//      riêng rút trước mốc ⇒ không quy đổi được); bản lưu trước S4.6b; CSDL của bảng con.
 //
 // Giàn cảnh: gói đã mở niêm phong dựng bằng SQL thô dưới vai chủ cụm, đúng thứ tự cạnh của đường thật (khuôn
 // `packages/du-lieu-nen/src/lich-su-gia.int.test.ts`) — mọi trigger ENABLE ALWAYS vẫn chạy, kể cả trigger ghim chính sách lúc OPEN.
@@ -31,7 +34,17 @@ import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { PermissionDeniedError } from "@trustprocure/identity";
-import { NHOM_BENCHMARK_MAU, docNhomBenchmark, taoHangChuan, tinhBenchmarkGoi } from "@trustprocure/du-lieu-nen";
+import {
+  NHOM_BENCHMARK_MAU,
+  docNhomBenchmark,
+  ghiBanLuuBenchmark,
+  khaiQuyDoiRieng,
+  nhapDuLieuNgoai,
+  rutDuLieuNgoai,
+  rutQuyDoiRieng,
+  taoHangChuan,
+  tinhBenchmarkGoi,
+} from "@trustprocure/du-lieu-nen";
 import { TEP_DAC_TA, TEP_DU_LIEU, docBenchmark, docDaiBenchmark, dungBoBangChung, taoLuotDanhGia, type BenchmarkCuaGoi } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -776,7 +789,9 @@ describe("[INV-L7] ⑸ docBenchmark", { timeout: 180_000 }, () => {
       [orgA],
     );
     expect(rows).toHaveLength(truoc + 1);
-    expect(Object.keys(rows[0]!.payload).sort()).toEqual(["nguon", "rfqId", "snapshotId", "soDong", "trangThai", "viewedBySessionId"]);
+    expect(Object.keys(rows[0]!.payload).sort()).toEqual([
+      "nguon", "rfqId", "snapshotId", "soDong", "soDongNgoai", "soMocNgoai", "trangThai", "viewedBySessionId",
+    ]);
   });
 
   it("gói `EVALUATING` mà chưa ai đọc (lượt chấm thô) ⇒ lần đọc đầu tính bản lưu cho lần mở thầu MỚI NHẤT, dưới phiên bản ghim", async () => {
@@ -1004,7 +1019,9 @@ describe("[INV-L6] [INV-L7] ⑺ Xem dải và vòng chào lại", { timeout: 300
       [orgA],
     );
     expect(rows).toHaveLength(truoc + 1);
-    expect(Object.keys(rows[0]!.payload).sort()).toEqual(["lineNo", "rfqId", "snapshotId", "soDai", "trangThai", "viewedBySessionId"]);
+    expect(Object.keys(rows[0]!.payload).sort()).toEqual([
+      "lineNo", "rfqId", "snapshotId", "soDai", "soDaiNgoai", "soMocNgoai", "trangThai", "viewedBySessionId",
+    ]);
     expect(JSON.stringify(rows[0]!.payload)).not.toMatch(/102\.5|107\.5/u);
   });
 
@@ -1693,5 +1710,275 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
       const dv = b.duLieuNen!.luotCham.find((l) => l.evaluationId === evaluationId)!.dauVao.find((x) => x.hangChuan === hangThep)!;
       dv.quanSat = dv.quanSat.slice(1);
     }, /LOI-BENCHMARK\t.*hai tập khác nhau/u);
+  });
+});
+
+// ---- [S1.9101 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài ở bảng benchmark và *Xem dải* -----------------------------------
+// Dữ liệu thiết kế, hàng chuẩn N (gốc kg), không lịch sử nội bộ (dải nội bộ dưới sàn), phiên bản 3 = mẫu (5% / 10%, sàn 3 / 3):
+//   Lịch sử ngoài, nhập TRƯỚC khi X mở (ngày = hôm nay giờ Việt Nam − n ngày):
+//     (d10, "Công ty Thép Á") 100 kg + (d10, "cong ty thep a") 120000 t ⇒ MỘT gói (cùng nhà cung cấp đã làm sạch), trung vị 110
+//     (d20, B) 105 · (d30, C) 98 · (d5, E) 130 — lô của E bị rút SAU khi X mở: vẫn vào dải (L1), đếm RUT
+//     (d30, U) 9999 USD ⇒ loại khác tiền tệ · (d40, Bao) 6000 bao, quy đổi riêng 1 bao = 50 kg rút TRƯỚC khi X mở ⇒ không quy đổi được
+//     tại mốc · (d400, Cũ) 50 ⇒ ngoài cửa sổ · (d15, D) 1 ⇒ lô bị rút TRƯỚC khi X mở
+//   ⇒ 5 dòng, 4 gói {98, 105, 110, 130}, 4 nhà cung cấp: Q1 103.25 · trung vị 107.5 · Q3 115.
+//   Nhập SAU khi X mở: (d3, F) 1 ⇒ đếm GHI, không vào dải; quy đổi riêng `bao` khai lại ⇒ dòng `bao` vẫn không quy đổi được TẠI MỐC.
+//   Mốc ngoài: d60 100 kg · d7 112000 t (= 112/kg, mới nhất) · hôm nay + 30 ngày 90 (hiệu lực sau mốc ⇒ bỏ) · d7 USD; sau khi X mở: d0 200.
+//   X: dòng 1 thép N 10 kg (ánh xạ trước khi mở), dòng 2 không ánh xạ; ba báo giá 1100 · 1500 · 900 ⇒ 110 · 150 · 90 /kg.
+//   Nhãn ngoài (5,375 / 10,75 quanh 107,5): BINH_THUONG · LECH_CAO TREN · LECH_CAO DUOI. Độ lệch so với 112: −1,8 · 33,9 · −19,6.
+describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và mốc ngoài", { timeout: 300_000 }, () => {
+  let hangN = "";
+  let rfqN = "";
+  let bgN: readonly BaoGia[] = [];
+  let dau: BenchmarkCuaGoi | null = null;
+  let homNay = "";
+  const dai = (rfqId: string, lineNo: number, phien = pm.phien) =>
+    trong(orgA, (c) => docDaiBenchmark(c, orgA, { rfqId, lineNo, actorSessionId: phien }, api));
+  /** Ngày giờ Việt Nam lệch `n` ngày (âm = tương lai) — cùng lịch với luật *"ngày mua không sau hôm nay"* của `109`. */
+  const ngay = async (n: number): Promise<string> =>
+    (
+      await db.pool.query<{ d: string }>(
+        "SELECT ((timezone('UTC', clock_timestamp()) + interval '7 hours')::date - $1::int)::text AS d",
+        [n],
+      )
+    ).rows[0]!.d;
+  const nhap = async (loai: "MOC_NGOAI" | "LICH_SU_NGOAI", dong: readonly string[]): Promise<string> => {
+    const dauDong =
+      loai === "MOC_NGOAI" ? "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon" : "ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon";
+    const kq = await trong(orgA, (c) => nhapDuLieuNgoai(c, orgA, { loai, vanBan: [dauDong, ...dong].join("\n"), actorSessionId: ql.phien }));
+    if (!kq.nhan) throw new Error(`lô ngoài bị từ chối: ${JSON.stringify(kq.loi)}`);
+    return kq.loNhapId;
+  };
+
+  beforeAll(async () => {
+    await chinhSach(orgA, 3, pm, NHOM_BENCHMARK_MAU);
+    hangN = (await trong(orgA, (c) => taoHangChuan(c, orgA, { ma: "THEP-NGOAI", ten: "Thép mua ngoài", donViGoc: "kg", actorSessionId: ql.phien }))).id;
+    await trong(orgA, (c) => khaiQuyDoiRieng(c, orgA, { hangChuanId: hangN, tuDonVi: "bao", sangDonVi: "kg", heSo: "50", actorSessionId: ql.phien }));
+    homNay = await ngay(0);
+    const [d5, d7, d10, d15, d20, d30, d40, d60, d400, tuongLai] = await Promise.all(
+      [5, 7, 10, 15, 20, 30, 40, 60, 400, -30].map((n) => ngay(n)),
+    );
+    await nhap("LICH_SU_NGOAI", [
+      `THEP-NGOAI,100,kg,VND,${d10!},Công ty Thép Á,Sổ mua 2026`,
+      `THEP-NGOAI,120000,t,VND,${d10!},cong ty thep a,Sổ mua 2026`,
+      `THEP-NGOAI,105,kg,VND,${d20!},Công ty B,Báo giá điện thoại`,
+      `THEP-NGOAI,98,kg,VND,${d30!},Công ty C,Sổ mua 2026`,
+      `THEP-NGOAI,9999,kg,USD,${d30!},Công ty U,Sổ mua 2026`,
+      `THEP-NGOAI,6000,bao,VND,${d40!},Công ty Bao,Sổ mua 2026`,
+      `THEP-NGOAI,50,kg,VND,${d400!},Công ty Cũ,Sổ mua 2025`,
+    ]);
+    const loRutTruoc = await nhap("LICH_SU_NGOAI", [`THEP-NGOAI,1,kg,VND,${d15!},Công ty D,Gõ nhầm`]);
+    await trong(orgA, (c) => rutDuLieuNgoai(c, orgA, { loai: "LICH_SU_NGOAI", loNhapId: loRutTruoc, actorSessionId: ql.phien }));
+    const loRutSau = await nhap("LICH_SU_NGOAI", [`THEP-NGOAI,130,kg,VND,${d5!},Công ty E,Sổ mua 2026`]);
+    await trong(orgA, (c) => rutQuyDoiRieng(c, orgA, { hangChuanId: hangN, tuDonVi: "bao", sangDonVi: "kg", actorSessionId: ql.phien }));
+    await nhap("MOC_NGOAI", [
+      `THEP-NGOAI,100,kg,VND,${d60!},Bảng giá quý 3`,
+      `THEP-NGOAI,112000,t,VND,${d7!},Bảng giá nhà máy tháng 9`,
+      `THEP-NGOAI,90,kg,VND,${tuongLai!},Bảng giá quý sau`,
+      `THEP-NGOAI,5,kg,USD,${d7!},Bảng giá USD`,
+    ]);
+
+    rfqN = await taoGoi(boA2, [
+      ["Thep mua ngoai", "10", "kg"],
+      ["Hang la", "1", "cai"],
+    ]);
+    await anhXa(orgA, rfqN, 1, hangN);
+    bgN = [await nopBaoGia(boA2, rfqN), await nopBaoGia(boA2, rfqN), await nopBaoGia(boA2, rfqN)];
+    await moThau(boA2, rfqN, [
+      [bgN[0]!.versionId, phongBi([[1, "1100"], [2, "50"]])],
+      [bgN[1]!.versionId, phongBi([[1, "1500"], [2, "50"]])],
+      [bgN[2]!.versionId, phongBi([[1, "900"], [2, "50"]])],
+    ]);
+    // SAU mốc mở giá của X: một dòng lịch sử, một mốc, và lần rút lô của E — dải và mốc của X không đổi (L1), chỉ đếm.
+    await nhap("LICH_SU_NGOAI", [`THEP-NGOAI,1,kg,VND,${await ngay(3)},Công ty F,Nhập sau mốc`]);
+    await nhap("MOC_NGOAI", [`THEP-NGOAI,200,kg,VND,${homNay},Nhập sau mốc`]);
+    await trong(orgA, (c) => rutDuLieuNgoai(c, orgA, { loai: "LICH_SU_NGOAI", loNhapId: loRutSau, actorSessionId: ql.phien }));
+    // Quy đổi riêng `bao` khai LẠI sau mốc của X: tại mốc của X dòng `bao` vẫn không quy đổi được — quy đổi đọc TẠI MỐC, không lúc đọc.
+    await trong(orgA, (c) => khaiQuyDoiRieng(c, orgA, { hangChuanId: hangN, tuDonVi: "bao", sangDonVi: "kg", heSo: "50", actorSessionId: ql.phien }));
+    dau = await doc(orgA, rfqN);
+  }, 300_000);
+
+  const nhanNgoai = (b: BenchmarkCuaGoi | null): string[] =>
+    b?.trangThai === "CO" && b.dongNgoai !== null
+      ? b.dongNgoai.map((d) => `${d.bidVersionId}:${String(d.lineNo)}:${d.nhan}:${d.chieu ?? "-"}`).sort()
+      : [];
+
+  it("lần đọc ĐẦU tính và lưu nhãn ngoài của mỗi dòng đo được — tách khỏi nhãn nội bộ (dưới sàn); cờ mốc ngoài không con số", async () => {
+    expect(dau).toMatchObject({ trangThai: "CO", nguon: "TINH_MOI", policyVersion: 3 });
+    if (dau?.trangThai !== "CO") return;
+    expect(dau.dong.filter((d) => d.lineNo === 1).map((d) => d.nhan)).toEqual(["CHUA_DU_LICH_SU", "CHUA_DU_LICH_SU", "CHUA_DU_LICH_SU"]);
+    expect(nhanNgoai(dau)).toEqual(
+      [
+        `${bgN[0]!.versionId}:1:BINH_THUONG:-`,
+        `${bgN[1]!.versionId}:1:LECH_CAO:TREN`,
+        `${bgN[2]!.versionId}:1:LECH_CAO:DUOI`,
+      ].sort(),
+    );
+    const cuaSoTu = (await db.pool.query<{ d: string }>("SELECT ($1::date - interval '12 months')::date::text AS d", [homNay])).rows[0]!.d;
+    for (const d of dau.dongNgoai ?? []) {
+      expect(d).toMatchObject({
+        canonicalItemId: hangN, tienTe: "VND", cuaSoTu, denNgay: homNay, soDong: 5, soGoi: 4, soNcc: 4, soLoaiTienTe: 1, soLoaiKhongQuyDoi: 1,
+      });
+    }
+    expect(dau.mocNgoai).toEqual([
+      { canonicalItemId: hangN, tienTe: "VND", nguon: "Bảng giá nhà máy tháng 9", ngayHieuLuc: await ngay(7) },
+    ]);
+    // Bảng con: ba hàng, không cột tiền; dòng 2 (không đo được) không có hàng.
+    const { rows } = await db.pool.query<{ line_no: number }>(
+      "SELECT line_no FROM price_benchmark_snapshot_external_lines WHERE rfq_id = $1 ORDER BY line_no",
+      [rfqN],
+    );
+    expect(rows.map((r) => r.line_no)).toEqual([1, 1, 1]);
+  });
+
+  it("đọc lại ⇒ BẢN LƯU, cùng nhãn ngoài; hàng sổ `BENCHMARK_READ` mang số đếm ngoài, không giá", async () => {
+    const lai = await doc(orgA, rfqN);
+    expect(lai).toMatchObject({ trangThai: "CO", nguon: "BAN_LUU" });
+    expect(nhanNgoai(lai)).toEqual(nhanNgoai(dau));
+    const { rows } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'BENCHMARK_READ' AND resource_id = $2 ORDER BY seq DESC LIMIT 1",
+      [orgA, rfqN],
+    );
+    expect(rows[0]!.payload).toMatchObject({ soDongNgoai: 3, soMocNgoai: 1, nguon: "BAN_LUU" });
+    expect(JSON.stringify(rows[0]!.payload)).not.toMatch(/107\.5|112/u);
+  });
+
+  it("Xem dải: số của dải ngoài, nguồn, ghi/rút SAU mốc chỉ đếm; mốc ngoài theo kg (không nhãn); độ lệch của từng báo giá; nhãn ngoài khớp bản lưu", async () => {
+    const kq = await dai(rfqN, 1);
+    expect(kq).toMatchObject({ trangThai: "CO", donViGoc: "kg" });
+    if (kq?.trangThai !== "CO") return;
+    expect(kq.daiNgoai).toHaveLength(1);
+    expect(kq.daiNgoai[0]).toMatchObject({
+      canonicalItemId: hangN, tienTe: "VND", duSan: true, q1: "103.25", trungVi: "107.5", q3: "115",
+      soDong: 5, soGoi: 4, soNcc: 4, soLoaiTienTe: 1, soLoaiKhongQuyDoi: 1,
+      nguon: ["Báo giá điện thoại", "Sổ mua 2026"], sauMoc: { GHI: 1, RUT: 1 }, khopBanLuu: true,
+    });
+    expect(kq.mocNgoai).toHaveLength(1);
+    expect(kq.mocNgoai[0]).toMatchObject({ tienTe: "VND", ghiSauMoc: 1, rutSauMoc: false, moc: { nguon: "Bảng giá nhà máy tháng 9" } });
+    expect(Number(kq.mocNgoai[0]!.moc?.donGiaQuyDoi)).toBe(112);
+    const lech = new Map(kq.giaCuaGoi.map((g) => [g.bidVersionId, g.lechMoc]));
+    expect([lech.get(bgN[0]!.versionId), lech.get(bgN[1]!.versionId), lech.get(bgN[2]!.versionId)]).toEqual(["-1.8", "33.9", "-19.6"]);
+    const { rows } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'BENCHMARK_BAND_READ' AND resource_id = $2 ORDER BY seq DESC LIMIT 1",
+      [orgA, rfqN],
+    );
+    expect(rows[0]!.payload).toMatchObject({ soDai: 1, soDaiNgoai: 1, soMocNgoai: 1 });
+    expect(JSON.stringify(rows[0]!.payload)).not.toMatch(/107\.5|112|103\.25/u);
+  });
+
+  it("người giữ `bid.view` đọc được; TECHNICAL (không `bid.view`) bị từ chối ở cả hai bộ đọc", async () => {
+    await expect(doc(orgA, rfqN, kyThuat.phien)).rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(dai(rfqN, 1, kyThuat.phien)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("nhãn ngoài đã lưu bị sửa NGOÀI luật (vai chủ cụm) ⇒ Xem dải `khopBanLuu: false`", async () => {
+    await db.pool.query(
+      "UPDATE price_benchmark_snapshot_external_lines SET nhan = 'BINH_THUONG', chieu = NULL WHERE rfq_id = $1 AND bid_version_id = $2",
+      [rfqN, bgN[1]!.versionId],
+    );
+    try {
+      expect(await dai(rfqN, 1)).toMatchObject({ trangThai: "CO", daiNgoai: [{ khopBanLuu: false }] });
+    } finally {
+      await db.pool.query(
+        "UPDATE price_benchmark_snapshot_external_lines SET nhan = 'LECH_CAO', chieu = 'TREN' WHERE rfq_id = $1 AND bid_version_id = $2",
+        [rfqN, bgN[1]!.versionId],
+      );
+    }
+    expect(await dai(rfqN, 1)).toMatchObject({ trangThai: "CO", daiNgoai: [{ khopBanLuu: true }] });
+  });
+
+  /** Gói Y một dòng thép N, đã mở, bản lưu tính KHÔNG kèm nhãn ngoài — đúng hình dạng một bản lưu ghi trước S4.6b. */
+  async function goiBanLuuCu(): Promise<{ readonly rfqId: string; readonly bg: BaoGia; readonly banId: string; readonly ghiLuc: string; readonly policyId: string }> {
+    const rfqId = await taoGoi(boA2, [["Thep mua ngoai", "10", "kg"]]);
+    await anhXa(orgA, rfqId, 1, hangN);
+    const bg = await nopBaoGia(boA2, rfqId);
+    await moThau(boA2, rfqId, [[bg.versionId, phongBi([[1, "1000"]])]]);
+    const yc = await lanMoMoiNhat(rfqId);
+    const policyId = (await db.pool.query<{ p: string }>("SELECT chinh_sach_ghim_id AS p FROM rfq_packages WHERE id = $1", [rfqId])).rows[0]!.p;
+    await trong(orgA, async (c) => {
+      const kq = await tinhBenchmarkGoi(c, orgA, { rfqId, bidVersionIds: [bg.versionId], nhom: docNhomBenchmark(NHOM_BENCHMARK_MAU)! });
+      expect(kq.ngoai).toBeNull();
+      await ghiBanLuuBenchmark(c, orgA, { unsealRequestId: yc, policyId, ketQua: kq });
+    });
+    // `ghi_luc` dạng CHỮ: `Date` cắt mất micro giây, và khoá ngoại cùng giao dịch so đúng tới micro giây.
+    const ban = (
+      await db.pool.query<{ id: string; g: string }>("SELECT id, ghi_luc::text AS g FROM price_benchmark_snapshots WHERE rfq_id = $1", [rfqId])
+    ).rows[0]!;
+    return { rfqId, bg, banId: ban.id, ghiLuc: ban.g, policyId };
+  }
+
+  it("bản lưu tính TRƯỚC khi có lịch sử ngoài (không `kemNgoai`) ⇒ bảng `dongNgoai: null`, Xem dải vẫn tính dải ngoài, `khopBanLuu: null`", async () => {
+    const { rfqId: rfqY } = await goiBanLuuCu();
+    const b = await doc(orgA, rfqY);
+    expect(b).toMatchObject({ trangThai: "CO", nguon: "BAN_LUU", dongNgoai: null });
+    expect(b?.trangThai === "CO" && b.mocNgoai.length).toBe(1);
+    // Y mở SAU X: dải của Y thấy dòng của F (nhập sau mốc của X, trước mốc của Y), thấy dòng `bao` (quy đổi riêng khai lại trước mốc
+    // của Y: 6000 / 50 = 120) và không thấy E (rút trước mốc của Y) — L1 theo mốc của TỪNG gói: gói {1, 98, 105, 110, 120} ⇒ trung vị 105.
+    const kq = await dai(rfqY, 1);
+    expect(kq).toMatchObject({
+      trangThai: "CO",
+      daiNgoai: [{ trungVi: "105", soDong: 6, soLoaiKhongQuyDoi: 0, sauMoc: { GHI: 0, RUT: 0 }, khopBanLuu: null }],
+    });
+  });
+
+  it("CSDL: hàng ngoài ở giao dịch KHÁC ⇒ `…_cung_ban_luu_fk`; dòng không đo được ⇒ `…_dong_do_duoc_fk`; năm `CHECK` có tên; đúng ⇒ vào", async () => {
+    // Vai chủ cụm đặt được `ghi_luc` — để khoá ngoại cùng giao dịch không che ràng buộc cần đo; `app_api` thì không đặt được (ca dưới).
+    // Bản lưu cũ Y (chưa hàng ngoài nào) để `UNIQUE` không che khoá ngoại; X cho dòng không đo được (dòng 2) và cho các `CHECK`.
+    const y = await goiBanLuuCu();
+    const banX = (await banLuuCua(rfqN))[0]!;
+    const ghiX = (await db.pool.query<{ g: string }>("SELECT ghi_luc::text AS g FROM price_benchmark_snapshots WHERE id = $1", [banX.id])).rows[0]!
+      .g;
+    interface Hang {
+      readonly ban: string; readonly rfq: string; readonly policy: string; readonly bid: string; readonly line: number; readonly ghi: string;
+      readonly tu: string; readonly den: string; readonly nhan: string; readonly chieu: string | null;
+      readonly dong: number; readonly goi: number; readonly ncc: number;
+    }
+    const X: Hang = {
+      ban: banX.id, rfq: rfqN, policy: banX.policy_id, bid: bgN[0]!.versionId, line: 1, ghi: ghiX,
+      tu: "2025-10-01", den: "2026-10-01", nhan: "BINH_THUONG", chieu: null, dong: 3, goi: 3, ncc: 3,
+    };
+    const Y: Hang = { ...X, ban: y.banId, rfq: y.rfqId, policy: y.policyId, bid: y.bg.versionId, ghi: y.ghiLuc };
+    const CHEN =
+      "INSERT INTO price_benchmark_snapshot_external_lines (org_id, snapshot_id, rfq_id, policy_id, bid_version_id, line_no, canonical_item_id, " +
+      "tien_te, cua_so_tu, den_ngay, nhan, chieu, so_dong, so_goi, so_ncc, so_loai_tien_te, so_loai_khong_quy_doi, ghi_luc) " +
+      "VALUES ($1, $2, $3, $4, $5, $6, $7, 'VND', $8::date, $9::date, $10, $11, $12, $13, $14, 0, 0, $15::timestamptz)";
+    const tham = (h: Hang) => [orgA, h.ban, h.rfq, h.policy, h.bid, h.line, hangN, h.tu, h.den, h.nhan, h.chieu, h.dong, h.goi, h.ncc, h.ghi];
+    const tuChoi = (h: Hang, code: string, constraint: string) =>
+      expect(db.pool.query(CHEN, tham(h)), constraint).rejects.toMatchObject({ code, constraint });
+    await tuChoi({ ...Y, ghi: new Date().toISOString() }, "23503", "price_benchmark_snapshot_external_lines_cung_ban_luu_fk");
+    await tuChoi({ ...X, line: 2 }, "23503", "price_benchmark_snapshot_external_lines_dong_do_duoc_fk");
+    await tuChoi({ ...X, nhan: "KHONG_DO_DUOC" }, "23514", "price_benchmark_snapshot_external_lines_nhan_mien");
+    await tuChoi({ ...X, chieu: "TREN" }, "23514", "price_benchmark_snapshot_external_lines_chieu_khi_lech");
+    await tuChoi({ ...X, goi: 2, ncc: 3 }, "23514", "price_benchmark_snapshot_external_lines_so_dem");
+    await tuChoi({ ...X, dong: 0, goi: 0, ncc: 0 }, "23514", "price_benchmark_snapshot_external_lines_co_dai");
+    await tuChoi({ ...X, tu: "2026-10-02" }, "23514", "price_benchmark_snapshot_external_lines_cua_so");
+    // Đối chứng dương: Y đúng mọi thứ ⇒ vào (rồi huỷ); X đúng mọi thứ ⇒ chỉ `UNIQUE` của hàng đã có chặn.
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(CHEN, tham(Y));
+      await c.query("ROLLBACK");
+    } finally {
+      c.release();
+    }
+    await expect(db.pool.query(CHEN, tham(X))).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("`app_api` không UPDATE, không DELETE, không tự đặt `ghi_luc`; phiên khách và tổ chức khác thấy 0 hàng", async () => {
+    const ban = (await banLuuCua(rfqN))[0]!;
+    for (const cau of [
+      "UPDATE price_benchmark_snapshot_external_lines SET nhan = 'BINH_THUONG' WHERE snapshot_id = $1",
+      "DELETE FROM price_benchmark_snapshot_external_lines WHERE snapshot_id = $1",
+      "INSERT INTO price_benchmark_snapshot_external_lines (org_id, snapshot_id, ghi_luc) SELECT org_id, id, ghi_luc FROM price_benchmark_snapshots WHERE id = $1",
+    ]) {
+      await expect(trong(orgA, (c) => c.query(cau, [ban.id])), cau).rejects.toMatchObject({ code: "42501" });
+    }
+    const dem = (org: string, khach: string | null) =>
+      trong(org, async (c) => {
+        if (khach !== null) await c.query("SELECT set_config('app.guest_session_id', $1, true)", [khach]);
+        return (await c.query<{ n: string }>("SELECT count(*)::text AS n FROM price_benchmark_snapshot_external_lines")).rows[0]!.n;
+      });
+    expect(Number(await dem(orgA, null)), "đối chứng dương").toBeGreaterThan(0);
+    expect(await dem(orgA, bgN[0]!.phienKhach)).toBe("0");
+    expect(await dem(orgB, null)).toBe("0");
   });
 });

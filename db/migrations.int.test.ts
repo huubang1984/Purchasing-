@@ -4186,6 +4186,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.9101 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-9201).
+        "9501_ban_luu_benchmark_ngoai.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8839,6 +8841,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.9101 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-9201).
+        "9501_ban_luu_benchmark_ngoai.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9172,6 +9176,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.9101 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-9201).
+        "9501_ban_luu_benchmark_ngoai.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -628,12 +628,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(qd.status, qd.text).toBe(201);
     // [S1.272 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
     // kịch bản sau đó (chấm, benchmark, BAFO, xuất bộ bằng chứng) chạy trong một thế giới CÓ dữ liệu ngoài; bước 14 quét hai kim.
+    // [S1.9101 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam: S4.6b đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên một ngày
+    // viết cứng là quả bom hẹn giờ — rơi khỏi cửa sổ thì dải và mốc ngoài lặng lẽ rỗng mà kịch bản vẫn xanh ở mọi phép đo cũ.
+    const ngayLui = async (n: number): Promise<string> =>
+      (
+        await db.pool.query<{ d: string }>(
+          "SELECT ((timezone('UTC', clock_timestamp()) + interval '7 hours')::date - $1::int)::text AS d",
+          [n],
+        )
+      ).rows[0]!.d;
     const mn = await goi("POST", "/external-references/import", dl, {
-      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_MOC_NGOAI},kg,VND,2026-01-15,Bang gia nha may\n`,
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_MOC_NGOAI},kg,VND,${await ngayLui(30)},Bang gia nha may\n`,
     });
     expect(mn.status, mn.text).toBe(201);
     const ls = await goi("POST", "/external-purchase-history/import", dl, {
-      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_LICH_SU_NGOAI},kg,VND,2025-11-20,Cong ty Thep Ngoai,So mua 2025\n`,
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_LICH_SU_NGOAI},kg,VND,${await ngayLui(60)},Cong ty Thep Ngoai,So mua 2025\n`,
     });
     expect(ls.status, ls.text).toBe(201);
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
@@ -1387,6 +1396,27 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect((dai.body as { dai: { trangThai: string } }).dai.trangThai).toBe("CO");
     const cuoi = trangThai.loiMoi.map((lm) => lm.gia).sort();
     expect([...quetDonGiaQuyDoi(dai.text)].sort(), "bộ quét phải THẤY đơn giá quy đổi ở Xem dải ngay khi gói UNSEALED").toEqual(cuoi);
+    // [S1.9101 / S4.6b — L15 vế ĐỌC] Dữ liệu ngoài của bước 1 đi qua đường đọc `bid.view`: bản lưu mang nhãn ngoài (một dòng lịch sử
+    // ⇒ dưới sàn) và cờ mốc ngoài KHÔNG con số; Xem dải THẤY mốc ngoài theo kg (đối chứng dương của bộ đọc giá) và dải ngoài một dòng
+    // không con số; mỗi báo giá có độ lệch so với mốc.
+    const bn = (bm.body as { benchmark: { dongNgoai: { nhan: string; soDong: number }[] | null; mocNgoai: { nguon: string }[] } }).benchmark;
+    expect(bn.dongNgoai?.length, "mỗi (báo giá, dòng) đo được một nhãn ngoài").toBe(b.dong.filter((d) => d.nhan !== "KHONG_DO_DUOC").length);
+    for (const d of bn.dongNgoai ?? []) expect([d.nhan, d.soDong]).toEqual(["CHUA_DU_LICH_SU", 1]);
+    expect(bn.mocNgoai.map((m) => m.nguon)).toEqual(["Bang gia nha may"]);
+    expect(bm.text, "bản lưu và cờ mốc không mang kim ngoài").not.toContain(KIM_MOC_NGOAI);
+    expect(bm.text).not.toContain(KIM_LICH_SU_NGOAI);
+    const dn = (
+      dai.body as {
+        dai: {
+          daiNgoai: { soDong: number; duSan: boolean; trungVi: string | null }[];
+          mocNgoai: { moc: { donGiaQuyDoi: string } | null }[];
+          giaCuaGoi: { donGiaQuyDoi: string | null; lechMoc: string | null }[];
+        };
+      }
+    ).dai;
+    expect(dn.daiNgoai.map((x) => [x.soDong, x.duSan, x.trungVi])).toEqual([[1, false, null]]);
+    expect(Number(dn.mocNgoai[0]?.moc?.donGiaQuyDoi), "bộ đọc giá dưới `bid.view` THẤY mốc ngoài").toBe(Number(KIM_MOC_NGOAI));
+    expect(dn.giaCuaGoi.filter((g) => g.donGiaQuyDoi !== null).every((g) => g.lechMoc !== null)).toBe(true);
     expect(await soHangBenchmark(), "mỗi lần đọc một hàng sổ").toBe(truoc + 2);
     const { rows: tai } = await db.pool.query<{ payload: unknown }>(
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('BENCHMARK_READ', 'BENCHMARK_BAND_READ') AND resource_id = $2",
@@ -2110,6 +2140,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Ghi đúng như trình duyệt ghi: văn bản → byte UTF-8, không phân tích lại.
       for (const [ten, noiDung] of Object.entries(eb.tep)) await writeFile(join(quaHttp, ten), Buffer.from(noiDung, "utf8"));
 
+      // [S1.9101 / S4.6b — L15] Nhãn ngoài không vào lượt chấm, nên không vào bộ bằng chứng; hai kim ngoài không ở tệp nào của bộ.
+      for (const [ten, noiDung] of Object.entries(eb.tep)) {
+        expect(noiDung, `${ten} mang kim mốc ngoài`).not.toContain(KIM_MOC_NGOAI);
+        expect(noiDung, `${ten} mang kim lịch sử ngoài`).not.toContain(KIM_LICH_SU_NGOAI);
+      }
       const kiem = chayCli(null, "kiem", "--bo", quaHttp);
       expect(kiem.ma, `${kiem.ra}\n${kiem.loi}`).toBe(0);
       expect(kiem.ra).toContain("ok=true");
