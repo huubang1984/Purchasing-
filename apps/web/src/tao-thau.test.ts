@@ -8,6 +8,26 @@
 
 import { describe, expect, it } from "vitest";
 import { RFQ_STATUSES, RFQ_TRANSITIONS } from "@trustprocure/rfq";
+import { CHOT_VAO_SO } from "@trustprocure/identity";
+import * as GoiNgoaiLe from "@trustprocure/invitation";
+import {
+  LOAI_NGOAI_LE,
+  MA_LY_DO_NGOAI_LE,
+  SAN_GIAI_TRINH_OTHER_BYTE,
+  TRAN_GIAI_TRINH_BYTE,
+  chiDanChot,
+  cungLanNop,
+  docNhaCungCapChon,
+  loaiNgoaiLeGoiY,
+  loiGiaiTrinh,
+  nhanCanhTranh,
+  nhanCo,
+  nhanLoaiNgoaiLe,
+  nhanMaLyDo,
+  nhanXacMinhNgan,
+  tenKemMst,
+  vanBanAnToan,
+} from "./tao-thau.js";
 import {
   KHUNG_TIN_HIEU_RONG,
   TRAN_LY_DO_BYTE,
@@ -386,5 +406,122 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
     expect(loiLyDoGhiNhan(" Ba cong trinh ")).toBeNull();
     expect(loiLyDoGhiNhan("a".repeat(TRAN_LY_DO_BYTE))).toBeNull();
     expect(loiLyDoGhiNhan("ệ".repeat(Math.floor(TRAN_LY_DO_BYTE / 3) + 1))).toContain("Lý do dài quá");
+  });
+});
+
+// ==============================================================================================
+// [S1.9101 / S3.3e1] NGOẠI LỆ, NHÀ CUNG CẤP CÓ SẴN, CHỈ DẪN THEO MÃ CHỐT
+// ==============================================================================================
+
+describe("[S1.9101 / S3.3e1] bản sao để đọc của ba tập đóng và hai trần — khớp hằng của gói máy chủ", () => {
+  it("loại, mã lý do, sàn OTHER và trần giải trình đúng bằng `packages/invitation/src/ngoai-le.ts`", () => {
+    expect([...LOAI_NGOAI_LE]).toEqual([...GoiNgoaiLe.LOAI_NGOAI_LE]);
+    expect([...MA_LY_DO_NGOAI_LE]).toEqual([...GoiNgoaiLe.MA_LY_DO_NGOAI_LE]);
+    expect(SAN_GIAI_TRINH_OTHER_BYTE).toBe(GoiNgoaiLe.SAN_GIAI_TRINH_OTHER_BYTE);
+    expect(TRAN_GIAI_TRINH_BYTE).toBe(GoiNgoaiLe.TRAN_GIAI_TRINH_BYTE);
+  });
+
+  it("mọi loại và mọi mã lý do có nhãn tiếng Việt; mã lạ nói nguyên văn", () => {
+    for (const l of LOAI_NGOAI_LE) expect(nhanLoaiNgoaiLe(l)).not.toBe(l);
+    for (const m of MA_LY_DO_NGOAI_LE) expect(nhanMaLyDo(m)).not.toBe(m);
+    expect(nhanLoaiNgoaiLe("LOW_ACTUAL_COMPETITION")).toBe("LOW_ACTUAL_COMPETITION");
+    expect(nhanMaLyDo(undefined)).toBe("—");
+  });
+});
+
+describe("[S1.9101 / S3.3e1] giải trình ngoại lệ — cùng luật với hàm gói, đếm BYTE", () => {
+  it("rỗng sau khi cắt, quá trần, OTHER dưới sàn ⇒ câu lỗi; đúng sàn ⇒ hợp lệ; mã khác không đòi sàn", () => {
+    expect(loiGiaiTrinh("EMERGENCY", "   ")).toMatch(/^Cần giải trình/u);
+    expect(loiGiaiTrinh("EMERGENCY", "a".repeat(2001))).toMatch(/2000 byte/u);
+    expect(loiGiaiTrinh("EMERGENCY", "ngắn")).toBeNull();
+    // 33 chữ «ệ» = 99 byte UTF-8 (3 byte mỗi chữ): dưới sàn tính bằng BYTE dù chỉ 33 ký tự; thêm một byte là đủ.
+    expect(loiGiaiTrinh("OTHER", "ệ".repeat(33))).toMatch(/từ 100 byte trở lên \(hiện 99\)/u);
+    expect(loiGiaiTrinh("OTHER", `${"ệ".repeat(33)}a`)).toBeNull();
+  });
+});
+
+describe("[S1.9101 / S3.3e1] loại ngoại lệ chọn sẵn theo số lời mời còn sống — khớp chặt của K2 (`107` ⑶)", () => {
+  it("0 ⇒ không loại nào (danh sách rỗng không ngoại lệ nào cứu); 1 ⇒ SINGLE_SOURCE; từ 2 ⇒ LIMITED_COMPETITION", () => {
+    expect([0, 1, 2, 5].map(loaiNgoaiLeGoiY)).toEqual([null, "SINGLE_SOURCE", "LIMITED_COMPETITION", "LIMITED_COMPETITION"]);
+  });
+});
+
+describe("[S1.9101 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫn đứng trước, câu này nói việc phải làm", () => {
+  it("bốn mã của S3.3 có câu; người không giữ quyền mời được bảo nhờ người mời được (trừ K5 — việc của người duyệt)", () => {
+    for (const ma of ["K2_THIEU_CANH_TRANH", "K2_DAU_THAU_CHINH_THUC", "K3_KHONG_XOAY_VONG", "K5_THIEU_CHU_KY_DOC_LAP"]) {
+      expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
+      expect(chiDanChot(ma, true), ma).not.toBeNull();
+    }
+    expect(chiDanChot("K2_THIEU_CANH_TRANH", false)).toMatch(/nhờ người tạo gói hay người giữ quyền mời/u);
+    expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).not.toMatch(/nhờ người tạo gói/u);
+    expect(chiDanChot("K5_THIEU_CHU_KY_DOC_LAP", false)).not.toMatch(/nhờ người tạo gói/u);
+  });
+
+  it("K2: nói khớp chặt (một lời mời ⇒ một nguồn, từ hai ⇒ hạn chế) và danh sách rỗng không cứu được; K3: nhà cung cấp mới phải đếm được", () => {
+    expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).toMatch(/một lời mời còn sống cần «Một nguồn duy nhất», từ hai lời mời cần «Cạnh tranh hạn chế»/u);
+    expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).toMatch(/Danh sách rỗng thì không ngoại lệ nào cứu/u);
+    expect(chiDanChot("K3_KHONG_XOAY_VONG", true)).toMatch(/cũng phải đếm được/u);
+    expect(chiDanChot("K5_THIEU_CHU_KY_DOC_LAP", true)).toMatch(/không lập ngoại lệ nào/u);
+  });
+
+  it("mã khác, không mã, kiểu lạ ⇒ null — màn chỉ in câu của máy chủ", () => {
+    expect(chiDanChot("K1_THIEU_BAC", true)).toBeNull();
+    expect(chiDanChot(undefined, true)).toBeNull();
+    expect(chiDanChot(42, true)).toBeNull();
+  });
+});
+
+describe("[S1.9101 / S3.3e1 · lượt soi TRUNG-2] câu số NHÓM của K2", () => {
+  it("đủ, chưa đủ, gói chưa có bậc; thân không mang khối ⇒ null", () => {
+    expect(nhanCanhTranh({ soNhomDemDuoc: 2, toiThieu: 2 })).toMatch(/^Đếm được 2\/2 nhóm .* — đủ\. Nhà cung cấp chung mã số thuế gốc/u);
+    expect(nhanCanhTranh({ soNhomDemDuoc: 1, toiThieu: 3 })).toMatch(/^Đếm được 1\/3 nhóm .* chưa đủ/u);
+    expect(nhanCanhTranh({ soNhomDemDuoc: 1, toiThieu: null })).toMatch(/chưa có bậc chính sách/u);
+    expect(nhanCanhTranh(null)).toBeNull();
+    expect(nhanCanhTranh({ toiThieu: 2 })).toBeNull();
+  });
+
+  it("cờ từng ô: true/false nói bằng lời, null (tổ chức chưa bật) ⇒ «—»", () => {
+    expect([nhanCo(true), nhanCo(false), nhanCo(null), nhanCo(undefined)]).toEqual(["có", "không", "—", "—"]);
+  });
+});
+
+describe("[S1.9101 / S3.3e1 · lượt soi CAO-1] cùng lần nộp", () => {
+  it("chỉ hai số bằng nhau mới là cùng; thiếu một bên ⇒ coi như lệch", () => {
+    expect(cungLanNop(2, 2)).toBe(true);
+    expect(cungLanNop(2, 3)).toBe(false);
+    expect(cungLanNop(undefined, 0)).toBe(false);
+    expect(cungLanNop(1, null)).toBe(false);
+  });
+});
+
+describe("[S1.9101 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
+  it("chỉ hồ sơ ACTIVE, đúng hình dạng; MST null giữ null", () => {
+    const ds = docNhaCungCapChon({
+      suppliers: [
+        { id: "a", legalName: "Thép A", taxCode: "0101010101", status: "ACTIVE" },
+        { id: "b", legalName: "Thép B", taxCode: null, status: "ACTIVE" },
+        { id: "c", legalName: "Thép C", taxCode: "0202020202", status: "SUSPENDED" },
+        { id: 7, legalName: "hỏng", status: "ACTIVE" },
+      ],
+    });
+    expect(ds.map((n) => [n.id, n.taxCode])).toEqual([["a", "0101010101"], ["b", null]]);
+    expect(docNhaCungCapChon({})).toEqual([]);
+  });
+
+  it("tên kèm MST; tên mang ký tự đảo chiều chữ bị gỡ ký tự và đánh dấu; văn bản tự do cũng vậy", () => {
+    expect(tenKemMst("Thép A", "0101010101")).toBe("Thép A — MST 0101010101");
+    expect(tenKemMst("Thép B", null)).toBe("Thép B — không MST");
+    expect(tenKemMst("Th\u202Eép", "1")).toBe("Thép — MST 1 [⚠ tên chứa ký tự đảo chiều chữ]");
+    expect(vanBanAnToan("bình thường")).toBe("bình thường");
+    expect(vanBanAnToan("a\u2066b")).toBe("ab [⚠ có ký tự đảo chiều chữ]");
+    expect(vanBanAnToan(undefined)).toBe("—");
+  });
+
+  it("trạng thái xác minh một câu: còn hiệu lực (kèm hạn), hết hiệu lực, thu hồi, chưa xác minh, không đọc được", () => {
+    expect(nhanXacMinhNgan({ loai: "VERIFIED", conHieuLuc: true, hetHanAt: "2027-01-01T00:00:00Z" })).toMatch(/^Đã xác minh, còn hiệu lực tới /u);
+    expect(nhanXacMinhNgan({ loai: "VERIFIED", conHieuLuc: false })).toMatch(/^Xác minh đã hết hiệu lực/u);
+    expect(nhanXacMinhNgan({ loai: "REVOKED", conHieuLuc: false })).toMatch(/^Xác minh đã bị thu hồi/u);
+    expect(nhanXacMinhNgan({ loai: null, conHieuLuc: false })).toMatch(/^Chưa được xác minh/u);
+    expect(nhanXacMinhNgan(null)).toBe("Không đọc được trạng thái xác minh.");
   });
 });

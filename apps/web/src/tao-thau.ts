@@ -374,12 +374,14 @@ const NHAN_MA_LY_DO: Readonly<Record<(typeof MA_LY_DO_NGOAI_LE)[number], string>
 
 /** Loại ngoại lệ nói bằng lời; mã lạ trả nguyên văn. */
 export function nhanLoaiNgoaiLe(loai: unknown): string {
-  return typeof loai === "string" && Object.hasOwn(NHAN_LOAI, loai) ? NHAN_LOAI[loai as LoaiNgoaiLe] : String(loai ?? "—");
+  if (typeof loai !== "string" || loai === "") return "—";
+  return Object.hasOwn(NHAN_LOAI, loai) ? NHAN_LOAI[loai as LoaiNgoaiLe] : loai;
 }
 
 /** Mã lý do nói bằng lời; mã lạ trả nguyên văn. */
 export function nhanMaLyDo(ma: unknown): string {
-  return typeof ma === "string" && Object.hasOwn(NHAN_MA_LY_DO, ma) ? NHAN_MA_LY_DO[ma as keyof typeof NHAN_MA_LY_DO] : String(ma ?? "—");
+  if (typeof ma !== "string" || ma === "") return "—";
+  return Object.hasOwn(NHAN_MA_LY_DO, ma) ? NHAN_MA_LY_DO[ma as keyof typeof NHAN_MA_LY_DO] : ma;
 }
 
 function soByteUtf8(s: string): number {

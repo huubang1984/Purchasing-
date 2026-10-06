@@ -38,7 +38,7 @@ export interface HoSoMan {
   readonly contacts: readonly NguoiLienHeMan[];
 }
 
-const chuoi = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const chuoiHoSo = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
 /** Đọc thân `GET /supplier-verifications`. Phần tử sai hình dạng bị bỏ — màn không vẽ thứ nó không hiểu, và không xác minh nó. */
 export function docHoSo(body: unknown): HoSoMan[] {
@@ -50,7 +50,8 @@ export function docHoSo(body: unknown): HoSoMan[] {
     if (h === null || typeof h !== "object") continue;
     const xm = h.xacMinh as Record<string, unknown> | null | undefined;
     if (typeof h.supplierId !== "string" || typeof h.legalName !== "string" || typeof h.status !== "string") continue;
-    if (typeof h.bamHoSo !== "string" || !/^[0-9a-f]{64}$/u.test(h.bamHoSo) || xm === null || typeof xm !== "object") continue;
+    // Băm sha-256 dạng hex — 64 ký tự thường.
+    if (typeof h.bamHoSo !== "string" || h.bamHoSo.length !== 64 || !/^[0-9a-f]+$/u.test(h.bamHoSo) || xm === null || typeof xm !== "object") continue;
     if (!Array.isArray(h.contacts)) continue;
     const contacts: NguoiLienHeMan[] = [];
     for (const y of h.contacts as unknown[]) {
@@ -58,25 +59,25 @@ export function docHoSo(body: unknown): HoSoMan[] {
       if (c === null || typeof c !== "object" || typeof c.id !== "string" || typeof c.email !== "string") continue;
       contacts.push({
         id: c.id,
-        fullName: chuoi(c.fullName) ?? "—",
+        fullName: chuoiHoSo(c.fullName) ?? "—",
         email: c.email,
-        phone: chuoi(c.phone),
-        status: chuoi(c.status) ?? "—",
-        createdAt: chuoi(c.createdAt) ?? "",
-        themBoiTen: chuoi(c.themBoiTen),
+        phone: chuoiHoSo(c.phone),
+        status: chuoiHoSo(c.status) ?? "—",
+        createdAt: chuoiHoSo(c.createdAt) ?? "",
+        themBoiTen: chuoiHoSo(c.themBoiTen),
       });
     }
     ra.push({
       supplierId: h.supplierId,
       legalName: h.legalName,
-      taxCode: chuoi(h.taxCode),
+      taxCode: chuoiHoSo(h.taxCode),
       status: h.status,
       loai: xm.loai === "VERIFIED" || xm.loai === "REVOKED" ? xm.loai : null,
       conHieuLuc: xm.conHieuLuc === true,
-      hetHanAt: chuoi(xm.hetHanAt),
-      luc: chuoi(xm.luc),
-      boiTen: chuoi(h.boiTen),
-      lyDo: chuoi(xm.lyDo),
+      hetHanAt: chuoiHoSo(xm.hetHanAt),
+      luc: chuoiHoSo(xm.luc),
+      boiTen: chuoiHoSo(h.boiTen),
+      lyDo: chuoiHoSo(xm.lyDo),
       bamHoSo: h.bamHoSo,
       doiSauXacMinh: h.doiSauXacMinh === true,
       contacts,

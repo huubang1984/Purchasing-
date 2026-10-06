@@ -1146,7 +1146,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           ? [{ path: hopLe.path, ...(hopLe.cookie === "" ? {} : { cookie: hopLe.cookie }), body: hopLe.body, ...(hopLe.sau === undefined ? {} : { sau: hopLe.sau }) }]
           : [{ path: thay(r.path), cookie: r.audience === "GUEST" ? k : m }];
       for (const ca of cacCa) {
-        const ph = await goi(r.method, ca.path, ca.cookie, r.method === "GET" ? undefined : await (ca.body ?? {}));
+        // [S1.9101 / S3.3e1] Thân có thể là một lời hứa (ca xác minh đọc băm hồ sơ ngay lúc gọi) — chờ nó trước khi gửi.
+        const than: unknown = r.method === "GET" ? undefined : await Promise.resolve(ca.body ?? {});
+        const ph = await goi(r.method, ca.path, ca.cookie, than);
         soGoi += 1;
         if (!laGhi) phanHoiDoc.set(`${r.method} ${r.path}`, ph);
         ca.sau?.(ph);

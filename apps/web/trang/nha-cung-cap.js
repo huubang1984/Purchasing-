@@ -198,8 +198,9 @@ async function xacMinh(h, nut) {
     // [lượt soi CAO-2] Băm của ĐÚNG hồ sơ đang hiện: hồ sơ đổi từ lúc đọc ⇒ máy chủ từ chối, và màn đọc lại.
     const r = await goi("POST", `/suppliers/${h.supplierId}/verify`, { bamDaXem: h.bamHoSo });
     if (r.status !== 201) {
-      bao($("loi2"), loiCua(r, "Không xác minh được"));
+      // Đọc lại TRƯỚC rồi mới in câu từ chối — lần đọc mở đầu bằng việc xoá ô lỗi.
       await napHoSo();
+      bao($("loi2"), loiCua(r, "Không xác minh được"));
       return;
     }
     bao($("ok2"), `Đã xác minh ${h.legalName}${h.taxCode === null ? "" : ` (MST ${h.taxCode})`}.`);
