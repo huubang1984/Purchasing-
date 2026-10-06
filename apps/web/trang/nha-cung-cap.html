@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Xác minh nhà cung cấp — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Xác minh nhà cung cấp</h1>
+    <span class="vai">Tài chính</span>
+    <nav><a href="/chinh-sach">Màn chính sách</a> · <a href="/nhom-hang">Màn nhóm hàng</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa <strong>bí mật ghi danh</strong>
+      để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Chỉ người giữ quyền xác minh nhà cung cấp — mặc định là vai tài
+      chính — xác minh và thu hồi được, và chỉ với nhà cung cấp mà họ không dựng hồ sơ hay người liên hệ nào.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <!-- [S1.240 / khoản 282] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login`. -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước. -->
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
+    <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Hồ sơ nhà cung cấp</h2>
+    <!-- [S1.273 / S3.3e1 — lượt soi CAO-2] Link mời đi tới NGƯỜI LIÊN HỆ được chọn, nên xác minh một hồ sơ là xác minh cả danh sách
+         người liên hệ của nó. Lần bấm «Xác minh» gửi băm của đúng hồ sơ đang hiện; hồ sơ đổi trong lúc xem thì máy chủ từ chối. -->
+    <p class="ghi">Xác minh là xác nhận mã số thuế, tên pháp lý và MỌI người liên hệ dưới đây — link mời và mã OTP đi tới người
+      liên hệ được chọn. Người liên hệ thêm sau lần xác minh gần nhất được đánh dấu. Hồ sơ đổi trong lúc bạn xem thì lần xác minh bị
+      từ chối: đọc lại rồi xem lại. Hạn hiệu lực theo chính sách của tổ chức; xác minh lại là gia hạn.</p>
+    <p class="ghi">Lý do thu hồi vào sổ kiểm toán vĩnh viễn và mọi người dùng bên mua trong tổ chức đọc được.</p>
+    <label for="ly-do-thu-hoi">Lý do thu hồi (cho nút «Thu hồi» trên bảng)</label>
+    <input id="ly-do-thu-hoi" autocomplete="off" placeholder="Mã số thuế không khớp với đăng ký kinh doanh">
+    <table class="xep" id="bang-ho-so">
+      <thead><tr><th>Nhà cung cấp</th><th>Xác minh</th><th>Người liên hệ</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="nut-doc-ho-so" class="phu">Đọc lại</button>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — chỉ nhà cung cấp đã xác minh còn hiệu lực mới được đếm cho cạnh tranh tối thiểu; mọi lần xác minh
+    và thu hồi đều để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/nha-cung-cap.js"></script>
+</body>
+</html>

@@ -803,12 +803,16 @@ describe("[S1.265 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm",
     expect(await soHang(rfqId)).toBe(1);
   });
 
-  it("⑺ tổ chức khác không thấy: đọc qua route trả rỗng, câu thô dưới `app_api` của tổ chức khác không thấy hàng; phiên khách không thấy", async () => {
+  it("⑺ tổ chức khác không thấy: đọc qua route ⇒ 404 như gói, câu thô dưới `app_api` của tổ chức khác không thấy hàng; phiên khách không thấy", async () => {
     const t = await toChucDaBat();
     const u = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await lap(t, rfqId);
-    expect(await danhSach(u, rfqId, u.pm)).toEqual([]);
+    // [S1.273 / S3.3e1 · ADR-150 ⑶] ~~đọc qua route trả rỗng~~ Câu đọc nay dựng từ `rfq_packages` để mang lần nộp: gói không đọc được
+    // dưới RLS của tổ chức khác ⇒ 404 `khong co goi thau`, cùng câu `GET /rfqs/:id` trả cho đúng gói ấy — không lộ thêm gì.
+    const r = await goi("GET", `/rfqs/${rfqId}/exceptions`, u.pm.cookie);
+    expect([r.status, r.body.error]).toEqual([404, "khong co goi thau"]);
+    expect((await goi("GET", `/rfqs/${rfqId}`, u.pm.cookie)).status, "đối chứng: gói cũng 404").toBe(404);
     const { rows } = await withTenant(apiPool, u.org, (c) => c.query("SELECT 1 FROM rfq_sourcing_exceptions WHERE rfq_id = $1", [rfqId]));
     expect(rows).toEqual([]);
     const khach = await withTenant(apiPool, t.org, async (c) => {

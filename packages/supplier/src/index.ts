@@ -32,8 +32,11 @@ export {
 } from "./suppliers.js";
 // [S1.196 / S3.3a / K8a] Xác minh nội bộ nhà cung cấp — ghi dưới `supplier.qualify`, trigger `ncc_kiem_xac_minh` có thẩm quyền.
 export {
+  docHoSoXacMinh,
   docXacMinhNhaCungCap,
   thuHoiXacMinhNhaCungCap,
   xacMinhNhaCungCap,
+  type HoSoXacMinh,
+  type NguoiLienHeXacMinh,
   type XacMinhNhaCungCap,
 } from "./xac-minh.js";

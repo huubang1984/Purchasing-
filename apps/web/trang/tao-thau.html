@@ -149,6 +149,19 @@
       nó đi thẳng tới bộ gửi. Danh sách dưới trả id để thu hồi được lời mời gửi nhầm.</p>
     <p class="ghi" id="ghi-s3-b5" hidden>Tổ chức này đã bật kiểm soát theo bậc: lời mời dựng ở đây nằm «chưa gửi» cho
       tới khi gói được mở — lúc ấy mọi link đi một lượt. Thu hồi chỉ được khi gói còn soạn thảo.</p>
+    <!-- [S1.273 / S3.3e1] Ô chọn nhà cung cấp CÓ SẴN. Trước vòng này bước này chỉ mời được hồ sơ vừa tạo trong phiên — mà ở tổ chức
+         đã bật, K2 không đếm nhà cung cấp do người chọn danh sách dựng, nên người mua dùng màn không bao giờ nộp duyệt được. -->
+    <h3>Chọn nhà cung cấp có sẵn</h3>
+    <p class="ghi" id="ghi-s3-ncc" hidden>Ở tổ chức này, nhà cung cấp chỉ được đếm cho cạnh tranh tối thiểu khi hồ sơ và mọi người
+      liên hệ của nó do người KHÁC dựng — không phải người tạo gói, người mời hay người thu hồi lời mời — và tài chính đã xác minh
+      nó còn hiệu lực. Nhà cung cấp bạn vừa tạo ở dưới không được đếm ở gói của bạn.</p>
+    <label for="chon-ncc">Nhà cung cấp</label>
+    <select id="chon-ncc"></select>
+    <label for="chon-lh">Người liên hệ nhận link mời</label>
+    <select id="chon-lh"></select>
+    <p class="ghi" id="xac-minh-ncc" hidden></p>
+    <button id="nut-doc-ncc" class="phu">Đọc lại danh sách nhà cung cấp</button>
+    <h3>Hoặc tạo nhà cung cấp mới</h3>
     <label for="ncc-ten">Tên pháp nhân nhà cung cấp</label>
     <input id="ncc-ten" autocomplete="off" placeholder="Thep Dong Anh">
     <label for="ncc-mst">Mã số thuế</label>
@@ -160,15 +173,47 @@
     <input id="lh-email" autocomplete="off" inputmode="email" placeholder="ban@vidu.vn">
     <label for="lh-dt">Điện thoại</label>
     <input id="lh-dt" autocomplete="off" inputmode="tel" placeholder="0901234567">
+    <!-- [S1.273 / S3.3e1 — lượt soi TRUNG-1] Chỉ cho nhà cung cấp VỪA TẠO ở đây: người liên hệ không xoá được, và một người liên hệ
+         do người chọn danh sách thêm làm nhà cung cấp ấy thôi được đếm ở gói của họ, đồng thời làm mất xác minh của nó. -->
     <button id="nut-them-lh" class="phu">Thêm người liên hệ</button>
+    <p class="ghi" id="ghi-them-lh" hidden>Chỉ thêm người liên hệ được cho nhà cung cấp vừa tạo ở trên. Hồ sơ của người khác cần thêm
+      người liên hệ thì nhờ người quản lý hồ sơ ấy — người liên hệ không xoá được, và mọi thay đổi làm xác minh của nhà cung cấp hết
+      hiệu lực.</p>
     <button id="nut-moi">Mời nhà cung cấp này</button>
     <button id="nut-doc-moi" class="phu">Đọc danh sách lời mời</button>
-    <table id="bang-moi">
-      <thead><tr><th>Nhà cung cấp</th><th>Người liên hệ</th><th>Kênh</th><th>Trạng thái</th><th></th></tr></thead>
+    <p class="ghi" id="tom-tat-canh-tranh" hidden></p>
+    <table class="xep" id="bang-moi">
+      <thead><tr><th>Nhà cung cấp</th><th>Người liên hệ</th><th>Kênh</th><th>Trạng thái</th><th id="th-xac-minh" hidden>Đã xác minh</th><th id="th-dem" hidden>Đếm được</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="bao loi" id="loi5" hidden></div>
     <div class="bao ok" id="ok5" hidden></div>
+    <!-- [S1.273 / S3.3e1] Ngoại lệ cạnh tranh (spec S3 §4.4): lập và rút chỉ ở DRAFT, nằm trong băm danh sách người duyệt ký; tác giả
+         ngoại lệ vào tập loại trừ của K5. Màn chỉ tự nạp bảng khi người xem giữ quyền mời (khoản 340) — người khác bấm «Xem ngoại lệ». -->
+    <div id="khoi-ngoai-le" hidden>
+      <h3>Ngoại lệ cạnh tranh</h3>
+      <p class="ghi">Gói không đủ nhà cung cấp đếm được, hay không có nhà cung cấp mới so với các gói gần đây, chỉ nộp duyệt được
+        khi có một ngoại lệ còn sống ĐÚNG loại. Người lập ngoại lệ không còn là người ký độc lập của gói này. Lập và rút chỉ khi gói
+        còn soạn thảo; mỗi lần đều vào sổ kiểm toán.</p>
+      <button id="nut-xem-ngoai-le" class="phu">Xem ngoại lệ</button>
+      <table class="xep" id="bang-ngoai-le">
+        <thead><tr><th>Loại</th><th>Lý do</th><th>Giải trình</th><th>Lập lúc</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="khoi-lap-ngoai-le" hidden>
+        <label for="loai-ngoai-le">Loại ngoại lệ</label>
+        <select id="loai-ngoai-le"></select>
+        <label for="ma-ly-do">Mã lý do</label>
+        <select id="ma-ly-do"></select>
+        <label for="giai-trinh">Giải trình</label>
+        <textarea id="giai-trinh" rows="3" autocomplete="off" placeholder="Chỉ một hãng phân phối loại van này tại Việt Nam"></textarea>
+        <button id="nut-lap-ngoai-le" class="phu">Lập ngoại lệ</button>
+        <label for="ly-do-rut">Lý do rút (cho nút «Rút» trên bảng)</label>
+        <input id="ly-do-rut" autocomplete="off" placeholder="Đã tìm được nhà cung cấp thứ hai">
+      </div>
+      <div class="bao loi" id="loi-nl" hidden></div>
+      <div class="bao ok" id="ok-nl" hidden></div>
+    </div>
   </section>
 
   <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>

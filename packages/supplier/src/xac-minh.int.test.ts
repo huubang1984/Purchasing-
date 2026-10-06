@@ -5,7 +5,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { docXacMinhNhaCungCap, thuHoiXacMinhNhaCungCap, xacMinhNhaCungCap } from "./xac-minh.js";
+import { docHoSoXacMinh, docXacMinhNhaCungCap, thuHoiXacMinhNhaCungCap, xacMinhNhaCungCap } from "./xac-minh.js";
 
 // =============================================================================================
 // [S1.196 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16
@@ -128,7 +128,11 @@ async function hoSo(t: ToChuc, tuyChon: { readonly mst?: boolean; readonly ai?: 
 }
 
 async function xacMinh(t: ToChuc, ncc: string, ai: Nguoi): Promise<Awaited<ReturnType<typeof xacMinhNhaCungCap>>> {
-  return await withTenant(apiPool, t.org, (c) => xacMinhNhaCungCap(c, t.org, { supplierId: ncc, actorSessionId: ai.s }, auditPool));
+  // [S1.273 / S3.3e1] Lần xác minh mang băm hồ sơ đã thấy — đọc ngay trước, như màn `/nha-cung-cap`.
+  return await withTenant(apiPool, t.org, async (c) => {
+    const bamDaXem = (await docHoSoXacMinh(c, t.org)).find((h) => h.supplierId === ncc)?.bamHoSo ?? "";
+    return await xacMinhNhaCungCap(c, t.org, { supplierId: ncc, actorSessionId: ai.s, bamDaXem }, auditPool);
+  });
 }
 
 async function loiCua(p: Promise<unknown>): Promise<{ ten: string; thongDiep: string; ma?: string }> {
