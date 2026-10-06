@@ -474,6 +474,9 @@ const DANH_SACH_TRANG_SUPPLIER = [
   "docXacMinhNhaCungCap",
   "thuHoiXacMinhNhaCungCap",
   "xacMinhNhaCungCap",
+  // [S1.273 / S3.3e1] Hồ sơ xác minh của mọi nhà cung cấp cho màn `/nha-cung-cap` — trạng thái, băm hồ sơ, người liên hệ; gọi
+  // `assertTenantBound` trước mọi thứ, không token, không phiên.
+  "docHoSoXacMinh",
 ];
 
 const SUPPLIER_PACKAGE_JSON_URL = new URL("../../packages/supplier/package.json", import.meta.url);

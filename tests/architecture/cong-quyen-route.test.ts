@@ -181,6 +181,9 @@ const HAM_CHI_DOC = [
   // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docXacMinhNhaCungCap",
+  // [S1.273 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp — gộp `docXacMinhNhaCungCap` và `listSupplierContacts`, cùng hạng hai
+  // hàm ấy. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docHoSoXacMinh",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",

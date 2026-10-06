@@ -38,7 +38,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { nguoiNhapNhaCungCap, quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { createSupplier, addSupplierContact, xacMinhNhaCungCap } from "@trustprocure/supplier";
+import { createSupplier, addSupplierContact, docHoSoXacMinh, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import {
   addRfqItem,
   approveRfq,
@@ -278,7 +278,8 @@ async function dungNccDemDuoc(c: pg.PoolClient, ten: string): Promise<{ supplier
     phone: `09${s.id.replace(/\D/g, "").slice(0, 8).padEnd(8, "0")}`,
     actorSessionId: sNhapNcc,
   });
-  const xm = await xacMinhNhaCungCap(c, orgA, { supplierId: s.id, actorSessionId: sTc2 }, apiPool);
+  const bamDaXem = (await docHoSoXacMinh(c, orgA)).find((h) => h.supplierId === s.id)?.bamHoSo ?? "";
+  const xm = await xacMinhNhaCungCap(c, orgA, { supplierId: s.id, actorSessionId: sTc2, bamDaXem }, apiPool);
   expect(xm.conHieuLuc, `luồng S3: xác minh của ${ten} còn hiệu lực`).toBe(true);
   return { supplierId: s.id, contactId: lh.id };
 }

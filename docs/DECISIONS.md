@@ -11235,9 +11235,13 @@ Không phát hiện CAO. Sửa:
 - **Cuộc đua với lần mở thầu:** lần mở thầu commit SAU lúc giao dịch đọc bắt đầu mà TRƯỚC câu bối cảnh có `unsealed_at ≥ now()` của người
   đọc; tính bây giờ thì `quan_sat_gia` không thấy các báo giá ấy (`<` chặt) — bản lưu ghi-một-lần mang `KHONG_DO_DUOC` mãi cho bản BAFO, hay
   vỡ `…_moc_truoc_ghi` ở vòng một. Trả trạng thái có tên **`THU_LAI`**, không ghi.
-- **Cuộc đua với cạnh trạng thái:** sau phép tính và trước khi ghi hay trả con số (ở cả `docBenchmark` lẫn `docDaiBenchmark`), khoá hàng gói
-  `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất bằng một câu RIÊNG (ảnh chụp mới dưới READ COMMITTED). Đã đổi ⇒ trạng thái mới
-  (không nhãn) hay `THU_LAI`. Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi.
+- **Cuộc đua với cạnh trạng thái:** sau phép tính và trước khi ghi hay trả con số (ở cả `docBenchmark` lẫn `docDaiBenchmark`), ~~khoá hàng gói
+  `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất bằng một câu RIÊNG (ảnh chụp mới dưới READ COMMITTED)~~ **[S1.274 / khoản 342]**
+  hỏi lại trạng thái và lần mở thầu mới nhất — lần đọc ĐẦU (ghi bản lưu) dưới khoá hàng gói `FOR SHARE`, bằng một câu RIÊNG sau câu khoá
+  (ảnh chụp mới dưới READ COMMITTED); lần đọc bản lưu và *Xem dải* bằng MỘT câu không khoá. Đã đổi ⇒ trạng thái mới (không nhãn) hay
+  `THU_LAI`. ~~Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi.~~ **[S1.274]** Ở
+  đường ghi, mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi; ở đường đọc, lượt
+  đọc đúng tại câu hỏi lại.
 - **`khopBanLuu` so cả NHÃN:** nhãn tính lại từ giá của chính dòng tại `ghi_luc` trên dải tính lại phải trùng nhãn đã lưu — một giá lịch
   sử sửa ngoài luật dời trung vị mà không đổi số đếm nào.
 - **Màn:** đọc gói khác xoá benchmark của gói trước; *Đọc benchmark* đọc benchmark TRƯỚC, bảng so sánh SAU, chỉ khi có nhãn, và LẠI mỗi lần
@@ -11256,11 +11260,23 @@ Giới hạn nói thêm:
 - **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước.
 - **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
   cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
-- **Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.
+- ~~**Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.~~ **[S1.274]** Đột biến M4 nay ĐỎ: luôn tính lại đưa mọi lượt đọc về
+  đường ghi, tức khoá hàng gói ở mỗi lượt — ca NOWAIT của lần đọc bản lưu bắt nó.
 - **[S1.271 / khoản 342] Lượt đọc gối nhau bỏ đói các cạnh trạng thái.** `FOR SHARE` của `kiemLaiDuoiKhoa` giữ tới hết giao dịch
   đọc, và một `FOR SHARE` mới không chờ bên ghi đang xếp hàng; ở ba trạng thái hiển thị, chấm thầu, mở vòng BAFO và đề xuất trao thầu
-  chờ tới khi các lượt đọc có khe — đo bằng đúng câu khoá của `duyetTraoThau` dưới hai trần 15 s của pool sản xuất: tới ba luồng đọc liên tục lần chờ lâu nhất 6,4 ms; sáu luồng ⇒ p50 2,8 s, lâu nhất 13,4 s, 5/30 lần hỏng ở `statement_timeout` (`57014`); mười hai luồng ⇒ 30/30 lần hỏng. Ở `AWARDED` lượt đọc không khoá, nên lần duyệt trao thầu không chờ nó. Chưa sửa;
-  hướng đề xuất ở khoản 342.
+  chờ tới khi các lượt đọc có khe — đo bằng đúng câu khoá của `duyetTraoThau` dưới hai trần 15 s của pool sản xuất: tới ba luồng đọc liên tục lần chờ lâu nhất 6,4 ms; sáu luồng ⇒ p50 2,8 s, lâu nhất 13,4 s, 5/30 lần hỏng ở `statement_timeout` (`57014`); mười hai luồng ⇒ 30/30 lần hỏng. Ở `AWARDED` lượt đọc không khoá, nên lần duyệt trao thầu không chờ nó. ~~Chưa sửa;
+  hướng đề xuất ở khoản 342.~~ **[S1.274]** Đã sửa — đoạn dưới.
+- **[S1.274 / khoản 342] Chỉ đường GHI khoá hàng gói.** Chủ dự án chọn 2026-10-06. Lần đọc đầu (tính rồi ghi bản lưu) giữ
+  `kiemLaiDuoiKhoa`; lần đọc bản lưu và *Xem dải* hỏi lại bằng MỘT câu không khoá (`kiemLaiKhongKhoa`): trạng thái và lần mở thầu mới
+  nhất trong cùng một ảnh chụp, cùng hàm phán quyết. Hệ quả nói ra: lượt đọc đúng tại câu hỏi lại, không tại lúc commit — một cạnh
+  commit sau câu ấy có thể đứng TRƯỚC hàng `BENCHMARK_READ`/`BENCHMARK_BAND_READ` của lượt đọc. Bảng so sánh, chuẩn *"bảng so sánh
+  mở"* của L6, đã chấp nhận đúng điều ấy cho dữ liệu nhạy hơn (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi
+  `COMPARISON_VIEWED`); không ai dựa vào thứ tự sổ của hai hàng ấy. Khoá còn lại ở đường ghi mở MỘT cửa sổ cho mỗi lần mở thầu (bản
+  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; xấu nhất ở
+  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.
+  Đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126). Đo, cạnh trọn (khoá hàng gói, một hàng sổ,
+  COMMIT), `UNSEALED`: sáu luồng đọc liên tục ⇒ lâu nhất 11,6 ms (trước 13,0 s, 6/30 hỏng), mười hai ⇒ 26,6 ms (trước 30/30 hỏng);
+  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274.
 
 ---
 
@@ -11737,3 +11753,88 @@ dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do.
 - Phép đọc giá, độ lệch của mốc ngoài, dải lịch sử ngoài và nhãn ở `/mo-thau` — S4.6b, theo ⑵ ⑶ của chủ dự án ở trên.
 - Nhập bằng tệp (multipart) — ADR-096 ⑸ giữ dán văn bản.
 - Tiền tệ khác `VND`/`USD`, và quy đổi tiền tệ.
+
+---
+
+## ADR-150 — S3.3e1: màn kiểm soát — cờ hiển thị thay lối tự nạp (khoản 340), mã ở lời từ chối của chốt, danh sách mang lần nộp, xác minh ràng băm hồ sơ đã thấy, ô chọn nhà cung cấp có sẵn
+
+**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-06: *"Tiếp S3.3e1"*; trước khi soi, bốn câu theo đề
+xuất: màn xác minh riêng cho FINANCE, cờ máy chủ trên `GET /rfqs/:id` đóng khoản 340, 422 của chốt mang mã, hai PR (S3.3e1 màn và route;
+S3.3e2 `gieo:demo` và kịch bản 41); sau lượt soi, bốn câu theo đề xuất: ⑷ hiện người liên hệ và ràng băm, ⑹ khoá thêm người liên hệ trên
+màn và ghi khoản nợ, ⑶ số nhóm so ngưỡng, ⑼ ghi ADR, KPI sang S3.9 · **[S1.273]** · **Liên quan:** ADR-081 ⑵, ADR-092, ADR-117,
+ADR-118 F3, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §4.4, §6 T4, §8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.273
+
+### Bối cảnh
+
+K2, K3, K5 (S3.3c, S3.3d) và xác minh, ngoại lệ (S3.3a, S3.3b) chặn ở máy chủ, nhưng không màn nào lập hay rút ngoại lệ, không màn nào
+xác minh nhà cung cấp, và bước 5 của `/tao-thau` chỉ mời được hồ sơ vừa tạo trong phiên — mà K2 không đếm nhà cung cấp do người chọn danh
+sách dựng: ở tổ chức đã bật, người mua dùng màn không bao giờ nộp duyệt được. Lời từ chối của chốt ra ngoài là `{ error }`, không mã.
+Khoản 340: `/tao-thau` tự nạp danh sách lời mời ở mọi lần đọc gói, nên người không giữ `rfq.invite` để lại một 403 và một hàng
+`PERMISSION_DENIED` ở mỗi lần đọc.
+
+### Quyết định
+
+⑴ **Cờ HIỂN THỊ `coQuyenMoi`** trên `GET /rfqs/:id` — anh em của `rfq` trong thân, không trong `RfqRecord`: người xem nằm trong
+`listUserIdsWithPermission(rfq.invite)` (khuôn `kiem-soat/tin-hieu.ts`; `hasPermission` vẫn ngoài mặt tiền — D5). Không phải cổng: hai
+route danh sách vẫn tự cổng trong thân, và mỗi lần từ chối vẫn vào sổ. Thân chỉ mang bit của CHÍNH người xem. Phiên agent luôn `false`:
+hai route ấy không cho agent, cờ `true` chỉ mời nó tiêu trần từ chối. Khác hướng đề xuất của khoản 340 (*người tạo hay người giữ quyền*):
+người tạo không giữ `rfq.invite` vẫn bị hai route từ chối, nên cờ là quyền, không là vai trò với gói. `/tao-thau` chỉ tự nạp lời mời VÀ
+ngoại lệ khi cờ bật; người khác bấm «Đọc danh sách lời mời», «Xem ngoại lệ» — lần từ chối đến từ thao tác cố ý (ADR-118 F3). Khoản 340 ĐÓNG.
+
+⑵ **422 của `ChotKiemSoatError` mang `ma`** (mã của `CHOT_VAO_SO`) cạnh `error`. Thông điệp là hằng của mã ấy — một mã một câu —, nên mã
+không lộ điều câu chưa lộ; `cause` không ra ngoài. Lỗi nghiệp vụ khác giữ `{ error }`. Màn in câu của máy chủ rồi MỘT câu chỉ dẫn BỔ SUNG
+— chỗ làm trên màn, tên ngoại lệ như ô chọn hiện, điều câu máy chủ không nói —, không nhắc lại (lượt đi thử T4 đo bản đầu nhắc lại nửa câu
+của K2; một test chặn cụm sáu chữ trùng). Lần chặn ở trigger khi đua (khuôn K1/K10a, ADR-148 ⑺) vẫn là lời không tên, không `ma`.
+
+⑶ **Hai danh sách mang lần nộp, cùng một câu SQL với danh sách** — `GET …/invitations` → `{ invitations, lanNop, trangThai, canhTranh }`,
+`GET …/exceptions` → `{ exceptions, lanNop, trangThai }`; câu dựng từ `rfq_packages`, nên gói chưa có hàng nào vẫn trả lần nộp (lượt soi
+TRUNG-3); gói không đọc được ⇒ 404. Màn so lần nộp của hai danh sách với lần đọc gói mà nút Phê duyệt gửi (ADR-117): lệch ⇒ đọc lại
+TRỌN gói một lần; vẫn lệch ⇒ màn không gửi chữ ký; lần duyệt hỏng ⇒ đọc lại trọn gói (lượt soi CAO-1: chỉ đọc lại gói thì `lanNop` mới
+đi cùng danh sách cũ, và chữ ký rơi lên danh sách người duyệt chưa thấy). Mỗi lời mời mang `demDuoc` (thuộc `rfq_loi_moi_dem_duoc`) và
+`xacMinhConHieuLuc`; `canhTranh` là số NHÓM của K2 (`rfq_dem_ncc_canh_tranh`) và ngưỡng của bậc ghim — K2 đếm nhóm, ba dòng «có» có thể
+là một nhóm (lượt soi TRUNG-2). Ở tổ chức chưa bật, hai cờ và `canhTranh` là `null`. Cờ từng dòng cho người giữ `rfq.invite` suy ra
+không để lại dấu vết dòng nào do người chọn dựng; nó không nâng được số đếm (không đường sửa hồ sơ, thêm người liên hệ chỉ làm mất khả
+năng đếm) — chấp nhận.
+
+⑷ **Lần xác minh ràng băm hồ sơ đã thấy** — `POST /suppliers/:id/verify` đòi `bamDaXem`; hàm gói so với `bam_ho_so` mà trigger `082` tính
+lúc chèn (`RETURNING`), lệch thì ném và giao dịch rollback — không migration (lượt soi CAO-2: một người giữ `supplier.manage` thêm người
+liên hệ của chính mình vào hồ sơ thật; xác minh hết hiệu lực; tài chính xác minh lại trên một màn không hiện người liên hệ; link mời và OTP
+về tay người ấy). Màn `/nha-cung-cap` hiện MỌI người liên hệ kèm người thêm và lúc thêm, đánh dấu người thêm SAU lần xác minh gần nhất, và
+nói vì sao một xác minh thôi hiệu lực. Route đọc mới `GET /supplier-verifications` — không cổng, như hai route đọc mà nó gộp
+(`…/verification`, `…/contacts`), KHÔNG cho agent (khoản 141), tránh N+1 chạm trần tần suất; không là `/suppliers/verifications` vì bộ
+định tuyến lấy route khớp đầu tiên và `/suppliers/:supplierId` (agent) khớp chuỗi ấy. Nút luôn hiện cho người đã vào: lời từ chối 403 ở
+màn này đến từ thao tác cố ý.
+
+⑸ **Ô chọn nhà cung cấp có sẵn ở bước 5** (`GET /suppliers`, `…/contacts`, `…/verification` — ba route không cổng, không sinh lời từ chối),
+ở cả hai luồng; tên kèm MST. Câu của tổ chức đã bật nói nhà cung cấp nào được đếm.
+
+⑹ **Màn chỉ thêm người liên hệ cho hồ sơ VỪA TẠO trong phiên** (lượt soi TRUNG-1): người liên hệ không sửa, không xoá được (`011`); một
+người liên hệ do người chọn danh sách thêm làm nhà cung cấp ấy thôi được đếm ở gói của họ mãi, và làm mất xác minh của nó trong cả tổ
+chức. Lối ở tầng API — ai giữ `supplier.manage` cũng thêm được vào hồ sơ bất kỳ — là khoản nợ mở mới (rổ đề xuất B).
+
+⑺ **Ngoại lệ trên màn** — khối ở bước 5 của tổ chức đã bật: bảng (loại, lý do, giải trình, lúc lập, trạng thái), lập (ba loại; mã lý do;
+giải trình, `OTHER` từ 100 byte — màn kiểm trước, máy chủ phán) và rút (lý do) chỉ ở DRAFT; loại chọn sẵn theo số lời mời còn sống (khớp
+chặt của K2: một ⇒ SINGLE_SOURCE, từ hai ⇒ LIMITED_COMPETITION); câu nói người lập ngoại lệ không còn là người ký độc lập (K5).
+
+⑻ **Hiển thị an toàn** — mọi chuỗi qua `textContent`; tên nhà cung cấp, giải trình và lý do mang ký tự điều khiển hướng chữ (U+202A–202E,
+U+2066–2069) bị gỡ ký tự khi hiện và gắn dấu cảnh báo — chữ hiện ra không được khác chữ được băm và ký. Bảng lời mời, ngoại lệ, hồ sơ xếp
+khối ở màn hẹp (`table.xep`); đo 375×812 không cuộn ngang.
+
+⑼ **Xác minh SAU ngày bật, từng nhà cung cấp** (lượt soi TRUNG-4). Spec §8.2 nêu *"xác minh hàng loạt trước ngày bật"*, nhưng trigger `082`
+cấm xác minh khi tổ chức chưa bật S3 (ADR-081 ⑵ — người xác minh đọc chính sách hiệu lực để đặt hạn), và màn xác minh từng hồ sơ để người
+xác minh nhìn người liên hệ của nó. Hệ quả nói thẳng: ngay sau ngày bật, gói nháp chờ tới khi đủ nhà cung cấp đã xác minh, hay đi bằng ngoại
+lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng chứng).
+
+### Cái giá, nói thẳng
+
+- **Thêm một truy vấn quyền ở mỗi lần đọc gói** (`listUserIdsWithPermission`) — một câu nhỏ theo chỉ mục; quy mô pilot.
+- **Xác minh phải đọc lại khi hồ sơ đổi trong lúc xem** — hồ sơ đổi luôn thì người xác minh không bấm kịp; quy mô pilot.
+- **Thêm người liên hệ vào hồ sơ của người khác vẫn đi được qua API** (khoản nợ mới); màn chặn lối dễ nhất.
+- **Chỉ dẫn K3 không nói nhà cung cấp nào là mới** — cần một hàm theo từng lời mời; câu của máy chủ và ngoại lệ ROTATION là đường gỡ.
+- **Cờ `coQuyenMoi` có thể cũ** giữa lần đọc gói và lần đọc danh sách (đổi vai giữa chừng): khi ấy một route từ chối và vào sổ — đúng D5.
+- **Lượt đi thử T4 là một lần, không phải một cổng**: script nằm ngoài kho (biên bản §S1.273), Playwright không trong kho.
+
+### Điều ADR này KHÔNG nói
+
+`gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
+người liên hệ (khoản nợ mới).

@@ -326,3 +326,189 @@ export function loiLyDoGhiNhan(lyDo: string): string | null {
   if (new TextEncoder().encode(t).length > TRAN_LY_DO_BYTE) return `Lý do dài quá — tối đa ${String(TRAN_LY_DO_BYTE)} byte, chữ có dấu tính hai hay ba byte.`;
   return null;
 }
+
+// ==============================================================================================
+// [S1.273 / S3.3e1] NGOẠI LỆ CẠNH TRANH, NHÀ CUNG CẤP CÓ SẴN VÀ LỜI TỪ CHỐI CỦA CHỐT
+//
+// Spec S3 §4.4 và §9 (S3.3e). K2, K3, K5 chặn ở máy chủ (`107`, `108`); màn chỉ đưa người dùng tới đúng việc phải làm: chọn nhà
+// cung cấp người khác đã dựng và FINANCE đã xác minh, lập ngoại lệ đúng loại, hay nhờ người ký độc lập. Ba tập đóng dưới đây là
+// BẢN SAO ĐỂ ĐỌC của `packages/invitation/src/ngoai-le.ts` — module này chạy trong trình duyệt nên không import gói máy chủ;
+// `tao-thau.test.ts` so chúng với hằng của gói, nên hai bản không lệch mà không đỏ.
+// ==============================================================================================
+
+/** Ba loại ngoại lệ của danh sách mời (`LOAI_NGOAI_LE`). */
+export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
+export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number];
+
+/** Tập đóng của mã lý do (`MA_LY_DO_NGOAI_LE`). */
+export const MA_LY_DO_NGOAI_LE = [
+  "PROPRIETARY_TECHNOLOGY",
+  "EXISTING_CONTRACT",
+  "EMERGENCY",
+  "NO_ALTERNATIVE",
+  "COMPATIBILITY",
+  "REGULATORY",
+  "OTHER",
+] as const;
+
+/** Sàn giải trình của mã `OTHER`, byte UTF-8 sau khi cắt khoảng trắng (`SAN_GIAI_TRINH_OTHER_BYTE`). */
+export const SAN_GIAI_TRINH_OTHER_BYTE = 100;
+/** Trần giải trình, byte UTF-8 (`TRAN_GIAI_TRINH_BYTE`). */
+export const TRAN_GIAI_TRINH_BYTE = 2000;
+
+const NHAN_LOAI: Readonly<Record<LoaiNgoaiLe, string>> = {
+  SINGLE_SOURCE: "Một nguồn duy nhất",
+  LIMITED_COMPETITION: "Cạnh tranh hạn chế",
+  ROTATION: "Miễn xoay vòng",
+};
+
+const NHAN_MA_LY_DO: Readonly<Record<(typeof MA_LY_DO_NGOAI_LE)[number], string>> = {
+  PROPRIETARY_TECHNOLOGY: "Công nghệ độc quyền",
+  EXISTING_CONTRACT: "Hợp đồng đang có",
+  EMERGENCY: "Khẩn cấp",
+  NO_ALTERNATIVE: "Không có lựa chọn khác",
+  COMPATIBILITY: "Tương thích với hệ thống đang dùng",
+  REGULATORY: "Yêu cầu pháp lý",
+  OTHER: "Lý do khác (giải trình từ 100 byte)",
+};
+
+/** Loại ngoại lệ nói bằng lời; mã lạ trả nguyên văn. */
+export function nhanLoaiNgoaiLe(loai: unknown): string {
+  if (typeof loai !== "string" || loai === "") return "—";
+  return Object.hasOwn(NHAN_LOAI, loai) ? NHAN_LOAI[loai as LoaiNgoaiLe] : loai;
+}
+
+/** Mã lý do nói bằng lời; mã lạ trả nguyên văn. */
+export function nhanMaLyDo(ma: unknown): string {
+  if (typeof ma !== "string" || ma === "") return "—";
+  return Object.hasOwn(NHAN_MA_LY_DO, ma) ? NHAN_MA_LY_DO[ma as keyof typeof NHAN_MA_LY_DO] : ma;
+}
+
+function soByteUtf8(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/** Giải trình của một ngoại lệ — cùng luật với hàm gói (rỗng, trần, sàn của `OTHER`); `null` là hợp lệ. */
+export function loiGiaiTrinh(maLyDo: string, giaiTrinh: string): string | null {
+  const g = giaiTrinh.trim();
+  if (g === "") return "Cần giải trình vì sao gói không đủ cạnh tranh.";
+  if (soByteUtf8(g) > TRAN_GIAI_TRINH_BYTE) return `Giải trình dài quá ${TRAN_GIAI_TRINH_BYTE} byte.`;
+  if (maLyDo === "OTHER" && soByteUtf8(g) < SAN_GIAI_TRINH_OTHER_BYTE) {
+    return `Lý do «khác» cần giải trình từ ${SAN_GIAI_TRINH_OTHER_BYTE} byte trở lên (hiện ${soByteUtf8(g)}).`;
+  }
+  return null;
+}
+
+/**
+ * Loại ngoại lệ K2 nhận cho số lời mời còn sống (`107` ⑶, khớp chặt): một lời mời ⇒ `SINGLE_SOURCE`, từ hai ⇒
+ * `LIMITED_COMPETITION`; danh sách rỗng thì không ngoại lệ nào cứu ⇒ `null`. Màn chọn sẵn loại này.
+ */
+export function loaiNgoaiLeGoiY(soLoiMoiConSong: number): LoaiNgoaiLe | null {
+  if (soLoiMoiConSong <= 0) return null;
+  return soLoiMoiConSong === 1 ? "SINGLE_SOURCE" : "LIMITED_COMPETITION";
+}
+
+/**
+ * Một câu chỉ dẫn cho lời từ chối có mã của chốt (`ma` ở thân 422 — `dispatch.ts`). Câu của máy chủ (`CHOT_VAO_SO`) đã nói phải làm
+ * gì, bằng mã của ngoại lệ; câu này BỔ SUNG, không nhắc lại — nó nói chỗ làm việc ấy trên màn, tên ngoại lệ như ô chọn hiện, và
+ * điều câu máy chủ không nói. [lượt đi thử T4] Bản đầu nhắc lại nửa câu của máy chủ ở K2. `coQuyenMoi` sai ⇒ người xem không sửa
+ * được danh sách, câu nói nhờ người mời được. Mã khác ⇒ `null`.
+ */
+export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
+  const nho = coQuyenMoi ? "" : " Bạn không giữ quyền mời — nhờ người tạo gói hay người giữ quyền mời làm việc này.";
+  switch (ma) {
+    case "K2_THIEU_CANH_TRANH":
+      return "Trên màn: chọn nhà cung cấp ở «Chọn nhà cung cấp có sẵn» — cột «Đếm được» của bảng lời mời nói dòng nào được tính —, " +
+        "hay lập ngoại lệ ở khối «Ngoại lệ cạnh tranh»: SINGLE_SOURCE là «Một nguồn duy nhất», LIMITED_COMPETITION là «Cạnh tranh " +
+        "hạn chế». Danh sách rỗng thì không ngoại lệ nào cứu." + nho;
+    case "K2_DAU_THAU_CHINH_THUC":
+      return "Không ngoại lệ nào cứu được bậc này trên hệ thống." + nho;
+    case "K3_KHONG_XOAY_VONG":
+      return "Trên màn: chọn ở «Chọn nhà cung cấp có sẵn» một nhà cung cấp chưa mời gần đây — nó cũng phải đếm được —, hay lập " +
+        "«Miễn xoay vòng» (ROTATION) ở khối «Ngoại lệ cạnh tranh»." + nho;
+    case "K5_THIEU_CHU_KY_DOC_LAP":
+      return "Nhờ một người giữ quyền duyệt chưa làm việc nào kể trên với gói này ký, rồi mở lại.";
+    default:
+      return null;
+  }
+}
+
+/** Câu tổng của K2 trên bảng lời mời: số NHÓM đếm được so với ngưỡng của bậc ghim. Thân không mang khối ấy ⇒ `null`. */
+export function nhanCanhTranh(canhTranh: unknown): string | null {
+  if (canhTranh === null || typeof canhTranh !== "object") return null;
+  const { soNhomDemDuoc, toiThieu } = canhTranh as { soNhomDemDuoc?: unknown; toiThieu?: unknown };
+  if (typeof soNhomDemDuoc !== "number") return null;
+  if (typeof toiThieu !== "number") {
+    return `Đếm được ${soNhomDemDuoc} nhóm nhà cung cấp. Gói chưa có bậc chính sách — đặt ngân sách để biết cần bao nhiêu.`;
+  }
+  const du = soNhomDemDuoc >= toiThieu;
+  return `Đếm được ${soNhomDemDuoc}/${toiThieu} nhóm nhà cung cấp cho cạnh tranh tối thiểu — ` +
+    (du ? "đủ." : "chưa đủ: mời thêm nhà cung cấp đếm được, hay lập ngoại lệ đúng loại.") +
+    " Nhà cung cấp chung mã số thuế gốc, email hay số điện thoại là MỘT nhóm.";
+}
+
+/** Cờ có/không của một ô; không phải boolean ⇒ `—` (tổ chức chưa bật). */
+export function nhanCo(v: unknown): string {
+  return v === true ? "có" : v === false ? "không" : "—";
+}
+
+/** Ký tự điều khiển hướng chữ (U+202A–202E, U+2066–2069): một tên mang chúng có thể HIỆN khác thứ được băm và ký. */
+const KY_TU_DIEU_HUONG = /[‪-‮⁦-⁩]/u;
+
+/** Tên nhà cung cấp kèm mã số thuế để phân biệt hai hồ sơ trùng tên; tên mang ký tự điều hướng thì được đánh dấu. */
+export function tenKemMst(ten: unknown, mst: unknown): string {
+  const t = typeof ten === "string" ? ten : "—";
+  const canh = KY_TU_DIEU_HUONG.test(t) ? " [⚠ tên chứa ký tự đảo chiều chữ]" : "";
+  const m = typeof mst === "string" && mst !== "" ? ` — MST ${mst}` : " — không MST";
+  return `${t.replace(/[‪-‮⁦-⁩]/gu, "")}${m}${canh}`;
+}
+
+/** Văn bản tự do (giải trình, lý do) để hiện: bỏ ký tự điều hướng và đánh dấu khi có. */
+export function vanBanAnToan(s: unknown): string {
+  if (typeof s !== "string") return "—";
+  return KY_TU_DIEU_HUONG.test(s) ? `${s.replace(/[‪-‮⁦-⁩]/gu, "")} [⚠ có ký tự đảo chiều chữ]` : s;
+}
+
+/**
+ * Danh sách đọc kèm một lần nộp (`GET …/invitations`, `GET …/exceptions`) có thuộc CÙNG lần nộp với lần đọc gói mà nút Phê duyệt
+ * sẽ gửi không. Lệch ⇒ màn đọc lại TRỌN gói, không chỉ sửa `lanNop` (lượt soi CAO-1). Thân không mang `lanNop` ⇒ coi như lệch.
+ */
+export function cungLanNop(lanNopGoi: unknown, lanNopDanhSach: unknown): boolean {
+  return typeof lanNopGoi === "number" && typeof lanNopDanhSach === "number" && lanNopGoi === lanNopDanhSach;
+}
+
+/** Một nhà cung cấp như `GET /suppliers` trả — chỉ bốn trường ô chọn đọc. */
+export interface NhaCungCapChon {
+  readonly id: string;
+  readonly legalName: string;
+  readonly taxCode: string | null;
+  readonly status: string;
+}
+
+/** Đọc thân `GET /suppliers`; phần tử sai hình dạng bị bỏ. Chỉ hồ sơ ACTIVE vào ô chọn — hồ sơ khác không mời được. */
+export function docNhaCungCapChon(body: unknown): NhaCungCapChon[] {
+  const ds = (body as { suppliers?: unknown } | null)?.suppliers;
+  if (!Array.isArray(ds)) return [];
+  const ra: NhaCungCapChon[] = [];
+  for (const x of ds as unknown[]) {
+    const n = x as Record<string, unknown> | null;
+    if (n === null || typeof n !== "object") continue;
+    if (typeof n.id !== "string" || typeof n.legalName !== "string" || typeof n.status !== "string") continue;
+    if (n.status !== "ACTIVE") continue;
+    ra.push({ id: n.id, legalName: n.legalName, taxCode: typeof n.taxCode === "string" ? n.taxCode : null, status: n.status });
+  }
+  return ra;
+}
+
+/** Trạng thái xác minh của nhà cung cấp đang chọn (`GET /suppliers/:id/verification`), một câu. */
+export function nhanXacMinhNgan(verification: unknown): string {
+  if (verification === null || typeof verification !== "object") return "Không đọc được trạng thái xác minh.";
+  const v = verification as { loai?: unknown; conHieuLuc?: unknown; hetHanAt?: unknown };
+  if (v.conHieuLuc === true) {
+    const han = typeof v.hetHanAt === "string" ? ` tới ${new Date(v.hetHanAt).toLocaleDateString("vi-VN")}` : "";
+    return `Đã xác minh, còn hiệu lực${han}.`;
+  }
+  if (v.loai === "VERIFIED") return "Xác minh đã hết hiệu lực (hết hạn, hay hồ sơ đổi sau lúc xác minh) — nhờ tài chính xác minh lại.";
+  if (v.loai === "REVOKED") return "Xác minh đã bị thu hồi — nhà cung cấp này không được đếm cho cạnh tranh tối thiểu.";
+  return "Chưa được xác minh — nhờ tài chính xác minh ở màn nhà cung cấp trước khi mời.";
+}

@@ -173,6 +173,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/unseal/src/unseal.int.test.ts",
     "tests/architecture/barrel-exports.test.ts",
     "tests/architecture/ghi-so-tu-choi-mot-duong.test.ts",
+    // [S1.273 / S3.3e1 · khoản 340] `man-kiem-soat` đo cả hai chiều của D5 ở `/tao-thau`: đọc gói (kèm cờ `coQuyenMoi`) không sinh
+    // từ chối nào, còn hai route danh sách vẫn tự cổng và mỗi lần từ chối vẫn vào sổ.
+    "apps/api/src/man-kiem-soat.int.test.ts",
   ],
   E1: [
     "apps/api/src/auth.int.test.ts",
@@ -406,8 +409,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // qua HTTP và dưới `app_api`: mỗi luật đếm một ca, nhóm (MST gốc, email, chín số cuối, bắc cầu), ngoại lệ khớp chặt, bậc đấu thầu
   // chính thức, chỉ READ COMMITTED, đua với lần rút ngoại lệ, lớp chặn cuối; K5 mỗi nguồn của tập loại trừ, `rfq.approve`, bậc
   // không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký — mỗi vế của hai hàm vị từ một đột biến.
-  K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
-  K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
+  // [S1.273 / S3.3e1] `man-kiem-soat` đo hợp đồng mà màn đọc: lời từ chối K2/K5 mang mã của bảng qua HTTP, và số NHÓM đếm được của
+  // danh sách lời mời bằng đúng hàm K2 dùng (hai nhà cung cấp chung MST gốc ⇒ một nhóm; tổ chức chưa bật ⇒ không khối ấy).
+  K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
+  K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
   // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
   // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
   // người chọn (người tạo, người thu hồi), khoá nhóm, *đếm được*, ROTATION, N = 0, nộp song song bị bắt lúc mở, hai lần mở đồng thời,
@@ -495,7 +500,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "tests/architecture/ban-ro-liet-ke.test.ts",
     // [S1.260 / S4.5c1] vế benchmark. `benchmark` đo ở tầng gói: đóng ở `BAFO_OPEN`/`BAFO_CLOSED` (cả bản lưu lẫn *Xem dải*), bản lưu
     // của tầng CSDL buộc phiên bản ghim, và — sau rà soát — hai cuộc đua: cạnh trạng thái trong lúc tính (khoá hàng gói, đo bằng chờ
-    // khoá) và lần mở thầu commit sau lúc giao dịch đọc bắt đầu (`THU_LAI`). `benchmark-trang-thai-dong-bo` khoá tập trạng thái hiện
+    // khoá) và lần mở thầu commit sau lúc giao dịch đọc bắt đầu (`THU_LAI`). [S1.274 / khoản 342] Chỉ lần đọc ĐẦU khoá hàng gói; lần đọc
+    // bản lưu và *Xem dải* hỏi lại không khoá — đo bằng ma trận hỏi lại và ca NOWAIT. `benchmark-trang-thai-dong-bo` khoá tập trạng thái hiện
     // với tập của bảng so sánh.
     "packages/danh-gia/src/benchmark.int.test.ts",
     "tests/architecture/benchmark-trang-thai-dong-bo.test.ts",
@@ -527,5 +533,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
-  K8a: ["packages/supplier/src/xac-minh.int.test.ts"],
+  // [S1.273 / S3.3e1] `man-kiem-soat` đo lần xác minh ràng băm hồ sơ đã thấy qua HTTP (băm cũ ⇒ 422, không hàng nào ở lại) và màn hồ
+  // sơ thấy người liên hệ lạ cùng người thêm nó (lượt soi CAO-2).
+  K8a: ["packages/supplier/src/xac-minh.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
 };

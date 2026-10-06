@@ -68,6 +68,7 @@ export {
   type ReissueLinkOutcome,
   type ResolvedGuestSession,
   type VerifyOtpInput,
+  type DanhSachLoiMoi,
 } from "./invitation.js";
 // [S1.265 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh — lập, rút, đọc; và hai tập đóng cùng hai trần mà route dùng lại.
 export {
@@ -80,6 +81,7 @@ export {
   rutNgoaiLe,
   type LoaiNgoaiLe,
   type MaLyDoNgoaiLe,
+  type DanhSachNgoaiLe,
   type NgoaiLeCanhTranh,
 } from "./ngoai-le.js";
 // ============================================================================================

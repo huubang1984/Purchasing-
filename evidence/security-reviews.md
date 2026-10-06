@@ -24886,6 +24886,254 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
 
+# §S1.274 — KHOẢN 342 ĐÓNG: CHỈ LẦN ĐỌC ĐẦU (GHI BẢN LƯU) KHOÁ HÀNG GÓI; ĐỌC BẢN LƯU VÀ *XEM DẢI* HỎI LẠI KHÔNG KHOÁ
+
+**Rổ và mảnh (ADR-043):** khoản 342 (rổ đề xuất B) đóng. Không migration, không route, không ADR mới (đoạn bổ sung ở ADR-143); một tệp
+mã sản xuất (`packages/danh-gia/src/doc-benchmark.ts`), một tệp test.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-06: *"Sửa khoản 342"* — bước 1 của đề xuất sau §S1.271: chỉ lần ghi bản lưu giữ khoá gói, lần đọc bản lưu và *Xem
+dải* hỏi lại không khoá; soi đối kháng trên hình dạng trước khi viết mã; đo lại bằng bảng của §S1.271 mục 3.
+
+## 2. Lượt soi đối kháng trên hình dạng (trước dòng mã đầu)
+Một lượt độc lập đọc mã và hình dạng đề xuất. Không CAO.
+- **TRUNG — bộ đo của §S1.271 đo sai chỗ sau bản sửa.** Mọi lượt đọc vẫn ghi một hàng sổ dưới khoá chuỗi sổ của tổ chức
+  (`noi_chuoi_kiem_toan`, trần 2 s, giữ tới commit). Bản sửa cho cạnh lấy hàng gói ngay rồi xếp hàng ở khoá ấy sau các lượt đọc đang
+  ghi sổ; bộ đo chỉ chạy câu khoá hàng gói sẽ in ~0 ms. Sửa: bộ đo là một cạnh trọn — khoá hàng gói, `appendAuditEvent`, COMMIT — in
+  riêng chờ hàng, chờ sổ, cả cạnh (mục 4).
+- **THẤP — hai ca chéo để sống hai đột biến.** Sửa: một hàm hỏi lại chung (`kiemLaiKhongKhoa`, phán quyết chung với đường ghi), bốn ca
+  (hai chỗ gọi × vế trạng thái / vế lần mở thầu); câu hỏi lại của lần đọc bản lưu đứng SAU câu đọc bản lưu.
+- **THẤP — ca NOWAIT xanh rỗng nếu lượt đọc rẽ nhánh không số** (`CHUA_CO_BAN_LUU`, `KHONG_CO_DAI`, `CHUA_CAU_HINH` không tới câu hỏi
+  lại). Sửa: khẳng định `CO` (và `BAN_LUU`) trước câu NOWAIT; chạy trên mã trước cho từng hàm (đột biến D0).
+- **THẤP — đột biến M4 (luôn tính lại) đổi nghĩa.** §S1.260 mục 7 ghi nó SỐNG; sau bản sửa nó đưa mọi lượt đọc về đường ghi, tức khoá
+  hàng gói ở mỗi lượt — phải đỏ (D9); ADR-143 gạch tại chỗ.
+- **THẤP — lý do *"hai câu, không một"* của `kiemLaiDuoiKhoa` chưa có ca nào** — chỉ hiện ra khi lần mở niêm phong ĐANG giữ hàng gói
+  lúc lần đọc đầu chờ ở `FOR SHARE`. Bản sửa đặt ngay cạnh nó một hàm hỏi lại MỘT câu. Sửa: thêm ca ấy (D8).
+- **THẤP — đường đọc dựa vào READ COMMITTED** (`withTenant` mở `BEGIN` trần): dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao
+  dịch. Không sửa: lượt đọc khi ấy đúng tại ảnh chụp ấy, vẫn nhất quán; bên gọi duy nhất là route (READ COMMITTED) — mục 6.
+- **THẤP — khoá còn lại ở đường ghi có trần.** Một cửa sổ mỗi lần mở thầu (bản lưu `UNIQUE (org_id, unseal_request_id)`), lấy SAU phép
+  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. Xấu nhất ở quy mô lớn
+  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu. Mở thêm lần mở thầu cần
+  người xin và người duyệt. Ghi ở ADR-143.
+- **Xác nhận, không phải lỗi** (tự kiểm lại): bảng so sánh — chuẩn *"bảng so sánh mở"* của L6 — đọc trạng thái một lần, không khoá
+  (`packages/unseal/src/comparison.ts`), rồi ghi `COMPARISON_VIEWED`; không ai dựa vào thứ tự sổ của hàng `BENCHMARK_*` (chỉ đếm hay
+  quét payload); đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126); `kiemGoiDaNop` của `anh-xa.ts`
+  lấy khoá tư vấn theo tổ chức (`khoaBiDanh`) TRƯỚC `FOR SHARE` ở cả ba chỗ gọi, nên hai giao dịch ánh xạ không cùng giữ khoá chia sẻ —
+  ngoài phạm vi.
+
+## 3. Sửa
+- `docHayTinh`: lần đọc đầu (chưa có bản lưu ⇒ tính rồi ghi) giữ `kiemLaiDuoiKhoa` y nguyên — `FOR SHARE`, hai câu. Lần đọc bản lưu gọi
+  `kiemLaiKhongKhoa` sau câu đọc bản lưu.
+- `docDaiBenchmark`: `kiemLaiKhongKhoa` sau phép tính dải, trước khi trả số.
+- `kiemLaiKhongKhoa`: MỘT câu — `status` của hàng gói và, trong truy vấn con, lần mở thầu `EXECUTED` mới nhất — một ảnh chụp dưới READ
+  COMMITTED. `phanXuHoiLai` là phán quyết chung của hai cách hỏi.
+- `benchmark.int` ⑻: bỏ ca *"Xem dải CHỜ ở khoá hàng gói"*; thêm tám ca — bốn ô ma trận hỏi lại (đọc bản lưu / *Xem dải* × vòng chào
+  lại MỞ commit giữa câu bối cảnh và câu hỏi lại ⇒ `VONG_CHAO_LAI_DANG_MO` / vòng chào lại TRỌN VẸN ⇒ `THU_LAI`; chặn bằng
+  `LOCK TABLE price_benchmark_snapshots`), ba ca NOWAIT (đọc bản lưu và *Xem dải* để giao dịch mở mà cạnh khoá được ngay; lần đọc đầu
+  để giao dịch mở thì KHÔNG), và ca hai câu (lần mở niêm phong giữ hàng gói lúc lần đọc đầu chờ `FOR SHARE` ⇒ `THU_LAI`, không bản
+  lưu). Helper vòng chào lại tách ra `vongBafoDenDuyet` và `moNiemPhongVongBafo`.
+
+## 4. Đo — cùng bộ đo, trước và sau
+Khối test tạm gắn vào `benchmark.int` bằng script (không commit; khôi phục cả tệp test lẫn `doc-benchmark.ts`, kiểm sha256). Gói một dòng
+vừa mở, bản lưu đã có; N luồng `docBenchmark` liên tục; 30 lần một CẠNH trọn mỗi mức — `SET LOCAL` hai trần 15 s như `createPool`
+sản xuất, câu khoá của `duyetTraoThau`, một hàng sổ, COMMIT. *Trước* là `doc-benchmark.ts` của `origin/master` (`58fd14cc`), *sau* là
+bản sửa; cùng tệp test, máy rảnh trước và sau mỗi lượt.
+
+| `UNSEALED`, luồng đọc | Trước: chờ hàng | Trước: cả cạnh | Sau: chờ hàng | Sau: chờ sổ | Sau: cả cạnh |
+|---|---|---|---|---|---|
+| 0 | lâu nhất 1,3 ms | lâu nhất 11,5 ms | lâu nhất 0,8 ms | 4,4 ms | 9,0 ms |
+| 1 | 3,5 ms | 9,2 ms | 0,7 ms | 4,8 ms | 8,8 ms |
+| 2 | 7,1 ms | 11,6 ms | 2,1 ms | 2,6 ms | 8,5 ms |
+| 3 | 7,6 ms | 13,3 ms | 0,8 ms | 3,5 ms | 9,3 ms |
+| 6 | p50 2,9 s · lâu nhất 13,0 s; 6/30 hỏng (`57014`) | lâu nhất 13,0 s | 0,9 ms | 5,5 ms | 11,6 ms |
+| 12 | 30/30 hỏng (`57014`) | — | 1,0 ms | 21,7 ms (p50 17,3) | 26,6 ms |
+
+- Sau bản sửa: 0 lần hỏng ở mọi mức; một lượt đọc bản lưu đang mở ⇒ `NOWAIT` chiếm được hàng gói (trước: `55P03`).
+- `AWARDED` (lượt đọc trả `KHONG_HIEN` không khoá, trước cũng vậy): chờ hàng ≤ 0,8 ms ở cả hai bản; chờ sổ ở mười hai luồng lâu nhất
+  18,5 ms (trước) và 34,5 ms (sau) — hàng đợi sổ, không đổi bởi bản sửa.
+- Hàng đợi sổ tăng theo số luồng đọc ghi sổ (sau: 6 luồng ⇒ 5,5 ms, 12 ⇒ 21,7 ms) và xa trần 2 s của nó.
+
+## 5. Đột biến
+Áp từng chỗ ở `doc-benchmark.ts`, chạy describe ⑻ bằng `--reporter=json`, so tập đỏ với tập phải đỏ, khôi phục kiểm sha256.
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| D0 | `doc-benchmark.ts` của `origin/master` | hai ca NOWAIT (đọc bản lưu, *Xem dải*) |
+| D1 | đọc bản lưu khoá lại (`kiemLaiDuoiKhoa`) | ca NOWAIT đọc bản lưu |
+| D2 | *Xem dải* khoá lại | ca NOWAIT *Xem dải* |
+| D3 | đường ghi bỏ khoá (`kiemLaiKhongKhoa`) | lần đọc đầu CHỜ; lần đọc đầu giữ khoá; ca hai câu |
+| D4 | đọc bản lưu bỏ hỏi lại | hai ô ma trận của đọc bản lưu |
+| D5 | *Xem dải* bỏ hỏi lại | hai ô ma trận của *Xem dải* |
+| D6 | hỏi lại không khoá bỏ vế lần mở thầu | hai ô `THU_LAI` |
+| D7 | hỏi lại không khoá bỏ vế trạng thái | hai ô `VONG_CHAO_LAI_DANG_MO` |
+| D8 | đường ghi gộp một câu `FOR SHARE` có truy vấn con | ca hai câu: trả `CO` — bản lưu ghi cho lần mở thầu gói đã rời |
+| D9 | M4 — luôn tính lại | ca NOWAIT đọc bản lưu, hai ô ma trận của đọc bản lưu |
+
+Lượt đầu của D8 đỏ VÌ PHÉP DÒ, không vì ngữ nghĩa: câu gộp viết xuống dòng không khớp mẫu `FROM public.rfq_packages p WHERE…FOR SHARE`
+mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá đỏ ở *"phải đang chờ khoá hàng gói"*. Lượt hai viết câu gộp trên
+đúng mẫu: chỉ ca hai câu đỏ, ở kết quả (`CO` thay vì `THU_LAI`). Lý do *"hai câu"* của §S1.260 nay có phép đo.
+
+## 6. Giới hạn, nói ra
+- Lượt đọc đúng tại câu hỏi lại, không tại lúc commit: hàng sổ của nó có thể đứng sau hàng sổ của một cạnh commit ngay sau câu ấy (mục 2,
+  ADR-143).
+- Đường đọc giả định READ COMMITTED; dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao dịch (lượt đọc khi ấy đúng tại ảnh chụp
+  ấy). Không có phép kiểm mức cô lập.
+- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); không đo một loạt lần đọc đầu ở quy mô 5.000 gói.
+- Bộ đo ở tầng hàm, không qua HTTP; luồng đọc liên tục là tải tổng hợp.
+
+## 7. Số đo
+- `cap-so` cấp S1.274 (trailer `Cap-So` ở `53097e00`); `cap-so --kiem` sạch; Handoff 342 khoản, 54 còn mở.
+- Trên `53097e00`, máy rảnh trước mỗi bước và sau lượt evidence: `pnpm t0` xanh; `pnpm test` 150 tệp (148 đạt, 2 bỏ qua), 2516 ca
+  đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 241 tệp, 4727 khẳng định (4704 đạt, 23 bỏ qua, 0 đỏ), 82/82 bất biến
+  (60/60 nghiệp vụ + 22/22 hàng rào), 1684 giây, *"Cổng evidence: XANH"*. `evidence/INV-matrix.md` đổi đúng hai số: L6 51 → 58,
+  L7 116 → 123 — bảy ca thêm của ⑻ (tám ca mới, một ca bỏ); bản mới vào commit này. 23 ca bỏ qua như §S1.271 mục 6 (13 ca
+  `skipIf(win32)`).
+- Trước đó, trên mã chưa commit: trọn `benchmark.int` 69/69 (máy rảnh); đột biến và hai lượt đo ở mục 4–5.
+
+# §S1.273 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-150
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105). Ba thay đổi chạm MỌI
+tổ chức: `GET /rfqs/:id` mang thêm `coQuyenMoi` (một câu đọc quyền mỗi lần đọc gói); hai danh sách mang thêm `lanNop`, `trangThai` (và ở
+tổ chức chưa bật, các cờ `null`); `POST /suppliers/:id/verify` đòi `bamDaXem` (tổ chức chưa bật vẫn bị trigger `082` từ chối như trước).
+Ô chọn nhà cung cấp có sẵn hiện ở cả hai luồng của `/tao-thau`. Không migration. ADR-150. Khoản 340 ĐÓNG; một khoản mới [MỞ].
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-06: *"Tạo PR cho S3.3d, chuẩn bị S3.3e"*, rồi *"Tiếp S3.3e1"*. S3.3e là phần cuối của S3.3 (spec S3 §9): màn,
+`gieo:demo`, kịch bản 41, lượt đi thử T4. Trước khi soi, chủ dự án chốt bốn câu theo đề xuất: màn xác minh riêng cho FINANCE; cờ máy chủ
+trên `GET /rfqs/:id` đóng khoản 340; 422 của chốt mang mã; hai PR — S3.3e1 màn và route, S3.3e2 `gieo:demo` và kịch bản 41.
+
+## 2. Đo trước (đọc mã trên `58fd14c`)
+- Bước 5 của `/tao-thau` chỉ mời được nhà cung cấp VỪA TẠO trong phiên (`phien.supplierId` từ `POST /suppliers`). K2 không đếm nhà cung cấp
+  do người chọn danh sách dựng (`108`) ⇒ ở tổ chức đã bật, người mua dùng màn không bao giờ nộp duyệt được, trừ ngoại lệ — mà màn cũng không
+  có. Lượt đi thử S3.2c (§S1.191) chạy trước K2.
+- Không màn nào lập/rút ngoại lệ hay xác minh nhà cung cấp; 422 của chốt là `{ error }`, không mã (`dispatch.ts`).
+- `hasPermission` cố ý ngoài mặt tiền identity (D5); tiền lệ cờ hiển thị: `kiem-soat/tin-hieu.ts` dùng `listUserIdsWithPermission`.
+- Khoản 340: `napRfq` tự nạp lời mời cho mọi người dùng của tổ chức đã bật.
+
+## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
+Hai CAO — dừng hỏi chủ dự án:
+- **CAO-1** — bản đầu viết *"`lanNop` của ngoại lệ lệch ⇒ đọc lại gói"*: người duyệt đọc gói ở lần nộp N rồi danh sách lời mời L_N; người tạo
+  trả về, đổi danh sách, nộp lại (N+1); lần đọc ngoại lệ của người duyệt về với N+1; màn chỉ đọc lại gói ⇒ `lanNop` thành N+1 trong khi màn vẫn
+  hiện L_N, và chữ ký rơi lên danh sách người duyệt chưa thấy ⇒ lệch thì đọc lại TRỌN gói, danh sách lời mời cũng mang lần nộp, màn không gửi
+  chữ ký khi vẫn lệch, lần duyệt hỏng thì đọc lại trọn.
+- **CAO-2** — FINANCE xác minh trên một màn chỉ hiện tên, MST, trạng thái: một PM giữ `supplier.manage` (không là người chọn của gói đích) thêm
+  người liên hệ của chính mình vào hồ sơ thật; xác minh hết hiệu lực vì băm phủ người liên hệ (`082`); FINANCE xác minh lại; PM khác mời qua
+  người liên hệ ấy, K2 vẫn đếm, link và OTP về tay người ấy. Và kể cả khi màn hiện người liên hệ, lần xác minh không ràng vào thứ đã hiện ⇒
+  màn hiện MỌI người liên hệ kèm người thêm, lần xác minh gửi băm đã thấy, gói so với băm lúc ghi.
+
+Bốn TRUNG: **T1** nút «Thêm người liên hệ» thêm vào nhà cung cấp đang chọn — một cú bấm làm nó thôi đếm được mãi ở gói của người bấm và mất
+xác minh cả tổ chức; **T2** cờ *đếm được* từng dòng trong khi K2 đếm nhóm; **T3** câu ngoại lệ dựng từ bảng ngoại lệ mất `lanNop` khi rỗng;
+**T4** spec §8.2 *"xác minh hàng loạt trước ngày bật"* trái trigger `082`, KPI tỷ lệ ngoại lệ không có chỗ. THẤP, sửa trong vòng: route
+`/suppliers/verifications` trùng `/suppliers/:supplierId` (agent) ⇒ `/supplier-verifications`; cờ là anh em của `rfq`, `false` với agent; câu
+chỉ dẫn chính xác (danh sách rỗng không cứu được, loại khớp số lời mời, tác giả ngoại lệ vào tập loại trừ K5, nhà cung cấp mới phải đếm
+được); ký tự đảo chiều chữ; T4 thêm BUYER và FINANCE dùng `/tao-thau`. Đã kiểm lại: hai hàm quyền cùng một vị từ; mã ở 422 không lộ thêm
+(một mã một câu); mọi lần đọc tự động khác của `/tao-thau` không cổng.
+
+## 4. Câu hỏi của chủ dự án (2026-10-06)
+Trước lượt soi: xác minh — **màn riêng cho FINANCE**; khoản 340 — **cờ máy chủ, đóng 340**; lời từ chối — **thêm mã, màn chỉ dẫn**; PR — **hai**.
+Sau lượt soi: CAO-2 — **hiện liên hệ và ràng băm**; T1 — **khoá trên màn và ghi khoản nợ**; T2 — **số nhóm so ngưỡng**; T4 — **ghi ADR, KPI sang
+S3.9**. Cả tám theo đề xuất.
+
+## 5. Thay đổi
+- `apps/api/src/dispatch.ts` — 422 của `ChotKiemSoatError` thành `{ error, ma }`.
+- `apps/api/src/routes/buyer.ts` — `coQuyenMoi` ở `GET /rfqs/:id`; thân mới của hai danh sách (404 khi gói không đọc được); route
+  `GET /supplier-verifications`; `bamDaXem` ở `POST …/verify`. `apps/mcp/src/cong-cu.ts` khai route mới không cho agent.
+- `packages/invitation` — `listInvitations` → `DanhSachLoiMoi` (một câu dựng từ `rfq_packages`; tập *đếm được* tính một lần thành mảng);
+  `docNgoaiLe` → `DanhSachNgoaiLe`.
+- `packages/supplier` — `xacMinhNhaCungCap` đòi `bamDaXem`, so với `RETURNING bam_ho_so`; `docHoSoXacMinh` (hồ sơ, băm hiện tại, cờ *đổi sau
+  xác minh*, mọi người liên hệ kèm người thêm).
+- `apps/web` — `/tao-thau` (ô chọn nhà cung cấp, khối ngoại lệ, câu số nhóm, hai cột cờ, chỉ dẫn theo mã, tự nạp theo cờ, so lần nộp, khoá
+  thêm người liên hệ); màn mới `/nha-cung-cap` (`trang/nha-cung-cap.html|js`, `src/nha-cung-cap.ts`, vào `TRANG` và `MODULE_WEB`);
+  `chung.css` bảng xếp khối ở màn hẹp.
+- Sổ đăng ký: `barrel-exports`, `cong-quyen-route` (`docHoSoXacMinh`), `so-khai-nhan` (`man-kiem-soat` ở D5, K2, K5, K8a); kịch bản 41 hai tệp
+  gửi `bamDaXem` (bộ quét: thân là lời hứa đọc băm ngay lúc gọi — route thêm người liên hệ của bộ quét chạy trước và đổi băm).
+- Lượt `pnpm test` đầu đỏ ở `ma-chep-api-worker` (`soByte`, `chuoi` và một literal hex trùng tên ở đơn vị khác) và `qt3-ghim-schema` (tên
+  CTE `dem` đọc như tên bảng) — đổi tên, đổi câu.
+
+## 6. Phép đo
+- `apps/api/src/man-kiem-soat.int.test.ts` — 15 ca trên Postgres 16, qua HTTP, dưới `app_api`: A1 cờ theo vai (PM, REQUESTER, FINANCE, agent),
+  thân chỉ hai khoá, ba lần đọc gói của người yêu cầu mua 0 hàng `PERMISSION_DENIED` và hai route vẫn từ chối vào sổ; A2 danh sách rỗng mang
+  `lanNop` 0, lập/nộp/trả về/nộp lại ⇒ 1, 2, gói lạ 404; A3 K2 ở nộp và K5 ở mở (tác giả ngoại lệ là người ký duy nhất) ⇒ `{ error, ma }`
+  đúng câu của bảng, lỗi khác không `ma`; A4 cờ từng dòng (đếm được / chưa xác minh / do PM dựng), hai nhà cung cấp chung MST gốc ⇒ hai dòng
+  đếm được một nhóm, tổ chức chưa bật ⇒ `null`; A5 người liên hệ lạ ⇒ xác minh thôi hiệu lực, cờ đổi, màn thấy người thêm; băm cũ ⇒ 422 và 0
+  hàng xác minh; băm mới ⇒ 201; thiếu băm, băm sai hình dạng ⇒ 422; route hồ sơ 403 với agent.
+- `apps/web/src/tao-thau.test.ts` 45 ca (+13: bản sao ba tập đóng khớp hằng của gói, giải trình đếm byte, loại chọn sẵn, chỉ dẫn từng mã,
+  chỉ dẫn KHÔNG trùng cụm sáu chữ nào của câu máy chủ, số nhóm, cùng lần nộp, ô chọn, ký tự đảo chiều); `nha-cung-cap.test.ts` 7 ca mới;
+  `phuc-vu.test.ts` 297 ca (+10 ca DOM mới cho hai màn, cộng lượt chung của trang mới: bước 1, phiên, đăng xuất, đổi người). Lượt chạy đầu của
+  ca DOM *"máy chủ từ chối ⇒ câu ở lại"* bắt một lỗi màn: `/nha-cung-cap` in câu từ chối rồi đọc lại bảng, mà lần đọc mở đầu bằng xoá ô lỗi
+  — đổi thứ tự.
+
+## 7. Đột biến
+Mười ba đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256:
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | 422 của chốt bỏ `ma` | 2/15 |
+| TS2 | `coQuyenMoi` luôn `true` | 2/15 |
+| TS3 | `coQuyenMoi` không loại phiên agent | 1/15 |
+| TS4 | bỏ so băm đã thấy | 1/15 |
+| TS5 | số nhóm = số dòng đếm được | 1/15 |
+| TS6 | `lanNop` của ngoại lệ hằng 0 | 1/15 |
+| TS7 | tự nạp hai danh sách bất kể cờ | 1/348 |
+| TS8 | bỏ so lần nộp sau khi đọc hai danh sách | 1/348 |
+| TS9 | bỏ chặn Phê duyệt khi danh sách lệch | 1/348 |
+| TS10 | bỏ khoá thêm người liên hệ cho hồ sơ có sẵn | 1/348 |
+| TS11 | Xác minh không gửi `bamDaXem` | 1/348 |
+| TS12 | lần duyệt hỏng không đọc lại gói | 1/348 |
+| TS13 | đảo loại ngoại lệ chọn sẵn | 2/348 |
+
+Năm sống: 0. Không đột biến CSDL: vòng này không migration.
+
+## 8. Lượt đi thử T4 — cụm thật, Chromium, script ngoài kho
+Cụm: `pnpm pilot:gia-lap cum` (Postgres `16-alpine` trong Docker, `api`, `web`, worker, khoá công khai; khoá local-dev, hộp thư dev), tổ chức
+S3 của `pnpm gieo:demo --s3` (bốn bậc mặc định: dưới 100 triệu cần hai nhóm). Script `playwright-core` 1.56 trên Chromium 1194 của
+`/opt/pw-browsers`, đăng nhập bằng link qua `POST /auth/link` và hộp thư dev, mã sáu số từ bí mật ghi danh hiện trên màn. Hai người dùng thêm
+thẳng vào CSDL: một REQUESTER, một BUYER. Trên `2a1ff40`, cây sạch, một tổ chức mới: **36/36**; vế BUYER **3/3**.
+- soan (PM): tạo gói 50 triệu nhóm KẾT CẤU; tự dựng một nhà cung cấp và người liên hệ trên màn, mời ⇒ dòng *Đã xác minh: không, Đếm được:
+  không*, «Đếm được 0/2 nhóm»; chọn một nhà cung cấp có sẵn ⇒ «Đã xác minh, còn hiệu lực tới 6/10/2027»; «Thêm người liên hệ» vào hồ sơ có sẵn
+  ⇒ câu chặn, 0 hàng mới; mời ⇒ «có, có», «1/2»; nộp ⇒ câu K2 của máy chủ rồi câu chỉ dẫn, một hàng `CONTROL_DENIED`; loại chọn sẵn «Cạnh
+  tranh hạn chế»; OTHER dưới 100 byte ⇒ chặn trên màn, 0 hàng; lập ngoại lệ ⇒ bảng; nộp lại ⇒ qua; ở chờ duyệt không lập, không rút.
+- soan2 (người duyệt): hai danh sách tự nạp, không câu lệch; soan trả về và nộp lại TRONG LÚC soan2 đang xem ⇒ lần duyệt của soan2 bị máy chủ
+  từ chối (lần nộp 2), màn đọc lại trọn gói («Lần nộp duyệt» 2); duyệt lại ⇒ chữ ký mang lần nộp 2; soan mở gói ⇒ K5 qua (người ký độc lập).
+- người yêu cầu mua và tài chính ở `/tao-thau`: ba lần đọc gói, 0 hàng `PERMISSION_DENIED`, bảng trống; bấm «Xem ngoại lệ» ⇒ câu 403, đúng một
+  hàng.
+- taichinh2 ở `/nha-cung-cap`, 375×812: hồ sơ tự dựng «Chưa xác minh.», người liên hệ kèm người thêm; soan thêm một người liên hệ qua API trong
+  lúc màn đang mở ⇒ «Xác minh» bị từ chối *"Hồ sơ nhà cung cấp đã đổi từ lúc bạn xem…"*, 0 hàng xác minh, bảng đọc lại hiện người chen vào; xác
+  minh lại ⇒ còn hiệu lực; một người liên hệ nữa ⇒ *"Hết hiệu lực: hồ sơ đã đổi sau lần xác minh…"* và dấu ⚠ trên đúng dòng ấy.
+- BUYER (giữ `rfq.invite`, không `supplier.manage`): hai danh sách tự nạp, 0 hàng từ chối; «Tạo nhà cung cấp» ⇒ câu 403 của màn, một hàng; ô
+  chọn vẫn dùng được.
+- Khung 375×812: `/nha-cung-cap` (hai lần) và `/tao-thau` với bảng lời mời bảy cột và bảng ngoại lệ — `scrollWidth` = `clientWidth` = 375.
+- Phản hồi lỗi trên mọi trang của lượt sạch: năm, đều được chờ — 422 nộp (K2), 422 duyệt (lần nộp cũ), hai 403 «Xem ngoại lệ», 422 xác minh
+  (băm cũ); vế BUYER: một 403 `POST /suppliers`.
+- **Tìm và sửa trong lượt:** câu chỉ dẫn K2 bản đầu nhắc lại nửa câu của máy chủ (câu của `CHOT_VAO_SO` đã nói phải làm gì) ⇒ viết lại cho
+  bổ sung — chỗ làm trên màn, tên ngoại lệ như ô chọn hiện, danh sách rỗng —, kèm test chặn cụm sáu chữ trùng (`2a1ff40`).
+- Hai lượt hỏng trước lượt sạch, không do màn: lượt một — script đoán sai họ tên người dùng của `gieo:demo` (2 khẳng định); lượt hai — chạy lại
+  trên CÙNG tổ chức tạo gói 50 triệu thứ hai cùng nhóm hàng trong 30 ngày, tổng chạm cận 100 triệu, và lần mở bị tín hiệu chia nhỏ (K10a)
+  chặn đúng luật.
+- Lượt đi thử T4 là một lần, không phải một cổng: script nằm ngoài kho.
+
+## 9. Giới hạn còn lại
+- Thêm người liên hệ vào hồ sơ bất kỳ vẫn đi được qua API (khoản nợ mới, rổ đề xuất B); màn chặn lối dễ nhất.
+- Chỉ dẫn K3 không nói nhà cung cấp nào là mới; lần chặn ở trigger khi đua vẫn là lời không tên, không `ma`.
+- Xác minh sau ngày bật, từng nhà cung cấp; KPI tỷ lệ ngoại lệ — S3.9 (ADR-150 ⑼).
+- `gieo:demo` và kịch bản 41 qua ngoại lệ, K2/K3/K5 bị chặn rồi qua — S3.3e2.
+
+## 10. Số đo
+Trên `0202d31` (nhánh dựng từ `master` `58fd14c`, không gộp thêm — `origin/master` không đổi trong vòng; số đã cấp ở `c863a69`: vòng 273,
+ADR-150, khoản 344): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm test` 151 tệp, 2586 ca đạt, 1 bỏ qua, 0 đỏ; `pnpm evidence`: vitest
+thoát mã 0, 243 tệp, 4792 khẳng định (4782 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60 nghiệp vụ + 22/22 hàng rào), 2117 giây, *"Cổng
+evidence: XANH"*; `evidence/INV-matrix.md` đổi đúng bốn con số — D5 182 → 185, K2 25 → 29, K5 12 → 13, K8a 10 → 14 —, không bất biến mới,
+mốc độ phủ giữ 82. Trong lượt ấy: `man-kiem-soat` 15/15, `ngoai-le-canh-tranh` 26/26, hai kịch bản 41 32 + 85 (bộ quét gửi băm đọc ngay lúc
+gọi), `xac-minh` 10/10, `migrations.int` 128/128, `phuc-vu` 297/297.
+Lượt evidence trước đó trên `c863a69` đỏ đúng một ca, ở `ngoai-le-canh-tranh` ⑺: tổ chức khác đọc ngoại lệ của một gói qua route nay nhận
+404 thay vì 200 rỗng — câu đọc dựng từ `rfq_packages` để mang lần nộp (ADR-150 ⑶), và 404 là đúng câu `GET /rfqs/:id` trả cho gói ấy, nên
+không lộ thêm gì; ca sửa theo hành vi mới kèm đối chứng 404 của gói (`0202d31`). Bản ma trận của lượt ấy bỏ, không commit.
+Sau lượt đo, `master` thêm `0ccd14c` (PR #249, §S1.274 — khoản 342: `packages/danh-gia` và tài liệu, không migration, không chạm
+màn hay route của vòng này) và được gộp vào nhánh: ba xung đột tài liệu (`Handoff.md`, `docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột
+mốc, cả hai biên bản, hàng 342 ĐÓNG của `master` cạnh hàng 344, danh sách khoản mở của `master` bỏ 340 thêm 344 —, lời khai đếm lại bằng
+`pnpm cap-so --dem`; ma trận INV gộp tự động hai bộ con số (L6, L7 của `master`; D5, K2, K5, K8a của vòng này). Số đo trên cây gộp ở
+commit gộp.
+
 # §S1.272 — S4.6a: MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ, NGƯỜI NHẬP MÙ GIÁ, ĐỌC LẠI KHÔNG CỘT GIÁ (L1, L3 vế hai bảng; L15 vế ghi) — ADR-149
 
 ## 1. Vòng này là gì
