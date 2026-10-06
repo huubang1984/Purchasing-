@@ -100,7 +100,14 @@ export interface DaiNgoaiInput {
   readonly nhom: NhomBenchmark;
 }
 
-const trongCuaSo = (ngay: string, cs: { readonly tu: string; readonly den: string }): boolean => ngay >= cs.tu && ngay <= cs.den;
+/**
+ * So CHỮ `YYYY-MM-DD` là so ngày — chỉ khi đúng dạng ấy. [rà soát §S1.9101 THẤP-4] Một ngày khác dạng (vd. `DateStyle` lệch) làm mọi hàng
+ * lặng lẽ rơi khỏi cửa sổ ⇒ NÉM, không đoán.
+ */
+const trongCuaSo = (ngay: string, cs: { readonly tu: string; readonly den: string }): boolean => {
+  if (!NGAY.test(ngay)) throw new RangeError(`ngày của dữ liệu ngoài không phải YYYY-MM-DD: ${JSON.stringify(ngay)}`);
+  return ngay >= cs.tu && ngay <= cs.den;
+};
 const conTaiMoc = (h: CoThoiDiem): boolean => h.ghiTruocMoc && !h.rutTruocMoc;
 
 /** Dải lịch sử ngoài của một (hàng chuẩn, tiền tệ) tại mốc của X. `hang` là mọi hàng dữ liệu của MỘT hàng chuẩn. */

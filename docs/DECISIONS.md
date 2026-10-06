@@ -11901,6 +11901,15 @@ gọi — `bang-ngoai-liet-ke.test.ts` ghim theo ký hiệu.
 ⑻ **Hàng sổ.** `BENCHMARK_READ` thêm `soDongNgoai` (null với bản lưu cũ), `soMocNgoai`; `BENCHMARK_BAND_READ` thêm `soDaiNgoai`,
 `soMocNgoai`. Không giá.
 
+⑼ **[sau rà soát đối kháng] Đọc chặn được, và chờ lô đang ghi.** Bộ đọc chỉ lấy hàng trong cửa sổ ngày (tương đương chính xác — lõi bỏ
+hàng ngoài cửa sổ trước mọi phép đếm) và quy đổi MỘT lần cho mỗi (hàng chuẩn, đơn vị) — đo: 50 000 dòng lịch sử một hàng chuẩn ⇒ 14,4 s
+(sát `statement_timeout` 15 s) thành 0,26 s khi dòng trải 2 000 ngày, 1,2 s khi cả 50 000 dòng trong cửa sổ. Trước khi đọc, bộ đọc lấy
+khoá tư vấn DÙNG CHUNG trên hai bảng của tổ chức — cùng khoá mà `du_lieu_nen_dat_thu_tu` (`079`) lấy ĐỘC QUYỀN trước khi đặt `ghi_luc`:
+`ghi_luc` là lúc INSERT chứ không phải lúc commit, nên một lô dài vắt qua mốc mở giá mang `ghi_luc` < mốc mà chưa thấy được; chờ khoá thì
+bản lưu và *Xem dải* thấy cùng một tập. Lần đọc bảng chờ tối đa một lô đang ghi (trần `lock_timeout` 15 s); cờ mốc của lần đọc đầu đọc
+TRƯỚC khoá hàng gói, để cửa sổ `FOR SHARE` của S1.274 giữ ngắn. Ngày ra bằng `to_char` — không phụ thuộc `DateStyle`; lõi NÉM trên ngày
+khác dạng.
+
 ### Đo bằng gì
 
 - T1 `packages/du-lieu-nen/src/dai-ngoai.test.ts` — ngày Việt Nam, cửa sổ, gói, sàn, L1 ghi/rút trước-sau mốc, loại tiền tệ và quy
@@ -11923,7 +11932,12 @@ gọi — `bang-ngoai-liet-ke.test.ts` ghim theo ký hiệu.
   không có phép so nào bắt — khác nhãn ngoài, có `khopBanLuu` ở *Xem dải*.
 - **Không khử trùng** (ADR-149): dán một lô hai lần là hai quan sát cùng gói ở dải ngoài.
 - **`nguon` và nhà cung cấp là lời khai** — hiện nguyên văn (`textContent`), ba nguồn đầu.
-- **Lớp L15 vẫn là lớp chữ** (ADR-149 ⑹).
+- **Lớp L15 vẫn là lớp chữ** (ADR-149 ⑹) — nay không phân biệt hoa thường.
+- **Migration khoá bảng lúc dựng chỉ mục.** `ADD CONSTRAINT … UNIQUE` trên `price_benchmark_snapshot_lines` lấy khoá độc quyền trong lúc
+  dựng chỉ mục — mọi lần đọc benchmark chờ tới hết lúc ấy khi deploy. Bảng nhỏ ở giai đoạn thí điểm; `CREATE INDEX CONCURRENTLY` không
+  chạy được trong giao dịch của `migrate()`.
+- **Người nhập chờ người đọc.** Khoá dùng chung giữ tới hết giao dịch đọc: một lô đang dán chờ các lần đọc benchmark đang mở — với lần
+  đọc ĐẦU, tới hết phép tính bản lưu.
 
 ### Điều ADR này KHÔNG nói
 

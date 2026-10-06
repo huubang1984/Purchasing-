@@ -27,7 +27,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { moiCauSql } from "./qt3-doc-sql.js";
 
-const BANG = /\bexternal_(?:price_references|purchase_history)\b/u;
+// [rà soát §S1.9101 THẤP-3] Cờ `i`: SQL không phân biệt hoa thường — `EXTERNAL_PURCHASE_HISTORY` hay `h.DON_GIA` vượt bản đầu.
+const BANG = /\bexternal_(?:price_references|purchase_history)\b/iu;
 const THU_MUC_MIGRATION = fileURLToPath(new URL("../../db/migrations/", import.meta.url));
 
 /** Tệp TypeScript sản xuất chạm hai bảng — và vì sao. */
@@ -52,8 +53,8 @@ function docCaHangHayGia(sql: string): string[] {
   const chen = /^\s*INSERT\s+INTO\s+public\.external_\w+\s*\(([^)]*)\)/iu.exec(sql);
   const [dau, duoi] = chen === null ? ["", sql] : [chen[0], sql.slice(chen[0].length)];
   const [than, traVe] = duoi.split(/\bRETURNING\b/iu, 2) as [string, string | undefined];
-  if (/\bdon_gia\b/u.test(than)) ly.push("đọc don_gia");
-  if (traVe !== undefined && /\bdon_gia\b|\*/u.test(traVe)) ly.push("RETURNING mang don_gia");
+  if (/\bdon_gia\b/iu.test(than)) ly.push("đọc don_gia");
+  if (traVe !== undefined && /\bdon_gia\b|\*/iu.test(traVe)) ly.push("RETURNING mang don_gia");
   const boDem = (dau + than).replace(/\bcount\s*\(\s*\*\s*\)/giu, "count()").replace(/OPERATOR\(pg_catalog\.\*\)/gu, "OPERATOR(nhan)");
   if (/\*/u.test(boDem)) ly.push("đọc cả hàng (*)");
   if (/\b(?:to_jsonb?|row_to_json|jsonb?_agg|jsonb?_build_(?:object|array)|array_agg|hstore|json_populate_record)\s*\(/iu.test(than)) {
@@ -92,9 +93,9 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
     ).toEqual([]);
     expect(boDocGia.filter((c) => docCaHangHayGia(c.sql).includes("đọc don_gia")).length, "số câu đọc giá của bộ đọc").toBe(SO_CAU_DOC_GIA);
     // Câu đọc CỜ mốc ngoài của bảng benchmark không đọc giá (chủ dự án chốt 2026-10-06: cờ ở bảng, số ở *Xem dải*).
-    expect(boDocGia.filter((c) => /external_price_references/u.test(c.sql) && !/\bdon_gia\b/u.test(c.sql)).length).toBe(1);
+    expect(boDocGia.filter((c) => /FROM public\.external_price_references/iu.test(c.sql) && !/\bdon_gia\b/iu.test(c.sql)).length).toBe(1);
     // Chống rỗng ruột: hai câu INSERT dữ liệu CÓ mang `don_gia`, và câu liệt kê lô thì không.
-    expect(cau.filter((c) => /^\s*INSERT/iu.test(c.sql) && /\bdon_gia\b/u.test(c.sql)).length).toBe(2);
+    expect(cau.filter((c) => /^\s*INSERT/iu.test(c.sql) && /\bdon_gia\b/iu.test(c.sql)).length).toBe(2);
   });
 
   it("[INV-L15] [S1.9101 / S4.6b] ba hàm đọc giá chỉ đi qua `benchmark-goi.ts`, và các hàm ấy chỉ `doc-benchmark.ts` (cổng `bid.view`) gọi; lượt chấm không bật `kemNgoai`", () => {
@@ -118,6 +119,11 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
     expect(docBm.match(/permission: PERMISSIONS\.BID_VIEW/gu)?.length).toBe(2);
   });
 
+  it("[INV-L15] [rà soát §S1.9101 THẤP-3] tên bảng viết HOA vẫn là chạm hai bảng", () => {
+    expect(BANG.test("SELECT h.id FROM public.EXTERNAL_PURCHASE_HISTORY h")).toBe(true);
+    expect(BANG.test("'EXTERNAL_PRICE_REFERENCES_IMPORTED'"), "mã hành động sổ không phải tên bảng").toBe(false);
+  });
+
   it("[INV-L15] ĐỐI CHỨNG của bộ dò đọc-cả-hàng: mỗi cách đọc giá không viết tên cột đều bị nêu; câu thật của vòng này thì không", () => {
     const E = "public.external_price_references";
     for (const [sql, ly] of [
@@ -130,6 +136,8 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
       [`SELECT h.don_gia FROM ${E} h`, "đọc don_gia"],
       [`INSERT INTO ${E} (org_id, don_gia) SELECT $1, $2 RETURNING id, don_gia`, "RETURNING mang don_gia"],
       [`INSERT INTO ${E} (org_id, don_gia) SELECT o.org_id, o.don_gia FROM ${E} o`, "đọc don_gia"],
+      // [rà soát §S1.9101 THẤP-3] Viết hoa vẫn là đọc giá.
+      [`SELECT h.DON_GIA FROM ${E} h`, "đọc don_gia"],
     ] as const) {
       expect(docCaHangHayGia(sql), sql).toContain(ly);
     }

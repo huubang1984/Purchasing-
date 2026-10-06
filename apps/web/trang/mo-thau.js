@@ -617,8 +617,8 @@ async function veDai(lineNo) {
     hien($("khoi-dai"), true);
     return;
   }
-  // [S1.9101 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn).
-  const coMoc = (d.mocNgoai ?? []).some((m) => m.moc !== null);
+  // [S1.9101 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn). Độ
+  // lệch chỉ in khi tiền tệ của CHÍNH báo giá có mốc (rà soát §S1.9101: tiền tệ khác của dòng có mốc không được kéo theo "—").
   dienDl($("tt-dai"), [
     ...cu,
     ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),
@@ -631,7 +631,7 @@ async function veDai(lineNo) {
       `Đơn giá quy đổi — ${tenBaoGia(g.bidVersionId)}`,
       g.donGiaQuyDoi === null
         ? `không quy đổi được (${g.trangThai})`
-        : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}${coMoc ? ` · ${chuLech(g.lechMoc ?? null)} so với mốc ngoài` : ""}`,
+        : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}${g.lechMoc == null ? "" : ` · ${chuLech(g.lechMoc)} so với mốc ngoài`}`,
     ]),
   ]);
   hien($("khoi-dai"), true);

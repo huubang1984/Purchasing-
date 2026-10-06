@@ -127,6 +127,11 @@ describe("[INV-L15] [INV-L1] [S1.9101 / S4.6b] dải lịch sử ngoài — cùn
   it("đơn giá quy đổi không dương là dữ liệu hỏng — NÉM, không đoán", () => {
     expect(() => tinhDaiNgoai([ls({ donGiaQuyDoi: "0" })], VAO)).toThrow(/không dương/u);
   });
+
+  it("[rà soát §S1.9101 THẤP-4] ngày khác dạng YYYY-MM-DD (vd. DateStyle lệch) ⇒ NÉM, không lặng lẽ rơi khỏi cửa sổ", () => {
+    expect(() => tinhDaiNgoai([ls({ ngayMua: "01/06/2026" })], VAO)).toThrow(RangeError);
+    expect(() => chonMocNgoai([mn({ ngayHieuLuc: "06/01/2026" })], VAO_MOC)).toThrow(RangeError);
+  });
 });
 
 let demMoc = 0;

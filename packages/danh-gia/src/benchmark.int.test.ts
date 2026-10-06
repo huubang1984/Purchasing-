@@ -1731,6 +1731,7 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và m�
   let bgN: readonly BaoGia[] = [];
   let dau: BenchmarkCuaGoi | null = null;
   let homNay = "";
+  let ngayMocChon = "";
   const dai = (rfqId: string, lineNo: number, phien = pm.phien) =>
     trong(orgA, (c) => docDaiBenchmark(c, orgA, { rfqId, lineNo, actorSessionId: phien }, api));
   /** Ngày giờ Việt Nam lệch `n` ngày (âm = tương lai) — cùng lịch với luật *"ngày mua không sau hôm nay"* của `109`. */
@@ -1757,6 +1758,7 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và m�
     const [d5, d7, d10, d15, d20, d30, d40, d60, d400, tuongLai] = await Promise.all(
       [5, 7, 10, 15, 20, 30, 40, 60, 400, -30].map((n) => ngay(n)),
     );
+    ngayMocChon = d7!;
     await nhap("LICH_SU_NGOAI", [
       `THEP-NGOAI,100,kg,VND,${d10!},Công ty Thép Á,Sổ mua 2026`,
       `THEP-NGOAI,120000,t,VND,${d10!},cong ty thep a,Sổ mua 2026`,
@@ -1813,14 +1815,20 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và m�
         `${bgN[2]!.versionId}:1:LECH_CAO:DUOI`,
       ].sort(),
     );
-    const cuaSoTu = (await db.pool.query<{ d: string }>("SELECT ($1::date - interval '12 months')::date::text AS d", [homNay])).rows[0]!.d;
+    // Cửa sổ suy từ MỐC ĐÃ LƯU, không từ "hôm nay" lúc dựng cảnh — lượt chạy vắt qua nửa đêm giờ Việt Nam (17:00Z) không đổi kỳ vọng.
+    const { rows: cs } = await db.pool.query<{ tu: string; den: string }>(
+      "SELECT to_char((d - interval '12 months')::date, 'YYYY-MM-DD') AS tu, to_char(d, 'YYYY-MM-DD') AS den " +
+        "FROM (SELECT (timezone('UTC', moc_mo_gia) + interval '7 hours')::date AS d FROM price_benchmark_snapshots WHERE rfq_id = $1) x",
+      [rfqN],
+    );
     for (const d of dau.dongNgoai ?? []) {
       expect(d).toMatchObject({
-        canonicalItemId: hangN, tienTe: "VND", cuaSoTu, denNgay: homNay, soDong: 5, soGoi: 4, soNcc: 4, soLoaiTienTe: 1, soLoaiKhongQuyDoi: 1,
+        canonicalItemId: hangN, tienTe: "VND", cuaSoTu: cs[0]!.tu, denNgay: cs[0]!.den, soDong: 5, soGoi: 4, soNcc: 4, soLoaiTienTe: 1,
+        soLoaiKhongQuyDoi: 1,
       });
     }
     expect(dau.mocNgoai).toEqual([
-      { canonicalItemId: hangN, tienTe: "VND", nguon: "Bảng giá nhà máy tháng 9", ngayHieuLuc: await ngay(7) },
+      { canonicalItemId: hangN, tienTe: "VND", nguon: "Bảng giá nhà máy tháng 9", ngayHieuLuc: ngayMocChon },
     ]);
     // Bảng con: ba hàng, không cột tiền; dòng 2 (không đo được) không có hàng.
     const { rows } = await db.pool.query<{ line_no: number }>(
@@ -1918,6 +1926,50 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và m�
       trangThai: "CO",
       daiNgoai: [{ trungVi: "105", soDong: 6, soLoaiKhongQuyDoi: 0, sauMoc: { GHI: 0, RUT: 0 }, khopBanLuu: null }],
     });
+  });
+
+  it("[rà soát §S1.9101 THẤP-2] lô ngoài ghi TRƯỚC mốc mở giá mà commit SAU: lần đọc đầu CHỜ lô commit rồi thấy nó — bản lưu và Xem dải cùng một tập", async () => {
+    const hangW = (
+      await trong(orgA, (c) => taoHangChuan(c, orgA, { ma: "THEP-CHO-LO", ten: "Thép chờ lô", donViGoc: "kg", actorSessionId: ql.phien }))
+    ).id;
+    const [a, b, c3] = await Promise.all([12, 13, 14].map((n) => ngay(n)));
+    let tha!: () => void;
+    const choTha = new Promise<void>((r) => (tha = r));
+    let daGhi!: () => void;
+    const ghiXong = new Promise<void>((r) => (daGhi = r));
+    // Giao dịch nhập lô giữ nguyên tới khi được thả: hàng đã có `ghi_luc` (lúc INSERT), khoá tư vấn của bảng còn giữ.
+    const lo = trong(orgA, async (c) => {
+      const kq = await nhapDuLieuNgoai(c, orgA, {
+        loai: "LICH_SU_NGOAI",
+        vanBan: [
+          "ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon",
+          `THEP-CHO-LO,100,kg,VND,${a!},Cong ty P,So mua`,
+          `THEP-CHO-LO,110,kg,VND,${b!},Cong ty Q,So mua`,
+          `THEP-CHO-LO,120,kg,VND,${c3!},Cong ty R,So mua`,
+        ].join("\n"),
+        actorSessionId: ql.phien,
+      });
+      expect(kq.nhan).toBe(true);
+      daGhi();
+      await choTha;
+    });
+    await ghiXong;
+    const rfqW = await taoGoi(boA2, [["Thep cho lo", "10", "kg"]]);
+    await anhXa(orgA, rfqW, 1, hangW);
+    const bg = await nopBaoGia(boA2, rfqW);
+    await moThau(boA2, rfqW, [[bg.versionId, phongBi([[1, "1100"]])]]);
+    let xong = false;
+    const docDau = doc(orgA, rfqW).then((kq) => {
+      xong = true;
+      return kq;
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(xong, "lần đọc đầu phải CHỜ lô đang ghi").toBe(false);
+    tha();
+    await lo;
+    const ban = await docDau;
+    expect(ban?.trangThai === "CO" && ban.dongNgoai?.map((d) => [d.soDong, d.soGoi, d.nhan])).toEqual([[3, 3, "BINH_THUONG"]]);
+    expect(await dai(rfqW, 1)).toMatchObject({ trangThai: "CO", daiNgoai: [{ soDong: 3, trungVi: "110", khopBanLuu: true }] });
   });
 
   it("CSDL: hàng ngoài ở giao dịch KHÁC ⇒ `…_cung_ban_luu_fk`; dòng không đo được ⇒ `…_dong_do_duoc_fk`; năm `CHECK` có tên; đúng ⇒ vào", async () => {

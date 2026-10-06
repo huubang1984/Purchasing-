@@ -284,8 +284,8 @@ async function docDongNgoaiBanLuu(
   lineNo?: number,
 ): Promise<readonly HangLuuNgoai[]> {
   const { rows } = await client.query<HangLuuNgoai>(
-    `SELECT e.bid_version_id, e.line_no, e.canonical_item_id, e.tien_te, e.cua_so_tu::pg_catalog.text AS cua_so_tu,
-            e.den_ngay::pg_catalog.text AS den_ngay, e.nhan, e.chieu, e.so_dong, e.so_goi, e.so_ncc, e.so_loai_tien_te,
+    `SELECT e.bid_version_id, e.line_no, e.canonical_item_id, e.tien_te, pg_catalog.to_char(e.cua_so_tu, 'YYYY-MM-DD') AS cua_so_tu,
+            pg_catalog.to_char(e.den_ngay, 'YYYY-MM-DD') AS den_ngay, e.nhan, e.chieu, e.so_dong, e.so_goi, e.so_ncc, e.so_loai_tien_te,
             e.so_loai_khong_quy_doi
        FROM public.price_benchmark_snapshot_external_lines e
       WHERE e.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
@@ -435,6 +435,7 @@ interface BoiCanhHien extends BoiCanh {
 async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, bc: BoiCanhHien): Promise<BenchmarkCuaGoi> {
   let dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
   let nguon: NguonBenchmark = "BAN_LUU";
+  let mocNgoaiDaTinh: readonly CoMocNgoai[] | undefined;
   if (dau === undefined) {
     if (bc.moHonGiaoDich) return { trangThai: "THU_LAI", rfqStatus: bc.status };
     const baoGia = await docBaoGia(client, orgId, rfqId);
@@ -445,10 +446,19 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
       nhom: bc.nhom,
       kemNgoai: true,
     });
+    // [rà soát §S1.9101] Cờ mốc ngoài đọc TRƯỚC khoá hàng gói: lần đọc hai bảng ngoài có thể chờ một lô đang ghi (khoá tư vấn dùng chung
+    // của `gia-ngoai.ts`), và cửa sổ `FOR SHARE` của S1.274 phải giữ ngắn. Cùng cặp (hàng chuẩn, tiền tệ), cùng mốc với bản sắp ghi.
+    mocNgoaiDaTinh = await docCoMocNgoai(client, orgId, {
+      cap: kq.dong.filter((d) => d.nhan !== "KHONG_DO_DUOC").map((d) => ({ canonicalItemId: d.canonicalItemId as string, tienTe: d.tienTe as string })),
+      mocMoGia: kq.mocMoGia,
+      cuaSoThang: bc.nhom.cuaSoThang,
+    });
     const doi = await kiemLaiDuoiKhoa(client, orgId, rfqId, bc.unsealRequestId);
     if (doi !== undefined) return doi;
     const id = await ghiBanLuuBenchmark(client, orgId, { unsealRequestId: bc.unsealRequestId, policyId: bc.policyId, ketQua: kq });
     if (id !== null) nguon = "TINH_MOI";
+    // Giao dịch khác đã ghi bản lưu: cờ đọc lại theo các dòng của bản ấy, ở dưới.
+    else mocNgoaiDaTinh = undefined;
     dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
     if (dau === undefined) throw new Error("bản lưu benchmark vừa ghi (hay do giao dịch khác ghi) không đọc lại được");
   } else {
@@ -459,11 +469,13 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
   // [S1.9101 / S4.6b] Nhãn ngoài đã lưu; cờ mốc ngoài đọc tại mốc mở giá đã lưu (không đơn giá) — chủ dự án chốt 2026-10-06.
   const doDuocDs = dong.filter(doDuoc);
   const ngoai = await docDongNgoaiBanLuu(client, orgId, dau.id);
-  const mocNgoai = await docCoMocNgoai(client, orgId, {
-    cap: doDuocDs.map((r) => ({ canonicalItemId: r.canonical_item_id as string, tienTe: r.tien_te as string })),
-    mocMoGia: BigInt(dau.moc_micro),
-    cuaSoThang: bc.nhom.cuaSoThang,
-  });
+  const mocNgoai =
+    mocNgoaiDaTinh ??
+    (await docCoMocNgoai(client, orgId, {
+      cap: doDuocDs.map((r) => ({ canonicalItemId: r.canonical_item_id as string, tienTe: r.tien_te as string })),
+      mocMoGia: BigInt(dau.moc_micro),
+      cuaSoThang: bc.nhom.cuaSoThang,
+    }));
   return {
     trangThai: "CO",
     nguon,

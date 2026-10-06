@@ -14,12 +14,42 @@
 import type pg from "pg";
 import type { HangLichSuNgoai, HangMocNgoai } from "./dai-ngoai.js";
 
-// Ba câu viết TRỌN, không ghép bằng `${…}`: bộ đọc SQL của lớp máy (`tests/architecture/qt3-doc-sql.ts`) ghép chuỗi liền kề nối bằng `+`
-// và không thấy nội suy. Mốc (`$3`, micro giây) thành `timestamptz` bằng cùng biểu thức của `benchmark-goi.ts`.
+// Các câu viết TRỌN, không ghép bằng `${…}`: bộ đọc SQL của lớp máy (`tests/architecture/qt3-doc-sql.ts`) ghép chuỗi liền kề nối bằng
+// `+` và không thấy nội suy. Mốc (`$3`, micro giây) thành `timestamptz` bằng cùng biểu thức của `benchmark-goi.ts`.
+// [rà soát §S1.9101 TRUNG-1] Bản đầu đọc MỌI hàng của hàng chuẩn và quy đổi TỪNG hàng — đo: 50 000 dòng lịch sử một hàng chuẩn ⇒ 14,4 s,
+// sát trần `statement_timeout` 15 s, mà người nhập (mù giá) dán được bao nhiêu lô tuỳ ý. Nay: chỉ hàng trong CỬA SỔ NGÀY (`$4`..`$5`) —
+// tương đương chính xác, vì lõi bỏ hàng ngoài cửa sổ trước mọi phép đếm —, và quy đổi MỘT lần cho mỗi (hàng chuẩn, đơn vị) trong một
+// CTE `MATERIALIZED` (khuôn `quan_sat_gia`). Ngày ra bằng `to_char` — không phụ thuộc `DateStyle` của phiên (rà soát THẤP-4).
 
-/** Lịch sử mua ngoài của các hàng chuẩn `$2` — CÓ đơn giá quy đổi tại mốc. */
+/**
+ * [rà soát §S1.9101 THẤP-2] Khoá tư vấn DÙNG CHUNG trên cả hai bảng của tổ chức — cùng khoá mà `du_lieu_nen_dat_thu_tu` (`079`) lấy
+ * ĐỘC QUYỀN trước khi đặt `ghi_luc`. `ghi_luc` là lúc INSERT, không phải lúc commit: một lô dài vắt qua mốc mở giá mang `ghi_luc` < mốc mà
+ * chưa thấy được. Chờ khoá ⇒ mọi hàng có `ghi_luc` < mốc đã commit lúc đọc, và lô bắt đầu sau lúc đọc mang `ghi_luc` sau lúc ấy — bản lưu
+ * và *Xem dải* thấy cùng một tập (không `khopBanLuu: false` giả). Thứ tự cố định (mốc rồi lịch sử); người ghi chỉ giữ một bảng mỗi giao dịch.
+ */
+const CAU_KHOA =
+  "SELECT pg_catalog.pg_advisory_xact_lock_shared(pg_catalog.hashtextextended(" +
+  "'external_price_references|' OPERATOR(pg_catalog.||) $1::pg_catalog.uuid::pg_catalog.text, 3)), " +
+  "pg_catalog.pg_advisory_xact_lock_shared(pg_catalog.hashtextextended(" +
+  "'external_purchase_history|' OPERATOR(pg_catalog.||) $1::pg_catalog.uuid::pg_catalog.text, 3))";
+
+/** Lịch sử mua ngoài của các hàng chuẩn `$2`, ngày mua trong `[$4, $5]` — CÓ đơn giá quy đổi tại mốc. */
 const CAU_LICH_SU_NGOAI =
-  "SELECT h.id, h.canonical_item_id, h.tien_te, h.ngay_mua::pg_catalog.text AS ngay_mua, " +
+  "WITH m AS (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
+  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc), " +
+  "h AS MATERIALIZED (SELECT e.id, e.org_id, e.canonical_item_id, e.don_gia, e.don_vi, e.tien_te, e.ngay_mua, e.nha_cung_cap_text, " +
+  "e.nguon, e.seq, e.ghi_luc FROM public.external_purchase_history e " +
+  "WHERE e.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND e.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND e.rut_cua IS NULL " +
+  "AND e.ngay_mua OPERATOR(pg_catalog.>=) $4::pg_catalog.date AND e.ngay_mua OPERATOR(pg_catalog.<=) $5::pg_catalog.date), " +
+  "q AS MATERIALIZED (SELECT k.canonical_item_id, k.don_vi, r.he_so " +
+  "FROM (SELECT DISTINCT h.canonical_item_id, h.don_vi FROM h) k " +
+  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND ci.id OPERATOR(pg_catalog.=) k.canonical_item_id CROSS JOIN m " +
+  "CROSS JOIN LATERAL public.quy_doi_da_giai($1::pg_catalog.uuid, k.canonical_item_id, " +
+  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) k.don_vi), k.don_vi, " +
+  "ci.don_vi_goc, ci.don_vi_goc, m.moc) r) " +
+  "SELECT h.id, h.canonical_item_id, h.tien_te, pg_catalog.to_char(h.ngay_mua, 'YYYY-MM-DD') AS ngay_mua, " +
   "public.chuoi_sach(h.nha_cung_cap_text) AS nha_cung_cap, h.nguon, " +
   "(h.ghi_luc OPERATOR(pg_catalog.<) m.moc) AS ghi_truoc, " +
   "EXISTS (SELECT 1 FROM public.external_purchase_history r WHERE r.org_id OPERATOR(pg_catalog.=) h.org_id " +
@@ -27,40 +57,54 @@ const CAU_LICH_SU_NGOAI =
   "EXISTS (SELECT 1 FROM public.external_purchase_history r WHERE r.org_id OPERATOR(pg_catalog.=) h.org_id " +
   "AND r.rut_cua OPERATOR(pg_catalog.=) h.id AND r.ghi_luc OPERATOR(pg_catalog.>=) m.moc) AS rut_sau, " +
   "(h.don_gia OPERATOR(pg_catalog./) q.he_so)::pg_catalog.text AS don_gia_quy_doi " +
-  "FROM public.external_purchase_history h CROSS JOIN (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
-  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc) m " +
-  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) h.org_id " +
-  "AND ci.id OPERATOR(pg_catalog.=) h.canonical_item_id " +
-  "CROSS JOIN LATERAL public.quy_doi_da_giai(h.org_id, h.canonical_item_id, " +
-  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) h.don_vi), h.don_vi, " +
-  "ci.don_vi_goc, ci.don_vi_goc, m.moc) q " +
-  "WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-  "AND h.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND h.rut_cua IS NULL " +
+  "FROM h CROSS JOIN m JOIN q ON q.canonical_item_id OPERATOR(pg_catalog.=) h.canonical_item_id " +
+  "AND q.don_vi OPERATOR(pg_catalog.=) h.don_vi " +
   "ORDER BY h.canonical_item_id, h.seq";
 
-/** Mốc ngoài của các hàng chuẩn `$2` — KHÔNG đọc đơn giá: chỉ đủ để chọn mốc và hiện CỜ ở bảng benchmark. */
+/** Mốc ngoài của các hàng chuẩn `$2`, ngày hiệu lực trong `[$4, $5]` — KHÔNG đọc đơn giá: chỉ đủ để chọn mốc và hiện CỜ ở bảng. */
 const CAU_MOC_NGOAI_CO =
-  "SELECT h.id, h.canonical_item_id, h.tien_te, h.ngay_hieu_luc::pg_catalog.text AS ngay_hieu_luc, h.nguon, " +
+  "WITH m AS (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
+  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc), " +
+  "h AS MATERIALIZED (SELECT e.id, e.org_id, e.canonical_item_id, e.don_vi, e.tien_te, e.ngay_hieu_luc, e.nguon, e.seq, e.ghi_luc " +
+  "FROM public.external_price_references e " +
+  "WHERE e.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND e.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND e.rut_cua IS NULL " +
+  "AND e.ngay_hieu_luc OPERATOR(pg_catalog.>=) $4::pg_catalog.date AND e.ngay_hieu_luc OPERATOR(pg_catalog.<=) $5::pg_catalog.date), " +
+  "q AS MATERIALIZED (SELECT k.canonical_item_id, k.don_vi, r.he_so " +
+  "FROM (SELECT DISTINCT h.canonical_item_id, h.don_vi FROM h) k " +
+  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND ci.id OPERATOR(pg_catalog.=) k.canonical_item_id CROSS JOIN m " +
+  "CROSS JOIN LATERAL public.quy_doi_da_giai($1::pg_catalog.uuid, k.canonical_item_id, " +
+  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) k.don_vi), k.don_vi, " +
+  "ci.don_vi_goc, ci.don_vi_goc, m.moc) r) " +
+  "SELECT h.id, h.canonical_item_id, h.tien_te, pg_catalog.to_char(h.ngay_hieu_luc, 'YYYY-MM-DD') AS ngay_hieu_luc, h.nguon, " +
   "h.seq::pg_catalog.text AS seq, (h.ghi_luc OPERATOR(pg_catalog.<) m.moc) AS ghi_truoc, " +
   "EXISTS (SELECT 1 FROM public.external_price_references r WHERE r.org_id OPERATOR(pg_catalog.=) h.org_id " +
   "AND r.rut_cua OPERATOR(pg_catalog.=) h.id AND r.ghi_luc OPERATOR(pg_catalog.<) m.moc) AS rut_truoc, " +
   "EXISTS (SELECT 1 FROM public.external_price_references r WHERE r.org_id OPERATOR(pg_catalog.=) h.org_id " +
   "AND r.rut_cua OPERATOR(pg_catalog.=) h.id AND r.ghi_luc OPERATOR(pg_catalog.>=) m.moc) AS rut_sau, " +
   "(q.he_so IS NOT NULL) AS quy_doi_duoc " +
-  "FROM public.external_price_references h CROSS JOIN (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
-  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc) m " +
-  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) h.org_id " +
-  "AND ci.id OPERATOR(pg_catalog.=) h.canonical_item_id " +
-  "CROSS JOIN LATERAL public.quy_doi_da_giai(h.org_id, h.canonical_item_id, " +
-  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) h.don_vi), h.don_vi, " +
-  "ci.don_vi_goc, ci.don_vi_goc, m.moc) q " +
-  "WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-  "AND h.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND h.rut_cua IS NULL " +
+  "FROM h CROSS JOIN m JOIN q ON q.canonical_item_id OPERATOR(pg_catalog.=) h.canonical_item_id " +
+  "AND q.don_vi OPERATOR(pg_catalog.=) h.don_vi " +
   "ORDER BY h.canonical_item_id, h.seq";
 
-/** Mốc ngoài của các hàng chuẩn `$2` — CÓ đơn giá quy đổi tại mốc (*Xem dải*). */
+/** Mốc ngoài của các hàng chuẩn `$2`, ngày hiệu lực trong `[$4, $5]` — CÓ đơn giá quy đổi tại mốc (*Xem dải*). */
 const CAU_MOC_NGOAI_GIA =
-  "SELECT h.id, h.canonical_item_id, h.tien_te, h.ngay_hieu_luc::pg_catalog.text AS ngay_hieu_luc, h.nguon, " +
+  "WITH m AS (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
+  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc), " +
+  "h AS MATERIALIZED (SELECT e.id, e.org_id, e.canonical_item_id, e.don_gia, e.don_vi, e.tien_te, e.ngay_hieu_luc, e.nguon, e.seq, " +
+  "e.ghi_luc FROM public.external_price_references e " +
+  "WHERE e.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND e.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND e.rut_cua IS NULL " +
+  "AND e.ngay_hieu_luc OPERATOR(pg_catalog.>=) $4::pg_catalog.date AND e.ngay_hieu_luc OPERATOR(pg_catalog.<=) $5::pg_catalog.date), " +
+  "q AS MATERIALIZED (SELECT k.canonical_item_id, k.don_vi, r.he_so " +
+  "FROM (SELECT DISTINCT h.canonical_item_id, h.don_vi FROM h) k " +
+  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+  "AND ci.id OPERATOR(pg_catalog.=) k.canonical_item_id CROSS JOIN m " +
+  "CROSS JOIN LATERAL public.quy_doi_da_giai($1::pg_catalog.uuid, k.canonical_item_id, " +
+  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) k.don_vi), k.don_vi, " +
+  "ci.don_vi_goc, ci.don_vi_goc, m.moc) r) " +
+  "SELECT h.id, h.canonical_item_id, h.tien_te, pg_catalog.to_char(h.ngay_hieu_luc, 'YYYY-MM-DD') AS ngay_hieu_luc, h.nguon, " +
   "h.seq::pg_catalog.text AS seq, (h.ghi_luc OPERATOR(pg_catalog.<) m.moc) AS ghi_truoc, " +
   "EXISTS (SELECT 1 FROM public.external_price_references r WHERE r.org_id OPERATOR(pg_catalog.=) h.org_id " +
   "AND r.rut_cua OPERATOR(pg_catalog.=) h.id AND r.ghi_luc OPERATOR(pg_catalog.<) m.moc) AS rut_truoc, " +
@@ -68,22 +112,30 @@ const CAU_MOC_NGOAI_GIA =
   "AND r.rut_cua OPERATOR(pg_catalog.=) h.id AND r.ghi_luc OPERATOR(pg_catalog.>=) m.moc) AS rut_sau, " +
   "(q.he_so IS NOT NULL) AS quy_doi_duoc, " +
   "(h.don_gia OPERATOR(pg_catalog./) q.he_so)::pg_catalog.text AS don_gia_quy_doi " +
-  "FROM public.external_price_references h CROSS JOIN (SELECT 'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+) " +
-  "($3::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval) AS moc) m " +
-  "JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) h.org_id " +
-  "AND ci.id OPERATOR(pg_catalog.=) h.canonical_item_id " +
-  "CROSS JOIN LATERAL public.quy_doi_da_giai(h.org_id, h.canonical_item_id, " +
-  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) h.don_vi), h.don_vi, " +
-  "ci.don_vi_goc, ci.don_vi_goc, m.moc) q " +
-  "WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-  "AND h.canonical_item_id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[]) AND h.rut_cua IS NULL " +
+  "FROM h CROSS JOIN m JOIN q ON q.canonical_item_id OPERATOR(pg_catalog.=) h.canonical_item_id " +
+  "AND q.don_vi OPERATOR(pg_catalog.=) h.don_vi " +
   "ORDER BY h.canonical_item_id, h.seq";
 
 export interface DocNgoaiTaiMocInput {
   readonly canonicalItemIds: readonly string[];
   /** Mốc mở giá của gói X, micro giây. */
   readonly mocMicro: bigint;
+  /** Cửa sổ ngày của gói X (`cuaSoNgayNgoai`), cả hai đầu tính vào — hàng ngoài cửa sổ không ra. */
+  readonly cuaSo: { readonly tu: string; readonly den: string };
 }
+
+/** Khoá dùng chung rồi mới đọc (khối `CAU_KHOA`). */
+async function choGhiXong(client: pg.PoolClient, orgId: string): Promise<void> {
+  await client.query(CAU_KHOA, [orgId]);
+}
+
+const thamSo = (orgId: string, input: DocNgoaiTaiMocInput): unknown[] => [
+  orgId,
+  [...input.canonicalItemIds],
+  input.mocMicro.toString(),
+  input.cuaSo.tu,
+  input.cuaSo.den,
+];
 
 /** Hàng lịch sử ngoài kèm hàng chuẩn của nó. */
 export interface HangLichSuNgoaiCuaHang extends HangLichSuNgoai {
@@ -127,9 +179,10 @@ export async function docLichSuNgoaiTaiMoc(
   input: DocNgoaiTaiMocInput,
 ): Promise<readonly HangLichSuNgoaiCuaHang[]> {
   if (input.canonicalItemIds.length === 0) return [];
+  await choGhiXong(client, orgId);
   const { rows } = await client.query<
     CotThoiDiem & { readonly ngay_mua: string; readonly nha_cung_cap: string; readonly don_gia_quy_doi: string | null }
-  >(CAU_LICH_SU_NGOAI, [orgId, [...input.canonicalItemIds], input.mocMicro.toString()]);
+  >(CAU_LICH_SU_NGOAI, thamSo(orgId, input));
   return rows.map((r) => ({ ...coThoiDiem(r), ngayMua: r.ngay_mua, nhaCungCap: r.nha_cung_cap, donGiaQuyDoi: r.don_gia_quy_doi }));
 }
 
@@ -153,7 +206,8 @@ export async function docMocNgoaiCo(
   input: DocNgoaiTaiMocInput,
 ): Promise<readonly HangMocNgoaiCuaHang[]> {
   if (input.canonicalItemIds.length === 0) return [];
-  const { rows } = await client.query<CotMoc>(CAU_MOC_NGOAI_CO, [orgId, [...input.canonicalItemIds], input.mocMicro.toString()]);
+  await choGhiXong(client, orgId);
+  const { rows } = await client.query<CotMoc>(CAU_MOC_NGOAI_CO, thamSo(orgId, input));
   return rows.map(hangMoc);
 }
 
@@ -164,10 +218,7 @@ export async function docMocNgoaiTaiMoc(
   input: DocNgoaiTaiMocInput,
 ): Promise<readonly HangMocNgoaiCoGia[]> {
   if (input.canonicalItemIds.length === 0) return [];
-  const { rows } = await client.query<CotMoc & { readonly don_gia_quy_doi: string | null }>(CAU_MOC_NGOAI_GIA, [
-    orgId,
-    [...input.canonicalItemIds],
-    input.mocMicro.toString(),
-  ]);
+  await choGhiXong(client, orgId);
+  const { rows } = await client.query<CotMoc & { readonly don_gia_quy_doi: string | null }>(CAU_MOC_NGOAI_GIA, thamSo(orgId, input));
   return rows.map((r) => ({ ...hangMoc(r), donGiaQuyDoi: r.don_gia_quy_doi }));
 }

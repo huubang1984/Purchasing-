@@ -30,7 +30,7 @@ import {
   type NhomBenchmark,
   type QuanSatBenchmark,
 } from "./benchmark.js";
-import { chonMocNgoai, lechPhanTram, tinhDaiNgoai, type DaiNgoai } from "./dai-ngoai.js";
+import { chonMocNgoai, cuaSoNgayNgoai, lechPhanTram, tinhDaiNgoai, type DaiNgoai } from "./dai-ngoai.js";
 import { docLichSuNgoaiTaiMoc, docMocNgoaiCo, docMocNgoaiTaiMoc } from "./gia-ngoai.js";
 
 /** Một dòng kết quả: một (báo giá, dòng của gói). Không con số nào có đơn vị tiền. */
@@ -317,6 +317,7 @@ export async function tinhBenchmarkGoi(
     const hangNgoai = await docLichSuNgoaiTaiMoc(client, orgId, {
       canonicalItemIds: [...new Set(doDuoc.map((d) => d.canonicalItemId as string))].sort(),
       mocMicro: mocMoGia,
+      cuaSo: cuaSoNgayNgoai(mocMoGia, input.nhom.cuaSoThang),
     });
     const daiNgoai = new Map<string, DaiNgoai>();
     ngoai = doDuoc.map((d) => {
@@ -748,7 +749,11 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
   });
 
   // [S1.9101 / S4.6b] Dải lịch sử ngoài và mốc ngoài của hàng chuẩn tại MỐC MỞ GIÁ đã lưu (L1) — cùng mốc của dải nội bộ.
-  const docNgoai = { canonicalItemIds: [input.canonicalItemId], mocMicro: input.mocMoGia };
+  const docNgoai = {
+    canonicalItemIds: [input.canonicalItemId],
+    mocMicro: input.mocMoGia,
+    cuaSo: cuaSoNgayNgoai(input.mocMoGia, input.nhom.cuaSoThang),
+  };
   const hangNgoai = await docLichSuNgoaiTaiMoc(client, orgId, docNgoai);
   const hangMoc = await docMocNgoaiTaiMoc(client, orgId, docNgoai);
   const tienTeDs = [...new Set(input.tienTe)].sort();
@@ -823,6 +828,7 @@ export async function docCoMocNgoai(
   const hang = await docMocNgoaiCo(client, orgId, {
     canonicalItemIds: [...new Set(input.cap.map((c) => c.canonicalItemId))].sort(),
     mocMicro: input.mocMoGia,
+    cuaSo: cuaSoNgayNgoai(input.mocMoGia, input.cuaSoThang),
   });
   const ra: CoMocNgoai[] = [];
   for (const k of khoa) {

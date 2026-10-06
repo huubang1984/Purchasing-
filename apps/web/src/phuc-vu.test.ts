@@ -1483,6 +1483,17 @@ describe("bề mặt tệp", () => {
         );
         expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Một|18.600,00 VND/kg · +3,3% so với mốc ngoài");
         expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Hai|25.000,13 VND/kg · +38,9% so với mốc ngoài");
+        // [rà soát §S1.9101] Báo giá mà tiền tệ của nó không có mốc: không câu "so với mốc ngoài" nào, kể cả khi tiền tệ khác của dòng có.
+        const q = await dung(BM_CO, SO_SANH, {
+          ...DAI,
+          giaCuaGoi: [DAI.giaCuaGoi[0], { ...DAI.giaCuaGoi[1], tienTe: "USD", lechMoc: null }],
+        });
+        await q.bam("nut-benchmark");
+        const nutQ = q.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        for (const f of nutQ?.nghe["click"] ?? []) await f();
+        const ttQ = ttChu(q, "tt-dai");
+        expect(ttQ).toMatch(/Đơn giá quy đổi — Công ty Thép Hai\|25\.000,13 USD\/kg(\||$)/u);
+        expect(ttQ).toContain("Đơn giá quy đổi — Công ty Thép Một|18.600,00 VND/kg · +3,3% so với mốc ngoài");
       });
 
       it("cột Benchmark của bảng xếp hạng: gạch trước khi đọc benchmark, tóm tắt nhãn và độ phủ sau — kể cả khi bảng xếp hạng vẽ TRƯỚC", async () => {
