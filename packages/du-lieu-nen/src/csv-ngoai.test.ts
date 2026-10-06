@@ -38,6 +38,14 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — dòng hợp l�
     expect(chamPhay.hopLe && chamPhay.dong[0]).toMatchObject({ donGia: "12.75", tienTe: "USD", nguon: "LME" });
   });
 
+  it("[đột biến N3] tiêu đề có `;` thì `;` là phân cách, dù một tên cột mang dấu phẩy — lỗi nói đúng cột sai, không vỡ cả tiêu đề", () => {
+    const kq = docCsvNgoai("MOC_NGOAI", "ma_hang;don_gia;don_vi;tien_te;ngay_hieu_luc;Nguồn (tên, tham chiếu)\nA1;1;kg;VND;2026-01-01;X\n");
+    expect(loiCua(kq)).toEqual([
+      { dong: 1, cot: "nguon_ten_tham_chieu", ma: "COT_LA" },
+      { dong: 1, cot: "nguon", ma: "THIEU_COT" },
+    ]);
+  });
+
   it("tên cột khác của cùng cột: `ma_hang_chuan`, `don_vi_tinh`, `ncc`", () => {
     expect(chuanHoaTenCot("Mã hàng chuẩn")).toBe("ma_hang_chuan");
     expect(chuanHoaTenCot("  Đơn vị tính ")).toBe("don_vi_tinh");
