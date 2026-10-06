@@ -1196,7 +1196,7 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
     expect(await banLuuCua(rfqId)).toEqual([]);
   });
 
-  // ~~"vòng chào lại mở TRONG lúc Xem dải đang tính ⇒ Xem dải CHỜ ở khoá hàng gói"~~ — [S1.9102 / khoản 342] chỉ đường GHI giữ khoá hàng
+  // ~~"vòng chào lại mở TRONG lúc Xem dải đang tính ⇒ Xem dải CHỜ ở khoá hàng gói"~~ — [S1.274 / khoản 342] chỉ đường GHI giữ khoá hàng
   // gói; lượt đọc bản lưu và *Xem dải* hỏi lại không khoá. Ca ấy nay đo bằng ma trận hỏi lại và ba ca NOWAIT dưới.
 
   /** Một cạnh chiếm hàng gói NGAY (`FOR NO KEY UPDATE NOWAIT`, câu khoá của mọi cạnh trạng thái) — `BI_GIU` khi có ai đang giữ nó. */
@@ -1273,7 +1273,7 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
     ["Xem dải", (rfqId) => dai(rfqId, 1)],
   ];
 
-  // [S1.9102] Ma trận hỏi lại của đường ĐỌC: hai chỗ gọi × hai vế (trạng thái, lần mở thầu), mỗi ô một ca — để đột biến từng vế ở từng chỗ
+  // [S1.274] Ma trận hỏi lại của đường ĐỌC: hai chỗ gọi × hai vế (trạng thái, lần mở thầu), mỗi ô một ca — để đột biến từng vế ở từng chỗ
   // gọi đều có một ca đỏ (lượt soi hình dạng: hai ca chéo để sống hai đột biến).
   it.each(HAI_CHO_GOI)("%s: vòng chào lại MỞ (commit) giữa câu bối cảnh và câu hỏi lại ⇒ `VONG_CHAO_LAI_DANG_MO`, không nhãn, không số", async (_ten, doc1) => {
     const { rfqId, luot } = await goiCoBanLuuDangCham();
@@ -1287,8 +1287,8 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
     expect(kq).toEqual({ trangThai: "THU_LAI", rfqStatus: "BAFO_UNSEALED" });
   });
 
-  // [S1.9102] Ba ca NOWAIT: giao dịch của lượt đọc còn MỞ (sau khi đã khẳng định `CO` — các nhánh không số không bao giờ tới câu hỏi lại),
-  // và một cạnh thử khoá hàng gói ngay. Trên mã trước S1.9102 hai ca đầu là `BI_GIU` (55P03).
+  // [S1.274] Ba ca NOWAIT: giao dịch của lượt đọc còn MỞ (sau khi đã khẳng định `CO` — các nhánh không số không bao giờ tới câu hỏi lại),
+  // và một cạnh thử khoá hàng gói ngay. Trên mã trước S1.274 hai ca đầu là `BI_GIU` (55P03).
   it("đọc bản lưu (`CO`, `BAN_LUU`) không giữ khoá hàng gói: giao dịch đọc còn mở mà một cạnh khoá được hàng gói ngay", async () => {
     const { rfqId } = await goiMoiDaMo();
     expect(await doc(orgA, rfqId)).toMatchObject({ trangThai: "CO", nguon: "TINH_MOI" });
@@ -1435,7 +1435,7 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
     expect(await doc(orgA, rfqId)).toMatchObject({ trangThai: "CO", unsealRequestId: ycMoi });
   });
 
-  // [S1.9102 / lượt soi hình dạng khoản 342] Lý do *"hai câu, không một"* của `kiemLaiDuoiKhoa`, đo: lần mở niêm phong vòng chào lại ĐANG giữ
+  // [S1.274 / lượt soi hình dạng khoản 342] Lý do *"hai câu, không một"* của `kiemLaiDuoiKhoa`, đo: lần mở niêm phong vòng chào lại ĐANG giữ
   // hàng gói lúc lần đọc đầu tới `FOR SHARE`. Câu chờ khoá thấy phiên bản MỚI của hàng gói (`BAFO_UNSEALED`, trạng thái hiện); một truy vấn
   // con trong cùng câu sẽ đọc ảnh chụp lúc câu bắt đầu — lần mở thầu vòng một — và ghi bản lưu cho một lần mở thầu gói đã rời.
   it("lần mở niêm phong vòng chào lại GIỮ hàng gói lúc lần đọc đầu tới khoá ⇒ lần đọc chờ, rồi `THU_LAI` — không bản lưu nào", async () => {

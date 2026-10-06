@@ -24886,7 +24886,7 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
 
-# §S1.9102 — KHOẢN 342 ĐÓNG: CHỈ LẦN ĐỌC ĐẦU (GHI BẢN LƯU) KHOÁ HÀNG GÓI; ĐỌC BẢN LƯU VÀ *XEM DẢI* HỎI LẠI KHÔNG KHOÁ
+# §S1.274 — KHOẢN 342 ĐÓNG: CHỈ LẦN ĐỌC ĐẦU (GHI BẢN LƯU) KHOÁ HÀNG GÓI; ĐỌC BẢN LƯU VÀ *XEM DẢI* HỎI LẠI KHÔNG KHOÁ
 
 **Rổ và mảnh (ADR-043):** khoản 342 (rổ đề xuất B) đóng. Không migration, không route, không ADR mới (đoạn bổ sung ở ADR-143); một tệp
 mã sản xuất (`packages/danh-gia/src/doc-benchmark.ts`), một tệp test.
