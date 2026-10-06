@@ -32,6 +32,7 @@ import * as dangNhap from "./dang-nhap.js";
 import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
 import * as nhomHang from "./nhom-hang.js";
+import * as nhaCungCap from "./nha-cung-cap.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -165,7 +166,7 @@ describe("bề mặt tệp", () => {
       runInNewContext(`${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent, LA_UUID: dangNhap.LA_UUID });
       return { org: o.org.value, token: o.token.value };
     };
-    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau", "du-lieu"]) {
+    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau", "du-lieu", "nha-cung-cap"]) {
       expect(chay(trang, `#${ORG}:tokTokTokTokTokTok_-1`, { org: "", token: "" }), trang).toEqual({ org: ORG, token: "tokTokTokTokTokTok_-1" });
     }
     expect(chay("mo-thau", `#${ORG}`, { org: "", token: "ma-cu-cua-nguoi-truoc" })).toEqual({ org: ORG, token: "" });
@@ -212,6 +213,8 @@ describe("bề mặt tệp", () => {
       "du-lieu": ["b2", "b3", "b5", "b6"],
       // [S1.201 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
       "nhom-hang": ["b2", "b3"],
+      // [S1.9101 / S3.3e1] Màn xác minh nhà cung cấp — cùng khuôn đăng nhập và phiên.
+      "nha-cung-cap": ["b2"],
     };
     /**
      * Lời gọi mỗi trang tự đi sau khi mở các bước — trước lượt đo riêng của từng trang. [S1.240 / khoản 282] Bốn trang người mua
@@ -219,8 +222,10 @@ describe("bề mặt tệp", () => {
      */
     const SAU_MO: Record<string, readonly string[]> = {
       "chinh-sach": ["GET /auth/login-links", "GET /policy/versions"],
-      "tao-thau": ["GET /auth/login-links", "GET /policy/versions"],
+      // [S1.9101 / S3.3e1] …rồi ô chọn nhà cung cấp có sẵn (`GET /suppliers`, không cổng) ở cả hai luồng.
+      "tao-thau": ["GET /auth/login-links", "GET /policy/versions", "GET /suppliers"],
       "nhom-hang": ["GET /auth/login-links", "GET /categories"],
+      "nha-cung-cap": ["GET /auth/login-links", "GET /supplier-verifications"],
       // [S1.199 / S4.2b] Màn dữ liệu nền nạp danh sách hàng chuẩn rồi danh mục đơn vị.
       // [S1.234 / S4.3b] …rồi hàng đợi ánh xạ.
       // [S1.249 / khoản 291] Bước 1 của `/du-lieu` nay là `/lib/dang-nhap.js`: link đăng nhập gần đây TRƯỚC lời gọi riêng của màn.
@@ -281,6 +286,8 @@ describe("bề mặt tệp", () => {
       ...taoThau,
       // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
       ...duLieu,
+      // [S1.9101 / S3.3e1] `/lib/nha-cung-cap.js` là bản thật: trạng thái xác minh, người liên hệ và nút của `/nha-cung-cap`.
+      ...nhaCungCap,
       // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
       ...benchmarkWeb,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
@@ -363,6 +370,9 @@ describe("bề mặt tệp", () => {
           if (lenh === "GET /uom" && trangThai.cookie !== null) return { status: 200, body: { donVi: [], biDanhChung: [], biDanhToChuc: [] } };
           if (lenh === "GET /mapping-queue" && trangThai.cookie !== null) return { status: 200, body: { dong: [], conNua: false } };
           if (lenh === "GET /categories" && trangThai.cookie !== null) return { status: 200, body: { nhomHang: [] } };
+          // [S1.9101 / S3.3e1] Ô chọn nhà cung cấp của `/tao-thau` và bảng hồ sơ của `/nha-cung-cap` — rỗng theo mặc định.
+          if (lenh === "GET /suppliers" && trangThai.cookie !== null) return { status: 200, body: { suppliers: [] } };
+          if (lenh === "GET /supplier-verifications" && trangThai.cookie !== null) return { status: 200, body: { hoSo: [] } };
           if (lenh === "GET /auth/login-links" && trangThai.cookie !== null) return { status: 200, body: { loginLinks: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
           if (lenh === "POST /guest/logout") {
@@ -557,7 +567,8 @@ describe("bề mặt tệp", () => {
     // ==========================================================================================
     // [S1.240 / khoản 282] ~~Bốn trang người mua~~ [S1.249 / khoản 291] Năm trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`),
     // cùng bộ id. ~~`BON_TRANG`~~ đổi tên theo số trang.
-    const NAM_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu"] as const;
+    // [S1.9101 / S3.3e1] Sáu trang: `/nha-cung-cap` cùng bước 1 (`/lib/dang-nhap.js`) — tên hằng giữ để không đổi mọi chỗ gọi.
+    const NAM_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu", "nha-cung-cap"] as const;
     /** Các cặp dt/dd đã vẽ vào `link-gan-day` (khối link đăng nhập gần đây — khoản 195, 268). */
     const capLink = (p: { el: (id: string) => PhanTu }): [string, string][] => {
       const con = p.el("link-gan-day").con;
@@ -2305,10 +2316,12 @@ describe("bề mặt tệp", () => {
         thay: (l) =>
           thay(l) ??
           (l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat, choKy: false } })
-            : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi } } })
+            // [S1.9101 / S3.3e1] Người xem giữ quyền mời (`coQuyenMoi`) — hai danh sách tự nạp; cả ba thân cùng lần nộp 1.
+            : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi, lanNop: 1 }, coQuyenMoi: true } })
             : l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [] } })
             : l === "GET /rfqs/r-1/invitations"
-              ? Promise.resolve({ status: 200, body: { invitations: [{ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", status: "UNSENT", revokedAt: null }] } })
+              ? Promise.resolve({ status: 200, body: { invitations: [{ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", status: "UNSENT", revokedAt: null }], lanNop: 1, trangThai: trangThaiGoi, canhTranh: null } })
+            : l === "GET /rfqs/r-1/exceptions" ? Promise.resolve({ status: 200, body: { exceptions: [], lanNop: 1, trangThai: trangThaiGoi } })
               : undefined),
       });
       await p.bam("nut-dung-phien");
@@ -2399,14 +2412,16 @@ describe("bề mặt tệp", () => {
     it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
       const draft = await moTaoThau(true, "DRAFT");
       expect(draft.dongMoi()?.con[3]?.textContent).toBe("chưa gửi");
-      expect((draft.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Thu hồi"]);
+      // [S1.9101 / S3.3e1] Tổ chức đã bật: hai cột *Đã xác minh*, *Đếm được* đứng trước cột nút — thân không mang cờ ⇒ «—».
+      expect(draft.dongMoi()?.con.slice(4, 6).map((x) => x.textContent)).toEqual(["—", "—"]);
+      expect((draft.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Thu hồi"]);
       const mo = await moTaoThau(true, "OPEN");
-      expect((mo.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link"]);
+      expect((mo.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link"]);
       const choDuyet = await moTaoThau(true, "PENDING_APPROVAL");
-      expect(choDuyet.dongMoi()?.con[4]?.con ?? []).toEqual([]);
+      expect(choDuyet.dongMoi()?.con.at(-1)?.con ?? []).toEqual([]);
       const mvp1 = await moTaoThau(false, "OPEN");
       await mvp1.p.bam("nut-doc-moi");
-      expect((mvp1.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
+      expect((mvp1.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
     });
 
     it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mời ở DRAFT (UNSENT) ⇒ câu nói link CHƯA đi; mời thêm ở OPEN gửi hỏng ⇒ lỗi chỉ đường Gửi lại link", async () => {
@@ -3208,7 +3223,7 @@ describe("bề mặt tệp", () => {
     expect(r.text).toContain('"/auth/redeem"');
     expect(r.text).toContain('"/auth/totp"');
     expect(r.text, "module bước 1 không được kéo theo một import nào").not.toMatch(/^\s*import[\s{*]/mu);
-    for (const trang of ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu"]) {
+    for (const trang of ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu", "nha-cung-cap"]) {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
       expect(js, `${trang}.js không import ganDangNhap`).toMatch(/^import \{[^}]*\bganDangNhap\b[^}]*\} from "\/lib\/dang-nhap\.js";$/mu);
       expect(js, `${trang}.js còn tự gọi /auth/redeem`).not.toContain('"/auth/redeem"');

@@ -175,10 +175,24 @@ tr.lech td { background: var(--vang-nen); }
 }
 #bang-hang td.cot-benchmark { max-width: 9rem; font-size: 0.82rem; }
 
+/* [S1.9101 / S3.3e1] Bảng lời mời, bảng ngoại lệ (/tao-thau) và bảng hồ sơ xác minh (/nha-cung-cap) trên màn hẹp — khuôn `hang-gia`:
+   mỗi dòng một khối, mỗi ô mang nhãn cột (`data-nhan`). Bảng lời mời có bảy cột ở tổ chức đã bật. */
+@media (max-width: 480px) {
+  table.xep thead { display: none; }
+  table.xep, table.xep tbody, table.xep tr, table.xep td { display: block; }
+  table.xep tr { padding: 8px 0; border-bottom: 1px solid var(--vien); }
+  table.xep td { border-bottom: 0; padding: 2px 0; text-align: left; }
+  table.xep td:empty { display: none; }
+  table.xep td[data-nhan]::before { content: attr(data-nhan) ": "; color: var(--chu-mo); font-size: 0.85em; }
+}
+
 /* [S1.106 / S2.4] Thành phần của một hàng xếp hạng nằm NGAY TRONG ô, không sau một cú bấm:
    spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */
 ul.tp { margin: 0; padding: 0; list-style: none; }
 ul.tp li { font-size: 0.82rem; color: var(--chu-mo); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* [S1.9101 / S3.3e1] Người liên hệ của một hồ sơ trên /nha-cung-cap — xuống dòng được, mỗi người một dòng. */
+ul.lh { margin: 0; padding: 0; list-style: none; }
+ul.lh li { font-size: 0.85rem; margin: 2px 0; }
 
 .ghi { font-size: 0.85rem; color: var(--chu-mo); margin: 8px 0 0; }
 .ma {

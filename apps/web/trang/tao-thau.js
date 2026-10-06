@@ -17,8 +17,10 @@
 // ==============================================================================================
 
 import {
-  KHUNG_TIN_HIEU_RONG, baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienCotHangChuan, hienTraVe, khungTinHieu, loiLyDo, loiLyDoGhiNhan,
-  nhanAnhXa, nhanLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
+  KHUNG_TIN_HIEU_RONG, LOAI_NGOAI_LE, MA_LY_DO_NGOAI_LE, baoSauKhiMo, baoSauKhiMoi, chiDanChot, cungLanNop, docNhaCungCapChon,
+  hangNganSach, hienCotHangChuan, hienTraVe, khungTinHieu, loaiNgoaiLeGoiY, loiGiaiTrinh, loiLyDo, loiLyDoGhiNhan, nhanAnhXa,
+  nhanCanhTranh, nhanCo, nhanLoaiNgoaiLe, nhanLoiMoi, nhanMaLyDo, nhanXacMinhNgan, nutLoiMoi, tenKemMst, thuTuBuoc, tuDocNganSach,
+  vanBanAnToan,
 } from "/lib/tao-thau.js";
 import { docNhomHang, hienDatNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
@@ -28,7 +30,13 @@ const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 // [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây — bước 1 nay là `/lib/dang-nhap.js`.
-let phien = { rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+// [S1.9101 / S3.3e1] `nccTaoTrongPhien`: nhà cung cấp đang chọn là hồ sơ vừa tạo ở bước 5 (chỉ hồ sơ ấy được thêm người liên hệ).
+// `coQuyenMoi`: cờ hiển thị của `GET /rfqs/:id` (khoản 340). `danhSachKhop`: hai danh sách đang thấy cùng lần nộp với `lanNop` mà nút
+// Phê duyệt sẽ gửi (lượt soi CAO-1). `soLoiMoiSong`: số lời mời còn sống của gói — để chọn sẵn loại ngoại lệ.
+const phienMoi = () => ({
+  rfqId: "", supplierId: "", contactId: "", soHangMuc: 0, nccTaoTrongPhien: false, coQuyenMoi: false, danhSachKhop: true, soLoiMoiSong: 0,
+});
+let phien = phienMoi();
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
 // [S1.201 / S3.6a] Nhóm hàng của tổ chức (`GET /categories`) — chỉ nạp ở tổ chức đã bật, nơi gói không nhóm hàng không nộp
@@ -103,12 +111,14 @@ function docLink() {
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+  phien = phienMoi();
   datLuong({ daBat: false, trangThaiGoi: "" });
   nguoiDung = "";
   xoaNganSach();
   veTinHieu(KHUNG_TIN_HIEU_RONG);
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
+  xoaDanhSach();
+  xoaNhaCungCap();
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh", "loi5", "ok5", "loi-nl", "ok-nl"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
@@ -157,6 +167,8 @@ async function napLuong() {
     datLuong({ ...luong, daBat: r.status === 200 && r.body?.daBat === true });
     if (luong.daBat) await napNhomHang(null);
   } catch { /* mất mạng: giữ luồng MVP1 */ }
+  // [S1.9101 / S3.3e1] Ô chọn nhà cung cấp có sẵn — `GET /suppliers` không cổng, không sinh lời từ chối nào.
+  try { await napNhaCungCap(""); } catch { /* mất mạng: ô chọn để trống */ }
 }
 
 /**
@@ -200,6 +212,13 @@ function datLuong(moi) {
   hien($("khoi-tra-ve"), hienTraVe(luong.daBat, luong.trangThaiGoi));
   hien($("khoi-nhom-hang"), luong.daBat);
   hien($("nut-nhom-hang"), hienDatNhomHang(luong.daBat, luong.trangThaiGoi));
+  // [S1.9101 / S3.3e1] Câu về nhà cung cấp đếm được, hai cột của bảng lời mời và khối ngoại lệ — chỉ tổ chức đã bật; lập và rút
+  // ngoại lệ chỉ ở DRAFT (máy chủ từ chối ở trạng thái khác — K4a).
+  hien($("ghi-s3-ncc"), luong.daBat);
+  hien($("th-xac-minh"), luong.daBat);
+  hien($("th-dem"), luong.daBat);
+  hien($("khoi-ngoai-le"), luong.daBat);
+  hien($("khoi-lap-ngoai-le"), luong.daBat && luong.trangThaiGoi === "DRAFT");
 }
 
 /** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
@@ -251,11 +270,13 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+    phien = phienMoi();
     datLuong({ daBat: false, trangThaiGoi: "" });
     nguoiDung = "";
     xoaNganSach();
     veTinHieu(KHUNG_TIN_HIEU_RONG);
+    xoaDanhSach();
+    xoaNhaCungCap();
     dongCacBuoc();
     dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
@@ -271,13 +292,15 @@ $("nut-dang-xuat").addEventListener("click", async () => {
 // Bước 2 — gói thầu
 // ---------------------------------------------------------------------------------------------
 
-async function napRfq(rfqId) {
+async function napRfq(rfqId, lanThu = 0) {
   const r = await goi("GET", `/rfqs/${rfqId}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return false; }
   const g = r.body?.rfq ?? {};
   // [S1.198 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
   // đang thấy trên màn. Gói được trả về và nộp lại sau lần đọc thì máy chủ từ chối, và người duyệt đọc lại.
   phien = { ...phien, rfqId, lanNop: typeof g.lanNop === "number" ? g.lanNop : undefined };
+  // [S1.9101 / S3.3e1 · khoản 340] Cờ hiển thị của máy chủ: người xem giữ quyền mời, tức hai danh sách sẽ cho họ đọc.
+  phien = { ...phien, coQuyenMoi: r.body?.coQuyenMoi === true, danhSachKhop: true };
   datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
   // [S1.200 / khoản 258 — lượt soi F4] Bảng ngân sách của gói TRƯỚC đi ngay, trước lần chờ đầu tiên: một lần đọc sau đó hỏng
   // giữa chừng không được để lại ngân sách của gói khác cạnh lần nộp mà nút Phê duyệt sẽ gửi.
@@ -302,7 +325,25 @@ async function napRfq(rfqId) {
   }
   dienDl($("tt-rfq"), hang);
   await napHangMuc();
-  if (luong.daBat) await napLoiMoi();
+  // [S1.9101 / S3.3e1 · khoản 340] Hai danh sách chỉ tự nạp khi người xem đọc được chúng — người không giữ quyền mời (người yêu cầu
+  // mua, tài chính) không để lại một 403 và một hàng `PERMISSION_DENIED` ở mỗi lần đọc gói; họ bấm «Đọc danh sách lời mời» hay «Xem
+  // ngoại lệ» nếu cần. [lượt soi CAO-1] Hai danh sách phải cùng lần nộp với lần đọc gói mà nút Phê duyệt gửi; lệch thì đọc lại TRỌN
+  // gói một lần, vẫn lệch thì chặn nút Phê duyệt trên màn tới lần đọc sau.
+  if (luong.daBat) {
+    if (phien.coQuyenMoi) {
+      const lanMoi = await napLoiMoi();
+      const lanNl = await napNgoaiLe();
+      if (phien.rfqId !== rfqId) return false;
+      if (!cungLanNop(phien.lanNop, lanMoi) || !cungLanNop(phien.lanNop, lanNl)) {
+        if (lanThu === 0) return await napRfq(rfqId, 1);
+        phien = { ...phien, danhSachKhop: false };
+        bao($("loi4"), "Gói vừa được trả về hay nộp lại trong lúc đọc — danh sách đang thấy chưa chắc là của lần nộp này. Bấm «Đọc» " +
+          "ở bước gói thầu rồi xem lại trước khi phê duyệt.");
+      }
+    } else {
+      xoaDanhSach();
+    }
+  }
   // [S1.200 / khoản 258] Người tạo gói thấy ngân sách ở CÙNG lần đọc; người khác bấm «Xem ngân sách» (chủ dự án chốt sau lượt
   // soi F3: lần từ chối phải đến từ một thao tác cố ý, không từ nhịp đọc gói).
   if (toiTao) await napNganSach();
@@ -529,8 +570,21 @@ for (const [nut, duong, xong] of [
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
     // [S1.198 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
     const than = duong === "approve" && typeof phien.lanNop === "number" ? { lanNop: phien.lanNop } : undefined;
+    // [S1.9101 / S3.3e1 — lượt soi CAO-1] Danh sách đang thấy không cùng lần nộp với lần đọc gói ⇒ không gửi chữ ký lên nó.
+    if (duong === "approve" && luong.daBat && phien.coQuyenMoi && !phien.danhSachKhop) {
+      bao($("loi4"), "Danh sách mời đang thấy chưa chắc là của lần nộp này — bấm «Đọc» ở bước gói thầu rồi xem lại trước khi phê duyệt.");
+      return;
+    }
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`, than);
-    if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }
+    if (r.status !== 200) {
+      // [S1.9101 / S3.3e1] Lời từ chối có mã của chốt (K2, K3, K5) kèm MỘT câu chỉ dẫn; câu của máy chủ vẫn đứng trước.
+      const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi);
+      const cau = loiCua(r, "Bước này không đi được");
+      // [lượt soi CAO-1] Lần duyệt hỏng (lần nộp lệch, gói đổi trạng thái) ⇒ đọc lại trọn gói trước khi người duyệt thử lại.
+      if (duong === "approve") await napRfq(phien.rfqId);
+      bao($("loi4"), chiDan === null ? cau : `${cau} ${chiDan}`);
+      return;
+    }
     if (duong === "open") {
       // [S1.191 / S3.2c2 · ADR-113] Gói ĐÃ mở dù một phần link chưa đi — câu báo nói số link ấy, bảng lời mời chỉ dòng.
       const b = baoSauKhiMo(luong.daBat, r.body?.unsentInvitationIds);
@@ -566,20 +620,33 @@ $("nut-tao-ncc").addEventListener("click", async () => {
   bao($("loi5"), ""); bao($("ok5"), "");
   const r = await goi("POST", "/suppliers", { legalName: $("ncc-ten").value.trim(), taxCode: $("ncc-mst").value.trim() });
   if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không tạo được nhà cung cấp")); return; }
-  phien = { ...phien, supplierId: r.body?.supplier?.id ?? "", contactId: "" };
+  const id = r.body?.supplier?.id ?? "";
+  // [S1.9101 / S3.3e1] Hồ sơ vừa tạo vào ô chọn và được chọn — chỉ hồ sơ này được thêm người liên hệ ở màn (lượt soi TRUNG-1).
+  await napNhaCungCap(id);
+  await chonNhaCungCap(id, true);
   bao($("ok5"), "Đã tạo nhà cung cấp. Thêm một người liên hệ rồi mới mời được.");
 });
 
 $("nut-them-lh").addEventListener("click", async () => {
   bao($("loi5"), ""); bao($("ok5"), "");
   if (phien.supplierId === "") { bao($("loi5"), "Tạo nhà cung cấp trước."); return; }
+  // [S1.9101 / S3.3e1 — lượt soi TRUNG-1] Người liên hệ không xoá được: thêm vào hồ sơ của người khác làm nhà cung cấp ấy thôi được
+  // đếm ở gói của bạn và mất xác minh trong cả tổ chức. Màn chỉ cho hồ sơ vừa tạo ở đây.
+  if (!phien.nccTaoTrongPhien) {
+    bao($("loi5"), "Chỉ thêm người liên hệ được cho nhà cung cấp vừa tạo ở bước này. Hồ sơ có sẵn cần thêm người liên hệ thì nhờ người " +
+      "quản lý hồ sơ ấy.");
+    return;
+  }
   const r = await goi("POST", `/suppliers/${phien.supplierId}/contacts`, {
     fullName: $("lh-ten").value.trim(),
     email: $("lh-email").value.trim(),
     phone: $("lh-dt").value.trim(),
   });
   if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không thêm được người liên hệ")); return; }
-  phien = { ...phien, contactId: r.body?.contact?.id ?? "" };
+  const lh = r.body?.contact?.id ?? "";
+  await chonNhaCungCap(phien.supplierId, true);
+  phien = { ...phien, contactId: lh };
+  $("chon-lh").value = lh;
   bao($("ok5"), "Đã thêm người liên hệ.");
 });
 
@@ -601,22 +668,240 @@ $("nut-moi").addEventListener("click", async () => {
 $("nut-doc-moi").addEventListener("click", async () => {
   bao($("loi5"), "");
   if (phien.rfqId === "") { bao($("loi5"), "Tạo hoặc đọc một gói thầu trước."); return; }
-  await napLoiMoi();
+  const lan = await napLoiMoi();
+  // [S1.9101 / S3.3e1 — lượt soi CAO-1] Danh sách của một lần nộp khác lần đọc gói ⇒ đọc lại trọn gói.
+  if (luong.daBat && lan !== null && !cungLanNop(phien.lanNop, lan)) await napRfq(phien.rfqId);
+});
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / S3.3e1] Bước 5 — ô chọn nhà cung cấp có sẵn
+// ---------------------------------------------------------------------------------------------
+
+let nhaCungCap = [];
+
+// [S1.9101 / S3.3e1] Nhãn cột cho bảng xếp khối trên màn hẹp (`table.xep`, `chung.css`).
+const NHAN_COT_LOI_MOI = ["Nhà cung cấp", "Người liên hệ", "Kênh", "Trạng thái", "Đã xác minh", "Đếm được"];
+const NHAN_COT_NGOAI_LE = ["Loại", "Lý do", "Giải trình", "Lập lúc", "Trạng thái"];
+
+/** Đổi người hay đăng xuất: ô chọn của người trước (có thể của tổ chức khác) đi cùng các bước. */
+function xoaNhaCungCap() {
+  nhaCungCap = [];
+  $("chon-ncc").replaceChildren();
+  $("chon-lh").replaceChildren();
+  bao($("xac-minh-ncc"), "");
+  hien($("ghi-them-lh"), false);
+}
+
+/** Nạp `GET /suppliers` (không cổng) vào ô chọn; chọn sẵn `chon` nếu có. Chỉ hồ sơ ACTIVE — hồ sơ khác không mời được. */
+async function napNhaCungCap(chon) {
+  const r = await goi("GET", "/suppliers");
+  nhaCungCap = r.status === 200 ? docNhaCungCapChon(r.body) : [];
+  const sel = $("chon-ncc");
+  sel.replaceChildren();
+  const trong = document.createElement("option");
+  trong.value = "";
+  trong.textContent = "— chọn nhà cung cấp —";
+  sel.append(trong);
+  for (const n of nhaCungCap) {
+    const o = document.createElement("option");
+    o.value = n.id;
+    o.textContent = tenKemMst(n.legalName, n.taxCode);
+    sel.append(o);
+  }
+  sel.value = nhaCungCap.some((n) => n.id === chon) ? chon : "";
+}
+
+/**
+ * Chọn một nhà cung cấp: nạp người liên hệ đang hoạt động (`GET …/contacts`, không cổng) và — ở tổ chức đã bật — trạng thái xác minh
+ * (`GET …/verification`, không cổng). `taoTrongPhien`: hồ sơ vừa tạo ở bước này, chỉ hồ sơ ấy được thêm người liên hệ.
+ */
+async function chonNhaCungCap(id, taoTrongPhien) {
+  phien = { ...phien, supplierId: id, contactId: "", nccTaoTrongPhien: taoTrongPhien };
+  hien($("ghi-them-lh"), id !== "" && !taoTrongPhien);
+  const lh = $("chon-lh");
+  lh.replaceChildren();
+  bao($("xac-minh-ncc"), "");
+  if (id === "") return;
+  const [c, v] = await Promise.all([
+    goi("GET", `/suppliers/${id}/contacts`),
+    luong.daBat ? goi("GET", `/suppliers/${id}/verification`) : Promise.resolve(null),
+  ]);
+  if (phien.supplierId !== id) return;
+  const ds = c.status === 200 && Array.isArray(c.body?.contacts) ? c.body.contacts.filter((x) => x?.status === "ACTIVE") : [];
+  for (const x of ds) {
+    const o = document.createElement("option");
+    o.value = x.id;
+    o.textContent = `${vanBanAnToan(x.fullName)} — ${x.email}${typeof x.phone === "string" && x.phone !== "" ? `, ${x.phone}` : ""}`;
+    lh.append(o);
+  }
+  phien = { ...phien, contactId: ds[0]?.id ?? "" };
+  lh.value = phien.contactId;
+  if (ds.length === 0 && !taoTrongPhien) bao($("loi5"), "Nhà cung cấp này chưa có người liên hệ đang hoạt động — chưa mời được.");
+  if (v !== null) bao($("xac-minh-ncc"), nhanXacMinhNgan(v.status === 200 ? v.body?.verification : null));
+}
+
+$("chon-ncc").addEventListener("change", async () => {
+  bao($("loi5"), ""); bao($("ok5"), "");
+  await chonNhaCungCap($("chon-ncc").value, false);
+});
+
+$("chon-lh").addEventListener("change", () => {
+  phien = { ...phien, contactId: $("chon-lh").value };
+});
+
+$("nut-doc-ncc").addEventListener("click", async () => {
+  bao($("loi5"), "");
+  await napNhaCungCap(phien.supplierId);
+});
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / S3.3e1] Ngoại lệ cạnh tranh — spec S3 §4.4, `105`
+// ---------------------------------------------------------------------------------------------
+
+/** Xoá hai danh sách của gói trước — đổi người, đổi gói, hay người xem không đọc được chúng. */
+function xoaDanhSach() {
+  $("bang-moi").querySelector("tbody").replaceChildren();
+  $("bang-ngoai-le").querySelector("tbody").replaceChildren();
+  bao($("tom-tat-canh-tranh"), "");
+}
+
+/** Hai ô chọn của khối lập ngoại lệ; loại được chọn sẵn theo số lời mời còn sống (khớp chặt của K2). */
+let daVeChonNgoaiLe = false;
+function veChonNgoaiLe() {
+  if (!luong.daBat) return;
+  const loai = $("loai-ngoai-le");
+  if (!daVeChonNgoaiLe) {
+    daVeChonNgoaiLe = true;
+    for (const l of LOAI_NGOAI_LE) {
+      const o = document.createElement("option");
+      o.value = l;
+      o.textContent = nhanLoaiNgoaiLe(l);
+      loai.append(o);
+    }
+    const ma = $("ma-ly-do");
+    for (const m of MA_LY_DO_NGOAI_LE) {
+      const o = document.createElement("option");
+      o.value = m;
+      o.textContent = nhanMaLyDo(m);
+      ma.append(o);
+    }
+  }
+  const goiY = loaiNgoaiLeGoiY(phien.soLoiMoiSong);
+  if (goiY !== null && loai.value !== "ROTATION") loai.value = goiY;
+}
+
+/** `GET /rfqs/:rfqId/exceptions` — vẽ bảng, trả `lanNop` của danh sách (hay `null` khi đọc hỏng). */
+async function napNgoaiLe() {
+  const id = phien.rfqId;
+  if (id === "") return null;
+  const r = await goi("GET", `/rfqs/${id}/exceptions`);
+  if (phien.rfqId !== id) return null;
+  const tb = $("bang-ngoai-le").querySelector("tbody");
+  tb.replaceChildren();
+  if (r.status !== 200) { bao($("loi-nl"), loiCua(r, "Không đọc được danh sách ngoại lệ")); return null; }
+  veChonNgoaiLe();
+  for (const e of Array.isArray(r.body?.exceptions) ? r.body.exceptions : []) {
+    const tr = document.createElement("tr");
+    const lap = typeof e.lapLuc === "string" ? new Date(e.lapLuc).toLocaleString("vi-VN") : "—";
+    const trangThai = e.rut === null ? "còn hiệu lực" : `đã rút — ${vanBanAnToan(e.rut?.lyDo)}`;
+    [nhanLoaiNgoaiLe(e.loai), nhanMaLyDo(e.maLyDo), vanBanAnToan(e.giaiTrinh), lap, trangThai].forEach((v, i) => {
+      const td = document.createElement("td");
+      td.textContent = v;
+      td.dataset.nhan = NHAN_COT_NGOAI_LE[i];
+      tr.append(td);
+    });
+    const td = document.createElement("td");
+    if (e.rut === null && luong.trangThaiGoi === "DRAFT") {
+      const nut = document.createElement("button");
+      nut.className = "phu";
+      nut.textContent = "Rút";
+      nut.addEventListener("click", () => rutNgoaiLe(e.id, nut));
+      td.append(nut);
+    }
+    tr.append(td);
+    tb.append(tr);
+  }
+  return typeof r.body?.lanNop === "number" ? r.body.lanNop : null;
+}
+
+async function rutNgoaiLe(exceptionId, nut) {
+  bao($("loi-nl"), ""); bao($("ok-nl"), "");
+  const lyDo = $("ly-do-rut").value;
+  const sai = loiLyDo(lyDo);
+  if (sai !== null) { bao($("loi-nl"), sai); return; }
+  const id = phien.rfqId;
+  nut.disabled = true;
+  try {
+    const r = await goi("POST", `/rfqs/${id}/exceptions/${exceptionId}/withdraw`, { reason: lyDo.trim() });
+    if (phien.rfqId !== id) return;
+    if (r.status !== 200) { bao($("loi-nl"), loiCua(r, "Không rút được ngoại lệ")); return; }
+    $("ly-do-rut").value = "";
+    bao($("ok-nl"), "Đã rút ngoại lệ. Gói không đủ cạnh tranh sẽ bị chặn lại ở lần nộp duyệt.");
+    await napNgoaiLe();
+  } catch {
+    bao($("loi-nl"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    nut.disabled = false;
+  }
+}
+
+$("nut-lap-ngoai-le").addEventListener("click", async () => {
+  bao($("loi-nl"), ""); bao($("ok-nl"), "");
+  if (phien.rfqId === "") { bao($("loi-nl"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const loai = $("loai-ngoai-le").value;
+  const maLyDo = $("ma-ly-do").value;
+  const giaiTrinh = $("giai-trinh").value;
+  const sai = loiGiaiTrinh(maLyDo, giaiTrinh);
+  if (sai !== null) { bao($("loi-nl"), sai); return; }
+  const id = phien.rfqId;
+  $("nut-lap-ngoai-le").disabled = true;
+  try {
+    const r = await goi("POST", `/rfqs/${id}/exceptions`, { loai, maLyDo, giaiTrinh: giaiTrinh.trim() });
+    if (phien.rfqId !== id) return;
+    if (r.status !== 201) { bao($("loi-nl"), loiCua(r, "Không lập được ngoại lệ")); return; }
+    $("giai-trinh").value = "";
+    bao($("ok-nl"), `Đã lập ngoại lệ «${nhanLoaiNgoaiLe(loai)}». Bạn không còn là người ký độc lập của gói này; người duyệt thấy ngoại ` +
+      "lệ cùng danh sách mời.");
+    await napNgoaiLe();
+  } catch {
+    bao($("loi-nl"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    $("nut-lap-ngoai-le").disabled = false;
+  }
+});
+
+$("nut-xem-ngoai-le").addEventListener("click", async () => {
+  bao($("loi-nl"), ""); bao($("ok-nl"), "");
+  if (phien.rfqId === "") { bao($("loi-nl"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const lan = await napNgoaiLe();
+  if (lan !== null && !cungLanNop(phien.lanNop, lan)) await napRfq(phien.rfqId);
 });
 
 async function napLoiMoi() {
-  const r = await goi("GET", `/rfqs/${phien.rfqId}/invitations`);
+  const id = phien.rfqId;
+  const r = await goi("GET", `/rfqs/${id}/invitations`);
+  if (phien.rfqId !== id) return null;
   const tb = $("bang-moi").querySelector("tbody");
   tb.replaceChildren();
-  if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
-  for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
+  bao($("tom-tat-canh-tranh"), "");
+  if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return null; }
+  const ds = Array.isArray(r.body?.invitations) ? r.body.invitations : [];
+  // [S1.9101 / S3.3e1] Số lời mời còn sống chọn sẵn loại ngoại lệ; số NHÓM đếm được của K2 nói ở một câu trên bảng (lượt soi TRUNG-2).
+  phien = { ...phien, soLoiMoiSong: ds.filter((m) => m?.revokedAt === null).length };
+  if (luong.daBat) bao($("tom-tat-canh-tranh"), nhanCanhTranh(r.body?.canhTranh) ?? "");
+  veChonNgoaiLe();
+  for (const m of ds) {
     const tr = document.createElement("tr");
     // [S1.193 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
-    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)]) {
+    const o = [vanBanAnToan(m.supplierName), vanBanAnToan(m.contactName), m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)];
+    // [S1.9101 / S3.3e1] Hai cột của tổ chức đã bật: nhà cung cấp còn xác minh, lời mời thuộc tập đếm được của K2.
+    if (luong.daBat) o.push(nhanCo(m.xacMinhConHieuLuc), nhanCo(m.demDuoc));
+    o.forEach((v, i) => {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
+      td.dataset.nhan = NHAN_COT_LOI_MOI[i];
       tr.append(td);
-    }
+    });
     const td = document.createElement("td");
     // [S1.191 / S3.2c2] Nút theo luồng và trạng thái gói: ở tổ chức đã bật, thu hồi chỉ ở DRAFT (K4a) và gửi lại chỉ khi
     // gói nhận báo giá (K6 — trước lần mở chưa có token nào).
@@ -674,6 +959,7 @@ async function napLoiMoi() {
     tr.append(td);
     tb.append(tr);
   }
+  return typeof r.body?.lanNop === "number" ? r.body.lanNop : null;
 }
 
 docLink();
