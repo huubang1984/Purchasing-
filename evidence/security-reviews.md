@@ -24885,3 +24885,131 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 được gộp vào nhánh: ba xung đột tài liệu (`Handoff.md`, `docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc, cả hai biên bản, danh
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
+
+# §S1.9101 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-9201
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105). Ba thay đổi chạm MỌI
+tổ chức: `GET /rfqs/:id` mang thêm `coQuyenMoi` (một câu đọc quyền mỗi lần đọc gói); hai danh sách mang thêm `lanNop`, `trangThai` (và ở
+tổ chức chưa bật, các cờ `null`); `POST /suppliers/:id/verify` đòi `bamDaXem` (tổ chức chưa bật vẫn bị trigger `082` từ chối như trước).
+Ô chọn nhà cung cấp có sẵn hiện ở cả hai luồng của `/tao-thau`. Không migration. ADR-9201. Khoản 340 ĐÓNG; một khoản mới [MỞ].
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-06: *"Tạo PR cho S3.3d, chuẩn bị S3.3e"*, rồi *"Tiếp S3.3e1"*. S3.3e là phần cuối của S3.3 (spec S3 §9): màn,
+`gieo:demo`, kịch bản 41, lượt đi thử T4. Trước khi soi, chủ dự án chốt bốn câu theo đề xuất: màn xác minh riêng cho FINANCE; cờ máy chủ
+trên `GET /rfqs/:id` đóng khoản 340; 422 của chốt mang mã; hai PR — S3.3e1 màn và route, S3.3e2 `gieo:demo` và kịch bản 41.
+
+## 2. Đo trước (đọc mã trên `58fd14c`)
+- Bước 5 của `/tao-thau` chỉ mời được nhà cung cấp VỪA TẠO trong phiên (`phien.supplierId` từ `POST /suppliers`). K2 không đếm nhà cung cấp
+  do người chọn danh sách dựng (`108`) ⇒ ở tổ chức đã bật, người mua dùng màn không bao giờ nộp duyệt được, trừ ngoại lệ — mà màn cũng không
+  có. Lượt đi thử S3.2c (§S1.191) chạy trước K2.
+- Không màn nào lập/rút ngoại lệ hay xác minh nhà cung cấp; 422 của chốt là `{ error }`, không mã (`dispatch.ts`).
+- `hasPermission` cố ý ngoài mặt tiền identity (D5); tiền lệ cờ hiển thị: `kiem-soat/tin-hieu.ts` dùng `listUserIdsWithPermission`.
+- Khoản 340: `napRfq` tự nạp lời mời cho mọi người dùng của tổ chức đã bật.
+
+## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
+Hai CAO — dừng hỏi chủ dự án:
+- **CAO-1** — bản đầu viết *"`lanNop` của ngoại lệ lệch ⇒ đọc lại gói"*: người duyệt đọc gói ở lần nộp N rồi danh sách lời mời L_N; người tạo
+  trả về, đổi danh sách, nộp lại (N+1); lần đọc ngoại lệ của người duyệt về với N+1; màn chỉ đọc lại gói ⇒ `lanNop` thành N+1 trong khi màn vẫn
+  hiện L_N, và chữ ký rơi lên danh sách người duyệt chưa thấy ⇒ lệch thì đọc lại TRỌN gói, danh sách lời mời cũng mang lần nộp, màn không gửi
+  chữ ký khi vẫn lệch, lần duyệt hỏng thì đọc lại trọn.
+- **CAO-2** — FINANCE xác minh trên một màn chỉ hiện tên, MST, trạng thái: một PM giữ `supplier.manage` (không là người chọn của gói đích) thêm
+  người liên hệ của chính mình vào hồ sơ thật; xác minh hết hiệu lực vì băm phủ người liên hệ (`082`); FINANCE xác minh lại; PM khác mời qua
+  người liên hệ ấy, K2 vẫn đếm, link và OTP về tay người ấy. Và kể cả khi màn hiện người liên hệ, lần xác minh không ràng vào thứ đã hiện ⇒
+  màn hiện MỌI người liên hệ kèm người thêm, lần xác minh gửi băm đã thấy, gói so với băm lúc ghi.
+
+Bốn TRUNG: **T1** nút «Thêm người liên hệ» thêm vào nhà cung cấp đang chọn — một cú bấm làm nó thôi đếm được mãi ở gói của người bấm và mất
+xác minh cả tổ chức; **T2** cờ *đếm được* từng dòng trong khi K2 đếm nhóm; **T3** câu ngoại lệ dựng từ bảng ngoại lệ mất `lanNop` khi rỗng;
+**T4** spec §8.2 *"xác minh hàng loạt trước ngày bật"* trái trigger `082`, KPI tỷ lệ ngoại lệ không có chỗ. THẤP, sửa trong vòng: route
+`/suppliers/verifications` trùng `/suppliers/:supplierId` (agent) ⇒ `/supplier-verifications`; cờ là anh em của `rfq`, `false` với agent; câu
+chỉ dẫn chính xác (danh sách rỗng không cứu được, loại khớp số lời mời, tác giả ngoại lệ vào tập loại trừ K5, nhà cung cấp mới phải đếm
+được); ký tự đảo chiều chữ; T4 thêm BUYER và FINANCE dùng `/tao-thau`. Đã kiểm lại: hai hàm quyền cùng một vị từ; mã ở 422 không lộ thêm
+(một mã một câu); mọi lần đọc tự động khác của `/tao-thau` không cổng.
+
+## 4. Câu hỏi của chủ dự án (2026-10-06)
+Trước lượt soi: xác minh — **màn riêng cho FINANCE**; khoản 340 — **cờ máy chủ, đóng 340**; lời từ chối — **thêm mã, màn chỉ dẫn**; PR — **hai**.
+Sau lượt soi: CAO-2 — **hiện liên hệ và ràng băm**; T1 — **khoá trên màn và ghi khoản nợ**; T2 — **số nhóm so ngưỡng**; T4 — **ghi ADR, KPI sang
+S3.9**. Cả tám theo đề xuất.
+
+## 5. Thay đổi
+- `apps/api/src/dispatch.ts` — 422 của `ChotKiemSoatError` thành `{ error, ma }`.
+- `apps/api/src/routes/buyer.ts` — `coQuyenMoi` ở `GET /rfqs/:id`; thân mới của hai danh sách (404 khi gói không đọc được); route
+  `GET /supplier-verifications`; `bamDaXem` ở `POST …/verify`. `apps/mcp/src/cong-cu.ts` khai route mới không cho agent.
+- `packages/invitation` — `listInvitations` → `DanhSachLoiMoi` (một câu dựng từ `rfq_packages`; tập *đếm được* tính một lần thành mảng);
+  `docNgoaiLe` → `DanhSachNgoaiLe`.
+- `packages/supplier` — `xacMinhNhaCungCap` đòi `bamDaXem`, so với `RETURNING bam_ho_so`; `docHoSoXacMinh` (hồ sơ, băm hiện tại, cờ *đổi sau
+  xác minh*, mọi người liên hệ kèm người thêm).
+- `apps/web` — `/tao-thau` (ô chọn nhà cung cấp, khối ngoại lệ, câu số nhóm, hai cột cờ, chỉ dẫn theo mã, tự nạp theo cờ, so lần nộp, khoá
+  thêm người liên hệ); màn mới `/nha-cung-cap` (`trang/nha-cung-cap.html|js`, `src/nha-cung-cap.ts`, vào `TRANG` và `MODULE_WEB`);
+  `chung.css` bảng xếp khối ở màn hẹp.
+- Sổ đăng ký: `barrel-exports`, `cong-quyen-route` (`docHoSoXacMinh`), `so-khai-nhan` (`man-kiem-soat` ở D5, K2, K5, K8a); kịch bản 41 hai tệp
+  gửi `bamDaXem` (bộ quét: thân là lời hứa đọc băm ngay lúc gọi — route thêm người liên hệ của bộ quét chạy trước và đổi băm).
+- Lượt `pnpm test` đầu đỏ ở `ma-chep-api-worker` (`soByte`, `chuoi` và một literal hex trùng tên ở đơn vị khác) và `qt3-ghim-schema` (tên
+  CTE `dem` đọc như tên bảng) — đổi tên, đổi câu.
+
+## 6. Phép đo
+- `apps/api/src/man-kiem-soat.int.test.ts` — 15 ca trên Postgres 16, qua HTTP, dưới `app_api`: A1 cờ theo vai (PM, REQUESTER, FINANCE, agent),
+  thân chỉ hai khoá, ba lần đọc gói của người yêu cầu mua 0 hàng `PERMISSION_DENIED` và hai route vẫn từ chối vào sổ; A2 danh sách rỗng mang
+  `lanNop` 0, lập/nộp/trả về/nộp lại ⇒ 1, 2, gói lạ 404; A3 K2 ở nộp và K5 ở mở (tác giả ngoại lệ là người ký duy nhất) ⇒ `{ error, ma }`
+  đúng câu của bảng, lỗi khác không `ma`; A4 cờ từng dòng (đếm được / chưa xác minh / do PM dựng), hai nhà cung cấp chung MST gốc ⇒ hai dòng
+  đếm được một nhóm, tổ chức chưa bật ⇒ `null`; A5 người liên hệ lạ ⇒ xác minh thôi hiệu lực, cờ đổi, màn thấy người thêm; băm cũ ⇒ 422 và 0
+  hàng xác minh; băm mới ⇒ 201; thiếu băm, băm sai hình dạng ⇒ 422; route hồ sơ 403 với agent.
+- `apps/web/src/tao-thau.test.ts` 45 ca (+13: bản sao ba tập đóng khớp hằng của gói, giải trình đếm byte, loại chọn sẵn, chỉ dẫn từng mã,
+  chỉ dẫn KHÔNG trùng cụm sáu chữ nào của câu máy chủ, số nhóm, cùng lần nộp, ô chọn, ký tự đảo chiều); `nha-cung-cap.test.ts` 7 ca mới;
+  `phuc-vu.test.ts` 297 ca (+10 ca DOM mới cho hai màn, cộng lượt chung của trang mới: bước 1, phiên, đăng xuất, đổi người). Lượt chạy đầu của
+  ca DOM *"máy chủ từ chối ⇒ câu ở lại"* bắt một lỗi màn: `/nha-cung-cap` in câu từ chối rồi đọc lại bảng, mà lần đọc mở đầu bằng xoá ô lỗi
+  — đổi thứ tự.
+
+## 7. Đột biến
+Mười ba đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256:
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | 422 của chốt bỏ `ma` | 2/15 |
+| TS2 | `coQuyenMoi` luôn `true` | 2/15 |
+| TS3 | `coQuyenMoi` không loại phiên agent | 1/15 |
+| TS4 | bỏ so băm đã thấy | 1/15 |
+| TS5 | số nhóm = số dòng đếm được | 1/15 |
+| TS6 | `lanNop` của ngoại lệ hằng 0 | 1/15 |
+| TS7 | tự nạp hai danh sách bất kể cờ | 1/348 |
+| TS8 | bỏ so lần nộp sau khi đọc hai danh sách | 1/348 |
+| TS9 | bỏ chặn Phê duyệt khi danh sách lệch | 1/348 |
+| TS10 | bỏ khoá thêm người liên hệ cho hồ sơ có sẵn | 1/348 |
+| TS11 | Xác minh không gửi `bamDaXem` | 1/348 |
+| TS12 | lần duyệt hỏng không đọc lại gói | 1/348 |
+| TS13 | đảo loại ngoại lệ chọn sẵn | 2/348 |
+
+Năm sống: 0. Không đột biến CSDL: vòng này không migration.
+
+## 8. Lượt đi thử T4 — cụm thật, Chromium, script ngoài kho
+Cụm: `pnpm pilot:gia-lap cum` (Postgres `16-alpine` trong Docker, `api`, `web`, worker, khoá công khai; khoá local-dev, hộp thư dev), tổ chức
+S3 của `pnpm gieo:demo --s3` (bốn bậc mặc định: dưới 100 triệu cần hai nhóm). Script `playwright-core` 1.56 trên Chromium 1194 của
+`/opt/pw-browsers`, đăng nhập bằng link qua `POST /auth/link` và hộp thư dev, mã sáu số từ bí mật ghi danh hiện trên màn. Hai người dùng thêm
+thẳng vào CSDL: một REQUESTER, một BUYER. Trên `2a1ff40`, cây sạch, một tổ chức mới: **36/36**; vế BUYER **3/3**.
+- soan (PM): tạo gói 50 triệu nhóm KẾT CẤU; tự dựng một nhà cung cấp và người liên hệ trên màn, mời ⇒ dòng *Đã xác minh: không, Đếm được:
+  không*, «Đếm được 0/2 nhóm»; chọn một nhà cung cấp có sẵn ⇒ «Đã xác minh, còn hiệu lực tới 6/10/2027»; «Thêm người liên hệ» vào hồ sơ có sẵn
+  ⇒ câu chặn, 0 hàng mới; mời ⇒ «có, có», «1/2»; nộp ⇒ câu K2 của máy chủ rồi câu chỉ dẫn, một hàng `CONTROL_DENIED`; loại chọn sẵn «Cạnh
+  tranh hạn chế»; OTHER dưới 100 byte ⇒ chặn trên màn, 0 hàng; lập ngoại lệ ⇒ bảng; nộp lại ⇒ qua; ở chờ duyệt không lập, không rút.
+- soan2 (người duyệt): hai danh sách tự nạp, không câu lệch; soan trả về và nộp lại TRONG LÚC soan2 đang xem ⇒ lần duyệt của soan2 bị máy chủ
+  từ chối (lần nộp 2), màn đọc lại trọn gói («Lần nộp duyệt» 2); duyệt lại ⇒ chữ ký mang lần nộp 2; soan mở gói ⇒ K5 qua (người ký độc lập).
+- người yêu cầu mua và tài chính ở `/tao-thau`: ba lần đọc gói, 0 hàng `PERMISSION_DENIED`, bảng trống; bấm «Xem ngoại lệ» ⇒ câu 403, đúng một
+  hàng.
+- taichinh2 ở `/nha-cung-cap`, 375×812: hồ sơ tự dựng «Chưa xác minh.», người liên hệ kèm người thêm; soan thêm một người liên hệ qua API trong
+  lúc màn đang mở ⇒ «Xác minh» bị từ chối *"Hồ sơ nhà cung cấp đã đổi từ lúc bạn xem…"*, 0 hàng xác minh, bảng đọc lại hiện người chen vào; xác
+  minh lại ⇒ còn hiệu lực; một người liên hệ nữa ⇒ *"Hết hiệu lực: hồ sơ đã đổi sau lần xác minh…"* và dấu ⚠ trên đúng dòng ấy.
+- BUYER (giữ `rfq.invite`, không `supplier.manage`): hai danh sách tự nạp, 0 hàng từ chối; «Tạo nhà cung cấp» ⇒ câu 403 của màn, một hàng; ô
+  chọn vẫn dùng được.
+- Khung 375×812: `/nha-cung-cap` (hai lần) và `/tao-thau` với bảng lời mời bảy cột và bảng ngoại lệ — `scrollWidth` = `clientWidth` = 375.
+- Phản hồi lỗi trên mọi trang của lượt sạch: năm, đều được chờ — 422 nộp (K2), 422 duyệt (lần nộp cũ), hai 403 «Xem ngoại lệ», 422 xác minh
+  (băm cũ); vế BUYER: một 403 `POST /suppliers`.
+- **Tìm và sửa trong lượt:** câu chỉ dẫn K2 bản đầu nhắc lại nửa câu của máy chủ (câu của `CHOT_VAO_SO` đã nói phải làm gì) ⇒ viết lại cho
+  bổ sung — chỗ làm trên màn, tên ngoại lệ như ô chọn hiện, danh sách rỗng —, kèm test chặn cụm sáu chữ trùng (`2a1ff40`).
+- Hai lượt hỏng trước lượt sạch, không do màn: lượt một — script đoán sai họ tên người dùng của `gieo:demo` (2 khẳng định); lượt hai — chạy lại
+  trên CÙNG tổ chức tạo gói 50 triệu thứ hai cùng nhóm hàng trong 30 ngày, tổng chạm cận 100 triệu, và lần mở bị tín hiệu chia nhỏ (K10a)
+  chặn đúng luật.
+- Lượt đi thử T4 là một lần, không phải một cổng: script nằm ngoài kho.
+
+## 9. Giới hạn còn lại
+- Thêm người liên hệ vào hồ sơ bất kỳ vẫn đi được qua API (khoản nợ mới, rổ đề xuất B); màn chặn lối dễ nhất.
+- Chỉ dẫn K3 không nói nhà cung cấp nào là mới; lần chặn ở trigger khi đua vẫn là lời không tên, không `ma`.
+- Xác minh sau ngày bật, từng nhà cung cấp; KPI tỷ lệ ngoại lệ — S3.9 (ADR-9201 ⑼).
+- `gieo:demo` và kịch bản 41 qua ngoại lệ, K2/K3/K5 bị chặn rồi qua — S3.3e2.

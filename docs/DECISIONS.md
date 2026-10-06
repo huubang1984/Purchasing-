@@ -11625,3 +11625,86 @@ Câu hỏi của tầng gói lọc trạng thái theo cạnh (`DRAFT` ở nộp,
 ### Điều ADR này KHÔNG nói
 
 - K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); màn và lượt đi thử T4 (S3.3e); khoản 319 ở tổ chức chưa bật.
+
+## ADR-9201 — S3.3e1: màn kiểm soát — cờ hiển thị thay lối tự nạp (khoản 340), mã ở lời từ chối của chốt, danh sách mang lần nộp, xác minh ràng băm hồ sơ đã thấy, ô chọn nhà cung cấp có sẵn
+
+**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-06: *"Tiếp S3.3e1"*; trước khi soi, bốn câu theo đề
+xuất: màn xác minh riêng cho FINANCE, cờ máy chủ trên `GET /rfqs/:id` đóng khoản 340, 422 của chốt mang mã, hai PR (S3.3e1 màn và route;
+S3.3e2 `gieo:demo` và kịch bản 41); sau lượt soi, bốn câu theo đề xuất: ⑷ hiện người liên hệ và ràng băm, ⑹ khoá thêm người liên hệ trên
+màn và ghi khoản nợ, ⑶ số nhóm so ngưỡng, ⑼ ghi ADR, KPI sang S3.9 · **[S1.9101]** · **Liên quan:** ADR-081 ⑵, ADR-092, ADR-117,
+ADR-118 F3, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §4.4, §6 T4, §8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+K2, K3, K5 (S3.3c, S3.3d) và xác minh, ngoại lệ (S3.3a, S3.3b) chặn ở máy chủ, nhưng không màn nào lập hay rút ngoại lệ, không màn nào
+xác minh nhà cung cấp, và bước 5 của `/tao-thau` chỉ mời được hồ sơ vừa tạo trong phiên — mà K2 không đếm nhà cung cấp do người chọn danh
+sách dựng: ở tổ chức đã bật, người mua dùng màn không bao giờ nộp duyệt được. Lời từ chối của chốt ra ngoài là `{ error }`, không mã.
+Khoản 340: `/tao-thau` tự nạp danh sách lời mời ở mọi lần đọc gói, nên người không giữ `rfq.invite` để lại một 403 và một hàng
+`PERMISSION_DENIED` ở mỗi lần đọc.
+
+### Quyết định
+
+⑴ **Cờ HIỂN THỊ `coQuyenMoi`** trên `GET /rfqs/:id` — anh em của `rfq` trong thân, không trong `RfqRecord`: người xem nằm trong
+`listUserIdsWithPermission(rfq.invite)` (khuôn `kiem-soat/tin-hieu.ts`; `hasPermission` vẫn ngoài mặt tiền — D5). Không phải cổng: hai
+route danh sách vẫn tự cổng trong thân, và mỗi lần từ chối vẫn vào sổ. Thân chỉ mang bit của CHÍNH người xem. Phiên agent luôn `false`:
+hai route ấy không cho agent, cờ `true` chỉ mời nó tiêu trần từ chối. Khác hướng đề xuất của khoản 340 (*người tạo hay người giữ quyền*):
+người tạo không giữ `rfq.invite` vẫn bị hai route từ chối, nên cờ là quyền, không là vai trò với gói. `/tao-thau` chỉ tự nạp lời mời VÀ
+ngoại lệ khi cờ bật; người khác bấm «Đọc danh sách lời mời», «Xem ngoại lệ» — lần từ chối đến từ thao tác cố ý (ADR-118 F3). Khoản 340 ĐÓNG.
+
+⑵ **422 của `ChotKiemSoatError` mang `ma`** (mã của `CHOT_VAO_SO`) cạnh `error`. Thông điệp là hằng của mã ấy — một mã một câu —, nên mã
+không lộ điều câu chưa lộ; `cause` không ra ngoài. Lỗi nghiệp vụ khác giữ `{ error }`. Màn in câu của máy chủ rồi MỘT câu chỉ dẫn BỔ SUNG
+— chỗ làm trên màn, tên ngoại lệ như ô chọn hiện, điều câu máy chủ không nói —, không nhắc lại (lượt đi thử T4 đo bản đầu nhắc lại nửa câu
+của K2; một test chặn cụm sáu chữ trùng). Lần chặn ở trigger khi đua (khuôn K1/K10a, ADR-148 ⑺) vẫn là lời không tên, không `ma`.
+
+⑶ **Hai danh sách mang lần nộp, cùng một câu SQL với danh sách** — `GET …/invitations` → `{ invitations, lanNop, trangThai, canhTranh }`,
+`GET …/exceptions` → `{ exceptions, lanNop, trangThai }`; câu dựng từ `rfq_packages`, nên gói chưa có hàng nào vẫn trả lần nộp (lượt soi
+TRUNG-3); gói không đọc được ⇒ 404. Màn so lần nộp của hai danh sách với lần đọc gói mà nút Phê duyệt gửi (ADR-117): lệch ⇒ đọc lại
+TRỌN gói một lần; vẫn lệch ⇒ màn không gửi chữ ký; lần duyệt hỏng ⇒ đọc lại trọn gói (lượt soi CAO-1: chỉ đọc lại gói thì `lanNop` mới
+đi cùng danh sách cũ, và chữ ký rơi lên danh sách người duyệt chưa thấy). Mỗi lời mời mang `demDuoc` (thuộc `rfq_loi_moi_dem_duoc`) và
+`xacMinhConHieuLuc`; `canhTranh` là số NHÓM của K2 (`rfq_dem_ncc_canh_tranh`) và ngưỡng của bậc ghim — K2 đếm nhóm, ba dòng «có» có thể
+là một nhóm (lượt soi TRUNG-2). Ở tổ chức chưa bật, hai cờ và `canhTranh` là `null`. Cờ từng dòng cho người giữ `rfq.invite` suy ra
+không để lại dấu vết dòng nào do người chọn dựng; nó không nâng được số đếm (không đường sửa hồ sơ, thêm người liên hệ chỉ làm mất khả
+năng đếm) — chấp nhận.
+
+⑷ **Lần xác minh ràng băm hồ sơ đã thấy** — `POST /suppliers/:id/verify` đòi `bamDaXem`; hàm gói so với `bam_ho_so` mà trigger `082` tính
+lúc chèn (`RETURNING`), lệch thì ném và giao dịch rollback — không migration (lượt soi CAO-2: một người giữ `supplier.manage` thêm người
+liên hệ của chính mình vào hồ sơ thật; xác minh hết hiệu lực; tài chính xác minh lại trên một màn không hiện người liên hệ; link mời và OTP
+về tay người ấy). Màn `/nha-cung-cap` hiện MỌI người liên hệ kèm người thêm và lúc thêm, đánh dấu người thêm SAU lần xác minh gần nhất, và
+nói vì sao một xác minh thôi hiệu lực. Route đọc mới `GET /supplier-verifications` — không cổng, như hai route đọc mà nó gộp
+(`…/verification`, `…/contacts`), KHÔNG cho agent (khoản 141), tránh N+1 chạm trần tần suất; không là `/suppliers/verifications` vì bộ
+định tuyến lấy route khớp đầu tiên và `/suppliers/:supplierId` (agent) khớp chuỗi ấy. Nút luôn hiện cho người đã vào: lời từ chối 403 ở
+màn này đến từ thao tác cố ý.
+
+⑸ **Ô chọn nhà cung cấp có sẵn ở bước 5** (`GET /suppliers`, `…/contacts`, `…/verification` — ba route không cổng, không sinh lời từ chối),
+ở cả hai luồng; tên kèm MST. Câu của tổ chức đã bật nói nhà cung cấp nào được đếm.
+
+⑹ **Màn chỉ thêm người liên hệ cho hồ sơ VỪA TẠO trong phiên** (lượt soi TRUNG-1): người liên hệ không sửa, không xoá được (`011`); một
+người liên hệ do người chọn danh sách thêm làm nhà cung cấp ấy thôi được đếm ở gói của họ mãi, và làm mất xác minh của nó trong cả tổ
+chức. Lối ở tầng API — ai giữ `supplier.manage` cũng thêm được vào hồ sơ bất kỳ — là khoản nợ mở mới (rổ đề xuất B).
+
+⑺ **Ngoại lệ trên màn** — khối ở bước 5 của tổ chức đã bật: bảng (loại, lý do, giải trình, lúc lập, trạng thái), lập (ba loại; mã lý do;
+giải trình, `OTHER` từ 100 byte — màn kiểm trước, máy chủ phán) và rút (lý do) chỉ ở DRAFT; loại chọn sẵn theo số lời mời còn sống (khớp
+chặt của K2: một ⇒ SINGLE_SOURCE, từ hai ⇒ LIMITED_COMPETITION); câu nói người lập ngoại lệ không còn là người ký độc lập (K5).
+
+⑻ **Hiển thị an toàn** — mọi chuỗi qua `textContent`; tên nhà cung cấp, giải trình và lý do mang ký tự điều khiển hướng chữ (U+202A–202E,
+U+2066–2069) bị gỡ ký tự khi hiện và gắn dấu cảnh báo — chữ hiện ra không được khác chữ được băm và ký. Bảng lời mời, ngoại lệ, hồ sơ xếp
+khối ở màn hẹp (`table.xep`); đo 375×812 không cuộn ngang.
+
+⑼ **Xác minh SAU ngày bật, từng nhà cung cấp** (lượt soi TRUNG-4). Spec §8.2 nêu *"xác minh hàng loạt trước ngày bật"*, nhưng trigger `082`
+cấm xác minh khi tổ chức chưa bật S3 (ADR-081 ⑵ — người xác minh đọc chính sách hiệu lực để đặt hạn), và màn xác minh từng hồ sơ để người
+xác minh nhìn người liên hệ của nó. Hệ quả nói thẳng: ngay sau ngày bật, gói nháp chờ tới khi đủ nhà cung cấp đã xác minh, hay đi bằng ngoại
+lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng chứng).
+
+### Cái giá, nói thẳng
+
+- **Thêm một truy vấn quyền ở mỗi lần đọc gói** (`listUserIdsWithPermission`) — một câu nhỏ theo chỉ mục; quy mô pilot.
+- **Xác minh phải đọc lại khi hồ sơ đổi trong lúc xem** — hồ sơ đổi luôn thì người xác minh không bấm kịp; quy mô pilot.
+- **Thêm người liên hệ vào hồ sơ của người khác vẫn đi được qua API** (khoản nợ mới); màn chặn lối dễ nhất.
+- **Chỉ dẫn K3 không nói nhà cung cấp nào là mới** — cần một hàm theo từng lời mời; câu của máy chủ và ngoại lệ ROTATION là đường gỡ.
+- **Cờ `coQuyenMoi` có thể cũ** giữa lần đọc gói và lần đọc danh sách (đổi vai giữa chừng): khi ấy một route từ chối và vào sổ — đúng D5.
+- **Lượt đi thử T4 là một lần, không phải một cổng**: script nằm ngoài kho (biên bản §S1.9101), Playwright không trong kho.
+
+### Điều ADR này KHÔNG nói
+
+`gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
+người liên hệ (khoản nợ mới).
