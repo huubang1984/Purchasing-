@@ -25023,3 +25023,13 @@ Một lượt đọc của agent rơi vào lúc đột biến N5 đang đặt tr
 - Luật `15.500` chỉ ở tầng gói: CSDL nhận `numeric`, không thấy chuỗi người gõ — câu INSERT thô dưới `app_api` vượt qua nó.
 - Lớp `bang-ngoai-liet-ke` là lớp chữ: SQL dựng động (`format('%I')`) vượt qua nó; hai hàm trigger dùng chung là chỗ duy nhất hôm nay.
 - `migrations.int` đầy đủ một lượt bị dừng giữa chừng vì tệp migration đổi trong lúc chạy (luật ngày mua); số ở mục 10 là lượt sau.
+
+## 10. Số của lượt cuối (mã sau rà soát, sau khi gộp master #247 và cấp số)
+
+- `pnpm cap-so --kiem`: không còn số tạm, không số trùng. `pnpm t0` xanh (typecheck, lint, depcruise 546 mô-đun). `pnpm test`: 152 tệp,
+  2556 ca đạt, 1 bỏ qua, 0 đỏ.
+- `pnpm evidence` lượt đầu trên `7925eac`: ĐỎ — `buyer.int` [INV-H17] [INV-D5] (hai route dán lô tạo lô mới, không toạ độ trên đường
+  dẫn, chưa có tên trong danh sách) và mốc độ phủ 82 < 83. Sửa ở `7b58287`.
+- `pnpm evidence` trên `7b582877`: vitest thoát mã 0, 245 tệp, 4766 khẳng định (4756 đạt, 10 bỏ qua, 0 đỏ), 83/83 bất biến (61/61
+  nghiệp vụ + 22/22 hàng rào), 2232 giây, *"Cổng evidence: XANH"*. Mười ca bỏ qua: một ca chỉ chạy trên CI, chín ca phong bì lớn bật
+  bằng tay.
