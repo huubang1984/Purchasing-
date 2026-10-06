@@ -140,6 +140,17 @@ function thuocTinh(obj: ts.ObjectLiteralExpression, ten: string): ts.PropertyAss
     (p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text === ten,
   );
 }
+/**
+ * [S1.272 / S4.6a] Đối tượng CÓ thuộc tính `ten`, kể cả dạng viết tắt `{ path, … }`. Route dựng bằng hàm (`nhap(path, loai)` của
+ * `routes/du-lieu-ngoai.ts`) viết `path` tắt; bản trước chỉ nhận `path: …` nên bỏ qua cả đối tượng — `EXTERNAL_DATA_ROW` của hai route
+ * rút theo hàng đi qua ⑶ mà không vào tập.
+ */
+function coThuocTinh(obj: ts.ObjectLiteralExpression, ten: string): boolean {
+  return (
+    thuocTinh(obj, ten) !== undefined ||
+    obj.properties.some((p) => ts.isShorthandPropertyAssignment(p) && p.name.text === ten)
+  );
+}
 
 type GiaTri =
   | { readonly loai: "chuoi"; readonly gia: string }
@@ -212,7 +223,7 @@ export function docTep(tep: string, vanBan: string): KetQuaDoc {
         else khongGiai.push(`${tep}:${dong(sf, n)} ${ten}: đối số tài nguyên không phải đối tượng viết tại chỗ`);
       }
     }
-    if (tep.startsWith(THU_MUC_ROUTE) && ts.isObjectLiteralExpression(n) && thuocTinh(n, "path") !== undefined && thuocTinh(n, "resourceType") !== undefined) {
+    if (tep.startsWith(THU_MUC_ROUTE) && ts.isObjectLiteralExpression(n) && coThuocTinh(n, "path") && thuocTinh(n, "resourceType") !== undefined) {
       ghi(n, n, "resourceType", route);
     }
   });
@@ -314,9 +325,10 @@ describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối B
          { method: "GET", path: "/y", handler: () => 1 },
          { resourceType: "khong_phai_route" },
          { path: "/z", resourceType: bien },
-       ];`,
+       ];
+       const tao = (path) => ({ method: "POST", path, resourceType: "R5", handler: () => 1 });`,
     );
-    expect([sapXep(route.route), route.khongGiai]).toEqual([["R4"], [`${THU_MUC_ROUTE}b.ts:5 resourceType: hằng \`bien\` không phải const chuỗi cấp tệp`]]);
+    expect([sapXep(route.route), route.khongGiai]).toEqual([["R4", "R5"], [`${THU_MUC_ROUTE}b.ts:5 resourceType: hằng \`bien\` không phải const chuỗi cấp tệp`]]);
     // Cùng văn bản ngoài thư mục route thì không phải route.
     expect(docTep("packages/x/src/b.ts", `export const R = [{ path: "/x", resourceType: "R4" }];`).route.size).toBe(0);
   });

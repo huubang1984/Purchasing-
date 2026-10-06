@@ -1805,6 +1805,8 @@ $ham$;
        ('public.bid_receipts', ARRAY['bid_receipts_chan_truncate', 'bid_receipts_chi_ghi_them']),
        ('public.canonical_item_versions', ARRAY['canonical_item_versions_chan_truncate', 'canonical_item_versions_chi_ghi_them', 'canonical_item_versions_dat_thu_tu', 'canonical_item_versions_kiem_danh_tinh', 'canonical_item_versions_kiem_quyen_ghi']),
        ('public.canonical_items', ARRAY['canonical_items_chan_truncate', 'canonical_items_chi_ghi_them', 'canonical_items_dat_thu_tu', 'canonical_items_kiem_danh_tinh', 'canonical_items_kiem_quyen_ghi']),
+       ('public.external_price_references', ARRAY['external_price_references_chan_truncate', 'external_price_references_chi_ghi_them', 'external_price_references_dat_thu_tu', 'external_price_references_kiem_danh_tinh', 'external_price_references_kiem_ngoai', 'external_price_references_kiem_quyen_ghi']),
+       ('public.external_purchase_history', ARRAY['external_purchase_history_chan_truncate', 'external_purchase_history_chi_ghi_them', 'external_purchase_history_dat_thu_tu', 'external_purchase_history_kiem_danh_tinh', 'external_purchase_history_kiem_ngoai', 'external_purchase_history_kiem_quyen_ghi']),
        ('public.governance_signal_acks', ARRAY['governance_signal_acks_chan_truncate', 'governance_signal_acks_chi_ghi_them', 'governance_signal_acks_kiem_danh_tinh', 'governance_signal_acks_kiem_nguoi']),
        ('public.governance_signals', ARRAY['governance_signals_chan_truncate', 'governance_signals_chi_ghi_them', 'governance_signals_kiem_danh_tinh', 'governance_signals_tinh']),
        ('public.guest_sessions', ARRAY['guest_sessions_kiem_danh_tinh', 'guest_sessions_thu_hoi_don_dieu']),
@@ -3787,6 +3789,8 @@ $ham$;
          ('public', 'bid_receipts', '018_vendor_bids'),
          ('public', 'canonical_item_versions', '083_hang_chuan'),
          ('public', 'canonical_items', '083_hang_chuan'),
+         ('public', 'external_price_references', '109_du_lieu_ngoai'),
+         ('public', 'external_purchase_history', '109_du_lieu_ngoai'),
          ('public', 'governance_signal_acks', '088_tin_hieu_chia_nho'),
          ('public', 'governance_signals', '088_tin_hieu_chia_nho'),
          ('public', 'guest_sessions', '010_invitations'),
@@ -5139,6 +5143,28 @@ $ham$;
              CREATE TRIGGER rfq_item_goi_y_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
              ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_danh_tinh BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_kiem_danh_tinh ON public.external_price_references;
+             CREATE TRIGGER external_price_references_kiem_danh_tinh BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_kiem_danh_tinh;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_danh_tinh BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_kiem_danh_tinh ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_kiem_danh_tinh BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_kiem_danh_tinh;
+           END IF;
            IF to_regclass('public.rfq_item_mappings') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -5476,6 +5502,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
+            AND (to_regclass('public.external_price_references') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_price_references')
+                               AND t.tgname = 'external_price_references_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_danh_tinh BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
+            AND (to_regclass('public.external_purchase_history') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                               AND t.tgname = 'external_purchase_history_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_danh_tinh BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
             AND (to_regclass('public.rfq_item_mappings') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -6425,6 +6467,28 @@ $ham$;
              CREATE TRIGGER rfq_item_goi_y_chi_ghi_them BEFORE UPDATE OR DELETE ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_chi_ghi_them;
            END IF;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_chi_ghi_them BEFORE DELETE OR UPDATE ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_chi_ghi_them ON public.external_price_references;
+             CREATE TRIGGER external_price_references_chi_ghi_them BEFORE UPDATE OR DELETE ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_chi_ghi_them BEFORE DELETE OR UPDATE ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_chi_ghi_them ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_chi_ghi_them BEFORE UPDATE OR DELETE ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_chi_ghi_them;
+           END IF;
            IF to_regclass('public.rfq_item_mappings') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -6501,6 +6565,28 @@ $ham$;
              DROP TRIGGER IF EXISTS rfq_item_goi_y_chan_truncate ON public.rfq_item_goi_y;
              CREATE TRIGGER rfq_item_goi_y_chan_truncate BEFORE TRUNCATE ON public.rfq_item_goi_y FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_chan_truncate;
+           END IF;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_chan_truncate BEFORE TRUNCATE ON public.external_price_references FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_chan_truncate ON public.external_price_references;
+             CREATE TRIGGER external_price_references_chan_truncate BEFORE TRUNCATE ON public.external_price_references FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_chan_truncate;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_chan_truncate BEFORE TRUNCATE ON public.external_purchase_history FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_chan_truncate ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_chan_truncate BEFORE TRUNCATE ON public.external_purchase_history FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_chan_truncate;
            END IF;
            IF to_regclass('public.rfq_item_mappings') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
@@ -6846,6 +6932,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.external_price_references') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_price_references')
+                               AND t.tgname = 'external_price_references_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_chi_ghi_them BEFORE DELETE OR UPDATE ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.external_purchase_history') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                               AND t.tgname = 'external_purchase_history_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_chi_ghi_them BEFORE DELETE OR UPDATE ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.rfq_item_mappings') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -6902,6 +7004,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chan_truncate BEFORE TRUNCATE ON public.rfq_item_goi_y FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.external_price_references') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_price_references')
+                               AND t.tgname = 'external_price_references_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_chan_truncate BEFORE TRUNCATE ON public.external_price_references FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.external_purchase_history') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                               AND t.tgname = 'external_purchase_history_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_chan_truncate BEFORE TRUNCATE ON public.external_purchase_history FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.rfq_item_mappings') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -11133,6 +11251,30 @@ $ham$;
              CREATE TRIGGER rfq_item_goi_y_dat_thu_tu BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
              ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_dat_thu_tu;
            END IF;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_dat_thu_tu'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_dat_thu_tu BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_dat_thu_tu ON public.external_price_references;
+             CREATE TRIGGER external_price_references_dat_thu_tu BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_dat_thu_tu;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_dat_thu_tu'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_dat_thu_tu BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_dat_thu_tu ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_dat_thu_tu BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_dat_thu_tu;
+           END IF;
            IF to_regclass('public.rfq_item_mappings') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -11201,6 +11343,22 @@ $ham$;
                                AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_dat_thu_tu BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
+            AND (to_regclass('public.external_price_references') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_price_references')
+                               AND t.tgname = 'external_price_references_dat_thu_tu'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_dat_thu_tu BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
+            AND (to_regclass('public.external_purchase_history') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                               AND t.tgname = 'external_purchase_history_dat_thu_tu'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_dat_thu_tu BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
             AND (to_regclass('public.rfq_item_mappings') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
@@ -11387,6 +11545,30 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_kiem_quyen_ghi BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_kiem_quyen_ghi();
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_kiem_quyen_ghi;
            END IF;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_kiem_quyen_ghi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_quyen_ghi BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_kiem_quyen_ghi()$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_kiem_quyen_ghi ON public.external_price_references;
+             CREATE TRIGGER external_price_references_kiem_quyen_ghi BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_kiem_quyen_ghi();
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_kiem_quyen_ghi;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_kiem_quyen_ghi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_quyen_ghi BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_kiem_quyen_ghi()$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_kiem_quyen_ghi ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_kiem_quyen_ghi BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_kiem_quyen_ghi();
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_kiem_quyen_ghi;
+           END IF;
          END
          $fn92$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -11431,6 +11613,22 @@ $ham$;
                            AND t.tgfoid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_kiem_quyen_ghi BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_kiem_quyen_ghi()$def$)
+            AND (to_regclass('public.external_price_references') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_price_references')
+                               AND t.tgname = 'external_price_references_kiem_quyen_ghi'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_quyen_ghi BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_kiem_quyen_ghi()$def$))
+            AND (to_regclass('public.external_purchase_history') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                               AND t.tgname = 'external_purchase_history_kiem_quyen_ghi'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_quyen_ghi BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_kiem_quyen_ghi()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
@@ -11444,7 +11642,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.du_lieu_nen_kiem_quyen_ghi()')),
                   'hàm public.du_lieu_nen_kiem_quyen_ghi() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.du_lieu_nen_kiem_quyen_ghi() và các bảng public.uom_aliases, public.canonical_items, public.canonical_item_versions, public.item_aliases, public.item_uom_conversions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.du_lieu_nen_kiem_quyen_ghi() và các bảng public.uom_aliases, public.canonical_items, public.canonical_item_versions, public.item_aliases, public.item_uom_conversions, public.external_price_references, public.external_purchase_history (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.197 / S4.2a / L3] Nguoi dat thuoc du lieu mu gia — khuon 033. Than `RETURN NULL` som de mot vai/mot nguoi om ca item.manage lan bid.view.
@@ -13143,6 +13341,120 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.goi_y_kiem_luat()')),
                   'hàm public.goi_y_kiem_luat() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.goi_y_kiem_luat() và bảng public.rfq_item_goi_y (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.272 / S4.6a] Luat ghi du lieu ngoai: hang rut khong tro ve hang rut; don vi quy doi duoc sang don vi goc. Than `RETURN NEW` som nhan don vi khong quy doi duoc va rut cua hang rut.
+    ARRAY[
+      $q$hàm + trigger du_lieu_ngoai_kiem_ghi (109_du_lieu_ngoai)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '109_du_lieu_ngoai.sql')$q$,
+      $q$DO $fn286$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.du_lieu_ngoai_kiem_ghi();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.du_lieu_ngoai_kiem_ghi() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
+DECLARE
+  dich_rut uuid;
+  goc text;
+  ma_quy_doi text;
+BEGIN
+  IF NEW.rut_cua IS NOT NULL THEN
+    EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME)
+       INTO dich_rut USING NEW.org_id, NEW.rut_cua;
+    IF dich_rut IS NOT NULL THEN
+      RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut';
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
+  -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó.
+  IF TG_TABLE_NAME = 'external_purchase_history' THEN
+    IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN
+      RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay';
+    END IF;
+  END IF;
+  SELECT ci.don_vi_goc INTO goc
+    FROM public.canonical_items ci
+   WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id;
+  IF goc IS NULL THEN
+    RETURN NEW;
+  END IF;
+  SELECT k.ma INTO ma_quy_doi
+    FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id,
+                                (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi,
+                                goc, goc, pg_catalog.clock_timestamp()) k;
+  IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN
+    RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.external_price_references') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_price_references')
+                                 AND t.tgname = 'external_price_references_kiem_ngoai'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_ngoai BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_ngoai_kiem_ghi()$def$) THEN
+             DROP TRIGGER IF EXISTS external_price_references_kiem_ngoai ON public.external_price_references;
+             CREATE TRIGGER external_price_references_kiem_ngoai BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION public.du_lieu_ngoai_kiem_ghi();
+             ALTER TABLE public.external_price_references ENABLE ALWAYS TRIGGER external_price_references_kiem_ngoai;
+           END IF;
+           IF to_regclass('public.external_purchase_history') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                                 AND t.tgname = 'external_purchase_history_kiem_ngoai'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_ngoai BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_ngoai_kiem_ghi()$def$) THEN
+             DROP TRIGGER IF EXISTS external_purchase_history_kiem_ngoai ON public.external_purchase_history;
+             CREATE TRIGGER external_purchase_history_kiem_ngoai BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION public.du_lieu_ngoai_kiem_ghi();
+             ALTER TABLE public.external_purchase_history ENABLE ALWAYS TRIGGER external_purchase_history_kiem_ngoai;
+           END IF;
+         END
+         $fn286$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE dich_rut uuid; goc text; ma_quy_doi text; BEGIN IF NEW.rut_cua IS NOT NULL THEN EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME) INTO dich_rut USING NEW.org_id, NEW.rut_cua; IF dich_rut IS NOT NULL THEN RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut'; END IF; RETURN NEW; END IF; -- [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó. IF TG_TABLE_NAME = 'external_purchase_history' THEN IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam' USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay'; END IF; END IF; SELECT ci.don_vi_goc INTO goc FROM public.canonical_items ci WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id; IF goc IS NULL THEN RETURN NEW; END IF; SELECT k.ma INTO ma_quy_doi FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id, (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi, goc, goc, pg_catalog.clock_timestamp()) k; IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.external_price_references')
+                           AND t.tgname = 'external_price_references_kiem_ngoai'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_price_references_kiem_ngoai BEFORE INSERT ON public.external_price_references FOR EACH ROW EXECUTE FUNCTION du_lieu_ngoai_kiem_ghi()$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.external_purchase_history')
+                           AND t.tgname = 'external_purchase_history_kiem_ngoai'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER external_purchase_history_kiem_ngoai BEFORE INSERT ON public.external_purchase_history FOR EACH ROW EXECUTE FUNCTION du_lieu_ngoai_kiem_ghi()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.du_lieu_ngoai_kiem_ghi()')),
+                  'hàm public.du_lieu_ngoai_kiem_ghi() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.du_lieu_ngoai_kiem_ghi() và các bảng public.external_price_references, public.external_purchase_history (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.204 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
     ARRAY[
