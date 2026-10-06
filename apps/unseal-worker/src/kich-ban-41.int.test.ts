@@ -54,9 +54,12 @@ import {
 import {
   PepperRing,
   createInvitation,
+  docNgoaiLe,
   ducTokenKhiMoGoi,
   issueMagicLinkToken,
   issueOtpChallenge,
+  lapNgoaiLe,
+  listInvitations,
   redeemMagicLink,
   verifyOtpAndStartSession,
 } from "@trustprocure/invitation";
@@ -960,5 +963,136 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       hanhDong.indexOf("GOVERNANCE_SIGNAL_ACKNOWLEDGED"),
     );
     expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
+  });
+
+  it("bước 17 — [S3.3e2 / K2 · K5 · K3] ngoại lệ cạnh tranh: gói MỘT nhà cung cấp bị K2 chặn lúc nộp, `SINGLE_SOURCE` cứu, chữ ký của người lập ngoại lệ bị K5 chặn lúc mở, người độc lập ký thì mở; gói mời lại nhà cung cấp cũ bị K3 chặn, `ROTATION` cứu — luồng MVP1: không chốt nào, ngoại lệ không lập được", async () => {
+    // Bản tầng gói của bước 17 qua HTTP: cùng hai gói ở bậc từ 100 triệu, một nhóm hàng RIÊNG (tổng 450 triệu, không cận K10a nào).
+    // Người lập ngoại lệ là người PM độc lập của bước 16 (`sPmDl` — giữ `rfq.invite`, không tạo, không mời), nên vào tập loại trừ của
+    // K5; người ký độc lập là `gd1`, như mọi gói của bước 16. Tầng gói bắt lời từ chối có tên của trigger và ném `ChotKiemSoatError`.
+    const thu = <T,>(viec: Promise<T>): Promise<unknown> => viec.then(() => null, (e: unknown) => e);
+    const taoGoi = (tieuDe: string, giaTri: string, nhomHang: string | null): Promise<string> =>
+      withTenant(apiPool, orgA, async (c) => {
+        const r = await createRfq(c, orgA, { title: tieuDe, deadlineAt: HAN_NOP, createdBySessionId: sMua, categoryId: nhomHang });
+        await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Van dieu ap DN100 PN16", quantity: "4.0000", unit: "cai", actorSessionId: sMua });
+        await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: sMua });
+        return r.id;
+      });
+    const nop = (rfqId: string): Promise<unknown> =>
+      thu(withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: sMua }, apiPool)));
+    const lanNop = async (rfqId: string): Promise<number> =>
+      (await db.pool.query<{ n: number }>("SELECT lan_nop AS n FROM rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n ?? -1;
+    const ky = async (rfqId: string, phien: string): Promise<void> => {
+      const moc = batS3 ? { lanNopDaXem: await lanNop(rfqId) } : {};
+      await withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: phien, ...moc }, apiPool));
+    };
+    const moGoi = (rfqId: string): Promise<unknown> =>
+      thu(withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: sMua, orgKeys: boBoc }, apiPool)));
+    const lapNgoaiLeCho = (rfqId: string, loai: string, maLyDo: string, phien: string): Promise<unknown> =>
+      thu(
+        withTenant(apiPool, orgA, (c) =>
+          lapNgoaiLe(c, orgA, { rfqId, loai, maLyDo, giaiTrinh: "Chi mot hang giu ban quyen van dieu ap loai nay tai Viet Nam", actorSessionId: phien }, apiPool),
+        ),
+      );
+    const hangChot = async (goiXet: readonly string[]): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = ANY($2::uuid[]) ORDER BY seq",
+          [orgA, goiXet],
+        )
+      ).rows.map((r) => r.ma);
+    const tenNguoi = new Map([
+      [uMua, "mua"],
+      [uPmDl, "pmDl"],
+      [uGd1, "gd1"],
+    ]);
+    const cauChuyen = async (rfqId: string): Promise<string[]> => {
+      const QUAN_TAM = new Set(["CONTROL_DENIED", "SOURCING_EXCEPTION_CREATED", "RFQ_SUBMITTED_FOR_APPROVAL", "RFQ_APPROVED", "RFQ_OPENED"]);
+      const { rows } = await db.pool.query<{ action: string; ma: string | null; nguoi: string | null }>(
+        "SELECT action, payload->>'ma' AS ma, actor_id::text AS nguoi FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+        [orgA, rfqId],
+      );
+      return rows
+        .filter((r) => QUAN_TAM.has(r.action))
+        .map((r) => `${r.ma === null ? r.action : `${r.action}:${r.ma}`}@${tenNguoi.get(r.nguoi ?? "") ?? "khac"}`);
+    };
+    const lyDo = (e: unknown): string | null => (e instanceof ChotKiemSoatError ? e.lyDo : null);
+
+    if (!batS3) {
+      // Luồng MVP1: K2/K3/K5 không sống ở tổ chức chưa bật — gói không lời mời nộp, ký và mở như bước 16; lập ngoại lệ dừng ở lời
+      // từ chối *tổ chức chưa bật* của trigger (không hàng ngoại lệ, không vào sổ chốt).
+      const a = await taoGoi("Van dieu ap mot nguon", "200000000.00", null);
+      const lap = await lapNgoaiLeCho(a, "SINGLE_SOURCE", "PROPRIETARY_TECHNOLOGY", sMua);
+      expect(lap, "luồng MVP1: tổ chức chưa bật không lập được ngoại lệ").toBeInstanceOf(Error);
+      expect(lyDo(lap)).toBeNull();
+      expect(await nop(a)).toBeNull();
+      await ky(a, sGd1);
+      expect(await moGoi(a)).toBeNull();
+      const { rows } = await db.pool.query("SELECT 1 FROM rfq_sourcing_exceptions WHERE rfq_id = $1", [a]);
+      expect(rows, "luồng MVP1: không một hàng ngoại lệ nào").toHaveLength(0);
+      expect(await hangChot([a]), "luồng MVP1: không một lần từ chối nào vào sổ").toEqual([]);
+      return;
+    }
+
+    const nhomHang = (await withTenant(apiPool, orgA, (c) => taoNhomHang(c, orgA, { ma: "VAN", ten: "Van cong nghiep", actorSessionId: sTc1 }, apiPool))).id;
+
+    // ── Gói A: MỘT nhà cung cấp đếm được, MỚI với mọi gói của người mua ──
+    const a = await taoGoi("Van dieu ap mot nguon", "200000000.00", nhomHang);
+    await withTenant(apiPool, orgA, async (c) => {
+      const n = await dungNccDemDuoc(c, "Van cong nghiep Mot Nguon");
+      await createInvitation(c, orgA, { rfqId: a, supplierId: n.supplierId, contactId: n.contactId, linkChannel: "EMAIL", actorSessionId: sMua }, apiPool);
+    });
+    // ⑴ K2: một nhóm đếm được, bậc đòi ba; danh sách lời mời nói cùng hai con số mà màn hiện.
+    expect(lyDo(await nop(a))).toBe("K2_THIEU_CANH_TRANH");
+    const dsA = await withTenant(apiPool, orgA, (c) => listInvitations(c, orgA, { rfqId: a, actorSessionId: sMua }, apiPool));
+    expect(dsA?.canhTranh).toEqual({ soNhomDemDuoc: 1, toiThieu: 3 });
+    // ⑵ Người PM độc lập lập `SINGLE_SOURCE`; danh sách ngoại lệ mang lần nộp của chính gói, ở DRAFT.
+    expect(await lapNgoaiLeCho(a, "SINGLE_SOURCE", "PROPRIETARY_TECHNOLOGY", sPmDl)).toBeNull();
+    const nlA = await withTenant(apiPool, orgA, (c) => docNgoaiLe(c, orgA, { rfqId: a, actorSessionId: sMua }, apiPool));
+    expect(nlA).toMatchObject({ lanNop: await lanNop(a), trangThai: "DRAFT", exceptions: [{ loai: "SINGLE_SOURCE", lapBoi: uPmDl, rut: null }] });
+    // ⑶ Lần nộp qua; người lập ngoại lệ ký.
+    expect(await nop(a)).toBeNull();
+    await ky(a, sPmDl);
+    // ⑷ K5: chữ ký duy nhất là của người lập ngoại lệ — một ngoại lệ không bao giờ tự duyệt. Không khoá nào được đúc.
+    expect(lyDo(await moGoi(a))).toBe("K5_THIEU_CHU_KY_DOC_LAP");
+    const { rows: khoaA } = await db.pool.query("SELECT 1 FROM rfq_key_material WHERE rfq_id = $1", [a]);
+    expect(khoaA, "không khoá nào được đúc cho gói bị chặn").toHaveLength(0);
+    // ⑸ Người ký độc lập ký; gói mở.
+    await ky(a, sGd1);
+    expect(await moGoi(a)).toBeNull();
+    expect(await cauChuyen(a)).toEqual([
+      "CONTROL_DENIED:K2_THIEU_CANH_TRANH@mua",
+      "SOURCING_EXCEPTION_CREATED@pmDl",
+      "RFQ_SUBMITTED_FOR_APPROVAL@mua",
+      "RFQ_APPROVED@pmDl",
+      "CONTROL_DENIED:K5_THIEU_CHU_KY_DOC_LAP@mua",
+      "RFQ_APPROVED@gd1",
+      "RFQ_OPENED@mua",
+    ]);
+
+    // ── Gói B: ba nhà cung cấp đầu của gói chính — đếm được, nhưng đã có trong gói 1 tỷ người mua mở ở bước 2 ──
+    const { rows: cu } = await db.pool.query<{ supplier_id: string; contact_id: string }>(
+      "SELECT supplier_id, contact_id FROM rfq_invitations WHERE org_id = $1 AND rfq_id = $2 ORDER BY created_at, id LIMIT 3",
+      [orgA, trangThai.rfqId],
+    );
+    expect(cu).toHaveLength(3);
+    const b = await taoGoi("Van dieu ap thay the", "250000000.00", nhomHang);
+    await withTenant(apiPool, orgA, async (c) => {
+      for (const n of cu) {
+        await createInvitation(c, orgA, { rfqId: b, supplierId: n.supplier_id, contactId: n.contact_id, linkChannel: "EMAIL", actorSessionId: sMua }, apiPool);
+      }
+    });
+    expect(lyDo(await nop(b))).toBe("K3_KHONG_XOAY_VONG");
+    expect(await lapNgoaiLeCho(b, "ROTATION", "EXISTING_CONTRACT", sPmDl)).toBeNull();
+    expect(await nop(b)).toBeNull();
+    await ky(b, sGd1);
+    expect(await moGoi(b)).toBeNull();
+    expect(await cauChuyen(b)).toEqual([
+      "CONTROL_DENIED:K3_KHONG_XOAY_VONG@mua",
+      "SOURCING_EXCEPTION_CREATED@pmDl",
+      "RFQ_SUBMITTED_FOR_APPROVAL@mua",
+      "RFQ_APPROVED@gd1",
+      "RFQ_OPENED@mua",
+    ]);
+    expect(await hangChot([a, b])).toEqual(["K2_THIEU_CANH_TRANH", "K5_THIEU_CHU_KY_DOC_LAP", "K3_KHONG_XOAY_VONG"]);
   });
 });
