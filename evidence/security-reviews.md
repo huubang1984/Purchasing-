@@ -25013,3 +25013,14 @@ thẳng vào CSDL: một REQUESTER, một BUYER. Trên `2a1ff40`, cây sạch, m
 - Chỉ dẫn K3 không nói nhà cung cấp nào là mới; lần chặn ở trigger khi đua vẫn là lời không tên, không `ma`.
 - Xác minh sau ngày bật, từng nhà cung cấp; KPI tỷ lệ ngoại lệ — S3.9 (ADR-150 ⑼).
 - `gieo:demo` và kịch bản 41 qua ngoại lệ, K2/K3/K5 bị chặn rồi qua — S3.3e2.
+
+## 10. Số đo
+Trên `0202d31` (nhánh dựng từ `master` `58fd14c`, không gộp thêm — `origin/master` không đổi trong vòng; số đã cấp ở `c863a69`: vòng 273,
+ADR-150, khoản 344): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm test` 151 tệp, 2586 ca đạt, 1 bỏ qua, 0 đỏ; `pnpm evidence`: vitest
+thoát mã 0, 243 tệp, 4792 khẳng định (4782 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60 nghiệp vụ + 22/22 hàng rào), 2117 giây, *"Cổng
+evidence: XANH"*; `evidence/INV-matrix.md` đổi đúng bốn con số — D5 182 → 185, K2 25 → 29, K5 12 → 13, K8a 10 → 14 —, không bất biến mới,
+mốc độ phủ giữ 82. Trong lượt ấy: `man-kiem-soat` 15/15, `ngoai-le-canh-tranh` 26/26, hai kịch bản 41 32 + 85 (bộ quét gửi băm đọc ngay lúc
+gọi), `xac-minh` 10/10, `migrations.int` 128/128, `phuc-vu` 297/297.
+Lượt evidence trước đó trên `c863a69` đỏ đúng một ca, ở `ngoai-le-canh-tranh` ⑺: tổ chức khác đọc ngoại lệ của một gói qua route nay nhận
+404 thay vì 200 rỗng — câu đọc dựng từ `rfq_packages` để mang lần nộp (ADR-150 ⑶), và 404 là đúng câu `GET /rfqs/:id` trả cho gói ấy, nên
+không lộ thêm gì; ca sửa theo hành vi mới kèm đối chứng 404 của gói (`0202d31`). Bản ma trận của lượt ấy bỏ, không commit.
