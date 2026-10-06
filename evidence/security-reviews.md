@@ -24885,3 +24885,107 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 được gộp vào nhánh: ba xung đột tài liệu (`Handoff.md`, `docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc, cả hai biên bản, danh
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
+
+# §S1.274 — KHOẢN 342 ĐÓNG: CHỈ LẦN ĐỌC ĐẦU (GHI BẢN LƯU) KHOÁ HÀNG GÓI; ĐỌC BẢN LƯU VÀ *XEM DẢI* HỎI LẠI KHÔNG KHOÁ
+
+**Rổ và mảnh (ADR-043):** khoản 342 (rổ đề xuất B) đóng. Không migration, không route, không ADR mới (đoạn bổ sung ở ADR-143); một tệp
+mã sản xuất (`packages/danh-gia/src/doc-benchmark.ts`), một tệp test.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-06: *"Sửa khoản 342"* — bước 1 của đề xuất sau §S1.271: chỉ lần ghi bản lưu giữ khoá gói, lần đọc bản lưu và *Xem
+dải* hỏi lại không khoá; soi đối kháng trên hình dạng trước khi viết mã; đo lại bằng bảng của §S1.271 mục 3.
+
+## 2. Lượt soi đối kháng trên hình dạng (trước dòng mã đầu)
+Một lượt độc lập đọc mã và hình dạng đề xuất. Không CAO.
+- **TRUNG — bộ đo của §S1.271 đo sai chỗ sau bản sửa.** Mọi lượt đọc vẫn ghi một hàng sổ dưới khoá chuỗi sổ của tổ chức
+  (`noi_chuoi_kiem_toan`, trần 2 s, giữ tới commit). Bản sửa cho cạnh lấy hàng gói ngay rồi xếp hàng ở khoá ấy sau các lượt đọc đang
+  ghi sổ; bộ đo chỉ chạy câu khoá hàng gói sẽ in ~0 ms. Sửa: bộ đo là một cạnh trọn — khoá hàng gói, `appendAuditEvent`, COMMIT — in
+  riêng chờ hàng, chờ sổ, cả cạnh (mục 4).
+- **THẤP — hai ca chéo để sống hai đột biến.** Sửa: một hàm hỏi lại chung (`kiemLaiKhongKhoa`, phán quyết chung với đường ghi), bốn ca
+  (hai chỗ gọi × vế trạng thái / vế lần mở thầu); câu hỏi lại của lần đọc bản lưu đứng SAU câu đọc bản lưu.
+- **THẤP — ca NOWAIT xanh rỗng nếu lượt đọc rẽ nhánh không số** (`CHUA_CO_BAN_LUU`, `KHONG_CO_DAI`, `CHUA_CAU_HINH` không tới câu hỏi
+  lại). Sửa: khẳng định `CO` (và `BAN_LUU`) trước câu NOWAIT; chạy trên mã trước cho từng hàm (đột biến D0).
+- **THẤP — đột biến M4 (luôn tính lại) đổi nghĩa.** §S1.260 mục 7 ghi nó SỐNG; sau bản sửa nó đưa mọi lượt đọc về đường ghi, tức khoá
+  hàng gói ở mỗi lượt — phải đỏ (D9); ADR-143 gạch tại chỗ.
+- **THẤP — lý do *"hai câu, không một"* của `kiemLaiDuoiKhoa` chưa có ca nào** — chỉ hiện ra khi lần mở niêm phong ĐANG giữ hàng gói
+  lúc lần đọc đầu chờ ở `FOR SHARE`. Bản sửa đặt ngay cạnh nó một hàm hỏi lại MỘT câu. Sửa: thêm ca ấy (D8).
+- **THẤP — đường đọc dựa vào READ COMMITTED** (`withTenant` mở `BEGIN` trần): dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao
+  dịch. Không sửa: lượt đọc khi ấy đúng tại ảnh chụp ấy, vẫn nhất quán; bên gọi duy nhất là route (READ COMMITTED) — mục 6.
+- **THẤP — khoá còn lại ở đường ghi có trần.** Một cửa sổ mỗi lần mở thầu (bản lưu `UNIQUE (org_id, unseal_request_id)`), lấy SAU phép
+  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. Xấu nhất ở quy mô lớn
+  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu. Mở thêm lần mở thầu cần
+  người xin và người duyệt. Ghi ở ADR-143.
+- **Xác nhận, không phải lỗi** (tự kiểm lại): bảng so sánh — chuẩn *"bảng so sánh mở"* của L6 — đọc trạng thái một lần, không khoá
+  (`packages/unseal/src/comparison.ts`), rồi ghi `COMPARISON_VIEWED`; không ai dựa vào thứ tự sổ của hàng `BENCHMARK_*` (chỉ đếm hay
+  quét payload); đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126); `kiemGoiDaNop` của `anh-xa.ts`
+  lấy khoá tư vấn theo tổ chức (`khoaBiDanh`) TRƯỚC `FOR SHARE` ở cả ba chỗ gọi, nên hai giao dịch ánh xạ không cùng giữ khoá chia sẻ —
+  ngoài phạm vi.
+
+## 3. Sửa
+- `docHayTinh`: lần đọc đầu (chưa có bản lưu ⇒ tính rồi ghi) giữ `kiemLaiDuoiKhoa` y nguyên — `FOR SHARE`, hai câu. Lần đọc bản lưu gọi
+  `kiemLaiKhongKhoa` sau câu đọc bản lưu.
+- `docDaiBenchmark`: `kiemLaiKhongKhoa` sau phép tính dải, trước khi trả số.
+- `kiemLaiKhongKhoa`: MỘT câu — `status` của hàng gói và, trong truy vấn con, lần mở thầu `EXECUTED` mới nhất — một ảnh chụp dưới READ
+  COMMITTED. `phanXuHoiLai` là phán quyết chung của hai cách hỏi.
+- `benchmark.int` ⑻: bỏ ca *"Xem dải CHỜ ở khoá hàng gói"*; thêm tám ca — bốn ô ma trận hỏi lại (đọc bản lưu / *Xem dải* × vòng chào
+  lại MỞ commit giữa câu bối cảnh và câu hỏi lại ⇒ `VONG_CHAO_LAI_DANG_MO` / vòng chào lại TRỌN VẸN ⇒ `THU_LAI`; chặn bằng
+  `LOCK TABLE price_benchmark_snapshots`), ba ca NOWAIT (đọc bản lưu và *Xem dải* để giao dịch mở mà cạnh khoá được ngay; lần đọc đầu
+  để giao dịch mở thì KHÔNG), và ca hai câu (lần mở niêm phong giữ hàng gói lúc lần đọc đầu chờ `FOR SHARE` ⇒ `THU_LAI`, không bản
+  lưu). Helper vòng chào lại tách ra `vongBafoDenDuyet` và `moNiemPhongVongBafo`.
+
+## 4. Đo — cùng bộ đo, trước và sau
+Khối test tạm gắn vào `benchmark.int` bằng script (không commit; khôi phục cả tệp test lẫn `doc-benchmark.ts`, kiểm sha256). Gói một dòng
+vừa mở, bản lưu đã có; N luồng `docBenchmark` liên tục; 30 lần một CẠNH trọn mỗi mức — `SET LOCAL` hai trần 15 s như `createPool`
+sản xuất, câu khoá của `duyetTraoThau`, một hàng sổ, COMMIT. *Trước* là `doc-benchmark.ts` của `origin/master` (`58fd14cc`), *sau* là
+bản sửa; cùng tệp test, máy rảnh trước và sau mỗi lượt.
+
+| `UNSEALED`, luồng đọc | Trước: chờ hàng | Trước: cả cạnh | Sau: chờ hàng | Sau: chờ sổ | Sau: cả cạnh |
+|---|---|---|---|---|---|
+| 0 | lâu nhất 1,3 ms | lâu nhất 11,5 ms | lâu nhất 0,8 ms | 4,4 ms | 9,0 ms |
+| 1 | 3,5 ms | 9,2 ms | 0,7 ms | 4,8 ms | 8,8 ms |
+| 2 | 7,1 ms | 11,6 ms | 2,1 ms | 2,6 ms | 8,5 ms |
+| 3 | 7,6 ms | 13,3 ms | 0,8 ms | 3,5 ms | 9,3 ms |
+| 6 | p50 2,9 s · lâu nhất 13,0 s; 6/30 hỏng (`57014`) | lâu nhất 13,0 s | 0,9 ms | 5,5 ms | 11,6 ms |
+| 12 | 30/30 hỏng (`57014`) | — | 1,0 ms | 21,7 ms (p50 17,3) | 26,6 ms |
+
+- Sau bản sửa: 0 lần hỏng ở mọi mức; một lượt đọc bản lưu đang mở ⇒ `NOWAIT` chiếm được hàng gói (trước: `55P03`).
+- `AWARDED` (lượt đọc trả `KHONG_HIEN` không khoá, trước cũng vậy): chờ hàng ≤ 0,8 ms ở cả hai bản; chờ sổ ở mười hai luồng lâu nhất
+  18,5 ms (trước) và 34,5 ms (sau) — hàng đợi sổ, không đổi bởi bản sửa.
+- Hàng đợi sổ tăng theo số luồng đọc ghi sổ (sau: 6 luồng ⇒ 5,5 ms, 12 ⇒ 21,7 ms) và xa trần 2 s của nó.
+
+## 5. Đột biến
+Áp từng chỗ ở `doc-benchmark.ts`, chạy describe ⑻ bằng `--reporter=json`, so tập đỏ với tập phải đỏ, khôi phục kiểm sha256.
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| D0 | `doc-benchmark.ts` của `origin/master` | hai ca NOWAIT (đọc bản lưu, *Xem dải*) |
+| D1 | đọc bản lưu khoá lại (`kiemLaiDuoiKhoa`) | ca NOWAIT đọc bản lưu |
+| D2 | *Xem dải* khoá lại | ca NOWAIT *Xem dải* |
+| D3 | đường ghi bỏ khoá (`kiemLaiKhongKhoa`) | lần đọc đầu CHỜ; lần đọc đầu giữ khoá; ca hai câu |
+| D4 | đọc bản lưu bỏ hỏi lại | hai ô ma trận của đọc bản lưu |
+| D5 | *Xem dải* bỏ hỏi lại | hai ô ma trận của *Xem dải* |
+| D6 | hỏi lại không khoá bỏ vế lần mở thầu | hai ô `THU_LAI` |
+| D7 | hỏi lại không khoá bỏ vế trạng thái | hai ô `VONG_CHAO_LAI_DANG_MO` |
+| D8 | đường ghi gộp một câu `FOR SHARE` có truy vấn con | ca hai câu: trả `CO` — bản lưu ghi cho lần mở thầu gói đã rời |
+| D9 | M4 — luôn tính lại | ca NOWAIT đọc bản lưu, hai ô ma trận của đọc bản lưu |
+
+Lượt đầu của D8 đỏ VÌ PHÉP DÒ, không vì ngữ nghĩa: câu gộp viết xuống dòng không khớp mẫu `FROM public.rfq_packages p WHERE…FOR SHARE`
+mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá đỏ ở *"phải đang chờ khoá hàng gói"*. Lượt hai viết câu gộp trên
+đúng mẫu: chỉ ca hai câu đỏ, ở kết quả (`CO` thay vì `THU_LAI`). Lý do *"hai câu"* của §S1.260 nay có phép đo.
+
+## 6. Giới hạn, nói ra
+- Lượt đọc đúng tại câu hỏi lại, không tại lúc commit: hàng sổ của nó có thể đứng sau hàng sổ của một cạnh commit ngay sau câu ấy (mục 2,
+  ADR-143).
+- Đường đọc giả định READ COMMITTED; dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao dịch (lượt đọc khi ấy đúng tại ảnh chụp
+  ấy). Không có phép kiểm mức cô lập.
+- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); không đo một loạt lần đọc đầu ở quy mô 5.000 gói.
+- Bộ đo ở tầng hàm, không qua HTTP; luồng đọc liên tục là tải tổng hợp.
+
+## 7. Số đo
+- `cap-so` cấp S1.274 (trailer `Cap-So` ở `53097e00`); `cap-so --kiem` sạch; Handoff 342 khoản, 54 còn mở.
+- Trên `53097e00`, máy rảnh trước mỗi bước và sau lượt evidence: `pnpm t0` xanh; `pnpm test` 150 tệp (148 đạt, 2 bỏ qua), 2516 ca
+  đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 241 tệp, 4727 khẳng định (4704 đạt, 23 bỏ qua, 0 đỏ), 82/82 bất biến
+  (60/60 nghiệp vụ + 22/22 hàng rào), 1684 giây, *"Cổng evidence: XANH"*. `evidence/INV-matrix.md` đổi đúng hai số: L6 51 → 58,
+  L7 116 → 123 — bảy ca thêm của ⑻ (tám ca mới, một ca bỏ); bản mới vào commit này. 23 ca bỏ qua như §S1.271 mục 6 (13 ca
+  `skipIf(win32)`).
+- Trước đó, trên mã chưa commit: trọn `benchmark.int` 69/69 (máy rảnh); đột biến và hai lượt đo ở mục 4–5.
