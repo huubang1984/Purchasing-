@@ -15,9 +15,18 @@
 //   • lần mở thầu thực thi SAU lúc giao dịch đọc bắt đầu mà commit TRƯỚC câu đọc bối cảnh — `unsealed_at ≥ now()`: `quan_sat_gia` tại
 //     `now()` (mốc đọc của bản lưu) không thấy báo giá vừa mở (`gia_da_lo` so `<` chặt), nên bản lưu GHI MỘT LẦN sẽ mang
 //     `KHONG_DO_DUOC` vĩnh viễn cho các báo giá ấy (vòng BAFO), hay vỡ ràng buộc `moc_truoc_ghi` (vòng một). Trả `THU_LAI`, không ghi.
-//   • trạng thái gói đổi TRONG lúc tính (vd. `EVALUATING → BAFO_OPEN`): trước khi ghi hay trả nhãn, khoá hàng gói `FOR SHARE` rồi hỏi
+//   • trạng thái gói đổi TRONG lúc tính (vd. `EVALUATING → BAFO_OPEN`): trước khi ghi hay trả nhãn, ~~khoá hàng gói `FOR SHARE` rồi hỏi
 //     lại trạng thái và lần mở thầu mới nhất (`kiemLaiDuoiKhoa`). Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit
-//     trạng thái vẫn là trạng thái đã hỏi; đổi rồi thì trả trạng thái mới (không nhãn, không ghi) hay `THU_LAI`.
+//     trạng thái vẫn là trạng thái đã hỏi~~ hỏi lại trạng thái và lần mở thầu mới nhất; đổi rồi thì trả trạng thái mới (không nhãn, không
+//     ghi) hay `THU_LAI`.
+// [S1.9102 / khoản 342] CHỈ ĐƯỜNG GHI giữ khoá hàng gói. Đo ở §S1.271: `FOR SHARE` ở MỌI lượt đọc có nhãn bỏ đói các cạnh trạng thái —
+// một `FOR SHARE` mới vào cạnh các khoá chia sẻ đang giữ mà không chờ bên ghi đang xếp hàng; sáu luồng đọc liên tục ⇒ cạnh chờ tới 13,4 s,
+// mười hai ⇒ mọi lần hỏng ở `statement_timeout`. Nay:
+//   • lần đọc ĐẦU (tính rồi ghi bản lưu) vẫn khoá `FOR SHARE` rồi hỏi lại (`kiemLaiDuoiKhoa`) — bản lưu ghi-một-lần không được ghi cho một
+//     trạng thái đã rời; khoá này mở một cửa sổ cho MỖI lần mở thầu (bản lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính;
+//   • lần đọc bản lưu và *Xem dải* hỏi lại KHÔNG khoá, bằng MỘT câu (`kiemLaiKhongKhoa`): trạng thái và lần mở thầu mới nhất trong cùng
+//     một ảnh chụp. Lượt đọc đúng tại câu ấy; một cạnh commit sau câu ấy có thể đứng TRƯỚC hàng sổ của lượt đọc — cùng điều bảng so sánh
+//     đã chấp nhận (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi `COMPARISON_VIEWED`). ADR-143, đoạn bổ sung S1.9102.
 //
 // Cổng nằm THẲNG trong thân hàm (khoản 33; `cong-quyen-route.test.ts`). Kết quả của `docBenchmark` không mang con số nào có đơn vị
 // tiền — nhãn, chiều, lý do, số đếm — nhưng nhãn là thông tin về giá, nên cổng là `bid.view` như bảng so sánh và lịch sử giá.
@@ -249,12 +258,20 @@ function trangThaiKhongHien(status: string): KhongHien | undefined {
 /** Bối cảnh đổi giữa lúc giao dịch bắt đầu và lúc trả — người đọc bấm lại là đủ. */
 export type ThuLai = { readonly trangThai: "THU_LAI"; readonly rfqStatus: string };
 
+/** Phán quyết của lần hỏi lại, chung cho hai cách hỏi: trạng thái rời tập hiện ⇒ trạng thái ấy; lần mở thầu đã khác ⇒ `THU_LAI`. */
+function phanXuHoiLai(status: string, moiNhat: string | undefined, unsealRequestId: string): KhongHien | ThuLai | undefined {
+  const khongHien = trangThaiKhongHien(status);
+  if (khongHien !== undefined) return khongHien;
+  return moiNhat === unsealRequestId ? undefined : { trangThai: "THU_LAI", rfqStatus: status };
+}
+
 /**
- * Khoá hàng gói `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất — ngay TRƯỚC khi ghi bản lưu hay trả con số, SAU phép tính
- * dài (khuôn `kiemGoiDaNop` của `anh-xa.ts`; khoản 126: khoá hàng trước mọi lần ghi sổ của giao dịch). Hai câu, không một: dưới READ
+ * [ĐƯỜNG GHI] Khoá hàng gói `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất — ngay TRƯỚC khi ghi bản lưu, SAU phép tính dài
+ * (khuôn `kiemGoiDaNop` của `anh-xa.ts`; khoản 126: khoá hàng trước mọi lần ghi sổ của giao dịch). Hai câu, không một: dưới READ
  * COMMITTED, câu chờ khoá thấy phiên bản MỚI của hàng gói nhưng một truy vấn con trong cùng câu vẫn đọc ảnh chụp lúc câu bắt đầu — có
  * thể thiếu lần mở thầu mà chính giao dịch vừa nhả khoá đã ghi. Câu thứ hai chụp ảnh mới, và từ đây không cạnh trạng thái nào commit
- * được tới hết giao dịch này. `undefined` khi vẫn là bối cảnh cũ.
+ * được tới hết giao dịch này. `undefined` khi vẫn là bối cảnh cũ. [S1.9102 / khoản 342] Chỉ lần đọc ĐẦU (tính rồi ghi) gọi hàm này; ĐỪNG
+ * gộp nó với `kiemLaiKhongKhoa` — một câu `FOR SHARE` có truy vấn con là đúng cái bẫy trên (đo ở `benchmark.int` ⑻).
  */
 async function kiemLaiDuoiKhoa(
   client: pg.PoolClient,
@@ -280,7 +297,36 @@ async function kiemLaiDuoiKhoa(
       LIMIT 1`,
     [orgId, rfqId],
   );
-  return moiNhat[0]?.id === unsealRequestId ? undefined : { trangThai: "THU_LAI", rfqStatus: status };
+  return phanXuHoiLai(status, moiNhat[0]?.id, unsealRequestId);
+}
+
+/**
+ * [ĐƯỜNG ĐỌC — S1.9102 / khoản 342] Hỏi lại trạng thái và lần mở thầu mới nhất KHÔNG khoá, bằng MỘT câu: dưới READ COMMITTED một câu là
+ * một ảnh chụp, nên trạng thái và lần mở thầu đọc cùng một thời điểm, và lượt đọc đúng tại thời điểm ấy. Không giữ gì tới commit — lượt
+ * đọc không bao giờ bắt một cạnh trạng thái chờ (§S1.271: `FOR SHARE` ở đây bỏ đói chấm thầu, mở vòng BAFO, đề xuất trao thầu).
+ */
+async function kiemLaiKhongKhoa(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  unsealRequestId: string,
+): Promise<KhongHien | ThuLai | undefined> {
+  const { rows } = await client.query<{ status: string; moi_nhat: string | null }>(
+    `SELECT p.status,
+            (SELECT r.id FROM public.unseal_requests r
+              WHERE r.org_id OPERATOR(pg_catalog.=) p.org_id
+                AND r.rfq_id OPERATOR(pg_catalog.=) p.id
+                AND r.status OPERATOR(pg_catalog.=) 'EXECUTED'
+              ORDER BY r.executed_at DESC, r.id DESC
+              LIMIT 1) AS moi_nhat
+       FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, rfqId],
+  );
+  const g = rows[0];
+  if (g === undefined) throw new Error("gói thầu không còn đọc được giữa giao dịch benchmark");
+  return phanXuHoiLai(g.status, g.moi_nhat ?? undefined, unsealRequestId);
 }
 
 /** Bối cảnh đã qua cổng trạng thái và cấu hình: có lần mở thầu, có phiên bản ghim cấu hình benchmark. */
@@ -291,7 +337,11 @@ interface BoiCanhHien extends BoiCanh {
   readonly nhom: NhomBenchmark;
 }
 
-/** Đọc bản lưu của lần mở thầu mới nhất, hay tính và ghi nó ở lần đọc đầu — dưới khoá hàng gói (`kiemLaiDuoiKhoa`). */
+/**
+ * Đọc bản lưu của lần mở thầu mới nhất, hay tính và ghi nó ở lần đọc đầu — ~~dưới khoá hàng gói (`kiemLaiDuoiKhoa`)~~ [S1.9102 / khoản 342]
+ * lần đọc đầu ghi dưới khoá hàng gói (`kiemLaiDuoiKhoa`); lần đọc bản lưu hỏi lại không khoá (`kiemLaiKhongKhoa`) SAU khi đã thấy bản lưu,
+ * để có một thời điểm mà cả ba cùng đúng: bản lưu có, trạng thái đang hiện, vẫn là lần mở thầu ấy.
+ */
 async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, bc: BoiCanhHien): Promise<BenchmarkCuaGoi> {
   let dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
   let nguon: NguonBenchmark = "BAN_LUU";
@@ -306,7 +356,7 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
     dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
     if (dau === undefined) throw new Error("bản lưu benchmark vừa ghi (hay do giao dịch khác ghi) không đọc lại được");
   } else {
-    const doi = await kiemLaiDuoiKhoa(client, orgId, rfqId, bc.unsealRequestId);
+    const doi = await kiemLaiKhongKhoa(client, orgId, rfqId, bc.unsealRequestId);
     if (doi !== undefined) return doi;
   }
   const dong = await docDongBanLuu(client, orgId, dau.id);
@@ -525,8 +575,9 @@ export async function docDaiBenchmark(
             giaCuaGoi.push({ bidVersionId: g.bidVersionId, trangThai: g.trangThai, donGiaQuyDoi: g.donGiaQuyDoi, tienTe: g.tienTe });
           }
         }
-        // Số của dải và giá quy đổi của gói chỉ trả khi, dưới khoá hàng gói, gói VẪN ở trạng thái hiện của CÙNG lần mở thầu (L6).
-        const doi = await kiemLaiDuoiKhoa(client, orgId, input.rfqId, uid);
+        // Số của dải và giá quy đổi của gói chỉ trả khi, ~~dưới khoá hàng gói,~~ [S1.9102 / khoản 342] ở một câu hỏi lại SAU phép tính, gói
+        // VẪN ở trạng thái hiện của CÙNG lần mở thầu (L6). *Xem dải* không ghi gì nên không khoá hàng gói.
+        const doi = await kiemLaiKhongKhoa(client, orgId, input.rfqId, uid);
         ketQua = doi ?? {
           trangThai: "CO",
           snapshotId: dau.id,
