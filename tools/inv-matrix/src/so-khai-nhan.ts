@@ -408,6 +408,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký — mỗi vế của hai hàm vị từ một đột biến.
   K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
   K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts"],
+  // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
+  // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
+  // người chọn (người tạo, người thu hồi), khoá nhóm, *đếm được*, ROTATION, N = 0, nộp song song bị bắt lúc mở, hai lần mở đồng thời,
+  // `opened_at` (khoản 319), READ COMMITTED, lớp chặn cuối — mỗi vế của hàm cửa sổ và hàm vị từ một đột biến.
+  K3: ["apps/api/src/xoay-vong.int.test.ts"],
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",

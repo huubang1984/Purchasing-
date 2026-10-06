@@ -901,7 +901,8 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       rfq_bac_cua: "THEO_ID",
       // [S1.269 / S3.3c2] Bậc mà gói ghim và số nhóm nhà cung cấp đếm được (tác giả phiên bản) đọc ĐÚNG phiên bản ngân sách ghim.
       rfq_bac_ghim: "THEO_ID",
-      rfq_dem_ncc_canh_tranh: "THEO_ID",
+      // [S1.270 / S3.3d] Vế *đếm được* (tác giả phiên bản) dời sang `rfq_loi_moi_dem_duoc`; `rfq_dem_ncc_canh_tranh` thôi đọc bảng.
+      rfq_loi_moi_dem_duoc: "THEO_ID",
       rfq_can_phe_duyet_kep: "THEO_ID",
       rfq_che_do_nghiem: "QUA_HAM",
       rfq_key_material_bat_bien: "QUA_HAM",

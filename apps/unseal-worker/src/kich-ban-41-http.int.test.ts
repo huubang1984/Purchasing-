@@ -817,8 +817,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // bước 16) — trước vòng này hai gói hy sinh nộp duyệt không một lời mời nào. Ba nhà cung cấp PHỤ, dựng một lần như năm người của
     // gói chính (`pm3` dựng, `taiChinh2` xác minh), mời ở DRAFT bởi người mua. Lời mời hy sinh SAU lần mở (dưới) giữ nguyên: nó là
     // đích của route mời và route phát lại link. MST và số điện thoại xa mọi giá của bộ quét.
+    // [S1.270 / S3.3d] NĂM nhà cung cấp phụ: bậc từ 100 triệu xoay vòng (`xoay_vong_n` = 5, K3), nên mỗi gói của bước 16 mời hai người
+    // đầu cộng một người MỚI của riêng nó.
     if (batS3) {
-      for (const k of [1, 2, 3]) {
+      for (const k of [1, 2, 3, 4, 5]) {
         trangThai.nccPhu.push(
           await dungNccQuaHttp(
             trangThai.pm3,
@@ -2303,7 +2305,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // [S1.266 / S3.3c1] Luồng S3: bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một
       // lời mời nào. Người mua mời ba nhà cung cấp phụ của bộ quét ở DRAFT. Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc
       // lời mời; `pm2` ký và nằm ngoài tập loại trừ, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua. Luồng MVP1: danh sách rỗng.
-      for (const n of trangThai.nccPhu) {
+      // [S1.270 / S3.3d] Bậc ấy cũng xoay vòng (K3): gói i mời phụ 1, phụ 2 — đã mời ở gói trước — cộng phụ (3 + i), mới.
+      for (const n of trangThai.nccPhu.filter((_, k) => k < 2 || k === 2 + i)) {
         const lm = await goi("POST", `/rfqs/${id}/invitations`, m, n);
         expect(lm.status, lm.text).toBe(201);
       }

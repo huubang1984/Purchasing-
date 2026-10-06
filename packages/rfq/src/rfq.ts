@@ -14,6 +14,8 @@ import {
   CAU_CHOT_NGAN_SACH,
   CAU_CHOT_NHOM_HANG,
   CAU_CHOT_TIN_HIEU,
+  CAU_CHOT_XOAY_VONG_MO,
+  CAU_CHOT_XOAY_VONG_NOP,
   kiemChot,
 } from "./chot-kiem-soat.js";
 
@@ -482,6 +484,8 @@ export async function submitRfqForApproval(
   // [S1.269 / S3.3c2 / K2] Cạnh tranh tối thiểu, cùng khuôn — sau K1 vì hàm vị từ đọc bậc mà ngân sách ghim (gói thiếu ngân sách
   // nhận lời từ chối của K1). Trigger `rfq_packages_kiem_so_ncc_khi_nop` hỏi lại dưới READ COMMITTED.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CANH_TRANH, [orgId, input.rfqId]);
+  // [S1.270 / S3.3d / K3] Xoay vòng, cùng khuôn, sau K2 — cùng thứ tự hai trigger ở cạnh.
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_XOAY_VONG_NOP, [orgId, input.rfqId]);
 
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái
@@ -723,6 +727,16 @@ export async function openRfq(
   // [S1.203 / S3.6b1] K10a, cùng khuôn K1: hỏi hàm vị từ `rfq_chot_tin_hieu` TRƯỚC `issueRfqKeyPair` (khoản 31) — lần từ chối ghi
   // sổ ở giao dịch độc lập, và câu ghi sổ của lần đúc khoá giữ khoá chuỗi của tổ chức tới COMMIT. Trigger ở cạnh hỏi lại.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_TIN_HIEU, [orgId, input.rfqId]);
+  // [S1.270 / S3.3d / K3 · lượt soi hình dạng T5] Khoá chính sách ĐỘC QUYỀN của tổ chức TRƯỚC lần đúc khoá: lần đúc ghi sổ (khoá chuỗi
+  // sổ, seed 0) và trigger `102` ở cạnh lấy khoá này sau đó — thứ tự cũ 0 → 2 ngược với ký phiên bản chính sách (2 → 0), đủ cho một
+  // deadlock. Nay mọi đường lấy 2 → 0. Khoá ấy cũng xếp hàng mọi lần mở trong tổ chức, nên K3 hỏi dưới nó thấy gói vừa mở trước.
+  await client.query(
+    "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::pg_catalog.uuid::pg_catalog.text, 2))",
+    [orgId],
+  );
+  // [S1.270 / S3.3d / K3] Xoay vòng ở cạnh mở — cửa sổ chỉ đếm gói ĐÃ MỞ, nên các gói nộp song song cùng một bộ nhà cung cấp đều
+  // qua lúc nộp; sau K10a, cùng thứ tự trigger (`…_kiem_xoay_vong_khi_mo` cuối cạnh).
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_XOAY_VONG_MO, [orgId, input.rfqId]);
 
   // Sinh khoá TRƯỚC lần UPDATE. Xem khối chú thích trên.
   await issueRfqKeyPair(client, orgId, {

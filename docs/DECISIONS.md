@@ -11556,6 +11556,85 @@ K4b.
 - K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); K3 và khoản 234 (S3.3d); màn, kịch bản 41, lượt đi thử T4 (S3.3e).
 - Chuẩn hoá số điện thoại hay email ở lúc ghi.
 
+## ADR-148 — S3.3d: K3 — xoay vòng theo cửa sổ N suất của người chọn danh sách, kiểm ở cạnh nộp duyệt VÀ cạnh mở gói; lời mời sau khi ký không chiếm suất; khoản 234 đóng
+
+**Ngày:** 2026-10-05 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-05: *"Tiếp S3.3d"*; trước lượt soi, ba câu theo đề
+xuất: ⑸ kiểm ở cả hai cạnh, ⑵ *cùng một nhà cung cấp* theo khoá nhóm, một PR; sau lượt soi, bốn câu theo đề xuất: ⑶ chỉ gói cùng loại
+chiếm suất, ⑴ người chọn như K2, ⑹ chặn `opened_at` do người gọi đặt ở tổ chức đã bật, ⑺ một mã vào sổ ở cả hai cạnh · **[S1.270]** ·
+**Liên quan:** ADR-058 ⑶(b), ADR-060, ADR-082 ⑹ ⒀, ADR-084 ⑷, ADR-141 (`102`), ADR-145, ADR-147 · **Spec:** S3 §2.5 ⒀, §5 K3, §5.1 K3,
+§9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.270
+
+### Bối cảnh
+
+Khoản 234 nêu ba việc ở khâu mời (ADR-058 ⑶): ⒜ ngưỡng số nhà cung cấp — K2 —, ⒞ chữ ký thứ hai theo hành vi — K5 — đã cài ở S3.3c
+(ADR-147); ⒝ *"mỗi RFQ có ít nhất một nhà cung cấp mà chính người mời ấy chưa mời trong N lần gần nhất"* còn lại — K3. Spec §5.1 và ADR-082
+⒀ đặt cửa sổ: chỉ gói đã `opened_at`, `opened_at DESC, id DESC`, loại gói đang xét, chỉ tính lời mời không thu hồi trước `opened_at`;
+ADR-082 ⑹ đòi bốn luật đếm áp cho cả K3.
+
+### Quyết định
+
+⑴ **Người chọn = người tạo ∪ mọi người mời ∪ mọi người thu hồi** của gói đang xét — như K2 (ADR-147 ⑵); chặn lối người tạo nhờ đồng
+nghiệp bấm mời. *Gói của một người* = gói ĐÃ MỞ, khác gói đang xét, mà người ấy tạo hay có lời mời TRƯỚC KHI KÝ không thu hồi trước lúc mở.
+
+⑵ **Nhà cung cấp cũ theo khoá nhóm** — id, MST gốc (mười chữ số đầu), email hay chín số cuối điện thoại của BẤT KỲ người liên hệ nào, khớp
+trực tiếp — cùng bộ khoá của K2. Cũ là nhà cung cấp của MỌI lời mời không thu hồi trước lúc mở ở một gói trong cửa sổ, kể cả lời mời thêm
+sau khi ký: nếu không, nhóm quen tham gia mãi bằng lời mời sau khi ký mà không bao giờ cũ. Một lời mời của gói đang xét là MỚI khi nó
+đếm được (vị từ *đếm được* của K2 — nay là MỘT hàm `rfq_loi_moi_dem_duoc`, K2 và K3 cùng đọc) và nhà cung cấp của nó không chung khoá nào
+với một nhà cung cấp cũ. K3 qua khi có ít nhất một lời mời mới, hoặc một ngoại lệ `ROTATION` còn sống.
+
+⑶ **Suất và cửa sổ.** Suất = gói của người ấy không huỷ, mà bậc ghim có `xoay_vong_n > 0`. Cửa sổ = mọi gói của người ấy mở từ suất
+thứ N gần nhất trở về sau (ít hơn N suất thì từ suất xa nhất; không suất nào thì người ấy không góp gì). Gói không chiếm suất — bậc nhỏ,
+đã huỷ, thời MVP1 — vẫn góp nhà cung cấp cũ khi nằm trong khoảng ấy: năm gói nhỏ hay năm gói mở rồi huỷ không đẩy được gói lớn cũ ra.
+N lấy ở bậc ghim của gói đang xét; N = 0 tắt K3.
+
+⑷ **Lời mời thêm SAU KHI KÝ không cho chiếm suất** (`moi_sau_khi_ky = false` mới tính). Lượt soi hình dạng đo được lỗ CAO của bản đầu:
+`076` cho THÊM lời mời ở gói đã mở, route chỉ hỏi `rfq.invite` — một người thêm một lời mời rác vào N gói đã mở của đồng nghiệp là đẩy
+gói có nhóm quen của mình ra khỏi cửa sổ, không cần chữ ký nào. Ở tổ chức chưa bật, cột ấy luôn `false`, nên gói thời MVP1 vẫn tính.
+
+⑸ **Kiểm ở CẢ hai cạnh.** Cửa sổ chỉ đếm gói đã mở, nên nhiều gói nộp song song cùng một bộ nhà cung cấp đều qua lúc nộp; lần mở lấy
+khoá chính sách ĐỘC QUYỀN của tổ chức (seed 2 — cùng khoá `102` lấy ở cạnh này) rồi hỏi lại, nên gói mở trước vào cửa sổ của gói mở sau.
+`openRfq` lấy khoá ấy TRƯỚC lần đúc khoá: lần đúc ghi sổ (khoá chuỗi sổ, seed 0), và thứ tự cũ 0 → 2 ngược với ký phiên bản chính sách
+(2 → 0) — đủ cho một deadlock có từ trước, K3 làm nặng thêm (lượt soi, T5); nay mọi đường lấy 2 → 0, và lần hỏi trước của tầng gói đứng
+dưới khoá nên chính xác. Hai trigger: cạnh nộp mang chốt READ COMMITTED RIÊNG (không dựa vào trigger K2 xếp trước); cạnh mở mang chốt
+READ COMMITTED, lấy lại khoá chính sách (no-op khi `102` đã lấy — để trigger không dựa vào thứ tự tên), và xếp cuối cạnh.
+
+⑹ **`opened_at` phải là giờ của lần mở ở tổ chức đã bật** (`now()` — đúng giá trị `openRfq` đặt). Cửa sổ xếp theo nó, và `app_api` giữ
+`UPDATE (opened_at)` (khoản 319): một câu mở thô với mốc năm 2100 giữ gói đệm ở đầu cửa sổ mãi. Khoản 319 đóng cho tổ chức đã bật; tổ
+chức chưa bật không đổi.
+
+⑺ **Một mã, vào sổ ở cả hai cạnh** — `K3_KHONG_XOAY_VONG`. Nộp song song cùng một bộ nhà cung cấp là đúng lối lách K3 nhắm, nên lần chặn
+ở cạnh mở cũng là thứ kiểm toán viên hỏi tới; thông điệp nói cách gỡ (trả về soạn thảo, thêm nhà cung cấp mới hay ngoại lệ, ký lại).
+Câu hỏi của tầng gói lọc trạng thái theo cạnh (`DRAFT` ở nộp, `PENDING_APPROVAL` ở mở): gọi sai cạnh nói lời từ chối trạng thái, không
+để một hàng `CONTROL_DENIED` (lượt soi, THẤP 1).
+
+⑻ **Khoản 234 ĐÓNG** — ⒜ K2, ⒝ K3, ⒞ K5 cùng cưỡng chế ở cạnh trạng thái.
+
+### Cái giá, nói thẳng
+
+- **Lần mở trong một tổ chức xếp hàng** dưới khoá chính sách, và truy vấn cửa sổ chạy khi giao dịch mở giữ cả khoá chuỗi sổ (seed 0, trần
+  chờ 2 s ở `050`). Không chỉ mục riêng cho cửa sổ: quy mô pilot; tổ chức có hàng nghìn gói mỗi người mời thì thêm
+  `rfq_invitations (org_id, invited_by, rfq_id)` và `rfq_packages (org_id, opened_at DESC, id DESC) WHERE opened_at IS NOT NULL`.
+- **Gói bị chặn ở cạnh mở phải trả về soạn thảo**, sửa danh sách hay lập ngoại lệ, rồi nộp và ký lại — kể cả khi lý do là xác minh hết
+  hạn sau lúc nộp (khả năng đếm tính lại ở lần mở).
+- **Người chọn vẫn THÊM được lời mời vào gói NHÁP của đồng nghiệp** — điều đó làm họ thành người mời của gói ấy và nằm trong băm danh sách
+  người duyệt ký (K4b), nên lộ ra; không chặn ở đây.
+- **Gói không bậc ghim, bậc đấu thầu chính thức** ở cạnh mở cho qua — chỉ tới được với dữ liệu trước `097`/`107`.
+- **Khoá `S|` (id nhà cung cấp) dư bởi khoá MST**: một nhà cung cấp đếm được có MST, và MST không đổi được dưới `app_api` (`011` thu
+  `UPDATE` cả ở mức cột — đo trên Postgres 16), nên đột biến bỏ riêng khoá ấy không đổi kết quả. Giữ cho rõ ý.
+- **Một quản trị viên tự tạo tài khoản thứ hai** vẫn phá được K3 như K2, K5 — giới hạn ADR-058.
+
+### Phương án đã loại
+
+- **Chỉ kiểm lúc nộp:** nộp song song lách được (⑸).
+- **Mọi gói đã mở chiếm suất** (đúng chữ §5.1): gói đệm nhỏ hay gói huỷ rửa được cửa sổ (⑶).
+- **Chỉ người mời, chỉ nhà cung cấp chính người ấy mời** (đúng chữ ADR-058 ⑶(b)): người tạo dùng k đồng nghiệp xoay được k lần (⑴).
+- **Khoá tư vấn mới (seed 9) ở cạnh mở:** dư — khoá chính sách đã xếp hàng mọi lần mở; lấy thêm ở cạnh nộp thì tạo vòng 9 → 0 / 0 → 9.
+- **Gói huỷ chiếm suất:** mở rồi huỷ năm gói rác là rửa xong cửa sổ.
+
+### Điều ADR này KHÔNG nói
+
+- K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); màn và lượt đi thử T4 (S3.3e); khoản 319 ở tổ chức chưa bật.
+
 ---
 
 ## ADR-9201 — S4.6a: hai bảng giá không phải báo giá — người quản lý dữ liệu mù giá nhập tay hay dán CSV (tất-cả-hoặc-không, đơn vị phải quy đổi được lúc ghi), rút theo mã hàng, đọc lại KHÔNG cột giá; S4.6 chia hai PR

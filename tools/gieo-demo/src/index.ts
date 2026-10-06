@@ -545,6 +545,33 @@ async function chinh(): Promise<void> {
             taoNhomHang(c, org, { ma: "THEP-TAM", ten: "Thep tam cho cong trinh", actorSessionId: f1.sessionId }, pool),
           )).id;
           const han = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+          // [S1.270 / S3.3d / K3] Bậc từ 100 triệu xoay vòng (`xoay_vong_n` = 5): gói 9 tỷ — đã mở, một suất trong cửa sổ của soan — mời
+          // cả tám nhà cung cấp của gói chính, nên một gói chia nhỏ chỉ mời lại họ là không có nhà cung cấp MỚI. Mỗi gói thêm một người
+          // mới của riêng nó, dựng như tám người kia (nhapncc dựng, taichinh2 xác minh SAU khi có người liên hệ); MST và số điện thoại
+          // mang đầu `04`/`08`, khác đầu `03`/`09` của gói chính.
+          const nhapMoi = nhapNcc;
+          const xacMinhMoi = xacMinhNcc;
+          if (nhapMoi === undefined || xacMinhMoi === undefined) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
+          const nccMoi = await withTenant(pool, org, async (c) => {
+            const ra: { readonly supplierId: string; readonly contactId: string }[] = [];
+            for (const i of [0, 1, 2]) {
+              const ncc = (await c.query<{ id: string }>(
+                "INSERT INTO public.suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                [org, `Thep tam luan phien ${String(i + 1)} ${duoi}`, `04${soDienThoai}${String(i)}`, nhapMoi.id, nhapMoi.sessionId],
+              )).rows[0]?.id ?? "";
+              const lh = (await c.query<{ id: string }>(
+                "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+                  "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+                [org, ncc, `Nguoi bao gia luan phien ${String(i + 1)}`, `luanphien${String(i + 1)}.${duoi}@vidu.vn`, `08${soDienThoai}${String(i)}`, nhapMoi.id, nhapMoi.sessionId],
+              )).rows[0]?.id ?? "";
+              await c.query(
+                "INSERT INTO public.supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4)",
+                [org, ncc, xacMinhMoi.id, xacMinhMoi.sessionId],
+              );
+              ra.push({ supplierId: ncc, contactId: lh });
+            }
+            return ra;
+          });
           const goi: { readonly giaTri: string; readonly id: string }[] = [];
           for (const [i, giaTri] of ["480000000.00", "470000000.00", "490000000.00"].entries()) {
             const id = await withTenant(pool, org, async (c) => {
@@ -566,7 +593,8 @@ async function chinh(): Promise<void> {
               // [S1.266 / S3.3c1] Bậc từ 100 triệu đòi BA nhà cung cấp đếm được (K2) — trước vòng này ba gói nộp duyệt không một lời
               // mời nào. soan mời ba người đầu của gói chính (nhapncc dựng, taichinh2 xác minh) ở DRAFT, trước lần nộp. Tín hiệu chia nhỏ
               // đọc ngân sách và nhóm hàng, không đọc lời mời; soan2 ký và nằm ngoài tập loại trừ, nên K5 cho hai lần mở dưới qua.
-              for (const n of moiTruocKhiKy.slice(0, 3)) {
+              // [S1.270 / S3.3d / K3] Hai người đầu của gói chính cộng người luân phiên thứ i — mới với cửa sổ của soan.
+              for (const n of [...moiTruocKhiKy.slice(0, 2), ...nccMoi.slice(i, i + 1)]) {
                 await createInvitation(
                   c,
                   org,

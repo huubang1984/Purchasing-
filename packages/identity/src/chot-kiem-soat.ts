@@ -47,6 +47,10 @@
 // Khuôn K1/K10a: hàm vị từ `rfq_chot_canh_tranh` và `rfq_chot_chu_ky_doc_lap` (`107_canh_tranh_toi_thieu`), tầng gói hỏi trước câu
 // ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Cả ba vào sổ (bản hình dạng S3.3c2, chủ dự án chốt 2026-10-04).
 //
+// [S1.270 / S3.3d / ADR-148] `K3_KHONG_XOAY_VONG` — gói có bậc `xoay_vong_n` > 0 mà danh sách không có nhà cung cấp *mới* so với
+// cửa sổ của người chọn danh sách, không ngoại lệ `ROTATION`; ở cạnh nộp duyệt VÀ cạnh mở gói. Khuôn K1: hàm vị từ `rfq_chot_xoay_vong`
+// (`108_xoay_vong`), tầng gói hỏi trước câu ghi, trigger hỏi lại. Chủ dự án chốt 2026-10-05: một mã, vào sổ ở cả hai cạnh.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -76,6 +80,7 @@ export type MaChotKiemSoat =
   | "J5_LUOT_CHAM_KHONG_MOI_NHAT"
   | "K2_DAU_THAU_CHINH_THUC"
   | "K2_THIEU_CANH_TRANH"
+  | "K3_KHONG_XOAY_VONG"
   | "K4A_NGOAI_LE_SAI_TRANG_THAI"
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
@@ -180,6 +185,16 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "§4.4): đi dưới ngưỡng cạnh tranh mà không để lại lý do là đúng thứ ADR-058 ⑶ đòi chặn",
     thongDiep:
       "Danh sách mời chưa đủ nhà cung cấp đếm được cho bậc của gói: mời thêm nhà cung cấp có MST, đã xác minh, do người khác người tạo gói và người mời nhập — hoặc lập ngoại lệ đúng loại (một lời mời: SINGLE_SOURCE; từ hai: LIMITED_COMPETITION).",
+  },
+  K3_KHONG_XOAY_VONG: {
+    chot: "K3",
+    vaoSo: true,
+    lyDo:
+      "một người nộp duyệt hay mở một gói mà mọi nhà cung cấp đếm được đều đã có trong N gói gần nhất của người chọn danh sách, không " +
+      "ngoại lệ ROTATION (ADR-058 ⑶(b)): giữ mãi một nhóm quen là đúng hình dạng thông đồng khâu mời mà kiểm toán viên hỏi tới — kể cả " +
+      "lối nộp song song nhiều gói cùng một bộ nhà cung cấp, bị bắt ở lần mở",
+    thongDiep:
+      "Danh sách mời cần ít nhất một nhà cung cấp mới (đếm được, chưa được người tạo, người mời hay người thu hồi của gói đưa vào các gói gần đây) — hoặc một ngoại lệ ROTATION. Gói đã chờ duyệt thì trả về soạn thảo, sửa danh sách rồi nộp và ký lại.",
   },
   K5_THIEU_CHU_KY_DOC_LAP: {
     chot: "K5",
