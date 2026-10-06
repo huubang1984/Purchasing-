@@ -44,8 +44,10 @@ export class DuLieuNenError extends Error {
       // [S1.9101 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống (`9501_du_lieu_ngoai`).
       | "DON_VI_KHONG_QUY_DOI_DUOC"
       | "DON_GIA_SAI_HINH_DANG"
+      | "DON_GIA_MO_HO"
       | "TIEN_TE_SAI"
       | "NGAY_SAI_HINH_DANG"
+      | "NGAY_MUA_SAU_HOM_NAY"
       | "NGUON_SAI_HINH_DANG"
       | "NHA_CUNG_CAP_SAI_HINH_DANG"
       | "KHONG_CO_HANG_DU_LIEU"
@@ -93,6 +95,7 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   // [S1.9101 / S4.6a] Luật ghi và ràng buộc của hai bảng ngoài (`9501_du_lieu_ngoai`).
   du_lieu_ngoai_don_vi_khong_quy_doi_duoc: "DON_VI_KHONG_QUY_DOI_DUOC",
   du_lieu_ngoai_rut_hang_rut: "KHONG_CO_HANG_DU_LIEU",
+  du_lieu_ngoai_ngay_mua_sau_hom_nay: "NGAY_MUA_SAU_HOM_NAY",
   external_price_references_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   external_purchase_history_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   external_price_references_org_id_rut_cua_fkey: "KHONG_CO_HANG_DU_LIEU",
@@ -137,8 +140,10 @@ const CAU_THEO_MA: Readonly<Partial<Record<DuLieuNenError["ma"], string>>> = {
   MA_LY_DO_DANH_RIENG: "mã lý do CHUAN_HOA_HOI_TO dành riêng cho ánh xạ tự động",
   DON_VI_KHONG_QUY_DOI_DUOC: "đơn vị không quy đổi được sang đơn vị gốc của hàng chuẩn — khai quy đổi riêng trước, hoặc dùng đơn vị khác",
   DON_GIA_SAI_HINH_DANG: "đơn giá là số thập phân dương, dấu chấm thập phân, không dấu phân cách nghìn",
+  DON_GIA_MO_HO: "đơn giá mơ hồ (một dấu chấm, đúng ba chữ số sau) — viết 15500 hay 15.5, không viết 15.500",
   TIEN_TE_SAI: "tiền tệ là VND hoặc USD",
   NGAY_SAI_HINH_DANG: "ngày dạng YYYY-MM-DD hoặc DD/MM/YYYY, và là một ngày có thật",
+  NGAY_MUA_SAU_HOM_NAY: "ngày mua sau ngày hôm nay (giờ Việt Nam)",
   NGUON_SAI_HINH_DANG: "nguồn dài 1 đến 500 ký tự",
   NHA_CUNG_CAP_SAI_HINH_DANG: "tên nhà cung cấp dài 1 đến 300 ký tự",
   KHONG_CO_HANG_DU_LIEU: "không có hàng dữ liệu ngoài nào còn hiệu lực ở đây để rút",

@@ -13006,6 +13006,14 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
+  -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
+  -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó.
+  IF TG_TABLE_NAME = 'external_purchase_history' THEN
+    IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN
+      RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay';
+    END IF;
+  END IF;
   SELECT ci.don_vi_goc INTO goc
     FROM public.canonical_items ci
    WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id;
@@ -13050,7 +13058,7 @@ $ham$;
          END
          $fn286$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE dich_rut uuid; goc text; ma_quy_doi text; BEGIN IF NEW.rut_cua IS NOT NULL THEN EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME) INTO dich_rut USING NEW.org_id, NEW.rut_cua; IF dich_rut IS NOT NULL THEN RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut'; END IF; RETURN NEW; END IF; SELECT ci.don_vi_goc INTO goc FROM public.canonical_items ci WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id; IF goc IS NULL THEN RETURN NEW; END IF; SELECT k.ma INTO ma_quy_doi FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id, (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi, goc, goc, pg_catalog.clock_timestamp()) k; IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE dich_rut uuid; goc text; ma_quy_doi text; BEGIN IF NEW.rut_cua IS NOT NULL THEN EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME) INTO dich_rut USING NEW.org_id, NEW.rut_cua; IF dich_rut IS NOT NULL THEN RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut'; END IF; RETURN NEW; END IF; -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó. IF TG_TABLE_NAME = 'external_purchase_history' THEN IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam' USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay'; END IF; END IF; SELECT ci.don_vi_goc INTO goc FROM public.canonical_items ci WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id; IF goc IS NULL THEN RETURN NEW; END IF; SELECT k.ma INTO ma_quy_doi FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id, (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi, goc, goc, pg_catalog.clock_timestamp()) k; IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog']
             AND p.pronargs = 0

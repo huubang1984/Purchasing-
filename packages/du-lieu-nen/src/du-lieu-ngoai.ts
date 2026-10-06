@@ -26,6 +26,7 @@ import {
   docCsvNgoai,
   docNgay,
   laDonGia,
+  laDonGiaMoHo,
   type DongNgoaiDaDoc,
   type LoaiDuLieuNgoai,
   type LoiDongNgoai,
@@ -257,6 +258,7 @@ export async function khaiMocNgoai(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const donGia = input.donGia.trim();
   if (!laDonGia(donGia)) throw new DuLieuNenError("DON_GIA_SAI_HINH_DANG", `${cauLoiDong("DON_GIA_SAI_HINH_DANG")} (DON_GIA_SAI_HINH_DANG)`);
+  if (laDonGiaMoHo(donGia)) throw new DuLieuNenError("DON_GIA_MO_HO", `${cauLoiDong("DON_GIA_MO_HO")} (DON_GIA_MO_HO)`);
   const tienTe = input.tienTe.trim().toUpperCase();
   if (tienTe !== "VND" && tienTe !== "USD") throw new DuLieuNenError("TIEN_TE_SAI", `${cauLoiDong("TIEN_TE_SAI")} (TIEN_TE_SAI)`);
   const ngay = docNgay(input.ngayHieuLuc.trim());

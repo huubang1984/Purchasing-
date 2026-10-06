@@ -173,6 +173,14 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
+  -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
+  -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó.
+  IF TG_TABLE_NAME = 'external_purchase_history' THEN
+    IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN
+      RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay';
+    END IF;
+  END IF;
   SELECT ci.don_vi_goc INTO goc
     FROM public.canonical_items ci
    WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id;

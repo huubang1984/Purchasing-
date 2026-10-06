@@ -209,6 +209,8 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑴ đường ứng dụng — l�
       );
     expect(await nhap({ donVi: "m3" })).toBe("DON_VI_KHONG_QUY_DOI_DUOC");
     expect(await nhap({ donGia: "1,5" })).toBe("DON_GIA_SAI_HINH_DANG");
+    // [rà soát §S1.9101 CAO-1] `15.500` là mười lăm nghìn năm trăm trên bảng tính tiếng Việt — mơ hồ, từ chối có mã.
+    expect(await nhap({ donGia: "15.500" })).toBe("DON_GIA_MO_HO");
     expect(await nhap({ ngayHieuLuc: "30/02/2026" })).toBe("NGAY_SAI_HINH_DANG");
     expect(await nhap({ hangChuanId: "00000000-0000-4000-8000-000000000000" })).toBe("KHONG_CO_HANG_CHUAN");
   });
@@ -287,6 +289,30 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑶ luật ở CSDL — câu SQL 
         [orgA, thep, quanLyA.nguoi, quanLyA.phien],
       ),
     ).toBe("external_price_references_hinh_dang");
+  });
+
+  it("[chủ dự án chốt sau rà soát §S1.9101] ngày mua sau HÔM NAY (giờ Việt Nam) ⇒ từ chối có tên ở CSDL; hôm nay thì nhận; mốc ngoài ngày tương lai thì nhận", async () => {
+    // Mỗi câu trong một giao dịch HUỶ ở cuối: hàng được nhận không thành lô thật, không làm lệch danh sách lô ở ⑷.
+    const thoHuy = async (sql: string, thamSo: readonly unknown[]): Promise<string> => {
+      let ma = "";
+      await trong(orgA, async (c) => {
+        ma = await loiCua(c.query(sql, [...thamSo]));
+        throw new Error("huy");
+      }).catch(() => undefined);
+      return ma;
+    };
+    const CHEN_LS =
+      "INSERT INTO external_purchase_history (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_mua, nha_cung_cap_text, nguon, lo_nhap_id, tac_gia, session_id) " +
+      "VALUES ($1, $2, 1, 'kg', 'VND', (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::interval)::date + $3::int, 'X', 'x', gen_random_uuid(), $4, $5)";
+    expect(await thoHuy(CHEN_LS, [orgA, thep, 1, quanLyA.nguoi, quanLyA.phien])).toBe("du_lieu_ngoai_ngay_mua_sau_hom_nay");
+    expect(await thoHuy(CHEN_LS, [orgA, thep, 0, quanLyA.nguoi, quanLyA.phien])).toBe("KHONG_NEM");
+    expect(
+      await thoHuy(
+        "INSERT INTO external_price_references (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_hieu_luc, nguon, lo_nhap_id, tac_gia, session_id) " +
+          "VALUES ($1, $2, 1, 'kg', 'VND', CURRENT_DATE + 400, 'x', gen_random_uuid(), $3, $4)",
+        [orgA, thep, quanLyA.nguoi, quanLyA.phien],
+      ),
+    ).toBe("KHONG_NEM");
   });
 
   it("rút: một hàng rút trỏ về hàng rút ⇒ từ chối có tên; rút hai lần ⇒ UNIQUE; hàng không có ⇒ khoá ngoại", async () => {

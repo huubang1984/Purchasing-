@@ -1,7 +1,17 @@
 // [S1.9101 / S4.6a] Bộ đọc văn bản dán của mốc ngoài và lịch sử ngoài hệ thống — thuần, không CSDL (spec S4 §4.7; ADR-096 ⑸).
 // Mỗi luật hình dạng một ca, cộng phép đo rằng KHÔNG câu lỗi nào lặp lại giá trị của ô (người nhập mù giá không đọc lại được giá).
 import { describe, expect, it } from "vitest";
-import { cauLoiDong, chuanHoaTenCot, docCsvNgoai, docNgay, laDonGia, TRAN_DONG_MOT_LO, type KetQuaDocCsv } from "./csv-ngoai.js";
+import {
+  cauLoiDong,
+  chuanHoaTenCot,
+  docCsvNgoai,
+  docNgay,
+  laDonGia,
+  laDonGiaMoHo,
+  ngayHomNayVn,
+  TRAN_DONG_MOT_LO,
+  type KetQuaDocCsv,
+} from "./csv-ngoai.js";
 
 const loiCua = (kq: KetQuaDocCsv): readonly { dong: number; cot: string | null; ma: string }[] =>
   kq.hopLe ? [] : kq.loi.map(({ dong, cot, ma }) => ({ dong, cot, ma }));
@@ -90,6 +100,30 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
     expect(laDonGia("1.0000001")).toBe(false);
   });
 
+  it("[rà soát §S1.9101 CAO-1, chủ dự án chốt] `15.500` — một dấu chấm, đúng ba chữ số sau — là mơ hồ ở CẢ HAI tiền tệ; dạng khác vẫn nhận", () => {
+    for (const mo of ["15.500", "1.250", "999.999", "1.000"]) {
+      for (const tienTe of ["VND", "USD"]) {
+        const kq = docCsvNgoai("MOC_NGOAI", `ma_hang;don_gia;don_vi;tien_te;ngay_hieu_luc;nguon\nA1;${mo};kg;${tienTe};2026-01-01;X\n`);
+        expect(loiCua(kq), `${mo} ${tienTe}`).toEqual([{ dong: 2, cot: "don_gia", ma: "DON_GIA_MO_HO" }]);
+      }
+    }
+    for (const ro of ["15.5", "15.50", "15.5000", "0.500", "1234.567", "15500", "2.3450"]) expect(laDonGiaMoHo(ro), ro).toBe(false);
+    expect(cauLoiDong("DON_GIA_MO_HO")).toMatch(/15500/u);
+  });
+
+  it("[chủ dự án chốt sau rà soát §S1.9101] ngày mua sau HÔM NAY (giờ Việt Nam) bị từ chối; hôm nay thì nhận; ngày hiệu lực của mốc ngoài không chặn", () => {
+    const lichSu = (ngay: string): KetQuaDocCsv =>
+      docCsvNgoai("LICH_SU_NGOAI", `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\nA1,1,kg,VND,${ngay},X,Y\n`, "2026-10-06");
+    expect(loiCua(lichSu("2026-10-07"))).toEqual([{ dong: 2, cot: "ngay_mua", ma: "NGAY_MUA_SAU_HOM_NAY" }]);
+    expect(loiCua(lichSu("07/10/2026"))).toEqual([{ dong: 2, cot: "ngay_mua", ma: "NGAY_MUA_SAU_HOM_NAY" }]);
+    expect(lichSu("2026-10-06").hopLe).toBe(true);
+    const moc = docCsvNgoai("MOC_NGOAI", "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nA1,1,kg,VND,2027-01-01,X\n", "2026-10-06");
+    expect(moc.hopLe).toBe(true);
+    // Hôm nay theo UTC+7: 17:00 UTC đã là ngày hôm sau ở Việt Nam.
+    expect(ngayHomNayVn(new Date("2026-10-06T16:59:59Z"))).toBe("2026-10-06");
+    expect(ngayHomNayVn(new Date("2026-10-06T17:00:00Z"))).toBe("2026-10-07");
+  });
+
   it("ngày có thật: 29/02 năm nhuận theo 4/100/400; 30/02, 31/04, tháng 13 từ chối", () => {
     expect(docNgay("29/02/2024")).toBe("2024-02-29");
     expect(docNgay("2000-02-29")).toBe("2000-02-29");
@@ -129,6 +163,26 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
       { dong: 2, cot: "nguon", ma: "NGUON_SAI_HINH_DANG" },
       { dong: 2, cot: "nha_cung_cap", ma: "NHA_CUNG_CAP_SAI_HINH_DANG" },
     ]);
+  });
+
+  it("[rà soát §S1.9101 TRUNG-2] dán THIẾU dòng tiêu đề ⇒ một lỗi, không nhắc lại ô nào của dòng đầu — đơn giá, ngày, nhà cung cấp", () => {
+    for (const [loai, vanBan] of [
+      ["MOC_NGOAI", "THEP-D10,15500.75,kg,VND,2026-01-15,Bao gia Hoa Phat\nTHEP-D10,1,kg,VND,2026-01-16,X\n"],
+      ["LICH_SU_NGOAI", "THEP-D10\t15500.75\tkg\tVND\t2025-11-20\tCong ty Thep Song Hong\tSo mua\nA1\t1\tkg\tVND\t2025-11-21\tB\tC\n"],
+    ] as const) {
+      const kq = docCsvNgoai(loai, vanBan);
+      expect(loiCua(kq), loai).toEqual([{ dong: 1, cot: null, ma: "KHONG_CO_TIEU_DE" }]);
+      expect(JSON.stringify(kq)).not.toMatch(/15500|2026|2025|thep|hoa_phat|song_hong/iu);
+    }
+    // Tiêu đề đúng mà thừa một ô KHÔNG giống tên cột (một con số): lỗi nêu VỊ TRÍ, không nêu ô.
+    const thua = docCsvNgoai("MOC_NGOAI", "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon,15500.75\nA1,1,kg,VND,2026-01-01,X,1\n");
+    expect(loiCua(thua)).toEqual([{ dong: 1, cot: "#7", ma: "COT_LA" }]);
+    expect(JSON.stringify(thua)).not.toContain("15500");
+  });
+
+  it("[rà soát §S1.9101 THẤP-5] chữ ngay sau ngoặc kép đóng là lỗi của dòng, không phải một ô ghép (`\"1\"5` không thành 15)", () => {
+    const kq = docCsvNgoai("MOC_NGOAI", 'ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nA1,"1"5,kg,VND,2026-01-01,X\nA2,"2",kg,VND,2026-01-01,"Y"\n');
+    expect(loiCua(kq)).toEqual([{ dong: 2, cot: null, ma: "NGOAC_KEP_HO" }]);
   });
 
   it("KHÔNG câu lỗi nào lặp lại giá trị của ô — một đơn giá sai không quay lại màn của người mù giá", () => {

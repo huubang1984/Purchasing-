@@ -11560,7 +11560,8 @@ K4b.
 
 ## ADR-9201 — S4.6a: hai bảng giá không phải báo giá — người quản lý dữ liệu mù giá nhập tay hay dán CSV (tất-cả-hoặc-không, đơn vị phải quy đổi được lúc ghi), rút theo mã hàng, đọc lại KHÔNG cột giá; S4.6 chia hai PR
 
-**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-06, cả bốn theo đề xuất, sau phép đo:
+**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-06, cả bốn theo đề xuất, sau phép đo
+(và hai điểm nữa sau rà soát đối kháng, cùng ngày, theo đề xuất — `15.500` mơ hồ, ngày mua không sau hôm nay; xem ⑷):
 ⑴ màn `/du-lieu` hiện hàng đã nhập KHÔNG cột giá — giữ nguyên ADR-096 ⑵ (cổng đọc giá `bid.view`); người quản lý dữ liệu sửa bằng rút
 rồi nhập lại; ⑵ dải lịch sử ngoài lấy *(ngày mua, nhà cung cấp đã làm sạch)* làm "gói", cửa sổ theo ngày mua, sàn và ngưỡng của phiên
 bản chính sách đã ghim; ⑶ mốc ngoài hiện ở dòng của gói X là mốc có `ngay_hieu_luc` MỚI NHẤT ≤ mốc mở giá, trong cửa sổ của chính
@@ -11602,7 +11603,14 @@ mọi hàng còn hiệu lực của một lô; mỗi lần rút một hàng sổ
 ⑷ **Nhập.** Nhập tay ở bước 4 (trang hàng chuẩn) là một lô một dòng; dán CSV ở bước 7 là một lô tới **1000 dòng**, thân JSON
 `{ vanBan }` dưới trần 64 KiB giữ nguyên (ADR-096 ⑸). Dòng tiêu đề bắt buộc, thứ tự cột tự do, có dấu hay không; phân cách tab, `;`
 hay `,`; số dùng dấu chấm thập phân, không phân cách nghìn (cả `1,234.5` lẫn `1.234,5` bị từ chối — đoán sai một trong hai là lệch
-nghìn lần); ngày `YYYY-MM-DD` hay `DD/MM/YYYY` có thật. Lô **tất-cả-hoặc-không**: một dòng sai ⇒ 422 mang MỌI lỗi theo số dòng vật
+nghìn lần); ngày `YYYY-MM-DD` hay `DD/MM/YYYY` có thật. **[sau rà soát — chủ dự án chốt 2026-10-06]** Đơn giá dạng `15.500` — một
+đến ba chữ số, MỘT dấu chấm, ĐÚNG ba chữ số sau — bị từ chối là MƠ HỒ (`DON_GIA_MO_HO`) ở cả hai tiền tệ và cả nhập tay: bảng tính
+tiếng Việt hiện 15500 thành chuỗi ấy, và luật dấu chấm thập phân đọc nó thành 15,5. `15.5`, `15.50`, `0.500`, `2.3450` vẫn nhận; giá
+USD có đúng ba số lẻ viết thêm một số 0. Ngày mua của lịch sử ngoài không được sau HÔM NAY theo giờ Việt Nam (UTC+7) —
+`NGAY_MUA_SAU_HOM_NAY` ở bộ đọc, `du_lieu_ngoai_ngay_mua_sau_hom_nay` ở trigger; ngày hiệu lực của mốc ngoài không chặn (bảng giá có
+thể hiệu lực từ tháng sau). Dòng tiêu đề mà không ô nào là tên cột (dán thiếu tiêu đề) ⇒ một lỗi `KHONG_CO_TIEU_DE`; tên cột lạ chỉ
+được nhắc lại khi nó chỉ gồm chữ thường không dấu và gạch dưới, không thì lỗi nêu vị trí (`#7`); chữ ngay sau ngoặc kép đóng là
+`NGOAC_KEP_HO`. Lô **tất-cả-hoặc-không**: một dòng sai ⇒ 422 mang MỌI lỗi theo số dòng vật
 lý, không dòng nào được ghi. Không câu lỗi nào lặp lại giá trị của ô. Một lô một hàng sổ, payload không giá (`loai`, `cachNhap`,
 `soDong`, `soHangChuan`).
 
@@ -11612,9 +11620,12 @@ nhà cung cấp, nguồn, đã rút). Danh sách cắt ở 200 lô mới nhất 
 bị từ chối — danh sách là màn của người nhập. Nhập tay trả `hangId` của hàng vừa ghi: đường sửa duy nhất của người mù giá là rút
 đúng hàng ấy. Ba route đọc `agent: false` (spec §3.5).
 
-⑹ **L15 vế ghi.** Không câu SQL nào ĐỌC `don_gia` của hai bảng ở vòng này, và không migration nào ngoài `9501` và tệp ghim nhắc tên
-chúng — không view, hàm hay phép đếm SQL (cổng (e) của S4b) đọc được lịch sử ngoài mà không qua lớp đã liệt kê
-(`tests/architecture/bang-ngoai-liet-ke.test.ts`). Bộ đọc giá dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do.
+⑹ **L15 vế ghi.** Không câu SQL nào ĐỌC `don_gia` của hai bảng ở vòng này — kể cả không viết tên cột: `*` ngoài `count(*)`, hàm
+đóng gói hàng (`to_jsonb`, `row_to_json`…), bí danh bảng đứng một mình hay ép kiểu, `RETURNING don_gia` đều bị nêu —, không migration
+nào (kể cả `9501` và tệp ghim) có `FROM`/`JOIN` hai bảng, và không migration nào ngoài hai tệp ấy nhắc tên chúng: không view, hàm hay
+phép đếm SQL (cổng (e) của S4b) đọc được lịch sử ngoài mà không qua lớp đã liệt kê (`tests/architecture/bang-ngoai-liet-ke.test.ts`).
+Lớp ấy là lớp CHỮ: một câu SQL dựng động (`format('%I')`, như hai hàm trigger dùng chung) vượt qua nó — nói ra, không chặn. Bộ đọc giá
+dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do.
 
 ### Đo bằng gì
 
@@ -11637,6 +11648,9 @@ chúng — không view, hàm hay phép đếm SQL (cổng (e) của S4b) đọc 
 - **Quy đổi được lúc ghi không có nghĩa quy đổi được lúc đọc.** Một quy đổi riêng rút sau lần ghi làm hàng thành không đo được ở gói
   mở sau lần rút ấy; S4.6b đọc lõi tại mốc của gói.
 - **`nguon` là lời khai,** không phải phép kiểm máy (ADR-096 ⑶).
+- **Luật `15.500` chỉ ở tầng gói.** CSDL nhận `numeric`, không thấy chuỗi người gõ; một câu INSERT thô dưới `app_api` vượt qua nó —
+  cùng ranh giới với mọi luật hình dạng của chuỗi nhập. Ngày `03/04/2026` luôn là 3 tháng 4 (luật `DD/MM/YYYY` đã chốt): một bảng tính
+  theo kiểu Mỹ dán vào sai ngày mà không lỗi khi ngày ≤ 12.
 - **Trần 1000 dòng và 64 KiB** — màn nói trước khi thân vượt trần (đếm byte); lô lớn hơn chia nhiều lần dán.
 
 ### Điều ADR này KHÔNG nói

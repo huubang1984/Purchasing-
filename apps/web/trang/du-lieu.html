@@ -132,7 +132,7 @@
       <p class="ghi">Giá tham chiếu từ một nguồn ngoài hệ thống — bảng giá nhà sản xuất, báo giá thị trường, chỉ số. Mốc này chỉ để
         tính độ lệch ở màn mở thầu, không vào dải giá nội bộ hay điều kiện dữ liệu của gói. Màn không hiện lại đơn giá sau khi ghi:
         sai thì rút dòng ở bước 7 rồi nhập lại.</p>
-      <label for="mn-don-gia">Đơn giá — số thập phân dương, dấu chấm, không phân cách nghìn</label>
+      <label for="mn-don-gia">Đơn giá — số thập phân dương, dấu chấm, không phân cách nghìn (15500, không viết 15.500)</label>
       <input id="mn-don-gia" inputmode="decimal" autocomplete="off" placeholder="15500">
       <label for="mn-don-vi">Đơn vị của đơn giá — phải quy đổi được sang đơn vị gốc của hàng</label>
       <input id="mn-don-vi" autocomplete="off" spellcheck="false" placeholder="kg">
@@ -216,8 +216,10 @@
   <section class="buoc" id="b7" hidden>
     <h2><span class="so">7</span> Mốc giá ngoài và lịch sử mua ngoài hệ thống</h2>
     <p class="ghi">Dán thẳng từ bảng tính: dòng đầu là tiêu đề, ô cách nhau bằng tab, dấu phẩy hay dấu chấm phẩy. Đơn giá dùng dấu
-      chấm thập phân, không phân cách nghìn; ngày dạng 2026-01-15 hay 15/01/2026; tiền tệ VND hoặc USD; mã hàng là mã hàng chuẩn ở
-      bước 2. Tối đa 1000 dòng một lô. Lô có một dòng sai thì không dòng nào được ghi — màn liệt kê mọi lỗi theo số dòng.</p>
+      chấm thập phân, không phân cách nghìn — bảng tính tiếng Việt hiện 15500 thành «15.500», và dạng ấy bị từ chối vì đọc được thành
+      hai số chênh nhau nghìn lần: đổi định dạng cột đơn giá sang số không phân cách trước khi sao chép. Ngày dạng 2026-01-15 hay
+      15/01/2026; ngày mua không sau hôm nay; tiền tệ VND hoặc USD; mã hàng là mã hàng chuẩn ở bước 2. Tối đa 1000 dòng một lô. Lô có
+      một dòng sai thì không dòng nào được ghi — màn liệt kê mọi lỗi theo số dòng.</p>
     <p class="ghi">Hai loại dữ liệu này chỉ hiện ở màn mở thầu với nhãn riêng: mốc ngoài để tính độ lệch, lịch sử ngoài là một dải
       riêng. Không loại nào vào dải giá nội bộ hay điều kiện dữ liệu của gói. Màn này không hiện lại đơn giá: sai thì rút rồi nhập lại.</p>
     <label for="dan-loai">Loại dữ liệu</label>
