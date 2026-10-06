@@ -1096,16 +1096,16 @@ export interface InvitationSummary {
   readonly createdAt: string;
   readonly revokedAt: string | null;
   /**
-   * [S1.9101 / S3.3e1] Ở tổ chức đã bật: lời mời này thuộc tập *đếm được* của K2 (`rfq_loi_moi_dem_duoc`, `108`) — `null` ở tổ chức
+   * [S1.273 / S3.3e1] Ở tổ chức đã bật: lời mời này thuộc tập *đếm được* của K2 (`rfq_loi_moi_dem_duoc`, `108`) — `null` ở tổ chức
    * chưa bật. Đếm theo TỪNG lời mời; K2 đếm NHÓM, nên màn đọc số nhóm ở `DanhSachLoiMoi.canhTranh`, không cộng cờ này.
    */
   readonly demDuoc: boolean | null;
-  /** [S1.9101 / S3.3e1] Ở tổ chức đã bật: nhà cung cấp có xác minh còn hiệu lực (`ncc_xac_minh_con_hieu_luc`); `null` ở tổ chức chưa bật. */
+  /** [S1.273 / S3.3e1] Ở tổ chức đã bật: nhà cung cấp có xác minh còn hiệu lực (`ncc_xac_minh_con_hieu_luc`); `null` ở tổ chức chưa bật. */
   readonly xacMinhConHieuLuc: boolean | null;
 }
 
 /**
- * [S1.9101 / S3.3e1] Danh sách lời mời cùng lần nộp, trạng thái gói và số nhóm của K2 — MỘT câu, một ảnh chụp. Người duyệt ký lên
+ * [S1.273 / S3.3e1] Danh sách lời mời cùng lần nộp, trạng thái gói và số nhóm của K2 — MỘT câu, một ảnh chụp. Người duyệt ký lên
  * danh sách của lần nộp mà nút Phê duyệt gửi; `lanNop` ở đây lệch `lanNop` của lần đọc gói thì màn đọc lại trọn gói (lượt soi CAO-1).
  */
 export interface DanhSachLoiMoi {
@@ -1163,7 +1163,7 @@ export async function listInvitations(
     auditPool,
   );
 
-  // [S1.9101 / S3.3e1] Câu dựng từ `rfq_packages` — gói chưa mời ai vẫn trả `lanNop` —, và tập *đếm được* tính MỘT lần thành mảng.
+  // [S1.273 / S3.3e1] Câu dựng từ `rfq_packages` — gói chưa mời ai vẫn trả `lanNop` —, và tập *đếm được* tính MỘT lần thành mảng.
   const { rows } = await client.query<{
     lan_nop: number;
     trang_thai: string;

@@ -247,7 +247,7 @@ async function truyVan(client: pg.PoolClient, orgId: string, rfqId: string): Pro
 }
 
 /**
- * [S1.9101 / S3.3e1] Danh sách ngoại lệ của một gói CÙNG lần nộp và trạng thái của gói, đọc trong MỘT câu — một ảnh chụp dưới READ
+ * [S1.273 / S3.3e1] Danh sách ngoại lệ của một gói CÙNG lần nộp và trạng thái của gói, đọc trong MỘT câu — một ảnh chụp dưới READ
  * COMMITTED. Màn so `lanNop` này với `lanNop` của lần đọc gói mà nút Phê duyệt sẽ gửi: lệch thì danh sách đang thấy không phải danh
  * sách của lần nộp ấy, và màn đọc lại TRỌN gói (lượt soi CAO-1). `lanNop` đi cùng cả khi gói chưa có ngoại lệ nào.
  */

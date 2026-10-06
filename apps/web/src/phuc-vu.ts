@@ -102,7 +102,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.260 / S4.5c1] `benchmark` — chữ của nhãn, thành phần dải, độ phủ và chữ của dải ở `/mo-thau` (spec S4 §4.6).
  *
- * [S1.9101 / S3.3e1] `nha-cung-cap` — trạng thái xác minh, người liên hệ và nút của màn xác minh nhà cung cấp (`/nha-cung-cap`).
+ * [S1.273 / S3.3e1] `nha-cung-cap` — trạng thái xác minh, người liên hệ và nút của màn xác minh nhà cung cấp (`/nha-cung-cap`).
  */
 export const MODULE_WEB = [
   "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap",
@@ -125,7 +125,7 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.199 / S4.2b] Màn dữ liệu nền — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
   "/du-lieu": "du-lieu.html",
   "/du-lieu.js": "du-lieu.js",
-  // [S1.9101 / S3.3e1] Màn xác minh nhà cung cấp của người giữ `supplier.qualify` (spec S3 §9 S3.3e, K8a).
+  // [S1.273 / S3.3e1] Màn xác minh nhà cung cấp của người giữ `supplier.qualify` (spec S3 §9 S3.3e, K8a).
   "/nha-cung-cap": "nha-cung-cap.html",
   "/nha-cung-cap.js": "nha-cung-cap.js",
   "/chung.css": "chung.css",

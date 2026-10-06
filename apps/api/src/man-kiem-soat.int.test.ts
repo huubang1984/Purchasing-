@@ -1,5 +1,5 @@
 // =============================================================================================
-// [S1.9101 / S3.3e1] NĂM THAY ĐỔI API CỦA MÀN KIỂM SOÁT — đo trên Postgres 16, qua HTTP, dưới `app_api`
+// [S1.273 / S3.3e1] NĂM THAY ĐỔI API CỦA MÀN KIỂM SOÁT — đo trên Postgres 16, qua HTTP, dưới `app_api`
 //
 // Spec S3 §9 (S3.3e). Chủ dự án chốt 2026-10-06: cờ máy chủ trên `GET /rfqs/:id` đóng khoản 340; lời từ chối 422 của chốt mang
 // mã; màn xác minh riêng cho FINANCE. Lượt soi trên hình dạng thêm: danh sách lời mời và ngoại lệ mang `lanNop` cùng ảnh chụp
@@ -252,7 +252,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[INV-D5] [S1.9101 / S3.3e1 · khoản 340] A1 — `coQuyenMoi` trên GET /rfqs/:id", () => {
+describe("[INV-D5] [S1.273 / S3.3e1 · khoản 340] A1 — `coQuyenMoi` trên GET /rfqs/:id", () => {
   it("người giữ quyền mời ⇒ true; người yêu cầu mua và tài chính ⇒ false; thân chỉ mang `rfq` và bit của chính người xem", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -290,7 +290,7 @@ describe("[INV-D5] [S1.9101 / S3.3e1 · khoản 340] A1 — `coQuyenMoi` trên G
   });
 });
 
-describe("[S1.9101 / S3.3e1 · lượt soi CAO-1, TRUNG-3] A2 — ngoại lệ mang `lanNop` cùng ảnh chụp", () => {
+describe("[S1.273 / S3.3e1 · lượt soi CAO-1, TRUNG-3] A2 — ngoại lệ mang `lanNop` cùng ảnh chụp", () => {
   it("gói chưa có ngoại lệ ⇒ danh sách rỗng VẪN mang lanNop và trạng thái; lập, nộp, trả về, nộp lại ⇒ lanNop đi theo", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -321,7 +321,7 @@ describe("[S1.9101 / S3.3e1 · lượt soi CAO-1, TRUNG-3] A2 — ngoại lệ m
   });
 });
 
-describe("[S1.9101 / S3.3e1] A3 — 422 của chốt mang mã", () => {
+describe("[S1.273 / S3.3e1] A3 — 422 của chốt mang mã", () => {
   it("[INV-K2] K2 ở lần nộp ⇒ 422 { error, ma: K2_THIEU_CANH_TRANH }, câu là câu của bảng", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -354,7 +354,7 @@ describe("[S1.9101 / S3.3e1] A3 — 422 của chốt mang mã", () => {
   });
 });
 
-describe("[INV-K2] [S1.9101 / S3.3e1 · lượt soi TRUNG-2] A4 — danh sách lời mời: cờ từng dòng, số NHÓM, lần nộp", () => {
+describe("[INV-K2] [S1.273 / S3.3e1 · lượt soi TRUNG-2] A4 — danh sách lời mời: cờ từng dòng, số NHÓM, lần nộp", () => {
   it("đếm được, chưa xác minh, do người chọn dựng — cờ đúng từng dòng; số nhóm và ngưỡng của bậc ghim; lanNop và trạng thái", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -396,7 +396,7 @@ describe("[INV-K2] [S1.9101 / S3.3e1 · lượt soi TRUNG-2] A4 — danh sách l
   });
 });
 
-describe("[INV-K8a] [S1.9101 / S3.3e1 · lượt soi CAO-2] A5 — hồ sơ xác minh và lần xác minh ràng băm đã thấy", () => {
+describe("[INV-K8a] [S1.273 / S3.3e1 · lượt soi CAO-2] A5 — hồ sơ xác minh và lần xác minh ràng băm đã thấy", () => {
   async function hoSo(t: ToChuc, nccId: string, ai: Nguoi = t.tc2): Promise<Record<string, unknown>> {
     const r = await goi("GET", "/supplier-verifications", ai.cookie);
     expect(r.status, r.text).toBe(200);

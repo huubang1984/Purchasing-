@@ -107,7 +107,7 @@ export async function xacMinhNhaCungCap(
     { supplierId: input.supplierId, actorSessionId: input.actorSessionId, loai: "VERIFIED", lyDo: null },
     auditPool,
   );
-  // [S1.9101 / S3.3e1 — lượt soi CAO-2] Lần xác minh rơi lên ĐÚNG hồ sơ người xác minh đã thấy: băm do trigger tính lúc chèn (`082`)
+  // [S1.273 / S3.3e1 — lượt soi CAO-2] Lần xác minh rơi lên ĐÚNG hồ sơ người xác minh đã thấy: băm do trigger tính lúc chèn (`082`)
   // khác băm màn đã hiện ⇒ hồ sơ (tên, MST, trạng thái, hay một người liên hệ) đã đổi giữa lúc xem và lúc bấm. Ném — giao dịch của
   // lời gọi rollback, không hàng xác minh nào ở lại.
   if (hang.bam_ho_so !== bamDaXem) {
@@ -160,7 +160,7 @@ export async function docXacMinhNhaCungCap(client: pg.PoolClient, orgId: string,
   };
 }
 
-/** [S1.9101 / S3.3e1] Một người liên hệ trên màn xác minh — đủ để người xác minh thấy link mời sẽ đi tới ai, và ai đã thêm nó. */
+/** [S1.273 / S3.3e1] Một người liên hệ trên màn xác minh — đủ để người xác minh thấy link mời sẽ đi tới ai, và ai đã thêm nó. */
 export interface NguoiLienHeXacMinh {
   readonly id: string;
   readonly fullName: string;
@@ -172,7 +172,7 @@ export interface NguoiLienHeXacMinh {
   readonly themBoiTen: string | null;
 }
 
-/** [S1.9101 / S3.3e1] Hồ sơ một nhà cung cấp trên màn xác minh: trạng thái, băm hồ sơ hiện tại, và mọi người liên hệ. */
+/** [S1.273 / S3.3e1] Hồ sơ một nhà cung cấp trên màn xác minh: trạng thái, băm hồ sơ hiện tại, và mọi người liên hệ. */
 export interface HoSoXacMinh {
   readonly supplierId: string;
   readonly legalName: string;
@@ -214,7 +214,7 @@ interface HangHoSoXacMinh {
 }
 
 /**
- * [S1.9101 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp trong tổ chức đang gắn, một câu — màn `/nha-cung-cap` của người giữ
+ * [S1.273 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp trong tổ chức đang gắn, một câu — màn `/nha-cung-cap` của người giữ
  * `supplier.qualify`. Không cổng, cùng khuôn `docXacMinhNhaCungCap` (route đọc một nhà cung cấp): trạng thái xác minh và người liên
  * hệ đã đọc được qua hai route đọc không cổng; hàm này gộp chúng để màn không gọi N+1 lần. Không cho agent (route khai).
  */

@@ -30,7 +30,7 @@ const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 // [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây — bước 1 nay là `/lib/dang-nhap.js`.
-// [S1.9101 / S3.3e1] `nccTaoTrongPhien`: nhà cung cấp đang chọn là hồ sơ vừa tạo ở bước 5 (chỉ hồ sơ ấy được thêm người liên hệ).
+// [S1.273 / S3.3e1] `nccTaoTrongPhien`: nhà cung cấp đang chọn là hồ sơ vừa tạo ở bước 5 (chỉ hồ sơ ấy được thêm người liên hệ).
 // `coQuyenMoi`: cờ hiển thị của `GET /rfqs/:id` (khoản 340). `danhSachKhop`: hai danh sách đang thấy cùng lần nộp với `lanNop` mà nút
 // Phê duyệt sẽ gửi (lượt soi CAO-1). `soLoiMoiSong`: số lời mời còn sống của gói — để chọn sẵn loại ngoại lệ.
 const phienMoi = () => ({
@@ -167,7 +167,7 @@ async function napLuong() {
     datLuong({ ...luong, daBat: r.status === 200 && r.body?.daBat === true });
     if (luong.daBat) await napNhomHang(null);
   } catch { /* mất mạng: giữ luồng MVP1 */ }
-  // [S1.9101 / S3.3e1] Ô chọn nhà cung cấp có sẵn — `GET /suppliers` không cổng, không sinh lời từ chối nào.
+  // [S1.273 / S3.3e1] Ô chọn nhà cung cấp có sẵn — `GET /suppliers` không cổng, không sinh lời từ chối nào.
   try { await napNhaCungCap(""); } catch { /* mất mạng: ô chọn để trống */ }
 }
 
@@ -212,7 +212,7 @@ function datLuong(moi) {
   hien($("khoi-tra-ve"), hienTraVe(luong.daBat, luong.trangThaiGoi));
   hien($("khoi-nhom-hang"), luong.daBat);
   hien($("nut-nhom-hang"), hienDatNhomHang(luong.daBat, luong.trangThaiGoi));
-  // [S1.9101 / S3.3e1] Câu về nhà cung cấp đếm được, hai cột của bảng lời mời và khối ngoại lệ — chỉ tổ chức đã bật; lập và rút
+  // [S1.273 / S3.3e1] Câu về nhà cung cấp đếm được, hai cột của bảng lời mời và khối ngoại lệ — chỉ tổ chức đã bật; lập và rút
   // ngoại lệ chỉ ở DRAFT (máy chủ từ chối ở trạng thái khác — K4a).
   hien($("ghi-s3-ncc"), luong.daBat);
   hien($("th-xac-minh"), luong.daBat);
@@ -299,7 +299,7 @@ async function napRfq(rfqId, lanThu = 0) {
   // [S1.198 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
   // đang thấy trên màn. Gói được trả về và nộp lại sau lần đọc thì máy chủ từ chối, và người duyệt đọc lại.
   phien = { ...phien, rfqId, lanNop: typeof g.lanNop === "number" ? g.lanNop : undefined };
-  // [S1.9101 / S3.3e1 · khoản 340] Cờ hiển thị của máy chủ: người xem giữ quyền mời, tức hai danh sách sẽ cho họ đọc.
+  // [S1.273 / S3.3e1 · khoản 340] Cờ hiển thị của máy chủ: người xem giữ quyền mời, tức hai danh sách sẽ cho họ đọc.
   phien = { ...phien, coQuyenMoi: r.body?.coQuyenMoi === true, danhSachKhop: true };
   datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
   // [S1.200 / khoản 258 — lượt soi F4] Bảng ngân sách của gói TRƯỚC đi ngay, trước lần chờ đầu tiên: một lần đọc sau đó hỏng
@@ -325,7 +325,7 @@ async function napRfq(rfqId, lanThu = 0) {
   }
   dienDl($("tt-rfq"), hang);
   await napHangMuc();
-  // [S1.9101 / S3.3e1 · khoản 340] Hai danh sách chỉ tự nạp khi người xem đọc được chúng — người không giữ quyền mời (người yêu cầu
+  // [S1.273 / S3.3e1 · khoản 340] Hai danh sách chỉ tự nạp khi người xem đọc được chúng — người không giữ quyền mời (người yêu cầu
   // mua, tài chính) không để lại một 403 và một hàng `PERMISSION_DENIED` ở mỗi lần đọc gói; họ bấm «Đọc danh sách lời mời» hay «Xem
   // ngoại lệ» nếu cần. [lượt soi CAO-1] Hai danh sách phải cùng lần nộp với lần đọc gói mà nút Phê duyệt gửi; lệch thì đọc lại TRỌN
   // gói một lần, vẫn lệch thì chặn nút Phê duyệt trên màn tới lần đọc sau.
@@ -570,14 +570,14 @@ for (const [nut, duong, xong] of [
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
     // [S1.198 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
     const than = duong === "approve" && typeof phien.lanNop === "number" ? { lanNop: phien.lanNop } : undefined;
-    // [S1.9101 / S3.3e1 — lượt soi CAO-1] Danh sách đang thấy không cùng lần nộp với lần đọc gói ⇒ không gửi chữ ký lên nó.
+    // [S1.273 / S3.3e1 — lượt soi CAO-1] Danh sách đang thấy không cùng lần nộp với lần đọc gói ⇒ không gửi chữ ký lên nó.
     if (duong === "approve" && luong.daBat && phien.coQuyenMoi && !phien.danhSachKhop) {
       bao($("loi4"), "Danh sách mời đang thấy chưa chắc là của lần nộp này — bấm «Đọc» ở bước gói thầu rồi xem lại trước khi phê duyệt.");
       return;
     }
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`, than);
     if (r.status !== 200) {
-      // [S1.9101 / S3.3e1] Lời từ chối có mã của chốt (K2, K3, K5) kèm MỘT câu chỉ dẫn; câu của máy chủ vẫn đứng trước.
+      // [S1.273 / S3.3e1] Lời từ chối có mã của chốt (K2, K3, K5) kèm MỘT câu chỉ dẫn; câu của máy chủ vẫn đứng trước.
       const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi);
       const cau = loiCua(r, "Bước này không đi được");
       // [lượt soi CAO-1] Lần duyệt hỏng (lần nộp lệch, gói đổi trạng thái) ⇒ đọc lại trọn gói trước khi người duyệt thử lại.
@@ -621,7 +621,7 @@ $("nut-tao-ncc").addEventListener("click", async () => {
   const r = await goi("POST", "/suppliers", { legalName: $("ncc-ten").value.trim(), taxCode: $("ncc-mst").value.trim() });
   if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không tạo được nhà cung cấp")); return; }
   const id = r.body?.supplier?.id ?? "";
-  // [S1.9101 / S3.3e1] Hồ sơ vừa tạo vào ô chọn và được chọn — chỉ hồ sơ này được thêm người liên hệ ở màn (lượt soi TRUNG-1).
+  // [S1.273 / S3.3e1] Hồ sơ vừa tạo vào ô chọn và được chọn — chỉ hồ sơ này được thêm người liên hệ ở màn (lượt soi TRUNG-1).
   await napNhaCungCap(id);
   await chonNhaCungCap(id, true);
   bao($("ok5"), "Đã tạo nhà cung cấp. Thêm một người liên hệ rồi mới mời được.");
@@ -630,7 +630,7 @@ $("nut-tao-ncc").addEventListener("click", async () => {
 $("nut-them-lh").addEventListener("click", async () => {
   bao($("loi5"), ""); bao($("ok5"), "");
   if (phien.supplierId === "") { bao($("loi5"), "Tạo nhà cung cấp trước."); return; }
-  // [S1.9101 / S3.3e1 — lượt soi TRUNG-1] Người liên hệ không xoá được: thêm vào hồ sơ của người khác làm nhà cung cấp ấy thôi được
+  // [S1.273 / S3.3e1 — lượt soi TRUNG-1] Người liên hệ không xoá được: thêm vào hồ sơ của người khác làm nhà cung cấp ấy thôi được
   // đếm ở gói của bạn và mất xác minh trong cả tổ chức. Màn chỉ cho hồ sơ vừa tạo ở đây.
   if (!phien.nccTaoTrongPhien) {
     bao($("loi5"), "Chỉ thêm người liên hệ được cho nhà cung cấp vừa tạo ở bước này. Hồ sơ có sẵn cần thêm người liên hệ thì nhờ người " +
@@ -669,17 +669,17 @@ $("nut-doc-moi").addEventListener("click", async () => {
   bao($("loi5"), "");
   if (phien.rfqId === "") { bao($("loi5"), "Tạo hoặc đọc một gói thầu trước."); return; }
   const lan = await napLoiMoi();
-  // [S1.9101 / S3.3e1 — lượt soi CAO-1] Danh sách của một lần nộp khác lần đọc gói ⇒ đọc lại trọn gói.
+  // [S1.273 / S3.3e1 — lượt soi CAO-1] Danh sách của một lần nộp khác lần đọc gói ⇒ đọc lại trọn gói.
   if (luong.daBat && lan !== null && !cungLanNop(phien.lanNop, lan)) await napRfq(phien.rfqId);
 });
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / S3.3e1] Bước 5 — ô chọn nhà cung cấp có sẵn
+// [S1.273 / S3.3e1] Bước 5 — ô chọn nhà cung cấp có sẵn
 // ---------------------------------------------------------------------------------------------
 
 let nhaCungCap = [];
 
-// [S1.9101 / S3.3e1] Nhãn cột cho bảng xếp khối trên màn hẹp (`table.xep`, `chung.css`).
+// [S1.273 / S3.3e1] Nhãn cột cho bảng xếp khối trên màn hẹp (`table.xep`, `chung.css`).
 const NHAN_COT_LOI_MOI = ["Nhà cung cấp", "Người liên hệ", "Kênh", "Trạng thái", "Đã xác minh", "Đếm được"];
 const NHAN_COT_NGOAI_LE = ["Loại", "Lý do", "Giải trình", "Lập lúc", "Trạng thái"];
 
@@ -755,7 +755,7 @@ $("nut-doc-ncc").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / S3.3e1] Ngoại lệ cạnh tranh — spec S3 §4.4, `105`
+// [S1.273 / S3.3e1] Ngoại lệ cạnh tranh — spec S3 §4.4, `105`
 // ---------------------------------------------------------------------------------------------
 
 /** Xoá hai danh sách của gói trước — đổi người, đổi gói, hay người xem không đọc được chúng. */
@@ -886,7 +886,7 @@ async function napLoiMoi() {
   bao($("tom-tat-canh-tranh"), "");
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return null; }
   const ds = Array.isArray(r.body?.invitations) ? r.body.invitations : [];
-  // [S1.9101 / S3.3e1] Số lời mời còn sống chọn sẵn loại ngoại lệ; số NHÓM đếm được của K2 nói ở một câu trên bảng (lượt soi TRUNG-2).
+  // [S1.273 / S3.3e1] Số lời mời còn sống chọn sẵn loại ngoại lệ; số NHÓM đếm được của K2 nói ở một câu trên bảng (lượt soi TRUNG-2).
   phien = { ...phien, soLoiMoiSong: ds.filter((m) => m?.revokedAt === null).length };
   if (luong.daBat) bao($("tom-tat-canh-tranh"), nhanCanhTranh(r.body?.canhTranh) ?? "");
   veChonNgoaiLe();
@@ -894,7 +894,7 @@ async function napLoiMoi() {
     const tr = document.createElement("tr");
     // [S1.193 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
     const o = [vanBanAnToan(m.supplierName), vanBanAnToan(m.contactName), m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)];
-    // [S1.9101 / S3.3e1] Hai cột của tổ chức đã bật: nhà cung cấp còn xác minh, lời mời thuộc tập đếm được của K2.
+    // [S1.273 / S3.3e1] Hai cột của tổ chức đã bật: nhà cung cấp còn xác minh, lời mời thuộc tập đếm được của K2.
     if (luong.daBat) o.push(nhanCo(m.xacMinhConHieuLuc), nhanCo(m.demDuoc));
     o.forEach((v, i) => {
       const td = document.createElement("td");

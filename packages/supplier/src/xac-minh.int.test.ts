@@ -128,7 +128,7 @@ async function hoSo(t: ToChuc, tuyChon: { readonly mst?: boolean; readonly ai?: 
 }
 
 async function xacMinh(t: ToChuc, ncc: string, ai: Nguoi): Promise<Awaited<ReturnType<typeof xacMinhNhaCungCap>>> {
-  // [S1.9101 / S3.3e1] Lần xác minh mang băm hồ sơ đã thấy — đọc ngay trước, như màn `/nha-cung-cap`.
+  // [S1.273 / S3.3e1] Lần xác minh mang băm hồ sơ đã thấy — đọc ngay trước, như màn `/nha-cung-cap`.
   return await withTenant(apiPool, t.org, async (c) => {
     const bamDaXem = (await docHoSoXacMinh(c, t.org)).find((h) => h.supplierId === ncc)?.bamHoSo ?? "";
     return await xacMinhNhaCungCap(c, t.org, { supplierId: ncc, actorSessionId: ai.s, bamDaXem }, auditPool);

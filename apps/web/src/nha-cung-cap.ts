@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.3e1] MÀN XÁC MINH NHÀ CUNG CẤP — PHÉP TÍNH CỦA `/nha-cung-cap`
+// [S1.273 / S3.3e1] MÀN XÁC MINH NHÀ CUNG CẤP — PHÉP TÍNH CỦA `/nha-cung-cap`
 //
 // Spec S3 §9 (S3.3a/S3.3e), K8a: người giữ `supplier.qualify` (mặc định FINANCE), không giữ `rfq.invite` và không dựng hồ sơ hay
 // người liên hệ nào của nhà cung cấp, xác nhận MST, tên pháp lý và đích liên lạc. Chủ dự án chốt 2026-10-06: màn riêng cho FINANCE;

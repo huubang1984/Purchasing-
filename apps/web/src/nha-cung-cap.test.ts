@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.3e1] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN XÁC MINH NHÀ CUNG CẤP
+// [S1.273 / S3.3e1] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN XÁC MINH NHÀ CUNG CẤP
 //
 // Màn hiện mọi người liên hệ, nói vì sao một xác minh thôi hiệu lực và đánh dấu người liên hệ thêm SAU lần xác minh gần nhất (lượt
 // soi CAO-2). Ca âm neo vào luật máy chủ: hồ sơ không ACTIVE hay không MST không xác minh được (`082`), thu hồi chỉ khi hàng mới nhất
@@ -26,7 +26,7 @@ const hoSoTho = (o: Record<string, unknown> = {}, xm: Record<string, unknown> = 
 });
 const mot = (o: Record<string, unknown> = {}, xm: Record<string, unknown> = {}): HoSoMan => docHoSo({ hoSo: [hoSoTho(o, xm)] })[0]!;
 
-describe("[S1.9101 / S3.3e1] đọc thân GET /supplier-verifications", () => {
+describe("[S1.273 / S3.3e1] đọc thân GET /supplier-verifications", () => {
   it("hồ sơ đúng hình dạng vào bảng; băm không phải 64 ký tự hex, thiếu khối xác minh hay thiếu mảng người liên hệ ⇒ bị bỏ", () => {
     const ds = docHoSo({
       hoSo: [
@@ -48,7 +48,7 @@ describe("[S1.9101 / S3.3e1] đọc thân GET /supplier-verifications", () => {
   });
 });
 
-describe("[S1.9101 / S3.3e1] trạng thái xác minh nói bằng lời", () => {
+describe("[S1.273 / S3.3e1] trạng thái xác minh nói bằng lời", () => {
   it("còn hiệu lực kèm hạn và người xác minh; hồ sơ đổi sau xác minh; hết hạn; thu hồi kèm lý do; chưa xác minh", () => {
     expect(nhanXacMinh(mot())).toMatch(/^Đã xác minh, còn hiệu lực tới .* — Tài chính hai\.$/u);
     expect(nhanXacMinh(mot({ doiSauXacMinh: true }, { conHieuLuc: false }))).toMatch(/^Hết hiệu lực: hồ sơ đã đổi sau lần xác minh/u);
@@ -58,7 +58,7 @@ describe("[S1.9101 / S3.3e1] trạng thái xác minh nói bằng lời", () => {
   });
 });
 
-describe("[S1.9101 / S3.3e1 · lượt soi CAO-2] người liên hệ thêm sau lần xác minh gần nhất", () => {
+describe("[S1.273 / S3.3e1 · lượt soi CAO-2] người liên hệ thêm sau lần xác minh gần nhất", () => {
   it("thêm sau ⇒ đánh dấu trên dòng; thêm trước ⇒ không; chưa từng xác minh ⇒ không người nào bị đánh dấu", () => {
     const h = mot({
       contacts: [
@@ -79,7 +79,7 @@ describe("[S1.9101 / S3.3e1 · lượt soi CAO-2] người liên hệ thêm sau 
   });
 });
 
-describe("[S1.9101 / S3.3e1] nút trên một hồ sơ", () => {
+describe("[S1.273 / S3.3e1] nút trên một hồ sơ", () => {
   it("xác minh chỉ khi hồ sơ ACTIVE và có MST (luật của `082`); thu hồi chỉ khi hàng mới nhất là VERIFIED", () => {
     expect(nutHoSo(mot())).toEqual({ xacMinh: true, thuHoi: true });
     expect(nutHoSo(mot({ status: "SUSPENDED" }))).toEqual({ xacMinh: false, thuHoi: true });

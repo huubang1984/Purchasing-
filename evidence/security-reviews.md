@@ -24886,12 +24886,12 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
 
-# §S1.9101 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-9201
+# §S1.273 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-150
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105). Ba thay đổi chạm MỌI
 tổ chức: `GET /rfqs/:id` mang thêm `coQuyenMoi` (một câu đọc quyền mỗi lần đọc gói); hai danh sách mang thêm `lanNop`, `trangThai` (và ở
 tổ chức chưa bật, các cờ `null`); `POST /suppliers/:id/verify` đòi `bamDaXem` (tổ chức chưa bật vẫn bị trigger `082` từ chối như trước).
-Ô chọn nhà cung cấp có sẵn hiện ở cả hai luồng của `/tao-thau`. Không migration. ADR-9201. Khoản 340 ĐÓNG; một khoản mới [MỞ].
+Ô chọn nhà cung cấp có sẵn hiện ở cả hai luồng của `/tao-thau`. Không migration. ADR-150. Khoản 340 ĐÓNG; một khoản mới [MỞ].
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-06: *"Tạo PR cho S3.3d, chuẩn bị S3.3e"*, rồi *"Tiếp S3.3e1"*. S3.3e là phần cuối của S3.3 (spec S3 §9): màn,
@@ -25011,5 +25011,5 @@ thẳng vào CSDL: một REQUESTER, một BUYER. Trên `2a1ff40`, cây sạch, m
 ## 9. Giới hạn còn lại
 - Thêm người liên hệ vào hồ sơ bất kỳ vẫn đi được qua API (khoản nợ mới, rổ đề xuất B); màn chặn lối dễ nhất.
 - Chỉ dẫn K3 không nói nhà cung cấp nào là mới; lần chặn ở trigger khi đua vẫn là lời không tên, không `ma`.
-- Xác minh sau ngày bật, từng nhà cung cấp; KPI tỷ lệ ngoại lệ — S3.9 (ADR-9201 ⑼).
+- Xác minh sau ngày bật, từng nhà cung cấp; KPI tỷ lệ ngoại lệ — S3.9 (ADR-150 ⑼).
 - `gieo:demo` và kịch bản 41 qua ngoại lệ, K2/K3/K5 bị chặn rồi qua — S3.3e2.

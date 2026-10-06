@@ -298,12 +298,12 @@ const doc: readonly BuyerReadRoute[] = [
   },
   {
     method: "GET",
-    // [S1.9101 / S3.3e1 — lượt soi THẤP] KHÔNG `/suppliers/verifications`: bộ định tuyến lấy route khớp đầu tiên, và
+    // [S1.273 / S3.3e1 — lượt soi THẤP] KHÔNG `/suppliers/verifications`: bộ định tuyến lấy route khớp đầu tiên, và
     // `/suppliers/:supplierId` (agent) khớp chuỗi ấy.
     path: "/supplier-verifications",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp — trạng thái, băm hồ sơ hiện tại, mọi người liên hệ — cho màn
+    // [S1.273 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp — trạng thái, băm hồ sơ hiện tại, mọi người liên hệ — cho màn
     // `/nha-cung-cap`. Không cổng, như hai route đọc mà nó gộp (`…/verification`, `…/contacts`); KHÔNG cho agent: người liên hệ là
     // dữ liệu của người ở công ty khác (khoản 141), trạng thái xác minh là bề mặt chưa mở cho agent.
     agent: false,
@@ -353,7 +353,7 @@ const doc: readonly BuyerReadRoute[] = [
     handler: async (ctx) => {
       const r = await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req));
       if (r === null) throw new HttpError(404, "khong co goi thau");
-      // [S1.9101 / S3.3e1 · khoản 340] Cờ HIỂN THỊ: người xem giữ `rfq.invite`, tức hai danh sách lời mời và ngoại lệ sẽ cho họ đọc.
+      // [S1.273 / S3.3e1 · khoản 340] Cờ HIỂN THỊ: người xem giữ `rfq.invite`, tức hai danh sách lời mời và ngoại lệ sẽ cho họ đọc.
       // `/tao-thau` chỉ tự nạp hai danh sách khi cờ bật — người không giữ quyền không sinh một 403 và một hàng `PERMISSION_DENIED` ở
       // mỗi lần đọc gói (ADR-118 F3). Không phải cổng: hai route đọc vẫn tự cổng trong thân. Đọc bằng `listUserIdsWithPermission`
       // (khuôn `kiem-soat/tin-hieu.ts`), không mở `hasPermission` ra mặt tiền; thân chỉ mang bit của CHÍNH người xem. Phiên agent luôn
@@ -401,7 +401,7 @@ const doc: readonly BuyerReadRoute[] = [
     // đọc — không có lý do để phơi nó ra một bề mặt rộng hơn người bấm nút. Kiểu `BuyerReadRoute`
     // đòi khai cờ này TƯỜNG MINH, nên đây là một quyết định được ghi chứ không một chỗ bỏ trống.
     agent: false,
-    // [S1.9101 / S3.3e1] Thân mang thêm `lanNop`, `trangThai` và số nhóm của K2 — đọc cùng một câu với danh sách (lượt soi CAO-1).
+    // [S1.273 / S3.3e1] Thân mang thêm `lanNop`, `trangThai` và số nhóm của K2 — đọc cùng một câu với danh sách (lượt soi CAO-1).
     handler: async (ctx) => {
       const ds = await listInvitations(
         ctx.client,
@@ -422,7 +422,7 @@ const doc: readonly BuyerReadRoute[] = [
     // một phần của danh sách ấy, nằm trong cùng băm mà người duyệt ký: cổng `rfq.invite` nằm THẲNG trong thân `docNgoaiLe` (rổ
     // `HAM_DOC_CO_QUYEN`), và KHÔNG `agent: true` — lý do vì sao gói không đủ cạnh tranh là dữ liệu kiểm soát của bên mua.
     agent: false,
-    // [S1.9101 / S3.3e1] Thân mang thêm `lanNop` và `trangThai`, cùng một câu với danh sách — kể cả khi gói chưa có ngoại lệ nào.
+    // [S1.273 / S3.3e1] Thân mang thêm `lanNop` và `trangThai`, cùng một câu với danh sách — kể cả khi gói chưa có ngoại lệ nào.
     handler: async (ctx) => {
       const ds = await docNgoaiLe(
         ctx.client,
@@ -1058,7 +1058,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         verification: await xacMinhNhaCungCap(
           ctx.client,
           ctx.orgId,
-          // [S1.9101 / S3.3e1 — lượt soi CAO-2] Băm hồ sơ mà người xác minh đã thấy (`GET /supplier-verifications`); lệch ⇒ 422.
+          // [S1.273 / S3.3e1 — lượt soi CAO-2] Băm hồ sơ mà người xác minh đã thấy (`GET /supplier-verifications`); lệch ⇒ 422.
           { supplierId: supplierIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, bamDaXem: chuoiBatBuoc(ctx.req.body, "bamDaXem") },
           ctx.auditPool,
         ),

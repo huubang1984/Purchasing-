@@ -410,10 +410,10 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / S3.3e1] NGOẠI LỆ, NHÀ CUNG CẤP CÓ SẴN, CHỈ DẪN THEO MÃ CHỐT
+// [S1.273 / S3.3e1] NGOẠI LỆ, NHÀ CUNG CẤP CÓ SẴN, CHỈ DẪN THEO MÃ CHỐT
 // ==============================================================================================
 
-describe("[S1.9101 / S3.3e1] bản sao để đọc của ba tập đóng và hai trần — khớp hằng của gói máy chủ", () => {
+describe("[S1.273 / S3.3e1] bản sao để đọc của ba tập đóng và hai trần — khớp hằng của gói máy chủ", () => {
   it("loại, mã lý do, sàn OTHER và trần giải trình đúng bằng `packages/invitation/src/ngoai-le.ts`", () => {
     expect([...LOAI_NGOAI_LE]).toEqual([...GoiNgoaiLe.LOAI_NGOAI_LE]);
     expect([...MA_LY_DO_NGOAI_LE]).toEqual([...GoiNgoaiLe.MA_LY_DO_NGOAI_LE]);
@@ -429,7 +429,7 @@ describe("[S1.9101 / S3.3e1] bản sao để đọc của ba tập đóng và ha
   });
 });
 
-describe("[S1.9101 / S3.3e1] giải trình ngoại lệ — cùng luật với hàm gói, đếm BYTE", () => {
+describe("[S1.273 / S3.3e1] giải trình ngoại lệ — cùng luật với hàm gói, đếm BYTE", () => {
   it("rỗng sau khi cắt, quá trần, OTHER dưới sàn ⇒ câu lỗi; đúng sàn ⇒ hợp lệ; mã khác không đòi sàn", () => {
     expect(loiGiaiTrinh("EMERGENCY", "   ")).toMatch(/^Cần giải trình/u);
     expect(loiGiaiTrinh("EMERGENCY", "a".repeat(2001))).toMatch(/2000 byte/u);
@@ -440,13 +440,13 @@ describe("[S1.9101 / S3.3e1] giải trình ngoại lệ — cùng luật với h
   });
 });
 
-describe("[S1.9101 / S3.3e1] loại ngoại lệ chọn sẵn theo số lời mời còn sống — khớp chặt của K2 (`107` ⑶)", () => {
+describe("[S1.273 / S3.3e1] loại ngoại lệ chọn sẵn theo số lời mời còn sống — khớp chặt của K2 (`107` ⑶)", () => {
   it("0 ⇒ không loại nào (danh sách rỗng không ngoại lệ nào cứu); 1 ⇒ SINGLE_SOURCE; từ 2 ⇒ LIMITED_COMPETITION", () => {
     expect([0, 1, 2, 5].map(loaiNgoaiLeGoiY)).toEqual([null, "SINGLE_SOURCE", "LIMITED_COMPETITION", "LIMITED_COMPETITION"]);
   });
 });
 
-describe("[S1.9101 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫn đứng trước, câu này nói việc phải làm", () => {
+describe("[S1.273 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫn đứng trước, câu này nói việc phải làm", () => {
   it("bốn mã của S3.3 có câu; người không giữ quyền mời được bảo nhờ người mời được (trừ K5 — việc của người duyệt)", () => {
     for (const ma of ["K2_THIEU_CANH_TRANH", "K2_DAU_THAU_CHINH_THUC", "K3_KHONG_XOAY_VONG", "K5_THIEU_CHU_KY_DOC_LAP"]) {
       expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
@@ -479,7 +479,7 @@ describe("[S1.9101 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ v�
   });
 });
 
-describe("[S1.9101 / S3.3e1 · lượt soi TRUNG-2] câu số NHÓM của K2", () => {
+describe("[S1.273 / S3.3e1 · lượt soi TRUNG-2] câu số NHÓM của K2", () => {
   it("đủ, chưa đủ, gói chưa có bậc; thân không mang khối ⇒ null", () => {
     expect(nhanCanhTranh({ soNhomDemDuoc: 2, toiThieu: 2 })).toMatch(/^Đếm được 2\/2 nhóm .* — đủ\. Nhà cung cấp chung mã số thuế gốc/u);
     expect(nhanCanhTranh({ soNhomDemDuoc: 1, toiThieu: 3 })).toMatch(/^Đếm được 1\/3 nhóm .* chưa đủ/u);
@@ -493,7 +493,7 @@ describe("[S1.9101 / S3.3e1 · lượt soi TRUNG-2] câu số NHÓM của K2", (
   });
 });
 
-describe("[S1.9101 / S3.3e1 · lượt soi CAO-1] cùng lần nộp", () => {
+describe("[S1.273 / S3.3e1 · lượt soi CAO-1] cùng lần nộp", () => {
   it("chỉ hai số bằng nhau mới là cùng; thiếu một bên ⇒ coi như lệch", () => {
     expect(cungLanNop(2, 2)).toBe(true);
     expect(cungLanNop(2, 3)).toBe(false);
@@ -502,7 +502,7 @@ describe("[S1.9101 / S3.3e1 · lượt soi CAO-1] cùng lần nộp", () => {
   });
 });
 
-describe("[S1.9101 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
+describe("[S1.273 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
   it("chỉ hồ sơ ACTIVE, đúng hình dạng; MST null giữ null", () => {
     const ds = docNhaCungCapChon({
       suppliers: [

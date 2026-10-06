@@ -11626,13 +11626,13 @@ Câu hỏi của tầng gói lọc trạng thái theo cạnh (`DRAFT` ở nộp,
 
 - K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); màn và lượt đi thử T4 (S3.3e); khoản 319 ở tổ chức chưa bật.
 
-## ADR-9201 — S3.3e1: màn kiểm soát — cờ hiển thị thay lối tự nạp (khoản 340), mã ở lời từ chối của chốt, danh sách mang lần nộp, xác minh ràng băm hồ sơ đã thấy, ô chọn nhà cung cấp có sẵn
+## ADR-150 — S3.3e1: màn kiểm soát — cờ hiển thị thay lối tự nạp (khoản 340), mã ở lời từ chối của chốt, danh sách mang lần nộp, xác minh ràng băm hồ sơ đã thấy, ô chọn nhà cung cấp có sẵn
 
 **Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-06: *"Tiếp S3.3e1"*; trước khi soi, bốn câu theo đề
 xuất: màn xác minh riêng cho FINANCE, cờ máy chủ trên `GET /rfqs/:id` đóng khoản 340, 422 của chốt mang mã, hai PR (S3.3e1 màn và route;
 S3.3e2 `gieo:demo` và kịch bản 41); sau lượt soi, bốn câu theo đề xuất: ⑷ hiện người liên hệ và ràng băm, ⑹ khoá thêm người liên hệ trên
-màn và ghi khoản nợ, ⑶ số nhóm so ngưỡng, ⑼ ghi ADR, KPI sang S3.9 · **[S1.9101]** · **Liên quan:** ADR-081 ⑵, ADR-092, ADR-117,
-ADR-118 F3, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §4.4, §6 T4, §8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+màn và ghi khoản nợ, ⑶ số nhóm so ngưỡng, ⑼ ghi ADR, KPI sang S3.9 · **[S1.273]** · **Liên quan:** ADR-081 ⑵, ADR-092, ADR-117,
+ADR-118 F3, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §4.4, §6 T4, §8.2, §9 S3.3 · **Biên bản:** `evidence/security-reviews.md` §S1.273
 
 ### Bối cảnh
 
@@ -11702,7 +11702,7 @@ lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng ch�
 - **Thêm người liên hệ vào hồ sơ của người khác vẫn đi được qua API** (khoản nợ mới); màn chặn lối dễ nhất.
 - **Chỉ dẫn K3 không nói nhà cung cấp nào là mới** — cần một hàm theo từng lời mời; câu của máy chủ và ngoại lệ ROTATION là đường gỡ.
 - **Cờ `coQuyenMoi` có thể cũ** giữa lần đọc gói và lần đọc danh sách (đổi vai giữa chừng): khi ấy một route từ chối và vào sổ — đúng D5.
-- **Lượt đi thử T4 là một lần, không phải một cổng**: script nằm ngoài kho (biên bản §S1.9101), Playwright không trong kho.
+- **Lượt đi thử T4 là một lần, không phải một cổng**: script nằm ngoài kho (biên bản §S1.273), Playwright không trong kho.
 
 ### Điều ADR này KHÔNG nói
 

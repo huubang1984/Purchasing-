@@ -438,7 +438,7 @@ function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResp
   // chính nó thành `LoiXacThuc`, nên tới đây chỉ còn `SessionInvalidError` do handler ném — một gói gọi `resolveSessionActor` khi phiên
   // vừa bị thu hồi hay người dùng vừa bị đình chỉ — và hợp đồng của ca ấy giữ nguyên.
   if (err instanceof SessionInvalidError) return { status: 401, body: THAN_401 };
-  // [S1.9101 / S3.3e1] Lời từ chối của một chốt mang thêm MÃ của bảng (`CHOT_VAO_SO`) để màn gắn đúng chỉ dẫn. Thông điệp là hằng
+  // [S1.273 / S3.3e1] Lời từ chối của một chốt mang thêm MÃ của bảng (`CHOT_VAO_SO`) để màn gắn đúng chỉ dẫn. Thông điệp là hằng
   // của mã ấy — một mã một câu —, nên mã không nói thêm điều gì câu chưa nói; `cause` không bao giờ ra ngoài.
   if (err instanceof ChotKiemSoatError) return { status: 422, body: { error: err.message, ma: err.lyDo } };
   if (err instanceof Error && LOI_NGHIEP_VU_422.has(err.name)) {

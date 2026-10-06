@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.3e1] MÀN XÁC MINH NHÀ CUNG CẤP — spec S3 §9 (S3.3a/S3.3e), K8a
+// [S1.273 / S3.3e1] MÀN XÁC MINH NHÀ CUNG CẤP — spec S3 §9 (S3.3a/S3.3e), K8a
 //
 // Người giữ `supplier.qualify` (mặc định FINANCE) xác minh và thu hồi xác minh của nhà cung cấp. Chủ dự án chốt 2026-10-06: màn
 // riêng; màn hiện mọi người liên hệ và lần xác minh gửi băm hồ sơ đã thấy (lượt soi CAO-2). Mọi luật nằm ở máy chủ và CSDL

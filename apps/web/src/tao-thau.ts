@@ -328,7 +328,7 @@ export function loiLyDoGhiNhan(lyDo: string): string | null {
 }
 
 // ==============================================================================================
-// [S1.9101 / S3.3e1] NGOẠI LỆ CẠNH TRANH, NHÀ CUNG CẤP CÓ SẴN VÀ LỜI TỪ CHỐI CỦA CHỐT
+// [S1.273 / S3.3e1] NGOẠI LỆ CẠNH TRANH, NHÀ CUNG CẤP CÓ SẴN VÀ LỜI TỪ CHỐI CỦA CHỐT
 //
 // Spec S3 §4.4 và §9 (S3.3e). K2, K3, K5 chặn ở máy chủ (`107`, `108`); màn chỉ đưa người dùng tới đúng việc phải làm: chọn nhà
 // cung cấp người khác đã dựng và FINANCE đã xác minh, lập ngoại lệ đúng loại, hay nhờ người ký độc lập. Ba tập đóng dưới đây là
