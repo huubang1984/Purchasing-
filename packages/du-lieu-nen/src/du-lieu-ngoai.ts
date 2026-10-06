@@ -70,12 +70,12 @@ const CAU_PHAN_GIAI_THEO_MA =
   "(SELECT q.ma FROM public.quy_doi_da_giai($1::pg_catalog.uuid, ci.id, " +
   "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) k.khoa), k.khoa, ci.don_vi_goc, ci.don_vi_goc, " +
   "pg_catalog.clock_timestamp()) q) END AS ket_qua " +
-  "FROM ROWS FROM (pg_catalog.unnest($2::pg_catalog.text[]), pg_catalog.unnest($3::pg_catalog.text[])) " +
-  "WITH ORDINALITY AS d(ma_hang, don_vi, i) " +
+  "FROM pg_catalog.unnest($2::pg_catalog.text[]) WITH ORDINALITY AS d(ma_hang, i) " +
   "LEFT JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND ci.ma OPERATOR(pg_catalog.=) d.ma_hang " +
   "CROSS JOIN LATERAL (SELECT coalesce(" +
-  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) public.chuoi_sach(d.don_vi)), " +
-  "public.don_vi_tai($1::pg_catalog.uuid, d.don_vi, pg_catalog.clock_timestamp()), public.chuoi_sach(d.don_vi)) AS khoa) k " +
+  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) public.chuoi_sach(($3::pg_catalog.text[])[d.i])), " +
+  "public.don_vi_tai($1::pg_catalog.uuid, ($3::pg_catalog.text[])[d.i], pg_catalog.clock_timestamp()), " +
+  "public.chuoi_sach(($3::pg_catalog.text[])[d.i])) AS khoa) k " +
   "ORDER BY d.i";
 /** Nhập tay trên trang một hàng chuẩn: hàng chuẩn theo ID (`$4`). */
 const CAU_PHAN_GIAI_THEO_ID =
@@ -84,33 +84,29 @@ const CAU_PHAN_GIAI_THEO_ID =
   "(SELECT q.ma FROM public.quy_doi_da_giai($1::pg_catalog.uuid, ci.id, " +
   "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) k.khoa), k.khoa, ci.don_vi_goc, ci.don_vi_goc, " +
   "pg_catalog.clock_timestamp()) q) END AS ket_qua " +
-  "FROM ROWS FROM (pg_catalog.unnest($2::pg_catalog.text[]), pg_catalog.unnest($3::pg_catalog.text[])) " +
-  "WITH ORDINALITY AS d(ma_hang, don_vi, i) " +
+  "FROM pg_catalog.unnest($2::pg_catalog.text[]) WITH ORDINALITY AS d(ma_hang, i) " +
   "LEFT JOIN public.canonical_items ci ON ci.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND ci.id OPERATOR(pg_catalog.=) $4::pg_catalog.uuid " +
   "CROSS JOIN LATERAL (SELECT coalesce(" +
-  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) public.chuoi_sach(d.don_vi)), " +
-  "public.don_vi_tai($1::pg_catalog.uuid, d.don_vi, pg_catalog.clock_timestamp()), public.chuoi_sach(d.don_vi)) AS khoa) k " +
+  "(SELECT u.code FROM public.uom_units u WHERE u.code OPERATOR(pg_catalog.=) public.chuoi_sach(($3::pg_catalog.text[])[d.i])), " +
+  "public.don_vi_tai($1::pg_catalog.uuid, ($3::pg_catalog.text[])[d.i], pg_catalog.clock_timestamp()), " +
+  "public.chuoi_sach(($3::pg_catalog.text[])[d.i])) AS khoa) k " +
   "ORDER BY d.i";
 
 const CAU_CHEN: Readonly<Record<LoaiDuLieuNgoai, string>> = {
   MOC_NGOAI:
     "INSERT INTO public.external_price_references (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_hieu_luc, nguon, " +
     "lo_nhap_id, tac_gia, session_id) " +
-    "SELECT $1::pg_catalog.uuid, d.hang, d.gia::pg_catalog.numeric, d.don_vi, d.tien_te, d.ngay::pg_catalog.date, d.nguon, " +
+    "SELECT $1::pg_catalog.uuid, d.hang, ($6::pg_catalog.text[])[d.i]::pg_catalog.numeric, ($7::pg_catalog.text[])[d.i], " +
+    "($8::pg_catalog.text[])[d.i], ($9::pg_catalog.text[])[d.i]::pg_catalog.date, ($10::pg_catalog.text[])[d.i], " +
     "$2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid " +
-    "FROM ROWS FROM (pg_catalog.unnest($5::pg_catalog.uuid[]), pg_catalog.unnest($6::pg_catalog.text[]), " +
-    "pg_catalog.unnest($7::pg_catalog.text[]), pg_catalog.unnest($8::pg_catalog.text[]), pg_catalog.unnest($9::pg_catalog.text[]), " +
-    "pg_catalog.unnest($10::pg_catalog.text[])) WITH ORDINALITY AS d(hang, gia, don_vi, tien_te, ngay, nguon, i) ORDER BY d.i",
+    "FROM pg_catalog.unnest($5::pg_catalog.uuid[]) WITH ORDINALITY AS d(hang, i) ORDER BY d.i RETURNING id",
   LICH_SU_NGOAI:
     "INSERT INTO public.external_purchase_history (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_mua, nha_cung_cap_text, " +
     "nguon, lo_nhap_id, tac_gia, session_id) " +
-    "SELECT $1::pg_catalog.uuid, d.hang, d.gia::pg_catalog.numeric, d.don_vi, d.tien_te, d.ngay::pg_catalog.date, d.ncc, d.nguon, " +
-    "$2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid " +
-    "FROM ROWS FROM (pg_catalog.unnest($5::pg_catalog.uuid[]), pg_catalog.unnest($6::pg_catalog.text[]), " +
-    "pg_catalog.unnest($7::pg_catalog.text[]), pg_catalog.unnest($8::pg_catalog.text[]), pg_catalog.unnest($9::pg_catalog.text[]), " +
-    "pg_catalog.unnest($10::pg_catalog.text[]), pg_catalog.unnest($11::pg_catalog.text[])) " +
-    "WITH ORDINALITY AS d(hang, gia, don_vi, tien_te, ngay, nguon, ncc, i) " +
-    "ORDER BY d.i",
+    "SELECT $1::pg_catalog.uuid, d.hang, ($6::pg_catalog.text[])[d.i]::pg_catalog.numeric, ($7::pg_catalog.text[])[d.i], " +
+    "($8::pg_catalog.text[])[d.i], ($9::pg_catalog.text[])[d.i]::pg_catalog.date, ($11::pg_catalog.text[])[d.i], " +
+    "($10::pg_catalog.text[])[d.i], $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid " +
+    "FROM pg_catalog.unnest($5::pg_catalog.uuid[]) WITH ORDINALITY AS d(hang, i) ORDER BY d.i RETURNING id",
 };
 
 /** Hàng dữ liệu CÒN HIỆU LỰC của một hàng hay một lô — không hàng rút nào trỏ về nó. */
@@ -149,7 +145,7 @@ async function ghiLo(
   cachNhap: CachNhapNgoai,
   actor: Awaited<ReturnType<typeof resolveSessionActor>>,
   hangChuanCoDinh: string | null,
-): Promise<KetQuaNhapNgoai> {
+): Promise<KetQuaNhapNgoai | (Extract<KetQuaNhapNgoai, { nhan: true }> & { readonly hangIds: readonly string[] })> {
   const { rows } = await client.query<{ i: number; hang_chuan_id: string | null; khoa: string; ket_qua: string | null }>(
     hangChuanCoDinh === null ? CAU_PHAN_GIAI_THEO_MA : CAU_PHAN_GIAI_THEO_ID,
     hangChuanCoDinh === null
@@ -203,8 +199,8 @@ async function ghiLo(
       daGiai.map((d) => d.nguon),
     ];
     if (loai === "LICH_SU_NGOAI") thamSo.push(daGiai.map((d) => d.nhaCungCap));
-    const { rowCount } = await client.query(CAU_CHEN[loai], thamSo);
-    if (rowCount !== daGiai.length) throw new Error("câu chèn lô dữ liệu ngoài ghi thiếu hàng");
+    const { rows: chen } = await client.query<{ id: string }>(CAU_CHEN[loai], thamSo);
+    if (chen.length !== daGiai.length) throw new Error("câu chèn lô dữ liệu ngoài ghi thiếu hàng");
     const soHangChuan = new Set(daGiai.map((d) => d.hangChuanId)).size;
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
@@ -214,7 +210,7 @@ async function ghiLo(
       resourceId: loNhapId,
       payload: { loai, cachNhap, soDong: daGiai.length, soHangChuan },
     });
-    return { nhan: true, loai, loNhapId, soDong: daGiai.length, soHangChuan };
+    return { nhan: true, loai, loNhapId, soDong: daGiai.length, soHangChuan, hangIds: chen.map((h) => h.id) };
   });
 }
 
@@ -231,7 +227,9 @@ export async function nhapDuLieuNgoai(client: pg.PoolClient, orgId: string, inpu
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const doc = docCsvNgoai(input.loai, input.vanBan);
   if (!doc.hopLe) return { nhan: false, loai: input.loai, loi: doc.loi };
-  return ghiLo(client, orgId, input.loai, doc.dong, "DAN_CSV", actor, null);
+  const kq = await ghiLo(client, orgId, input.loai, doc.dong, "DAN_CSV", actor, null);
+  // Một lô tới 1000 dòng: id từng hàng không đi ra — người nhập đọc lại lô qua `docLoDuLieuNgoai`.
+  return kq.nhan ? { nhan: true, loai: kq.loai, loNhapId: kq.loNhapId, soDong: kq.soDong, soHangChuan: kq.soHangChuan } : kq;
 }
 
 export interface KhaiMocNgoaiInput {
@@ -246,12 +244,15 @@ export interface KhaiMocNgoaiInput {
   readonly actorSessionId: string;
 }
 
-/** Nhập TAY một mốc ngoài của một hàng chuẩn — một lô một dòng. Sai hình dạng ⇒ `DuLieuNenError` có mã. */
+/**
+ * Nhập TAY một mốc ngoài của một hàng chuẩn — một lô một dòng. Sai hình dạng ⇒ `DuLieuNenError` có mã. Trả cả id của hàng vừa ghi:
+ * người nhập không đọc lại được đơn giá, nên đường sửa duy nhất là rút đúng hàng ấy rồi nhập lại (chủ dự án chốt 2026-10-06).
+ */
 export async function khaiMocNgoai(
   client: pg.PoolClient,
   orgId: string,
   input: KhaiMocNgoaiInput,
-): Promise<{ readonly loNhapId: string }> {
+): Promise<{ readonly loNhapId: string; readonly hangId: string }> {
   await assertTenantBound(client, orgId, "khaiMocNgoai");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const donGia = input.donGia.trim();
@@ -278,7 +279,8 @@ export async function khaiMocNgoai(
     const maLoi: DuLieuNenError["ma"] = ma === "KHONG_CO_HANG_CHUAN" ? "KHONG_CO_HANG_CHUAN" : ma === "DON_VI_RONG" ? "CHUOI_RONG" : "DON_VI_KHONG_QUY_DOI_DUOC";
     throw new DuLieuNenError(maLoi, `${kq.loi[0]!.cau} (${maLoi})`);
   }
-  return { loNhapId: kq.loNhapId };
+  if (!("hangIds" in kq) || kq.hangIds.length !== 1) throw new Error("nhập tay một mốc ngoài phải ghi đúng một hàng");
+  return { loNhapId: kq.loNhapId, hangId: kq.hangIds[0]! };
 }
 
 export interface RutDuLieuNgoaiInput {
@@ -372,7 +374,7 @@ const CAU_LO =
   "pg_catalog.min(h.tac_gia::pg_catalog.text), pg_catalog.min(h.ghi_luc) " +
   "FROM public.external_purchase_history h " +
   "WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND h.rut_cua IS NULL GROUP BY h.lo_nhap_id " +
-  "ORDER BY ghi_luc DESC LIMIT 200";
+  "ORDER BY ghi_luc DESC LIMIT 201";
 
 const CAU_HANG_CUA_LO: Readonly<Record<LoaiDuLieuNgoai, string>> = {
   MOC_NGOAI:
@@ -391,13 +393,16 @@ const CAU_HANG_CUA_LO: Readonly<Record<LoaiDuLieuNgoai, string>> = {
     "WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND h.lo_nhap_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid ORDER BY h.seq",
 };
 
-/** Hai trăm lô gần nhất của cả hai bảng, mới nhất trước — không một con số giá nào. */
+/** Trần số lô một lần liệt kê; câu đọc lấy thêm MỘT để biết còn nữa không (`conNua`). */
+const TRAN_LO_LIET_KE = 200;
+
+/** Hai trăm lô gần nhất của cả hai bảng, mới nhất trước — không một con số giá nào; `conNua` khi tổ chức còn lô cũ hơn. */
 export async function lietKeLoDuLieuNgoai(
   client: pg.PoolClient,
   orgId: string,
   input: { readonly actorSessionId: string },
   auditPool: pg.Pool,
-): Promise<readonly LoDuLieuNgoai[]> {
+): Promise<{ readonly lo: readonly LoDuLieuNgoai[]; readonly conNua: boolean }> {
   await assertTenantBound(client, orgId, "lietKeLoDuLieuNgoai");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await requirePermission(
@@ -416,6 +421,8 @@ export async function lietKeLoDuLieuNgoai(
     tac_gia: string;
     ghi_luc: Date;
   }>(CAU_LO, [orgId]);
+  const conNua = rows.length > TRAN_LO_LIET_KE;
+  if (conNua) rows.length = TRAN_LO_LIET_KE;
   const ten = new Map<string, string | null>();
   const nguoi = [...new Set(rows.map((r) => r.tac_gia))];
   if (nguoi.length > 0) {
@@ -426,7 +433,7 @@ export async function lietKeLoDuLieuNgoai(
     );
     for (const x of u) ten.set(x.id, x.full_name);
   }
-  return rows.map((r) => ({
+  const lo = rows.map((r) => ({
     loai: r.loai,
     loNhapId: r.lo_nhap_id,
     soDong: r.so_dong,
@@ -437,6 +444,7 @@ export async function lietKeLoDuLieuNgoai(
     tacGia: { userId: r.tac_gia, hoTen: ten.get(r.tac_gia) ?? null },
     ghiLuc: r.ghi_luc,
   }));
+  return { lo, conNua };
 }
 
 /** Các hàng của một lô — không đơn giá. `null` khi lô không có trong tổ chức (sau cổng quyền). */

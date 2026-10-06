@@ -125,6 +125,25 @@
       <input id="qd-sang" autocomplete="off" spellcheck="false" placeholder="kg">
       <button id="nut-quy-doi" class="phu">Khai quy đổi</button>
     </div>
+    <!-- [S1.9101 / S4.6a] Nhập tay MỘT mốc giá ngoài cho hàng đang mở (spec S4 §4.7). Màn không đọc lại đơn giá: người quản lý dữ
+         liệu mù giá (ADR-096 ⑵) — dòng vừa ghi hiện ở bước 7 với hàng, đơn vị, ngày, nguồn, không đơn giá. -->
+    <div id="khoi-moc-ngoai" hidden>
+      <h3>Mốc giá ngoài cho hàng này</h3>
+      <p class="ghi">Giá tham chiếu từ một nguồn ngoài hệ thống — bảng giá nhà sản xuất, báo giá thị trường, chỉ số. Mốc này chỉ để
+        tính độ lệch ở màn mở thầu, không vào dải giá nội bộ hay điều kiện dữ liệu của gói. Màn không hiện lại đơn giá sau khi ghi:
+        sai thì rút dòng ở bước 7 rồi nhập lại.</p>
+      <label for="mn-don-gia">Đơn giá — số thập phân dương, dấu chấm, không phân cách nghìn</label>
+      <input id="mn-don-gia" inputmode="decimal" autocomplete="off" placeholder="15500">
+      <label for="mn-don-vi">Đơn vị của đơn giá — phải quy đổi được sang đơn vị gốc của hàng</label>
+      <input id="mn-don-vi" autocomplete="off" spellcheck="false" placeholder="kg">
+      <label for="mn-tien-te">Tiền tệ</label>
+      <select id="mn-tien-te"><option value="VND">VND</option><option value="USD">USD</option></select>
+      <label for="mn-ngay">Ngày hiệu lực</label>
+      <input id="mn-ngay" type="date">
+      <label for="mn-nguon">Nguồn</label>
+      <input id="mn-nguon" autocomplete="off" maxlength="500" placeholder="Bảng giá Hòa Phát tháng 1/2026">
+      <button id="nut-moc-ngoai" class="phu">Ghi mốc giá ngoài</button>
+    </div>
     <div class="bao loi" id="loi4" hidden></div>
     <div class="bao ok" id="ok4" hidden></div>
   </section>
@@ -190,6 +209,43 @@
     </div>
     <div class="bao loi" id="loi6" hidden></div>
     <div class="bao ok" id="ok6" hidden></div>
+  </section>
+
+  <!-- [S1.9101 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096). Chỉ người giữ `item.manage`
+       thấy bước này; danh sách lô và hàng KHÔNG mang cột giá. -->
+  <section class="buoc" id="b7" hidden>
+    <h2><span class="so">7</span> Mốc giá ngoài và lịch sử mua ngoài hệ thống</h2>
+    <p class="ghi">Dán thẳng từ bảng tính: dòng đầu là tiêu đề, ô cách nhau bằng tab, dấu phẩy hay dấu chấm phẩy. Đơn giá dùng dấu
+      chấm thập phân, không phân cách nghìn; ngày dạng 2026-01-15 hay 15/01/2026; tiền tệ VND hoặc USD; mã hàng là mã hàng chuẩn ở
+      bước 2. Tối đa 1000 dòng một lô. Lô có một dòng sai thì không dòng nào được ghi — màn liệt kê mọi lỗi theo số dòng.</p>
+    <p class="ghi">Hai loại dữ liệu này chỉ hiện ở màn mở thầu với nhãn riêng: mốc ngoài để tính độ lệch, lịch sử ngoài là một dải
+      riêng. Không loại nào vào dải giá nội bộ hay điều kiện dữ liệu của gói. Màn này không hiện lại đơn giá: sai thì rút rồi nhập lại.</p>
+    <label for="dan-loai">Loại dữ liệu</label>
+    <select id="dan-loai">
+      <option value="MOC_NGOAI">Mốc giá ngoài (ngày hiệu lực)</option>
+      <option value="LICH_SU_NGOAI">Lịch sử mua ngoài hệ thống (ngày mua, nhà cung cấp)</option>
+    </select>
+    <p class="ghi">Dòng tiêu đề mẫu: <code id="dan-mau"></code></p>
+    <label for="dan-van-ban">Văn bản dán</label>
+    <textarea id="dan-van-ban" rows="8" spellcheck="false"></textarea>
+    <button id="nut-dan">Nhập lô</button>
+    <ul class="bao loi" id="loi-dong" hidden></ul>
+    <div class="bao loi" id="loi7" hidden></div>
+    <div class="bao ok" id="ok7" hidden></div>
+    <h3>Các lô đã nhập</h3>
+    <table id="bang-lo">
+      <thead><tr><th>Loại</th><th>Khoảng ngày</th><th class="so">Dòng còn hiệu lực</th><th class="so">Hàng chuẩn</th><th>Người nhập</th><th>Lúc</th><th></th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao luu" id="con-nua-lo" hidden></div>
+    <button id="nut-doc-lo" class="phu">Đọc lại</button>
+    <div id="khoi-lo" hidden>
+      <h3 id="tieu-de-lo"></h3>
+      <table id="bang-hang-lo">
+        <thead><tr><th>Mã hàng</th><th>Đơn vị</th><th>Tiền tệ</th><th>Ngày</th><th>Nhà cung cấp</th><th>Nguồn</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <footer class="chan">Lát cắt demo — mọi lần ghi dữ liệu nền là một hàng mới, mang người ghi và thời điểm, và để lại dấu vết trong sổ kiểm toán.</footer>

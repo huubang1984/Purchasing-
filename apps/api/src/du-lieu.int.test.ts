@@ -104,15 +104,18 @@ afterAll(async () => {
 const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
 describe("[S1.199 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng", () => {
-  it("mười hai route, đúng tám route ghi khai `item.manage`, bốn route đọc khai `agent: false`", () => {
+  it("mười ba route, đúng chín route ghi khai `item.manage`, bốn route đọc khai `agent: false`", () => {
     // [S1.251 / S4.4b] Route thứ mười hai là `GET /items/:itemId/price-history` (lịch sử giá, `apps/api/src/routes/lich-su-gia.ts`):
     // một route ĐỌC dưới cùng tiền tố, cổng `bid.view` nằm trong bộ đọc. Mười một route của S4.2b giữ nguyên.
+    // [S1.9101 / S4.6a] Route thứ mười ba là `POST /items/:itemId/external-references` (nhập tay một mốc giá ngoài,
+    // `apps/api/src/routes/du-lieu-ngoai.ts`): một route GHI thứ chín, cùng cổng `item.manage`; `du-lieu-ngoai.int.test.ts` đo nó.
     const cuaDuLieu = ROUTES.filter((r) => /^\/(?:items|uom)(?:\/|$)/u.test(r.path));
-    expect(cuaDuLieu).toHaveLength(12);
+    expect(cuaDuLieu).toHaveLength(13);
     expect(cuaDuLieu.filter((r) => r.path === "/items/:itemId/price-history").map((r) => r.method)).toEqual(["GET"]);
+    expect(cuaDuLieu.filter((r) => r.path === "/items/:itemId/external-references").map((r) => r.method)).toEqual(["POST"]);
     expect(cuaDuLieu.every((r) => r.audience === "BUYER")).toBe(true);
     const ghi = cuaDuLieu.filter((r) => "mutates" in r && r.mutates);
-    expect(ghi).toHaveLength(8);
+    expect(ghi).toHaveLength(9);
     for (const r of ghi) expect("permission" in r ? r.permission : null, `${r.method} ${r.path}`).toBe("item.manage");
     for (const r of cuaDuLieu.filter((x) => !("mutates" in x && x.mutates))) {
       expect("agent" in r ? r.agent : null, `${r.method} ${r.path}`).toBe(false);

@@ -191,14 +191,15 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑴ đường ứng dụng — l�
   });
 
   it("nhập tay một mốc trên trang hàng chuẩn: một lô một dòng, `cachNhap: TAY`; bốn lời từ chối có mã", async () => {
-    const { loNhapId } = await trong(orgA, (c) =>
+    const { loNhapId, hangId } = await trong(orgA, (c) =>
       khaiMocNgoai(c, orgA, { hangChuanId: thep, donGia: "16000", donVi: "kg", tienTe: "vnd", ngayHieuLuc: "2026-03-10", nguon: " Gia niem yet ", actorSessionId: quanLyA.phien }),
     );
-    const { rows } = await db.pool.query<{ nguon: string; tien_te: string }>(
-      "SELECT nguon, tien_te FROM external_price_references WHERE org_id = $1 AND lo_nhap_id = $2",
+    const { rows } = await db.pool.query<{ id: string; nguon: string; tien_te: string }>(
+      "SELECT id, nguon, tien_te FROM external_price_references WHERE org_id = $1 AND lo_nhap_id = $2",
       [orgA, loNhapId],
     );
-    expect(rows).toEqual([{ nguon: "Gia niem yet", tien_te: "VND" }]);
+    // `hangId` là id của ĐÚNG hàng vừa ghi — đường sửa của người nhập mù giá là rút nó rồi nhập lại.
+    expect(rows).toEqual([{ id: hangId, nguon: "Gia niem yet", tien_te: "VND" }]);
     expect((await hangSo(orgA, "EXTERNAL_PRICE_REFERENCES_IMPORTED")).at(-1)!.payload).toMatchObject({ cachNhap: "TAY", soDong: 1 });
     const nhap = (sua: Record<string, string>): Promise<string> =>
       loiCua(
@@ -335,7 +336,8 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑶ luật ở CSDL — câu SQL 
 
 describe("[INV-L15] [S1.9101 / S4.6a] ⑷ đọc — lô và hàng KHÔNG đơn giá, cổng `item.manage`", () => {
   it("người quản lý dữ liệu: lô của cả hai bảng, mới nhất trước, với số còn hiệu lực; hàng của lô không có đơn giá", async () => {
-    const lo = await trong(orgA, (c) => lietKeLoDuLieuNgoai(c, orgA, { actorSessionId: quanLyA.phien }, api));
+    const { lo, conNua } = await trong(orgA, (c) => lietKeLoDuLieuNgoai(c, orgA, { actorSessionId: quanLyA.phien }, api));
+    expect(conNua).toBe(false);
     expect(lo.map((l) => l.loai).sort()).toEqual(["LICH_SU_NGOAI", "MOC_NGOAI", "MOC_NGOAI", "MOC_NGOAI"]);
     const dan = lo.find((l) => l.loai === "MOC_NGOAI" && l.soDong === 3)!;
     expect(dan).toMatchObject({ soDongConHieuLuc: 0, soHangChuan: 2, tuNgay: "2026-01-15", denNgay: "2026-02-01" });
@@ -350,6 +352,22 @@ describe("[INV-L15] [S1.9101 / S4.6a] ⑷ đọc — lô và hàng KHÔNG đơn 
     const json = JSON.stringify({ lo, hang });
     expect(json).not.toMatch(/15200|15400|15500|111000|350000|16000|donGia|don_gia/u);
     expect(await trong(orgA, (c) => docLoDuLieuNgoai(c, orgA, { loai: "MOC_NGOAI", loNhapId: lichSu.loNhapId, actorSessionId: quanLyA.phien }, api))).toBeNull();
+  });
+
+  it("danh sách cắt ở 200 lô và NÓI ra: 201 lô ⇒ 200 lô mới nhất cùng `conNua`; lô cũ nhất là lô bị cắt", async () => {
+    const hangB = (await trong(orgB, (c) => taoHangChuan(c, orgB, { ma: "THEP-B", donViGoc: "kg", ten: "Thep B", actorSessionId: quanLyB.phien }))).id;
+    await trong(orgB, (c) =>
+      c.query(
+        "INSERT INTO external_price_references (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_hieu_luc, nguon, lo_nhap_id, tac_gia, session_id) " +
+          "SELECT $1, $2, 1, 'kg', 'VND', DATE '2026-01-01' + g, 'x', gen_random_uuid(), $3, $4 FROM generate_series(1, 201) g ORDER BY g",
+        [orgB, hangB, quanLyB.nguoi, quanLyB.phien],
+      ),
+    );
+    const { lo, conNua } = await trong(orgB, (c) => lietKeLoDuLieuNgoai(c, orgB, { actorSessionId: quanLyB.phien }, api));
+    expect(conNua).toBe(true);
+    expect(lo).toHaveLength(200);
+    expect(lo.map((l) => l.tuNgay)).not.toContain("2026-01-02");
+    expect(lo[0]?.tuNgay).toBe("2026-07-21");
   });
 
   it("người giữ `bid.view` không giữ `item.manage` ⇒ từ chối và một hàng PERMISSION_DENIED — danh sách này là của người nhập", async () => {

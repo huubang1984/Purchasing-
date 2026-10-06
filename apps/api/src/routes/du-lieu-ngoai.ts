@@ -55,10 +55,10 @@ const doc: readonly BuyerReadRoute[] = [
     audience: "BUYER",
     mutates: false,
     agent: false,
-    handler: async (ctx) => ({
-      status: 200,
-      body: { lo: await lietKeLoDuLieuNgoai(ctx.client, ctx.orgId, { actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
-    }),
+    handler: async (ctx) => {
+      const { lo, conNua } = await lietKeLoDuLieuNgoai(ctx.client, ctx.orgId, { actorSessionId: ctx.actor.sessionId }, ctx.auditPool);
+      return { status: 200, body: { lo, conNua } };
+    },
   },
   ...(
     [

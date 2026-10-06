@@ -13,7 +13,8 @@
 // ==============================================================================================
 
 import {
-  cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, locHangDoi, luaChonHangChuan, maHopLe, moTaQuyDoi, nhanGoiY, vietThuocTinh,
+  cauVaiQuanLy, docLoiLo, docThuocTinh, docTrongYeu, heSoHopLe, khoangNgay, locHangChuan, locHangDoi, luaChonHangChuan, maHopLe, moTaQuyDoi,
+  nhanGoiY, TEN_LOAI, thanLoVuotTran, TIEU_DE_MAU, vietThuocTinh,
 } from "/lib/du-lieu.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
 
@@ -30,6 +31,8 @@ let dangXem = null;
 /** [S1.234 / S4.3b] Hàng đợi đang hiện ở bước 6, và dòng đang mở ở khối xử lý — `null` khi khối đóng. */
 let hangDoi = { dong: [], conNua: false };
 let dangXuLy = null;
+/** [S1.9101 / S4.6a] Lô đang mở ở bước 7 — `{ loai, loNhapId }`, `null` khi khối đóng. */
+let loDangMo = null;
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -120,7 +123,7 @@ window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
   // [S1.249 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ — `dangNhap.datLai()` dưới, sau khi các bước đã đóng.
-  for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5", "loi6", "ok6"]) bao($(id), "");
+  for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5", "loi6", "ok6", "loi7", "ok7"]) bao($(id), "");
   dongCacBuoc();
   dangNhap.datLai();
   thuPhienCo();
@@ -156,9 +159,12 @@ async function moSauDangNhap(me, dungLai) {
 
 function dongCacBuoc() {
   $("b1").classList.remove("xong");
-  for (const b of [...CAC_BUOC_SAU, "b3", "b4"]) hien($(b), false);
+  for (const b of [...CAC_BUOC_SAU, "b3", "b4", "b7"]) hien($(b), false);
   xoaChiTiet();
   xoaXuLy();
+  xoaLo();
+  $("bang-lo").querySelector("tbody").replaceChildren();
+  veLoiDong([]);
   hangDoi = { dong: [], conNua: false };
   $("bang-hang-doi").querySelector("tbody").replaceChildren();
   trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
@@ -235,7 +241,10 @@ async function napHangChuan() {
   };
   bao($("vai-quan-ly"), cauVaiQuanLy(trangThai.choGhi, trangThai.soNguoiQuanLy) ?? "");
   hien($("b3"), trangThai.choGhi);
-  for (const id of ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv"]) hien($(id), trangThai.choGhi);
+  for (const id of ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv", "khoi-moc-ngoai"]) hien($(id), trangThai.choGhi);
+  // [S1.9101 / S4.6a] Bước 7 chỉ cho người ghi được: danh sách lô đọc dưới `item.manage` ở máy chủ, nên người khác chỉ nhận 403.
+  hien($("b7"), trangThai.choGhi);
+  if (trangThai.choGhi) await napLo();
   bao($("con-nua"), trangThai.conNua
     ? `Màn hiện ${trangThai.hangChuan.length} hàng chuẩn đầu tiên theo mã; tổ chức còn hàng khác. Ô lọc chỉ lọc trên những hàng đang hiện.`
     : "");
@@ -371,6 +380,19 @@ $("nut-quy-doi").addEventListener("click", motLan($("nut-quy-doi"), async () => 
   const heSo = $("qd-he-so").value.trim();
   if (!heSoHopLe(heSo)) { bao($("loi4"), "Hệ số là số thập phân dương, dùng dấu chấm: 7.22"); return; }
   await ghiChiTiet("conversions", { tuDonVi: $("qd-tu").value.trim(), sangDonVi: $("qd-sang").value.trim(), heSo }, "Đã khai quy đổi riêng.");
+}));
+
+// [S1.9101 / S4.6a] Một mốc giá ngoài cho hàng đang mở. Màn không kiểm lại đơn giá hay đơn vị — gói và trigger CSDL nói (`422`). Ô đơn
+// giá xoá sau khi ghi: màn của người mù giá không giữ lại con số nào (ADR-096 ⑵).
+$("nut-moc-ngoai").addEventListener("click", motLan($("nut-moc-ngoai"), async () => {
+  bao($("loi4"), ""); bao($("ok4"), "");
+  const ma = dangXem?.hangChuan?.ma ?? "";
+  await ghiChiTiet("external-references", {
+    donGia: $("mn-don-gia").value.trim(), donVi: $("mn-don-vi").value.trim(), tienTe: $("mn-tien-te").value,
+    ngayHieuLuc: $("mn-ngay").value, nguon: $("mn-nguon").value.trim(),
+  }, `Đã ghi một mốc giá ngoài cho ${ma}. Dòng hiện ở bước 7, không kèm đơn giá.`);
+  // Danh sách lô đọc lại trong `ghiChiTiet` → `napHangChuan` (bước 7 nạp cùng danh sách hàng chuẩn khi `choGhi`).
+  if ($("loi4").hidden) $("mn-don-gia").value = "";
 }));
 
 // ---------------------------------------------------------------------------------------------
@@ -555,4 +577,125 @@ $("nut-chuan-hoa-lai").addEventListener("click", motLanKhoi(async () => {
   await napHangDoi();
   bao($("ok6"), `Đã chuẩn hoá lại gói «${d.tieuDe}»: ${k.tuDong ?? 0} dòng tự nối, ${(k.goiY ?? 0) + (k.canDuyet ?? 0)} gợi ý mới, ` +
     `${k.daCo ?? 0} dòng đã có ánh xạ.`);
+}));
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096). Nhập lô bằng văn bản dán, rút
+// theo lô hay theo dòng. Danh sách lô và hàng KHÔNG mang đơn giá: máy chủ không gửi, màn không có cột (chủ dự án chốt 2026-10-06).
+// ---------------------------------------------------------------------------------------------
+
+const DUONG_LOAI = { MOC_NGOAI: "/external-references", LICH_SU_NGOAI: "/external-purchase-history" };
+/** Ô chọn loại chỉ có hai giá trị; một giá trị khác (ô bị sửa) rơi về mốc ngoài, không thành một đường `/undefined/import`. */
+const loaiDan = () => ($("dan-loai").value === "LICH_SU_NGOAI" ? "LICH_SU_NGOAI" : "MOC_NGOAI");
+
+function veMau() {
+  $("dan-mau").textContent = TIEU_DE_MAU[loaiDan()].split("\t").join(", ");
+}
+veMau();
+$("dan-loai").addEventListener("change", veMau);
+
+/** Lỗi theo dòng của lô vừa bị từ chối — mỗi lỗi một mục, qua `textContent`. */
+function veLoiDong(cau) {
+  const ul = $("loi-dong");
+  ul.replaceChildren();
+  for (const c of cau) {
+    const li = document.createElement("li");
+    li.textContent = c;
+    ul.append(li);
+  }
+  hien(ul, cau.length > 0);
+}
+
+function xoaLo() {
+  loDangMo = null;
+  $("tieu-de-lo").textContent = "";
+  $("bang-hang-lo").querySelector("tbody").replaceChildren();
+  hien($("khoi-lo"), false);
+}
+
+async function napLo() {
+  bao($("loi7"), "");
+  const r = await goi("GET", "/external-data/batches");
+  if (r.status !== 200) { bao($("loi7"), loiCua(r, "Không đọc được danh sách lô")); return; }
+  const ds = Array.isArray(r.body?.lo) ? r.body.lo : [];
+  bao($("con-nua-lo"), r.body?.conNua === true ? `Màn hiện ${ds.length} lô mới nhất; tổ chức còn lô cũ hơn.` : "");
+  const tb = $("bang-lo").querySelector("tbody");
+  tb.replaceChildren();
+  for (const l of ds) {
+    const tr = document.createElement("tr");
+    tr.append(o(TEN_LOAI[l.loai] ?? l.loai), o(khoangNgay(l.tuNgay, l.denNgay)), o(`${l.soDongConHieuLuc} / ${l.soDong}`, "so"),
+      o(String(l.soHangChuan), "so"), o(l.tacGia?.hoTen ?? l.tacGia?.userId ?? "—"), o(luc(l.ghiLuc)));
+    tr.append(oNut("Xem", () => moLo(l.loai, l.loNhapId)));
+    tr.append(l.soDongConHieuLuc > 0 ? oNut("Rút cả lô", () => rutLo(l)) : o("đã rút"));
+    tb.append(tr);
+  }
+  if (ds.length === 0) {
+    const tr = document.createElement("tr");
+    const td = o("Chưa có lô nào.");
+    td.colSpan = 8;
+    tr.append(td);
+    tb.append(tr);
+  }
+  // Lô đang mở mà vừa đổi (rút) thì đọc lại; không còn trong danh sách thì đóng.
+  if (loDangMo !== null) {
+    if (ds.some((l) => l.loNhapId === loDangMo.loNhapId)) await moLo(loDangMo.loai, loDangMo.loNhapId);
+    else xoaLo();
+  }
+}
+
+async function moLo(loai, loNhapId) {
+  bao($("loi7"), "");
+  const r = await goi("GET", `${DUONG_LOAI[loai]}/batches/${loNhapId}`);
+  if (r.status !== 200) { xoaLo(); bao($("loi7"), loiCua(r, "Không đọc được lô")); return; }
+  loDangMo = { loai, loNhapId };
+  const hang = Array.isArray(r.body?.lo?.hang) ? r.body.lo.hang : [];
+  $("tieu-de-lo").textContent = `Lô ${TEN_LOAI[loai] ?? loai} — ${hang.length} dòng`;
+  const tb = $("bang-hang-lo").querySelector("tbody");
+  tb.replaceChildren();
+  for (const h of hang) {
+    const tr = document.createElement("tr");
+    tr.append(o(h.maHang), o(h.donVi), o(h.tienTe), o(h.ngay), o(h.nhaCungCap ?? "—"), o(h.nguon), o(h.daRut ? "đã rút" : "còn hiệu lực"));
+    tr.append(h.daRut ? o("") : oNut("Rút dòng", () => rutHang(loai, h)));
+    tb.append(tr);
+  }
+  hien($("khoi-lo"), true);
+}
+
+/** Một lần rút, rồi đọc lại danh sách (và lô đang mở) — màn không tự đoán kết quả. */
+async function ghiRut(duong, cauOk) {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const r = await goi("POST", duong);
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Máy chủ từ chối")); return; }
+  await napLo();
+  bao($("ok7"), cauOk(r.body?.rut?.soDong ?? 0));
+}
+
+function rutLo(l) {
+  return ghiRut(`${DUONG_LOAI[l.loai]}/batches/${l.loNhapId}/withdraw`,
+    (n) => `Đã rút ${n} dòng của lô ${TEN_LOAI[l.loai] ?? l.loai}. Dòng đã rút vẫn đọc được ở đây, không dùng nữa.`);
+}
+
+function rutHang(loai, h) {
+  return ghiRut(`${DUONG_LOAI[loai]}/${h.id}/withdraw`, () => `Đã rút dòng ${h.maHang} ngày ${h.ngay}.`);
+}
+
+$("nut-doc-lo").addEventListener("click", () => { void napLo(); });
+
+$("nut-dan").addEventListener("click", motLan($("nut-dan"), async () => {
+  bao($("loi7"), ""); bao($("ok7"), ""); veLoiDong([]);
+  const loai = loaiDan();
+  const vanBan = $("dan-van-ban").value;
+  if (vanBan.trim() === "") { bao($("loi7"), "Dán văn bản từ bảng tính — dòng đầu là tiêu đề."); return; }
+  if (thanLoVuotTran(vanBan)) { bao($("loi7"), "Văn bản dán vượt 64 KB — chia thành nhiều lô (khoảng 500 dòng một lô)."); return; }
+  const r = await goi("POST", `${DUONG_LOAI[loai]}/import`, { vanBan });
+  if (r.status === 201) {
+    const lo = r.body?.lo ?? {};
+    $("dan-van-ban").value = "";
+    await napLo();
+    bao($("ok7"), `Đã nhập lô ${TEN_LOAI[loai]}: ${lo.soDong ?? 0} dòng, ${lo.soHangChuan ?? 0} hàng chuẩn.`);
+    return;
+  }
+  const cau = r.status === 422 ? docLoiLo(r.body) : null;
+  if (cau !== null) veLoiDong(cau);
+  bao($("loi7"), loiCua(r, "Không nhập được lô"));
 }));

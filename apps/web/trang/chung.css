@@ -198,6 +198,7 @@ ul.tp li { font-size: 0.82rem; color: var(--chu-mo); font-variant-numeric: tabul
 .bao.loi { background: var(--do-nen); color: var(--do); }
 .bao.ok { background: var(--luc-nen); color: var(--luc); }
 .bao.luu { background: var(--vang-nen); color: var(--vang-chu); }
+ul.bao { padding-left: 2em; }
 
 .doi { display: flex; gap: 10px; flex-wrap: wrap; }
 .doi > * { flex: 1 1 140px; }

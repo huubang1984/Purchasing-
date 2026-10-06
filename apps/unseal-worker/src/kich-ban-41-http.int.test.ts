@@ -83,6 +83,13 @@ const MOI_GIA: readonly string[] = [...NHA_CUNG_CAP.map((n) => n.gia), GIA_SUA_L
  */
 const SO_LUONG_DONG = 100;
 const donGiaCua = (tong: string): string => (Number(tong) / SO_LUONG_DONG).toFixed(2);
+/**
+ * [S1.9101 / S4.6a] Hai KIM của dữ liệu ngoài (ADR-095 ⑹): đơn giá của một mốc giá ngoài và của một dòng lịch sử mua ngoài hệ thống,
+ * nhập ở bước 1 — TRƯỚC mọi lượt chấm, benchmark và xuất bộ bằng chứng — và quét ở bước 14. Hai con số không trùng giá nào của kịch
+ * bản, và khác nhau, nên mỗi kim chỉ được phép đứng ở ĐÚNG bảng của nó.
+ */
+const KIM_MOC_NGOAI = "73519.83";
+const KIM_LICH_SU_NGOAI = "64287.19";
 const banRo = (tong: string, ten: string): string =>
   JSON.stringify({ totalAmount: tong, currency: "VND", nhaCungCap: ten, lines: [{ lineNo: 1, unitPrice: donGiaCua(tong), amount: tong }] });
 /** Hàng chuẩn của dòng ấy (bước 1): gốc `kg`, tấm 1 500 × 6 000 × 12 mm thép 7 850 kg/m³ = 847,8 kg. */
@@ -607,6 +614,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(bd.status, bd.text).toBe(201);
     const qd = await goi("POST", `/items/${trangThai.hangChuanId}/conversions`, dl, { tuDonVi: "tam", sangDonVi: "kg", heSo: HANG_CHUAN_CHINH.heSoTam });
     expect(qd.status, qd.text).toBe(201);
+    // [S1.9101 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
+    // kịch bản sau đó (chấm, benchmark, BAFO, xuất bộ bằng chứng) chạy trong một thế giới CÓ dữ liệu ngoài; bước 14 quét hai kim.
+    const mn = await goi("POST", "/external-references/import", dl, {
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_MOC_NGOAI},kg,VND,2026-01-15,Bang gia nha may\n`,
+    });
+    expect(mn.status, mn.text).toBe(201);
+    const ls = await goi("POST", "/external-purchase-history/import", dl, {
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_LICH_SU_NGOAI},kg,VND,2025-11-20,Cong ty Thep Ngoai,So mua 2025\n`,
+    });
+    expect(ls.status, ls.text).toBe(201);
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
     expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(true);
@@ -851,13 +868,19 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // [S1.199 / S4.2b] Người quản lý dữ liệu HY SINH: tám route ghi dữ liệu nền đòi `item.manage`, và chỉ `DATA_STEWARD` giữ
     // mã ấy — gọi bằng `m` thì dừng ở 403 của cổng, tức route không đi tới nghiệp vụ.
     const quanLyHy = await dangNhap("quan-ly-hy@vidu.vn", "DATA_STEWARD");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string; nhomId: string; itemId: string; lanNopB: number } = {
+    const hy: {
+      unsealId: string; mfaResetId: string; policyId: string; nhomId: string; itemId: string; lanNopB: number;
+      mocTay: string; loMoc: string; loLichSu: string;
+    } = {
       unsealId: UUID0,
       mfaResetId: UUID0,
       policyId: UUID0,
       nhomId: UUID0,
       itemId: UUID0,
       lanNopB: 0,
+      mocTay: UUID0,
+      loMoc: UUID0,
+      loLichSu: UUID0,
     };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
@@ -1075,6 +1098,44 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
         case "POST /uom/aliases/withdraw":
           return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
+        // [S1.9101 / S4.6a] Bảy route ghi dữ liệu ngoài, trên hàng chuẩn hy sinh. Thứ tự của bảng route: nhập tay → dán mốc → dán lịch
+        // sử → rút lô mốc → rút lô lịch sử → rút hàng mốc → rút hàng lịch sử. Sáu route đi tới 201; route cuối rút một id không có
+        // (không route nào trả id hàng của một lô dán) ⇒ 422 có tên `KHONG_CO_HANG_DU_LIEU`, tức vẫn qua bộ đọc thân.
+        case "POST /items/:itemId/external-references":
+          return {
+            path: r.path.replace(":itemId", hy.itemId),
+            body: { donGia: "12.5", donVi: "kg", tienTe: "VND", ngayHieuLuc: "2026-01-15", nguon: "Bang gia quet" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.mocTay = (ph.body as { moc: { hangId: string } }).moc.hangId;
+            },
+          };
+        case "POST /external-references/import":
+          return {
+            path: r.path,
+            body: { vanBan: "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nQUET-HY-SINH,13.5,kg,VND,2026-01-16,Bang gia quet\n" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.loMoc = (ph.body as { lo: { loNhapId: string } }).lo.loNhapId;
+            },
+          };
+        case "POST /external-purchase-history/import":
+          return {
+            path: r.path,
+            body: { vanBan: "ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\nQUET-HY-SINH,14.5,kg,VND,2025-11-20,Cong ty quet,So quet\n" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.loLichSu = (ph.body as { lo: { loNhapId: string } }).lo.loNhapId;
+            },
+          };
+        case "POST /external-references/batches/:batchId/withdraw":
+          return { path: r.path.replace(":batchId", hy.loMoc), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-purchase-history/batches/:batchId/withdraw":
+          return { path: r.path.replace(":batchId", hy.loLichSu), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-references/:rowId/withdraw":
+          return { path: r.path.replace(":rowId", hy.mocTay), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-purchase-history/:rowId/withdraw":
+          return { path: r.path.replace(":rowId", UUID0), body: {}, cookie: quanLyHy.cookie };
         // [S1.234 / S4.3b] Ba route ghi ánh xạ, trên gói HY SINH A (đã nộp, đã đóng) và hàng chuẩn hy sinh ở trên — người quản lý
         // dữ liệu hy sinh không chạm gói nào nên nằm ngoài tập loại trừ. Lý do khai sẵn: nếu gói A đã có bản rõ, L13 đòi nó.
         case "POST /rfqs/:rfqId/normalize":
@@ -2121,6 +2182,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     ).rows[0]!.v;
     expect(quyDoi.startsWith("10969.568")).toBe(true);
     expect((await quetGiaMoiQuanHe(db.pool, quyDoi)).dinh, "đơn giá quy đổi không được lưu ở đâu").toEqual([]);
+    // [S1.9101 / S4.6a — ADR-095 ⑸⑹, ADR-054] Hai bảng giá KHÔNG phải báo giá: mỗi kim của bước 1 chỉ ở đúng bảng của nó — không ở
+    // sổ kiểm toán (payload lần nhập không mang giá), không ở bảng chấm, benchmark hay bản lưu, không ở bảng kia.
+    expect((await quetGiaMoiQuanHe(db.pool, KIM_MOC_NGOAI)).dinh, "mốc giá ngoài chỉ ở bảng của nó").toEqual(["external_price_references"]);
+    expect((await quetGiaMoiQuanHe(db.pool, KIM_LICH_SU_NGOAI)).dinh, "lịch sử ngoài chỉ ở bảng của nó").toEqual(["external_purchase_history"]);
     // Đối chứng dương trên CỤM CỦA KỊCH BẢN: một materialized view dựng LÚC CHẠY, ngoài migration — đúng chỗ hở mục (C) của
     // hardening không thấy — chép đơn giá ra; cùng bộ quét phải kể nó.
     await db.pool.query("CREATE MATERIALIZED VIEW public.zz_doi_chung_don_gia AS SELECT payload -> 'lines' AS dong FROM public.rfq_unsealed_bids");

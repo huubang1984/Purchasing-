@@ -777,6 +777,9 @@ describe("phủ RLS", () => {
       // [S1.197 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
       { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
+      // [S1.9101 / S4.6a] Hai bảng giá ngoài (ADR-096 ⑹): SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
+      { grantee: "app_api", bang: "external_price_references", quyen: "SELECT" },
+      { grantee: "app_api", bang: "external_purchase_history", quyen: "SELECT" },
       // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "governance_signal_acks", quyen: "SELECT" },
       { grantee: "app_api", bang: "governance_signals", quyen: "SELECT" },
@@ -1124,6 +1127,30 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "canonical_items", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "tac_gia", quyen: "INSERT" },
+      // [S1.9101 / S4.6a] Theo CỘT: `id`, `seq`, `ghi_luc` do CSDL đặt (khuôn L1).
+      { grantee: "app_api", bang: "external_price_references", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "don_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "don_vi", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "lo_nhap_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "ngay_hieu_luc", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "nguon", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "rut_cua", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_price_references", cot: "tien_te", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "don_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "don_vi", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "lo_nhap_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "ngay_mua", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "nguon", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "nha_cung_cap_text", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "rut_cua", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "external_purchase_history", cot: "tien_te", quyen: "INSERT" },
       // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ INSERT. Bằng chứng, độ tin cậy, giải thích và mốc tính KHÔNG cấp — trigger
       // `governance_signals_tinh` đặt chúng, nên người gọi không khai được bằng chứng.
       { grantee: "app_api", bang: "governance_signal_acks", cot: "created_by", quyen: "INSERT" },
@@ -2142,6 +2169,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       // [S1.197 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
       "canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions",
+      // [S1.9101 / S4.6a] L6: không phiên khách nào đọc mốc giá ngoài hay lịch sử mua ngoài hệ thống.
+      "external_price_references", "external_purchase_history",
       // [S1.203 / S3.6b1] Tín hiệu là việc nội bộ bên mua — nhà cung cấp không đọc được gói nào bị soi là chia nhỏ.
       "governance_signal_acks", "governance_signals",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",

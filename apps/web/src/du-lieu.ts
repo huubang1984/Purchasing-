@@ -184,3 +184,56 @@ export function luaChonHangChuan(
   const conLai = hangChuan.filter((h) => h.trangThai === "DANG_DUNG" && !daCo.has(h.id)).map((h) => ({ id: h.id, nhan: `${h.ma} — ${h.ten}` }));
   return [...ungVien, ...conLai];
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — bước 7. Không phép tính nào về GIÁ: màn của người quản lý dữ liệu
+// không nhận lại đơn giá (ADR-096 ⑵; chủ dự án chốt 2026-10-06). Luật đọc văn bản dán ở `packages/du-lieu-nen/src/csv-ngoai.ts`.
+// ----------------------------------------------------------------------------------------------
+
+export type LoaiDuLieuNgoai = "MOC_NGOAI" | "LICH_SU_NGOAI";
+
+/** Dòng tiêu đề mẫu mà màn đưa cho người dán — đúng tên cột của bộ đọc (thứ tự tự do, có dấu hay không đều được). */
+export const TIEU_DE_MAU: Readonly<Record<LoaiDuLieuNgoai, string>> = {
+  MOC_NGOAI: "ma_hang\tdon_gia\tdon_vi\ttien_te\tngay_hieu_luc\tnguon",
+  LICH_SU_NGOAI: "ma_hang\tdon_gia\tdon_vi\ttien_te\tngay_mua\tnha_cung_cap\tnguon",
+};
+
+export const TEN_LOAI: Readonly<Record<LoaiDuLieuNgoai, string>> = {
+  MOC_NGOAI: "mốc giá ngoài",
+  LICH_SU_NGOAI: "lịch sử mua ngoài hệ thống",
+};
+
+/** Một lỗi theo dòng của lô bị từ chối — đúng hình dạng thân 422 của `POST /external-…/import`. */
+export interface LoiDongNgoai {
+  readonly dong: number;
+  readonly cot: string | null;
+  readonly ma: string;
+  readonly cau: string;
+}
+
+/** *"Dòng 3, cột don_vi: …"* — dòng 1 là tiêu đề, đúng số dòng người dán thấy trong bảng tính. */
+export function moTaLoiDong(l: LoiDongNgoai): string {
+  return `Dòng ${String(l.dong)}${l.cot === null ? "" : `, cột ${l.cot}`}: ${l.cau}`;
+}
+
+/** Thân 422 của lần nhập lô → danh sách câu; thân không mang `loi` (một 422 khác) ⇒ `null`. */
+export function docLoiLo(body: unknown): readonly string[] | null {
+  const loi = (body as { loi?: unknown } | null)?.loi;
+  if (!Array.isArray(loi)) return null;
+  return loi
+    .filter((l): l is LoiDongNgoai => typeof l === "object" && l !== null && typeof (l as LoiDongNgoai).dong === "number" && typeof (l as LoiDongNgoai).cau === "string")
+    .map(moTaLoiDong);
+}
+
+/** *"2025-11-20 → 2025-12-05"*, hay một ngày khi hai đầu trùng. */
+export function khoangNgay(tu: string, den: string): string {
+  return tu === den ? tu : `${tu} → ${den}`;
+}
+
+/** Trần thân yêu cầu của API mà một lô dán phải lọt — bằng `TRAN_THAN_BYTE` của `apps/api/src/router.ts`; test đối chiếu nguồn. */
+export const TRAN_THAN_LO_BYTE = 64 * 1024;
+
+/** Thân `{ vanBan }` vượt trần ⇒ máy chủ cắt kết nối trước khi đọc xong; màn nói trước, kèm cách chia lô. */
+export function thanLoVuotTran(vanBan: string): boolean {
+  return new TextEncoder().encode(JSON.stringify({ vanBan })).length > TRAN_THAN_LO_BYTE;
+}

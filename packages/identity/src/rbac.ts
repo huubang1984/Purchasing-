@@ -363,6 +363,10 @@ export const DANH_MUC_HANH_DONG_TU_CHOI: ReadonlySet<string> = new Set([
 export const DANH_MUC_LOAI_TAI_NGUYEN: ReadonlySet<string> = new Set([
   // [S1.199 / S4.2b] Route ghi của dữ liệu nền (`apps/api/src/routes/du-lieu.ts`) — vào danh mục ở lần hợp master sau đợt 2.
   "CANONICAL_ITEM",
+  // [S1.9101 / S4.6a] Lô và hàng của mốc giá ngoài / lịch sử ngoài hệ thống (`apps/api/src/routes/du-lieu-ngoai.ts`; cổng đọc trong
+  // `lietKeLoDuLieuNgoai`/`docLoDuLieuNgoai`).
+  "EXTERNAL_DATA_BATCH",
+  "EXTERNAL_DATA_ROW",
   "INVITATION",
   "MFA_RESET_REQUEST",
   "PROCUREMENT_CATEGORY",
