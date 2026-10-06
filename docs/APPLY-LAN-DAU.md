@@ -165,7 +165,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       `DeleteAlias`, `ScheduleKeyDeletion` (`so ngay cho xoa 7`), `CancelKeyDeletion`, `ScheduleKeyDeletion`. Lệnh cuối để khoá
       thử tự xoá sau 7 ngày. Thiếu thư nào thì ⑴ chưa bắt thao tác ấy, dù `apply` xanh. `create-key` bị từ chối (một SCP của
       tổ chức — nằm ngoài kho, chưa đo) thì khối lệnh dừng ở đó: lần bị từ chối vẫn phải ra một thư `CreateKey` có `errorCode`. Ghi giờ
-      các thư vào STATE khoản 336.
+      các thư vào STATE khoản 336. **[2026-10-05] Đã làm** (chủ dự án): stack 60 apply lại; sáu thư đủ, đúng thứ tự, 14:31:23Z–14:31:34Z — khoản 336 đóng.
 - [ ] **3.4 Đối chứng dương ⑵**: ~~`aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
       ⇒ lời gọi lỗi nhưng **có thư**.~~ **[apply lần đầu 2026-09-30] Phép thử ấy KHÔNG BAO GIỜ có thư:** task definition
       `tp-unseal-worker` chưa tồn tại (stack 90 chưa apply) nên ECS từ chối ở bước kiểm đầu vào (`ClientException:
@@ -411,7 +411,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 9. Trước dữ liệu thật — kiểm lại
 
 - [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ.
-- [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. ~~Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.~~ **[sửa 2026-10-02]** Mã đã bắt cả 17 thao tác; khoản ấy vẫn ở rổ A tới khi stack 60 được apply lại và 3.3b có đủ sáu thư.
+- [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. ~~Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.~~ **[sửa 2026-10-02]** Mã đã bắt cả 17 thao tác; khoản ấy vẫn ở rổ A tới khi stack 60 được apply lại và 3.3b có đủ sáu thư. **[2026-10-05]** Đã apply lại và đã đủ sáu thư — khoản 336 đóng.
 - [ ] **[rà 2026-10-01]** Ít nhất một kênh OTP ngoài thư (SMS hay Zalo) đã bật — `pnpm kiem-truoc-apply` hết `[VANG] kenh_otp` (0.3).
 - [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2, **[rà 2026-10-01]** 8.1 (⑼).
 - [ ] Mọi alarm `tp-van-hanh-*`, `tp-dns-bi-chan`, `tp-canh-bao-thieu-moc-neo` đang **OK**.
