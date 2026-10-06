@@ -502,6 +502,15 @@ afterAll(async () => {
  * nộp gói nào; ký đúng một gói (gói chính) mà `pm2` cũng ký, nên K5 của gói ấy vẫn có một chữ ký ngoài tập loại trừ — và xác minh
  * bằng `taiChinh2`: `taiChinh` khai phiên bản 1, `taiChinh2` chỉ ký nó. Người liên hệ có TRƯỚC lần xác minh (băm hồ sơ phủ nó).
  */
+/** [S1.9101 / S3.3e1] Băm hồ sơ hiện tại của một nhà cung cấp, đọc qua `GET /supplier-verifications` dưới phiên người xác minh. */
+async function bamHoSoQuaHttp(cookie: string, supplierId: string): Promise<string> {
+  const r = await goi("GET", "/supplier-verifications", cookie);
+  expect(r.status, r.text).toBe(200);
+  const h = (r.body as { hoSo: { supplierId: string; bamHoSo: string }[] }).hoSo.find((x) => x.supplierId === supplierId);
+  expect(h, `hồ sơ ${supplierId} có trong danh sách xác minh`).toBeDefined();
+  return h!.bamHoSo;
+}
+
 async function dungNccQuaHttp(
   nguoiDung: Nguoi,
   ncc: { readonly ten: string; readonly mst: string; readonly lienHe: string; readonly email: string; readonly phone: string },
@@ -514,7 +523,10 @@ async function dungNccQuaHttp(
   expect(c.status, c.text).toBe(201);
   const contactId = (c.body as { contact: { id: string } }).contact.id;
   if (xacMinh) {
-    const xm = await goi("POST", `/suppliers/${supplierId}/verify`, trangThai.taiChinh2.cookie);
+    // [S1.9101 / S3.3e1] Lần xác minh mang băm hồ sơ người xác minh vừa thấy — như màn `/nha-cung-cap`.
+    const xm = await goi("POST", `/suppliers/${supplierId}/verify`, trangThai.taiChinh2.cookie, {
+      bamDaXem: await bamHoSoQuaHttp(trangThai.taiChinh2.cookie, supplierId),
+    });
     expect(xm.status, xm.text).toBe(201);
     expect((xm.body as { verification: { conHieuLuc: boolean } }).verification.conHieuLuc, `xác minh của ${ncc.ten} còn hiệu lực`).toBe(true);
   }
@@ -929,8 +941,14 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":supplierId", nccHyId), body: { fullName: "Lien he quet", email: "quet@ncc.vn", phone: "0908888888" }, cookie: m };
         // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp HY SINH bằng tài chính (giữ `supplier.qualify`, không dựng hồ sơ ấy): luồng
         // S3 ghi một hàng xác minh của nhà cung cấp không ai mời trong kịch bản, luồng MVP1 dừng ở lời từ chối *tổ chức chưa bật*.
+        // [S1.9101 / S3.3e1] Thân mang băm hồ sơ đọc NGAY lúc gọi — route thêm người liên hệ của bộ quét chạy trước và đổi băm. Thân là
+        // một lời hứa; vòng quét chờ nó trước khi gửi.
         case "POST /suppliers/:supplierId/verify":
-          return { path: r.path.replace(":supplierId", nccHyId), body: {}, cookie: trangThai.taiChinh.cookie };
+          return {
+            path: r.path.replace(":supplierId", nccHyId),
+            body: bamHoSoQuaHttp(trangThai.taiChinh.cookie, nccHyId).then((bamDaXem) => ({ bamDaXem })),
+            cookie: trangThai.taiChinh.cookie,
+          };
         case "POST /suppliers/:supplierId/verification/revoke":
           return { path: r.path.replace(":supplierId", nccHyId), body: { reason: "thu hoi xac minh de quet" }, cookie: trangThai.taiChinh.cookie };
         case "POST /rfqs":
@@ -1128,7 +1146,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           ? [{ path: hopLe.path, ...(hopLe.cookie === "" ? {} : { cookie: hopLe.cookie }), body: hopLe.body, ...(hopLe.sau === undefined ? {} : { sau: hopLe.sau }) }]
           : [{ path: thay(r.path), cookie: r.audience === "GUEST" ? k : m }];
       for (const ca of cacCa) {
-        const ph = await goi(r.method, ca.path, ca.cookie, r.method === "GET" ? undefined : (ca.body ?? {}));
+        const ph = await goi(r.method, ca.path, ca.cookie, r.method === "GET" ? undefined : await (ca.body ?? {}));
         soGoi += 1;
         if (!laGhi) phanHoiDoc.set(`${r.method} ${r.path}`, ph);
         ca.sau?.(ph);

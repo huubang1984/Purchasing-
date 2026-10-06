@@ -1095,6 +1095,28 @@ export interface InvitationSummary {
   readonly moiSauKhiKy: boolean;
   readonly createdAt: string;
   readonly revokedAt: string | null;
+  /**
+   * [S1.9101 / S3.3e1] Ở tổ chức đã bật: lời mời này thuộc tập *đếm được* của K2 (`rfq_loi_moi_dem_duoc`, `108`) — `null` ở tổ chức
+   * chưa bật. Đếm theo TỪNG lời mời; K2 đếm NHÓM, nên màn đọc số nhóm ở `DanhSachLoiMoi.canhTranh`, không cộng cờ này.
+   */
+  readonly demDuoc: boolean | null;
+  /** [S1.9101 / S3.3e1] Ở tổ chức đã bật: nhà cung cấp có xác minh còn hiệu lực (`ncc_xac_minh_con_hieu_luc`); `null` ở tổ chức chưa bật. */
+  readonly xacMinhConHieuLuc: boolean | null;
+}
+
+/**
+ * [S1.9101 / S3.3e1] Danh sách lời mời cùng lần nộp, trạng thái gói và số nhóm của K2 — MỘT câu, một ảnh chụp. Người duyệt ký lên
+ * danh sách của lần nộp mà nút Phê duyệt gửi; `lanNop` ở đây lệch `lanNop` của lần đọc gói thì màn đọc lại trọn gói (lượt soi CAO-1).
+ */
+export interface DanhSachLoiMoi {
+  readonly invitations: readonly InvitationSummary[];
+  readonly lanNop: number;
+  readonly trangThai: string;
+  /**
+   * Ở tổ chức đã bật: số NHÓM nhà cung cấp đếm được (`rfq_dem_ncc_canh_tranh`) và ngưỡng `so_ncc_toi_thieu` của bậc ghim (`null` khi
+   * gói chưa có bậc ghim — K1 nói ở lần nộp). `null` ở tổ chức chưa bật.
+   */
+  readonly canhTranh: { readonly soNhomDemDuoc: number; readonly toiThieu: number | null } | null;
 }
 
 // ==============================================================================================
@@ -1126,7 +1148,7 @@ export async function listInvitations(
   orgId: string,
   input: { readonly rfqId: string; readonly actorSessionId: string },
   auditPool: pg.Pool,
-): Promise<InvitationSummary[]> {
+): Promise<DanhSachLoiMoi | null> {
   await assertTenantBound(client, orgId, "listInvitations");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await requirePermission(
@@ -1141,45 +1163,88 @@ export async function listInvitations(
     auditPool,
   );
 
+  // [S1.9101 / S3.3e1] Câu dựng từ `rfq_packages` — gói chưa mời ai vẫn trả `lanNop` —, và tập *đếm được* tính MỘT lần thành mảng.
   const { rows } = await client.query<{
-    id: string;
-    supplier_id: string;
-    supplier_name: string;
-    contact_id: string;
-    contact_name: string;
-    link_channel: string;
-    status: string;
-    moi_sau_khi_ky: boolean;
-    created_at: Date;
+    lan_nop: number;
+    trang_thai: string;
+    bat: boolean;
+    so_nhom: number | null;
+    toi_thieu: number | null;
+    id: string | null;
+    supplier_id: string | null;
+    supplier_name: string | null;
+    contact_id: string | null;
+    contact_name: string | null;
+    link_channel: string | null;
+    status: string | null;
+    moi_sau_khi_ky: boolean | null;
+    created_at: Date | null;
     revoked_at: Date | null;
+    dem_duoc: boolean | null;
+    xac_minh: boolean | null;
   }>(
-    `SELECT m.id, m.supplier_id, ncc.legal_name AS supplier_name, m.contact_id,
-            lh.full_name AS contact_name, m.link_channel, m.status, m.moi_sau_khi_ky, m.created_at, m.revoked_at
-       FROM public.rfq_invitations m
-       JOIN public.suppliers ncc
-         ON ncc.id OPERATOR(pg_catalog.=) m.supplier_id
-        AND ncc.org_id OPERATOR(pg_catalog.=) m.org_id
-       JOIN public.supplier_contacts lh
-         ON lh.id OPERATOR(pg_catalog.=) m.contact_id
-        AND lh.org_id OPERATOR(pg_catalog.=) m.org_id
-      WHERE m.rfq_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-        AND m.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+    `WITH goi AS (
+       SELECT p.id, p.org_id, p.lan_nop, p.status, b.bat,
+              CASE WHEN b.bat THEN ARRAY(SELECT public.rfq_loi_moi_dem_duoc(p.org_id, p.id)) END AS dem
+         FROM public.rfq_packages p
+         CROSS JOIN LATERAL (SELECT public.to_chuc_da_bat_s3(p.org_id) AS bat) b
+        WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+          AND p.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+     )
+     SELECT g.lan_nop, g.status AS trang_thai, g.bat,
+            CASE WHEN g.bat THEN public.rfq_dem_ncc_canh_tranh(g.org_id, g.id) END AS so_nhom,
+            CASE WHEN g.bat THEN (public.rfq_bac_ghim(g.org_id, g.id) OPERATOR(pg_catalog.->>) 'so_ncc_toi_thieu')::pg_catalog.int4 END
+              AS toi_thieu,
+            m.id, m.supplier_id, ncc.legal_name AS supplier_name, m.contact_id,
+            lh.full_name AS contact_name, m.link_channel, m.status, m.moi_sau_khi_ky, m.created_at, m.revoked_at,
+            CASE WHEN g.bat AND m.id IS NOT NULL THEN m.id OPERATOR(pg_catalog.=) ANY (g.dem) END AS dem_duoc,
+            CASE WHEN g.bat AND m.id IS NOT NULL THEN public.ncc_xac_minh_con_hieu_luc(m.org_id, m.supplier_id) END AS xac_minh
+       FROM goi g
+       LEFT JOIN public.rfq_invitations m
+              ON m.rfq_id OPERATOR(pg_catalog.=) g.id
+             AND m.org_id OPERATOR(pg_catalog.=) g.org_id
+       LEFT JOIN public.suppliers ncc
+              ON ncc.id OPERATOR(pg_catalog.=) m.supplier_id
+             AND ncc.org_id OPERATOR(pg_catalog.=) m.org_id
+       LEFT JOIN public.supplier_contacts lh
+              ON lh.id OPERATOR(pg_catalog.=) m.contact_id
+             AND lh.org_id OPERATOR(pg_catalog.=) m.org_id
       ORDER BY m.created_at, m.id`,
     [input.rfqId, orgId],
   );
 
-  return rows.map((r) => ({
-    id: r.id,
-    supplierId: r.supplier_id,
-    supplierName: r.supplier_name,
-    contactId: r.contact_id,
-    contactName: r.contact_name,
-    linkChannel: r.link_channel,
-    status: r.status,
-    moiSauKhiKy: r.moi_sau_khi_ky,
-    createdAt: r.created_at.toISOString(),
-    revokedAt: r.revoked_at === null ? null : r.revoked_at.toISOString(),
-  }));
+  const dau = rows[0];
+  if (dau === undefined) return null;
+  const invitations: InvitationSummary[] = [];
+  for (const r of rows) {
+    if (r.id === null) continue;
+    if (
+      r.supplier_id === null || r.supplier_name === null || r.contact_id === null || r.contact_name === null ||
+      r.link_channel === null || r.status === null || r.moi_sau_khi_ky === null || r.created_at === null
+    ) {
+      throw new Error("hàng lời mời thiếu nhà cung cấp hay người liên hệ — khoá ngoại hợp thành của 010 đã trôi");
+    }
+    invitations.push({
+      id: r.id,
+      supplierId: r.supplier_id,
+      supplierName: r.supplier_name,
+      contactId: r.contact_id,
+      contactName: r.contact_name,
+      linkChannel: r.link_channel,
+      status: r.status,
+      moiSauKhiKy: r.moi_sau_khi_ky,
+      createdAt: r.created_at.toISOString(),
+      revokedAt: r.revoked_at === null ? null : r.revoked_at.toISOString(),
+      demDuoc: r.dem_duoc,
+      xacMinhConHieuLuc: r.xac_minh,
+    });
+  }
+  return {
+    invitations,
+    lanNop: dau.lan_nop,
+    trangThai: dau.trang_thai,
+    canhTranh: dau.bat && dau.so_nhom !== null ? { soNhomDemDuoc: dau.so_nhom, toiThieu: dau.toi_thieu } : null,
+  };
 }
 
 // ==============================================================================================

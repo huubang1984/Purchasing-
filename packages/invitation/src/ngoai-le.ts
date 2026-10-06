@@ -247,7 +247,34 @@ async function truyVan(client: pg.PoolClient, orgId: string, rfqId: string): Pro
 }
 
 /**
- * Mọi ngoại lệ đã lập của một gói trong tổ chức đang gắn, kèm lần rút nếu có — cũ trước.
+ * [S1.9101 / S3.3e1] Danh sách ngoại lệ của một gói CÙNG lần nộp và trạng thái của gói, đọc trong MỘT câu — một ảnh chụp dưới READ
+ * COMMITTED. Màn so `lanNop` này với `lanNop` của lần đọc gói mà nút Phê duyệt sẽ gửi: lệch thì danh sách đang thấy không phải danh
+ * sách của lần nộp ấy, và màn đọc lại TRỌN gói (lượt soi CAO-1). `lanNop` đi cùng cả khi gói chưa có ngoại lệ nào.
+ */
+export interface DanhSachNgoaiLe {
+  readonly exceptions: readonly NgoaiLeCanhTranh[];
+  readonly lanNop: number;
+  readonly trangThai: string;
+}
+
+interface HangDanhSachNgoaiLe {
+  lan_nop: number;
+  status: string;
+  id: string | null;
+  rfq_id: string | null;
+  loai: LoaiNgoaiLe | null;
+  ma_ly_do: MaLyDoNgoaiLe | null;
+  giai_trinh: string | null;
+  created_by: string | null;
+  created_at: Date | null;
+  rut_boi: string | null;
+  rut_luc: Date | null;
+  rut_ly_do: string | null;
+}
+
+/**
+ * Mọi ngoại lệ đã lập của một gói trong tổ chức đang gắn, kèm lần rút nếu có — cũ trước —, cùng lần nộp và trạng thái của gói. Gói
+ * không đọc được (không có, hay của tổ chức khác) ⇒ `null`.
  *
  * Cổng `rfq.invite`, cùng khuôn `listInvitations`: ngoại lệ là một phần của danh sách mời, nằm trong cùng băm mà người duyệt ký,
  * và ai mời được thì xem được — không hơn. Mọi vai giữ `rfq.approve` hôm nay cũng giữ `rfq.invite` (`005`). `requirePermission`
@@ -258,7 +285,7 @@ export async function docNgoaiLe(
   orgId: string,
   input: { readonly rfqId: string; readonly actorSessionId: string },
   auditPool: pg.Pool,
-): Promise<NgoaiLeCanhTranh[]> {
+): Promise<DanhSachNgoaiLe | null> {
   await assertTenantBound(client, orgId, "docNgoaiLe");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await requirePermission(
@@ -266,5 +293,39 @@ export async function docNgoaiLe(
     { userId: actor.id, orgId, permission: PERMISSIONS.RFQ_INVITE, resourceType: "RFQ", resourceId: input.rfqId },
     auditPool,
   );
-  return truyVan(client, orgId, input.rfqId);
+  // Câu DỰNG TỪ `rfq_packages` (lượt soi TRUNG-3): dựng từ bảng ngoại lệ thì gói chưa có ngoại lệ nào trả không hàng, mất `lanNop`
+  // đúng lúc người duyệt cần biết tập ấy rỗng.
+  const { rows } = await client.query<HangDanhSachNgoaiLe>(
+    `SELECT p.lan_nop, p.status, e.id, e.rfq_id, e.loai, e.ma_ly_do, e.giai_trinh, e.created_by, e.created_at,
+            r.created_by AS rut_boi, r.created_at AS rut_luc, r.giai_trinh AS rut_ly_do
+       FROM public.rfq_packages p
+       LEFT JOIN public.rfq_sourcing_exceptions e
+              ON e.org_id OPERATOR(pg_catalog.=) p.org_id AND e.rfq_id OPERATOR(pg_catalog.=) p.id
+             AND e.hanh_dong OPERATOR(pg_catalog.=) 'LAP'
+       LEFT JOIN public.rfq_sourcing_exceptions r
+              ON r.org_id OPERATOR(pg_catalog.=) e.org_id AND r.hanh_dong OPERATOR(pg_catalog.=) 'RUT'
+             AND r.ngoai_le_id OPERATOR(pg_catalog.=) e.id
+      WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND p.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+      ORDER BY e.created_at, e.id`,
+    [input.rfqId, orgId],
+  );
+  const dau = rows[0];
+  if (dau === undefined) return null;
+  const exceptions: NgoaiLeCanhTranh[] = [];
+  for (const h of rows) {
+    if (h.id === null || h.rfq_id === null || h.loai === null || h.ma_ly_do === null || h.giai_trinh === null) continue;
+    if (h.created_by === null || h.created_at === null) throw new Error("hàng ngoại lệ thiếu người lập hay lúc lập — CHECK của 105 đã trôi");
+    exceptions.push({
+      id: h.id,
+      rfqId: h.rfq_id,
+      loai: h.loai,
+      maLyDo: h.ma_ly_do,
+      giaiTrinh: h.giai_trinh,
+      lapBoi: h.created_by,
+      lapLuc: h.created_at,
+      rut: h.rut_boi === null || h.rut_luc === null || h.rut_ly_do === null ? null : { boi: h.rut_boi, luc: h.rut_luc, lyDo: h.rut_ly_do },
+    });
+  }
+  return { exceptions, lanNop: dau.lan_nop, trangThai: dau.status };
 }

@@ -140,6 +140,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +
     "kiểm soát của bên mua (K8a), và câu hỏi *nhà cung cấp này có được đếm vào K2 không* là của máy chủ lúc nộp duyệt, " +
     "không phải của một tác tử chỉ-đọc. Mở sau là một quyết định có tên.",
+  // [S1.9101 / S3.3e1]
+  "/supplier-verifications":
+    "HỒ SƠ XÁC MINH CỦA MỌI NHÀ CUNG CẤP — trạng thái, băm hồ sơ, và MỌI người liên hệ (tên, email, điện thoại, ai thêm). " +
+    "Nó gộp hai route đã khai không cho tác tử ở trên (`…/verification`, `…/contacts`) cho màn `/nha-cung-cap` của người " +
+    "giữ `supplier.qualify`; gộp không làm dữ liệu bớt nhạy, chỉ làm việc liệt kê dễ hơn. Route khai `agent: false`.",
   "/policy/versions":
     "LỊCH SỬ PHIÊN BẢN CHÍNH SÁCH — trọn ma trận bậc của MỌI phiên bản, ai khai, ai ký, lúc nào, và tổ chức đã bật S3 " +
     "chưa. Nó là dữ liệu QUẢN TRỊ của màn `/chinh-sach`, không phải thứ một tác tử chỉ-đọc cần để làm việc: chính sách " +
