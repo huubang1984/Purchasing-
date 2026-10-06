@@ -115,7 +115,7 @@
 // ==============================================================================================
 //
 // ==============================================================================================
-// ⑺ CHỖ HỎNG THỨ BẢY — `EPERM` CỦA ⑸ TÁI PHÁT TRÊN CI, VÀ PHÉP PHÂN LOẠI CỦA ⑸ TỰ CÓ MỘT KHE ĐUA. [khoản 9401]
+// ⑺ CHỖ HỎNG THỨ BẢY — `EPERM` CỦA ⑸ TÁI PHÁT TRÊN CI, VÀ PHÉP PHÂN LOẠI CỦA ⑸ TỰ CÓ MỘT KHE ĐUA. [khoản 343]
 //
 // Đo: PR #245, run 37354665496 lượt 1, job `T1+T2 (windows-latest)` ĐỎ đúng một ca — `boundaries.test.ts`
 // > *chặn import ngược từ tools/bench-keyprovider/src* — `EPERM: operation not permitted, mkdir
@@ -301,10 +301,10 @@ interface TrangThaiCho {
   readonly han: number;
   readonly hanChoMs: number;
   hanEperm: number | undefined;
-  /** [khoản 9401] Chẩn đoán của chuỗi `EPERM` liên tiếp đang chạy: mốc lần đầu và số lần — xem ⑺. */
+  /** [khoản 343] Chẩn đoán của chuỗi `EPERM` liên tiếp đang chạy: mốc lần đầu và số lần — xem ⑺. */
   epermTu: number | undefined;
   demEperm: number;
-  /** [khoản 9401] Số lần thử `mkdir` lại NGAY vì `EPERM` trên một tên không có (vế ⒜ của ⑺). */
+  /** [khoản 343] Số lần thử `mkdir` lại NGAY vì `EPERM` trên một tên không có (vế ⒜ của ⑺). */
   thuLaiNgay: number;
   /** [khoản 249] Tên dấu chờ của lượt này — có từ lần giành hỏng đầu tiên, hay ngay từ đầu nếu phải nhường. */
   dau: string | undefined;
@@ -325,7 +325,7 @@ function trangThaiMoi(cach: CachCho): TrangThaiCho {
 }
 
 /**
- * [khoản 9401] Gắn chẩn đoán vào CHÍNH lỗi gốc rồi trả nó về để ném — không bọc trong một lỗi mới: người
+ * [khoản 343] Gắn chẩn đoán vào CHÍNH lỗi gốc rồi trả nó về để ném — không bọc trong một lỗi mới: người
  * đọc log vẫn thấy `EPERM` đứng đầu (⑸), và thấy thêm vế nào ném, chuỗi `EPERM` dài bao nhiêu (⑺).
  */
 function kemChanDoan(e: unknown, ve: string, tt: TrangThaiCho): unknown {
@@ -333,14 +333,14 @@ function kemChanDoan(e: unknown, ve: string, tt: TrangThaiCho): unknown {
   const msChuoi = tt.epermTu === undefined ? 0 : Date.now() - tt.epermTu;
   const them =
     ` [khoá depcruise — vế ${ve}; EPERM liên tiếp: ${String(tt.demEperm)} lần trong ${String(msChuoi)} ms;` +
-    ` thử lại ngay: ${String(tt.thuLaiNgay)} lần — khoản 9401, xem ⑺ trong tests/architecture/khoa-depcruise.ts]`;
+    ` thử lại ngay: ${String(tt.thuLaiNgay)} lần — khoản 343, xem ⑺ trong tests/architecture/khoa-depcruise.ts]`;
   const cu = e.message;
   e.message = cu + them;
   if (e.stack?.includes(cu) === true) e.stack = e.stack.replace(cu, e.message);
   return e;
 }
 
-/** [khoản 9401] Một lần gọi `tao`: `undefined` khi thành công, còn không thì lỗi nó ném. */
+/** [khoản 343] Một lần gọi `tao`: `undefined` khi thành công, còn không thì lỗi nó ném. */
 function goiTao(duongKhoa: string, tao: (duong: string) => void): unknown {
   try {
     tao(duongKhoa);
@@ -364,7 +364,7 @@ function loiHetHan(duongKhoa: string, tt: TrangThaiCho): Error {
  */
 function thuGianhKhoa(duongKhoa: string, tao: (duong: string) => void, tt: TrangThaiCho): boolean {
   let loi = goiTao(duongKhoa, tao);
-  // [khoản 9401] ⑺ ⒜: `EPERM` mà tên KHÔNG có có thể là khe đua của chính phép phân loại — handle cuối
+  // [khoản 343] ⑺ ⒜: `EPERM` mà tên KHÔNG có có thể là khe đua của chính phép phân loại — handle cuối
   // của một thư mục đang chờ xoá đóng giữa `mkdir` và `readdir`. Thử lại NGAY một lần, không ngủ: khe đua
   // thì lần này thành công hay rơi vào luật dưới; lỗi quyền thật thì hỏng lại và vẫn ném ngay.
   if (loi !== undefined && maLoi(loi) === "EPERM" && !tenConTonTai(duongKhoa)) {
