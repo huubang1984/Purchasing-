@@ -409,23 +409,25 @@ export function loaiNgoaiLeGoiY(soLoiMoiConSong: number): LoaiNgoaiLe | null {
 }
 
 /**
- * Một câu chỉ dẫn cho lời từ chối có mã của chốt (`ma` ở thân 422 — `dispatch.ts`). Câu của máy chủ vẫn in trước; câu này chỉ
- * nói việc phải làm trên màn. `coQuyenMoi` sai ⇒ người xem không sửa được danh sách, câu nói nhờ người mời được. Mã khác ⇒ `null`.
+ * Một câu chỉ dẫn cho lời từ chối có mã của chốt (`ma` ở thân 422 — `dispatch.ts`). Câu của máy chủ (`CHOT_VAO_SO`) đã nói phải làm
+ * gì, bằng mã của ngoại lệ; câu này BỔ SUNG, không nhắc lại — nó nói chỗ làm việc ấy trên màn, tên ngoại lệ như ô chọn hiện, và
+ * điều câu máy chủ không nói. [lượt đi thử T4] Bản đầu nhắc lại nửa câu của máy chủ ở K2. `coQuyenMoi` sai ⇒ người xem không sửa
+ * được danh sách, câu nói nhờ người mời được. Mã khác ⇒ `null`.
  */
 export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
   const nho = coQuyenMoi ? "" : " Bạn không giữ quyền mời — nhờ người tạo gói hay người giữ quyền mời làm việc này.";
   switch (ma) {
     case "K2_THIEU_CANH_TRANH":
-      return "Mời thêm nhà cung cấp ĐẾM ĐƯỢC ở bước nhà cung cấp — do người khác dựng và đã được xác minh còn hiệu lực —, hoặc lập " +
-        "ngoại lệ đúng loại: một lời mời còn sống cần «Một nguồn duy nhất», từ hai lời mời cần «Cạnh tranh hạn chế». Danh sách rỗng " +
-        "thì không ngoại lệ nào cứu." + nho;
+      return "Trên màn: chọn nhà cung cấp ở «Chọn nhà cung cấp có sẵn» — cột «Đếm được» của bảng lời mời nói dòng nào được tính —, " +
+        "hay lập ngoại lệ ở khối «Ngoại lệ cạnh tranh»: SINGLE_SOURCE là «Một nguồn duy nhất», LIMITED_COMPETITION là «Cạnh tranh " +
+        "hạn chế». Danh sách rỗng thì không ngoại lệ nào cứu." + nho;
     case "K2_DAU_THAU_CHINH_THUC":
-      return "Gói ở bậc đấu thầu chính thức: không ngoại lệ nào cứu được trên hệ thống này." + nho;
+      return "Không ngoại lệ nào cứu được bậc này trên hệ thống." + nho;
     case "K3_KHONG_XOAY_VONG":
-      return "Mời ít nhất một nhà cung cấp MỚI — chưa có trong các gói gần nhất của người chọn danh sách, và cũng phải đếm được —, " +
-        "hoặc lập ngoại lệ «Miễn xoay vòng». Gói bị chặn lúc mở thì trả về soạn thảo rồi sửa." + nho;
+      return "Trên màn: chọn ở «Chọn nhà cung cấp có sẵn» một nhà cung cấp chưa mời gần đây — nó cũng phải đếm được —, hay lập " +
+        "«Miễn xoay vòng» (ROTATION) ở khối «Ngoại lệ cạnh tranh»." + nho;
     case "K5_THIEU_CHU_KY_DOC_LAP":
-      return "Cần chữ ký của một người duyệt KHÔNG tạo gói, không mời hay thu hồi lời mời nào và không lập ngoại lệ nào của gói này.";
+      return "Nhờ một người giữ quyền duyệt chưa làm việc nào kể trên với gói này ký, rồi mở lại.";
     default:
       return null;
   }

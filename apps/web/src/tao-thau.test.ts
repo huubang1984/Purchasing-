@@ -457,11 +457,19 @@ describe("[S1.9101 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ v�
     expect(chiDanChot("K5_THIEU_CHU_KY_DOC_LAP", false)).not.toMatch(/nhờ người tạo gói/u);
   });
 
-  it("K2: nói khớp chặt (một lời mời ⇒ một nguồn, từ hai ⇒ hạn chế) và danh sách rỗng không cứu được; K3: nhà cung cấp mới phải đếm được", () => {
-    expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).toMatch(/một lời mời còn sống cần «Một nguồn duy nhất», từ hai lời mời cần «Cạnh tranh hạn chế»/u);
+  it("K2: tên ngoại lệ của câu máy chủ quy về nhãn ô chọn, chỗ làm trên màn, danh sách rỗng không cứu được; K3: nhà cung cấp mới phải đếm được", () => {
+    expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).toMatch(/SINGLE_SOURCE là «Một nguồn duy nhất», LIMITED_COMPETITION là «Cạnh tranh hạn chế»/u);
     expect(chiDanChot("K2_THIEU_CANH_TRANH", true)).toMatch(/Danh sách rỗng thì không ngoại lệ nào cứu/u);
     expect(chiDanChot("K3_KHONG_XOAY_VONG", true)).toMatch(/cũng phải đếm được/u);
-    expect(chiDanChot("K5_THIEU_CHU_KY_DOC_LAP", true)).toMatch(/không lập ngoại lệ nào/u);
+    expect(chiDanChot("K5_THIEU_CHU_KY_DOC_LAP", true)).toMatch(/^Nhờ một người giữ quyền duyệt/u);
+  });
+
+  it("[lượt đi thử T4] câu chỉ dẫn KHÔNG nhắc lại câu của máy chủ: không cụm sáu chữ nào của thông điệp lặp trong chỉ dẫn", () => {
+    for (const ma of ["K2_THIEU_CANH_TRANH", "K2_DAU_THAU_CHINH_THUC", "K3_KHONG_XOAY_VONG", "K5_THIEU_CHU_KY_DOC_LAP"] as const) {
+      const may = CHOT_VAO_SO[ma].thongDiep.toLowerCase().split(/\s+/u);
+      const chiDan = (chiDanChot(ma, true) ?? "").toLowerCase();
+      for (let i = 0; i + 6 <= may.length; i += 1) expect(chiDan, `${ma}: «${may.slice(i, i + 6).join(" ")}»`).not.toContain(may.slice(i, i + 6).join(" "));
+    }
   });
 
   it("mã khác, không mã, kiểu lạ ⇒ null — màn chỉ in câu của máy chủ", () => {

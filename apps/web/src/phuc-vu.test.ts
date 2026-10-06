@@ -2477,7 +2477,7 @@ describe("bề mặt tệp", () => {
       const coMa = await moTaoThau(true, "DRAFT", (l) =>
         l === "POST /rfqs/r-1/submit" ? Promise.resolve({ status: 422, body: { error: "Gói chưa đủ cạnh tranh.", ma: "K2_THIEU_CANH_TRANH" } }) : undefined);
       await coMa.p.bam("nut-nop-duyet");
-      expect(coMa.p.el("loi4").textContent).toMatch(/^Gói chưa đủ cạnh tranh\. Mời thêm nhà cung cấp ĐẾM ĐƯỢC/u);
+      expect(coMa.p.el("loi4").textContent).toMatch(/^Gói chưa đủ cạnh tranh\. Trên màn: chọn nhà cung cấp ở «Chọn nhà cung cấp có sẵn»/u);
       const khongMa = await moTaoThau(true, "DRAFT", (l) =>
         l === "POST /rfqs/r-1/submit" ? Promise.resolve({ status: 422, body: { error: "Gói thiếu hạng mục." } }) : undefined);
       await khongMa.p.bam("nut-nop-duyet");
