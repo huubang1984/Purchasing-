@@ -24885,3 +24885,141 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 được gộp vào nhánh: ba xung đột tài liệu (`Handoff.md`, `docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc, cả hai biên bản, danh
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
+
+# §S1.9101 — S4.6a: MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ, NGƯỜI NHẬP MÙ GIÁ, ĐỌC LẠI KHÔNG CỘT GIÁ (L1, L3 vế hai bảng; L15 vế ghi) — ADR-9201
+
+## 1. Vòng này là gì
+
+Nửa đầu của S4.6 (spec S4 §9, §4.6, §4.7; ADR-096): hai bảng giá *"không phải báo giá"* mà ADR-095 ⑸ đã hứa một dòng ở ADR-054 —
+`external_price_references` (mốc giá ngoài) và `external_purchase_history` (lịch sử mua ngoài hệ thống) —, đường GHI của người quản lý
+dữ liệu (nhập tay một mốc, dán CSV một lô, rút), màn `/du-lieu` của người ấy, và bước 14 của kịch bản 41 quét hai kim riêng (ADR-095 ⑹).
+Phép đọc giá dưới `bid.view`, độ lệch của mốc ngoài và dải lịch sử ngoài ở `/mo-thau` là S4.6b.
+
+## 2. Quyết định của chủ dự án (2026-10-06)
+
+Bốn câu, cả bốn theo đề xuất, sau phép đo ở mục 3: ⑴ màn `/du-lieu` hiện hàng đã nhập KHÔNG cột giá — ADR-096 ⑵ giữ nguyên, người quản
+lý dữ liệu sửa bằng rút rồi nhập lại; ⑵ "gói" của dải lịch sử ngoài là (ngày mua, nhà cung cấp đã làm sạch), cửa sổ theo ngày mua, sàn
+và ngưỡng của phiên bản chính sách đã ghim; ⑶ mốc ngoài hiện ở dòng của gói X là mốc có ngày hiệu lực mới nhất ≤ mốc mở giá, trong cửa
+sổ, cùng tiền tệ, `ghi_luc` < mốc; ⑷ hai PR — S4.6a (vòng này) và S4.6b. Năm mặc định kỹ thuật nói ra cùng lúc và không bị phản đối: rút
+theo mã hàng (khuôn `105`); đơn vị phải quy đổi được lúc ghi, không thì CSDL từ chối; CSV có tiêu đề, tab/`;`/`,`, dấu chấm thập phân,
+ngày `YYYY-MM-DD` hay `DD/MM/YYYY`; lô tất-cả-hoặc-không với lỗi theo dòng; giữ trần thân 64 KiB (~500 dòng), trần 1000 dòng.
+
+Sau rà soát đối kháng (mục 8), hai câu nữa, cùng ngày, theo đề xuất: ⑸ *"Từ chối dạng mơ hồ"* — đơn giá `15.500` (một–ba chữ số, một
+dấu chấm, đúng ba chữ số sau) bị từ chối ở cả hai tiền tệ và cả nhập tay; ⑹ *"Chặn ngày mua sau hôm nay"* — giờ Việt Nam, ở bộ đọc và
+ở trigger; ngày hiệu lực của mốc ngoài không chặn.
+
+## 3. Đo trước
+
+1. `DATA_STEWARD` chỉ giữ `item.manage`; trigger của `083` cấm vai ấy, và người giữ nó, giữ cùng `bid.view`. ADR-096 ⑵ đặt cổng đọc
+   giá của hai bảng ở `bid.view` ⇒ một màn liệt kê kèm giá cho người nhập là một lần nới ADR — câu ⑴ cho chủ dự án.
+2. Khuôn có sẵn: bảng nền L1 (`079`), cổng ghi `du_lieu_nen_kiem_quyen_ghi` (`083`), lõi quy đổi theo mã `quy_doi_da_giai` (`096`),
+   rút bằng hàng rút trỏ `rut_cua` (`105`). Luật `maDanhMuc` của màn quy đổi riêng: mã danh mục nếu chuỗi quy về một mã, không thì chuỗi
+   đã làm sạch.
+3. Trần thân 64 KiB (`TRAN_THAN_BYTE`, chặn trong lúc đọc, đếm byte). Một dòng mốc ngoài điển hình 60–130 byte ⇒ ~500 dòng một lô.
+4. `audit_events` có `CHECK` từ chối khoá payload mang giá; bốn bộ quét giá (ADR-140) quét mọi quan hệ của `public`.
+
+## 4. Thay đổi
+
+- `9501_du_lieu_ngoai`: hai bảng khuôn L1 (`lo_nhap_id`; hàng rút `rut_cua`, `UNIQUE (org_id, rut_cua)`; `CHECK` có tên: đơn giá dương
+  hữu hạn, đơn vị đã làm sạch, tiền tệ `VND`/`USD`, nguồn 1–500, nhà cung cấp 1–300, hình dạng hàng dữ liệu / hàng rút; khoá ngoại tới
+  hàng chuẩn, người ghi, hàng được rút); ENABLE + FORCE RLS, `_tenant_isolation`, `_khach` RESTRICTIVE; `GRANT SELECT` + `INSERT` theo
+  cột. Hàm `du_lieu_ngoai_kiem_ghi`: đơn vị phải quy đổi được sang đơn vị gốc tại `clock_timestamp()` (`du_lieu_ngoai_don_vi_khong_quy_
+  doi_duoc`), hàng rút không trỏ về hàng rút (`du_lieu_ngoai_rut_hang_rut`). Sáu trigger mỗi bảng, ENABLE ALWAYS.
+- `hardening.always.sql`: lượt sửa và lượt phán xét cho bốn hàm khuôn trên hai bảng mới, mục ghim của `du_lieu_ngoai_kiem_ghi`, hai dòng
+  `BANG_TENANT_KHAI`, `TRIGGER_DUOC_PHEP`.
+- `packages/du-lieu-nen`: `csv-ngoai.ts` (bộ đọc văn bản dán, thuần); `du-lieu-ngoai.ts` — `nhapDuLieuNgoai`, `khaiMocNgoai` (trả cả id
+  hàng), `rutDuLieuNgoai` (theo hàng hay theo lô), `lietKeLoDuLieuNgoai` (200 lô + `conNua`), `docLoDuLieuNgoai`; phân giải cả lô ở MỘT
+  câu SQL (mã hàng → hàng chuẩn, chuỗi đơn vị → khoá, khoá → quy đổi được không), rồi một câu INSERT; mã lỗi mới của `DuLieuNenError`.
+- `apps/api`: mười route (bảy ghi `item.manage`, ba đọc `agent: false`, cổng `item.manage` trong hàm đọc); 422 của lô mang `loi` theo dòng.
+- `/du-lieu`: khối nhập tay ở bước 4; bước 7 — dán, mẫu tiêu đề, lỗi theo dòng, nói trước khi thân vượt 64 KiB, danh sách lô và hàng
+  không giá, rút theo dòng và theo lô; chỉ khi `choGhi`.
+- Kịch bản 41: hai kim nhập ở bước 1, bước 14 đòi mỗi kim ở đúng bảng của nó; bộ quét rò rỉ trước mở thầu có thân hợp lệ cho bảy route
+  ghi mới. `gieo:demo`: một lô mốc ngoài (2 dòng), một lô lịch sử ngoài (3 dòng, một dòng theo tấm).
+- Sổ: barrel, `cong-quyen-route`, `ROUTE_DOC_KHONG_PHOI` của MCP, `ma-chep-api-worker`, `migration-shape`, `rls-coverage`, `check-an-ninh`,
+  `migrations.int` (bốn danh sách migration, `HAM_51`/`HAM_56`), `hardening-suy-tu-tinh-chat`, `danh-sach-ham-canh`, `BANG_DU_LIEU_NEN`,
+  danh mục `resourceType` (`EXTERNAL_DATA_BATCH`, `EXTERNAL_DATA_ROW`), sổ khai nhãn (L1, L3, L15).
+- Tài liệu: ADR-9201; ADR-054 hai dòng + đoạn bổ sung; spec §9 (S4.6a, S4.6b) và ⒅; STATE; PRODUCT; TEST-PLAN (L1, L15 mới);
+  Handoff (105 migration, 147 ADR, 82 bất biến).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Phân giải ở tầng gói TRƯỚC, trigger hỏi LẠI.** Lỗi theo dòng cần tầng gói; tầng có thẩm quyền là trigger. Cả hai hỏi cùng lõi
+  `quy_doi_da_giai`, nên không có bản luật thứ hai.
+- **Nhập tay là một lô một dòng**, cùng đường `ghiLo` với dán: một hàng sổ, `cachNhap: TAY`.
+- **Nhập tay trả `hangId`**: người mù giá không đọc lại được con số mình gõ, nên id hàng là thứ duy nhất họ cần để sửa.
+- **Danh sách 200 lô + `conNua`**: bản đầu cắt im ở 200 — sửa trước rà soát, khuôn `conNua` của các màn khác.
+- **Bộ đọc ⑶ của `danh-muc-tu-choi`** nay nhận `path` viết tắt: route dựng bằng hàm (`{ path, … }`) bị bỏ qua cả đối tượng —
+  `EXTERNAL_DATA_ROW` đi qua mà không vào tập; ca đối chứng mới.
+- **SQL không dùng `ROWS FROM`**: bộ đọc QT3 đọc `FROM ROWS FROM (…)` thành bảng `rows`; viết lại bằng `unnest` một mảng + chỉ số.
+
+## 6. Đo
+
+- T1: `csv-ngoai.test.ts` 15 ca (mỗi luật hình dạng một ca; không câu lỗi nào lặp lại ô); `bang-ngoai-liet-ke.test.ts` 5 ca;
+  `apps/web/src/du-lieu.test.ts` 19 ca; `phuc-vu.test.ts` 264 ca (ba ca mới của bước 7 và nhập tay).
+- T2/T3: `packages/du-lieu-nen/src/du-lieu-ngoai.int.test.ts` 15 ca; `apps/api/src/du-lieu-ngoai.int.test.ts` 4 ca (mười route, người giữ
+  `bid.view` nhận 403 cả mười, mười hàng PERMISSION_DENIED, không thân nào mang đơn giá); `apps/api/src/du-lieu.int.test.ts` 18 ca;
+  kịch bản 41 qua HTTP 85/85.
+- Sổ CSDL: `rls-coverage` 61/61, `check-an-ninh` 4/4, `hardening-suy-tu-tinh-chat` 38/38, `unique-oracle` 13/13,
+  `trigger-la-mac-dinh-dong` 17/17, `thong-diep-khong-gia-tri` 8/8, `ghim-trigger-tu-chua` 4/4, `migrations.int` (các ca chạm sổ).
+- `gieo:demo` trên một `postgres:16-alpine` dùng một lần (vai `app_unseal_login` dựng tay, `TRUSTPROCURE_KEY_ADAPTER=local-dev`): thoát 0;
+  2 + 3 dòng, hai hàng sổ `EXTERNAL_*_IMPORTED` payload `{loai, soDong, cachNhap, soHangChuan}`. Tệp test tạm dùng để chạy đã xoá.
+
+## 7. Đột biến
+
+Mười sáu đột biến, mỗi cái chạy đúng tệp test của nó, khôi phục bằng bản sao trước khi sang cái sau. Cả mười sáu đỏ; N3 sống ở lượt
+đầu và một ca đo mới bắt nó.
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| N1 | đơn giá nhận dấu phẩy nghìn | `csv-ngoai.test` |
+| N2 | đơn giá `0` lọt | `csv-ngoai.test` |
+| N3 | phân cách: `,` trước `;` | **sống** ở lượt đầu (mọi tiêu đề của test không chứa cả hai) ⇒ ca mới: tiêu đề `;` có tên cột mang dấu phẩy — đỏ |
+| N4 | lô không còn tất-cả-hoặc-không | `du-lieu-ngoai.int` (2 ca) |
+| N5 | danh sách hàng của lô đọc đơn giá | `bang-ngoai-liet-ke` |
+| N6 | liệt kê lô bỏ cổng `item.manage` | `du-lieu-ngoai.int` của gói và của `apps/api` |
+| N7 | danh sách lô `LIMIT 200` — không biết còn nữa | `du-lieu-ngoai.int` |
+| N8 | route nhập lô khai `bid.view` | `apps/api/src/du-lieu-ngoai.int` (4 ca) |
+| N9 | nhập tay trả id lô thay id hàng | `du-lieu-ngoai.int` |
+| N10 | trigger bỏ luật quy đổi (migration + hardening + `$than$`) | `du-lieu-ngoai.int` — câu SQL thô |
+| N11 | trigger cho hàng rút trỏ về hàng rút (cùng ba chỗ) | `du-lieu-ngoai.int` — câu SQL thô |
+| N12 | mẫu tiêu đề của màn lệch bộ đọc | `apps/web/src/du-lieu.test` |
+| N13 | bỏ luật `15.500` mơ hồ | `csv-ngoai.test`, `du-lieu-ngoai.int` (3 ca) |
+| N14 | trigger bỏ luật ngày mua (ba chỗ) | `du-lieu-ngoai.int` — câu SQL thô |
+| N15 | dán thiếu tiêu đề lại nhắc ô | `csv-ngoai.test` |
+| N16 | chữ sau ngoặc kép đóng lại được ghép | `csv-ngoai.test` |
+
+## 8. Rà soát đối kháng
+
+Một agent đọc toàn bộ phạm vi `4653307..28cd39a`, chạy bộ đọc văn bản dán trên ca biên. Năm phát hiện, không cái nào là rò xuyên tổ
+chức hay vượt cổng quyền:
+
+- **CAO-1 — `15.500` lưu im thành 15,5.** Bảng tính tiếng Việt hiện 15500 thành chuỗi ấy; `DON_GIA` nhận nó; người nhập mù giá không
+  thấy lại. Chủ dự án chốt (2026-10-06, theo đề xuất): từ chối dạng một–ba chữ số, một dấu chấm, đúng ba chữ số sau ở cả hai tiền tệ và
+  cả nhập tay — `DON_GIA_MO_HO`. **Sửa**; N13.
+- **TRUNG-2 — dán thiếu dòng tiêu đề nhắc lại ô.** Dòng đầu là dữ liệu, mỗi ô thành một lỗi `COT_LA` mang chính ô ấy ở `cot` — đo:
+  `cot: "15500_75"`, `"2026_01_15"`, tên nhà cung cấp. Trái luật *không giá ở thân trả về nào*. **Sửa**: không ô nào là tên cột ⇒ một
+  lỗi `KHONG_CO_TIEU_DE`; tên cột lạ chỉ nhắc khi chỉ gồm chữ thường và gạch dưới, không thì nêu vị trí; N15.
+- **THẤP-3 — lớp L15 là lớp chữ, dễ vượt** (`h.*`, `to_jsonb(h)`, `RETURNING don_gia`, hardening được miễn cả tệp). **Sửa**: bộ dò
+  đọc-cả-hàng có đối chứng cho từng mẫu; cấm `FROM`/`JOIN` hai bảng trong mọi migration. Ranh giới còn lại nói ra ở ADR-9201 ⑹.
+- **THẤP-4 — ngày.** Ngày mua ở tương lai được nhận. Chủ dự án chốt: chặn sau HÔM NAY (giờ Việt Nam) ở bộ đọc và ở trigger; ngày hiệu
+  lực của mốc ngoài không chặn. **Sửa**; N14. `03/04/2026` luôn là 3 tháng 4 — luật đã chốt, nói ra.
+- **THẤP-5 — chữ sau ngoặc kép đóng được ghép vào ô** (`"1"5` thành 15). **Sửa**: `NGOAC_KEP_HO`; N16.
+
+Agent kiểm và thấy đúng: ánh xạ lỗi (mọi thông điệp `DuLieuNenError` là hằng; lối 23514 lộ thông điệp của `dispatch.ts` không tới được
+vì mọi câu INSERT nằm trong `ghiDuLieuNen`), sổ không giá, cách ly tổ chức (khoá ngoại ghép `org_id`, cùng 422/404 cho id lạ và id của
+tổ chức khác), hai lần rút đua, phân giải và INSERT trong một giao dịch, cổng của hai hàm đọc, `textContent` ở màn.
+
+Một lượt đọc của agent rơi vào lúc đột biến N5 đang đặt trên đĩa (`h.don_gia … AS don_vi`); agent nhận ra và đối chiếu với HEAD.
+
+## 9. Giới hạn, nói ra
+
+- Người nhập không kiểm được con số mình gõ — đơn giá gõ sai chỉ lộ ra ở người giữ `bid.view` (S4.6b). Cái giá chủ dự án chọn ở ⑴.
+- Không khử trùng: dán một lô hai lần là hai lô. Mốc ngoài (luật ⑶ chọn mốc mới nhất) không bị ảnh hưởng; dải lịch sử ngoài thì có —
+  hai dòng trùng là hai quan sát của cùng "gói" (ngày mua, nhà cung cấp). Người nhập thấy lô trùng ở bước 7 và rút được.
+- Quy đổi được lúc ghi không có nghĩa quy đổi được lúc đọc: quy đổi riêng rút sau đó làm hàng thành không đo được ở gói mở sau lần rút.
+- `nguon` và `nha_cung_cap_text` là lời khai.
+- Trần 1000 dòng / 64 KiB; màn đếm byte của thân và nói trước.
+- Thông điệp RAISE của hai trigger mang chuỗi đơn vị và id hàng chuẩn (không giá); lớp gói đổi tên ràng buộc thành mã có tên.
+- Luật `15.500` chỉ ở tầng gói: CSDL nhận `numeric`, không thấy chuỗi người gõ — câu INSERT thô dưới `app_api` vượt qua nó.
+- Lớp `bang-ngoai-liet-ke` là lớp chữ: SQL dựng động (`format('%I')`) vượt qua nó; hai hàm trigger dùng chung là chỗ duy nhất hôm nay.
+- `migrations.int` đầy đủ một lượt bị dừng giữa chừng vì tệp migration đổi trong lúc chạy (luật ngày mua); số ở mục 10 là lượt sau.
