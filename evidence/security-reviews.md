@@ -24982,4 +24982,10 @@ mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá 
 - Bộ đo ở tầng hàm, không qua HTTP; luồng đọc liên tục là tải tổng hợp.
 
 ## 7. Số đo
-- Ghi ở commit số đo, sau lần cấp số.
+- `cap-so` cấp S1.274 (trailer `Cap-So` ở `53097e00`); `cap-so --kiem` sạch; Handoff 342 khoản, 54 còn mở.
+- Trên `53097e00`, máy rảnh trước mỗi bước và sau lượt evidence: `pnpm t0` xanh; `pnpm test` 150 tệp (148 đạt, 2 bỏ qua), 2516 ca
+  đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 241 tệp, 4727 khẳng định (4704 đạt, 23 bỏ qua, 0 đỏ), 82/82 bất biến
+  (60/60 nghiệp vụ + 22/22 hàng rào), 1684 giây, *"Cổng evidence: XANH"*. `evidence/INV-matrix.md` đổi đúng hai số: L6 51 → 58,
+  L7 116 → 123 — bảy ca thêm của ⑻ (tám ca mới, một ca bỏ); bản mới vào commit này. 23 ca bỏ qua như §S1.271 mục 6 (13 ca
+  `skipIf(win32)`).
+- Trước đó, trên mã chưa commit: trọn `benchmark.int` 69/69 (máy rảnh); đột biến và hai lượt đo ở mục 4–5.
