@@ -25386,7 +25386,7 @@ commit trung gian được dựng khi M4 đang đặt trên đĩa: tệp ấy v�
 | M12 | độ lệch làm tròn về 0 | `dai-ngoai.test` (2 ca) |
 | M13 | cờ mốc đọc tại `now()` | `benchmark.int` ⑽ |
 | M14 | nhãn ngoài lệch cao tô cả hàng | `phuc-vu.test` |
-| M15 | migration bỏ khoá ngoại tới dòng đo được | xem mục 10 |
+| M15 | migration bỏ khoá ngoại tới dòng đo được | `benchmark.int` ⑽ — ca CSDL (`…_dong_do_duoc_fk`) |
 | M16 | bộ đọc `SELECT h.*` | `bang-ngoai-liet-ke` |
 | M17 | lượt chấm bật `kemNgoai` | `bang-ngoai-liet-ke` |
 | M18 | lõi: bỏ lọc tiền tệ | `dai-ngoai.test` |
@@ -25438,7 +25438,9 @@ L1 so `<`/`>=` chính xác trên mốc dựng lại từ micro giây; quy đổi
 - Không khử trùng lô; `nguon` và nhà cung cấp là lời khai; lớp L15 vẫn là lớp chữ.
 - Q1/Q3 của dải ngoài mang nhiều chữ số lẻ (thương `numeric` của quy đổi) — màn làm tròn hai chữ số.
 
-## 10. Còn chạy ở lúc ghi
+## 10. Đo cuối
 
-`db/migrations.int.test.ts` đầy đủ và đột biến M15 (migration bỏ khoá ngoại tới dòng đo được — phải chạy SAU `migrations.int` vì nó sửa
-tệp migration) đang chạy; kết quả ghi ở commit sau. Mọi tệp `db/` và `packages/db` khác đã xanh.
+- `db/migrations.int.test.ts` đầy đủ một lượt: 128/128 (43 phút); mọi tệp `db/` và `packages/db` khác xanh.
+- Sau các sửa của mục 8: unit toàn kho 2640/2640; `benchmark.int` 78/78, `du-lieu-ngoai.int` 15/15; kịch bản 41 qua HTTP 85/85.
+- M15 chạy SAU `migrations.int` (nó sửa tệp migration): đỏ. Hai mươi hai đột biến, cả hai mươi hai đỏ.
+- Số tạm (S1.9101, ADR-9201, `9501`) giữ tới lúc mở PR: `pnpm cap-so` cấp số thật, rồi `pnpm evidence` sinh lại ma trận.
