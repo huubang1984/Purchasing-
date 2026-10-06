@@ -2482,6 +2482,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         .map((r) => `${r.ma === null ? r.action : `${r.action}:${r.ma}`}@${tenNguoi.get(r.nguoi ?? "") ?? "khac"}`);
     };
 
+    // Đồ gá (khuôn đồ gá ⒜ của khối khoản 275 cuối tệp): bộ quét rò rỉ cố ý gọi mọi route bằng phiên `mua`, và mỗi lần từ chối tiêu
+    // một suất của ngân sách 30 lần từ chối mỗi phiên mỗi cửa sổ 15 phút (ADR-092). Đo trên cây gộp với PR #251 (thêm route vào bộ
+    // quét): phiên `mua` của luồng S3 tới đây đã 30/30, và lần từ chối CÓ CHỦ ĐÍCH đầu tiên của bước này (K2) nhận 429 thay vì 422.
+    // Một người mua thật không quét mọi route. Xoá bucket người gọi của cụm test — bảng toàn cục, cụm của riêng tệp này — trả bước về
+    // một cửa sổ mới; không lần từ chối nào bị bỏ khỏi sổ, và ba lần của bước vẫn đi qua đúng bucket ấy.
+    await db.pool.query("DELETE FROM caller_rate_limits");
+
     if (!batS3) {
       // Luồng MVP1: K2/K3/K5 không sống ở tổ chức chưa bật — gói không lời mời nộp, ký và mở như bước 16; lập ngoại lệ dừng ở lời
       // từ chối *tổ chức chưa bật* của trigger (422 nghiệp vụ, không hàng ngoại lệ, không vào sổ chốt).

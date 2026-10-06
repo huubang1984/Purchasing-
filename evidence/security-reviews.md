@@ -25384,4 +25384,9 @@ Docker chưa chạy trong container — chạy lại sau khi bật Docker); hai 
 Sau lượt đo, `master` thêm `b49d571` (PR #251, §S1.272 — S4.6a: migration `109_du_lieu_ngoai`, gói `du-lieu-nen`, route và màn
 `/du-lieu`, một lô dữ liệu ngoài trong `gieo:demo` và một thay đổi ở tệp HTTP của kịch bản 41) và được gộp vào nhánh: mã gộp tự động; hai
 xung đột tài liệu (`docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc và cả hai biên bản —, `pnpm cap-so --dem` báo lời khai đếm đã khớp.
-Số đo trên cây gộp ở commit gộp.
+Trên cây gộp `98c055d`: `pnpm t0` xanh; `pnpm test` 153 tệp, 2613 ca đạt, 1 bỏ qua; kịch bản 41 tầng gói 34/34; tệp HTTP **đỏ ở bước 17**:
+lần nộp K2 nhận 429 (*"qua nhieu yeu cau"*) thay vì 422. Đo bằng một dòng in tạm: bucket từ chối của phiên `mua` (luồng S3) đã 30/30 trong
+cửa sổ 15 phút (ADR-092) — bộ quét rò rỉ của kịch bản cố ý gọi mọi route bằng phiên ấy, và PR #251 thêm route vào bộ quét; trước lần gộp,
+ba lần từ chối của bước 17 còn vừa ngân sách. Sửa ở đồ gá, khuôn đồ gá ⒜ của khối khoản 275 cùng tệp: đầu bước 17 xoá bucket người gọi của
+cụm test (bảng toàn cục, cụm riêng của tệp) — không khẳng định nào đổi, không lần từ chối nào rời sổ. Sau đó tệp HTTP 87/87. Lượt
+`pnpm evidence` trên cây gộp: lượt CI của PR.
