@@ -24767,3 +24767,121 @@ Không chỗ nào cần sửa.
   định (4675 đạt, 23 bỏ qua, 0 đỏ), 81/81 bất biến (59/59 nghiệp vụ + 22/22 hàng rào), 1696 giây, *"Cổng evidence: XANH"*,
   `evidence/INV-matrix.md` không đổi. 23 ca bỏ qua: 13 ca của `tests/deploy/khoi-tao-sh.test.ts` và `kiem-sau-deploy-sh.test.ts`
   (`skipIf(win32)` — lượt §S1.269 chạy trên Linux nên chỉ có 10), một ca chỉ chạy trên CI, chín ca phong bì lớn bật bằng tay.
+
+# §S1.270 — S3.3d: K3 — XOAY VÒNG NHÀ CUNG CẤP Ở CẠNH NỘP DUYỆT VÀ CẠNH MỞ GÓI; KHOẢN 234 ĐÓNG — ADR-148
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và tổ chức chưa
+bật chạy nguyên MVP1 (K3 trả NULL; vế `opened_at` chỉ ở tổ chức đã bật). Một thay đổi chạm MỌI tổ chức: `openRfq` lấy khoá chính sách
+của tổ chức TRƯỚC lần đúc khoá thay vì trong trigger `102` — cùng khoá, sớm hơn. Migration `108`, ADR-148. Khoản 234 ĐÓNG; khoản 319
+đóng cho tổ chức đã bật.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-05: *"Tiếp S3.3d"* — phần thứ tư trong năm phần của S3.3 (spec S3 §9): K3 và khoản 234. ⒜ (K2) và ⒞ (K5) của
+khoản 234 đã cài ở S3.3c (ADR-147); ⒝ là K3. Trước dòng mã đầu, chủ dự án chốt ba câu theo đề xuất: K3 kiểm ở cả hai cạnh, *cùng một nhà
+cung cấp* theo khoá nhóm, một PR.
+
+## 2. Đo trước
+Cửa sổ của spec (§5.1, ADR-082 ⒀): gói đã `opened_at`, `opened_at DESC, id DESC`, loại gói đang xét, lời mời không thu hồi trước
+`opened_at`. Bậc mặc định (`apps/web/src/chinh-sach.ts`, `gieo:demo`) có `xoay_vong_n: 5` ở bậc 1 và bậc 2, 0 ở bậc 0. Khoá tư vấn
+đang dùng: 0 sổ, 1 trao thầu, 2 chính sách, 3 dữ liệu nền, 7 xác minh, 8 nhóm hàng. Không chỉ mục nào trên `rfq_invitations
+(org_id, invited_by)` hay `rfq_packages (opened_at)`.
+
+## 3. Lượt soi đối kháng trên HÌNH DẠNG, trước dòng mã đầu
+Một CAO — dừng hỏi chủ dự án:
+- **C1** — lời mời thêm SAU KHI KÝ cho chiếm suất: `076` cho thêm lời mời ở gói đã mở, route chỉ hỏi `rfq.invite`; một lời mời rác vào
+  N gói đã mở của đồng nghiệp đẩy gói có nhóm quen ra khỏi cửa sổ, không cần chữ ký ⇒ suất chỉ tính lời mời trước ký (ADR-148 ⑷).
+Năm TRUNG: **T1** gói đệm (bậc nhỏ, mở rồi huỷ) chiếm suất ⇒ chủ dự án chọn chỉ gói cùng loại chiếm suất, gói khác trong khoảng vẫn góp
+nhà cung cấp cũ (⑶); **T2** `opened_at` do người gọi đặt (khoản 319) ⇒ chủ dự án chọn chặn ở tổ chức đã bật (⑹); **T3** khoá nhà cung
+cấp cũ đọc từ hàng sửa được — **ĐO là SAI**: `011` `REVOKE UPDATE` ở mức bảng thu luôn quyền cột của `008` (trên Postgres 16:
+`has_column_privilege` true trước, false sau); **T4** người tạo không ở tập người chọn ⇒ chủ dự án chọn như K2 (⑴); **T5** thứ tự khoá
+0 → 2 ở `openRfq` ngược 2 → 0 ở ký chính sách — deadlock có từ trước, K3 làm nặng ⇒ `openRfq` lấy khoá chính sách trước lần đúc khoá;
+khoá mới seed 9 bỏ — dư (⑸).
+THẤP, sửa trong vòng: câu hỏi của tầng gói lọc trạng thái theo cạnh; tách vị từ *đếm được* giữ nhóm dựng trên MỌI lời mời sống; khoá
+người liên hệ gồm cả người liên hệ không ACTIVE. Chủ dự án chọn MỘT mã vào sổ ở cả hai cạnh (THẤP 2). Ghi ở ADR: hiệu năng, gói bị chặn
+lúc mở phải trả về, thêm lời mời vào gói nháp của đồng nghiệp, tài khoản thứ hai.
+Dữ liệu vỡ theo lượt soi: bước 16 của hai kịch bản 41, gói chia nhỏ của `gieo:demo --s3`; `bac-chinh-sach` KHÔNG (bậc của nó `xoay_vong_n`
+= 0 — bản hình dạng liệt kê nhầm).
+
+## 4. Câu hỏi của chủ dự án (2026-10-05)
+Trước lượt soi: cạnh — **nộp duyệt + mở gói**; danh tính — **khoá nhóm**; PR — **một**. Sau lượt soi: suất — **chỉ gói cùng loại**;
+người chọn — **như K2**; `opened_at` — **chặn ở tổ chức đã bật**; sổ ở cạnh mở — **một mã, vào sổ**. Cả bảy theo đề xuất. Một chỗ
+người tích hợp tự chọn theo chiều chặt hơn: nhà cung cấp mời SAU KHI KÝ vào gói trong cửa sổ vẫn là cũ (lời mời ấy chỉ không cho chiếm
+suất) — không thì nhóm quen tham gia mãi bằng lời mời sau khi ký.
+
+## 5. Thay đổi
+- `db/migrations/108_xoay_vong.sql` — `rfq_loi_moi_dem_duoc` (SQL, `SETOF uuid`; sáu vế của `107` nguyên văn), `rfq_dem_ncc_canh_tranh`
+  định nghĩa lại (nhóm trên mọi lời mời sống, đếm qua hàm mới), `rfq_ncc_moi_xoay_vong`, `rfq_chot_xoay_vong`, hai trigger
+  `rfq_packages_kiem_xoay_vong_khi_nop` (chốt READ COMMITTED riêng, `k3_xoay_vong`) và `rfq_packages_kiem_xoay_vong_khi_mo` (`opened_at`
+  là `now()` ở tổ chức đã bật, READ COMMITTED, khoá chính sách seed 2). Không bảng mới, không chỉ mục.
+- `hardening.always.sql` cùng commit: hai tên trigger ở `TRIGGER_DUOC_PHEP`; hai mục hàm + trigger (`provolatile = 'v'`), ba mục định
+  nghĩa hàm, mục `rfq_dem_ncc_canh_tranh` thân từ `108`. Thân PHÁN XÉT suy bằng script từ thân migration.
+- `@trustprocure/identity`: mã `K3_KHONG_XOAY_VONG` (vào sổ) ở `CHOT_VAO_SO` và `DANH_MUC_VE_CONG`; lời khai *"hai mươi hai mã chốt"*
+  nay hai mươi ba.
+- `@trustprocure/rfq`: `CAU_CHOT_XOAY_VONG_NOP` (sau K2) và `CAU_CHOT_XOAY_VONG_MO` (sau K10a, dưới khoá chính sách lấy trước lần đúc
+  khoá) — lọc trạng thái theo cạnh.
+- Dữ liệu: bước 16 của kịch bản 41 (trong tiến trình và qua HTTP) — năm nhà cung cấp phụ, gói i mời hai người đầu cộng một người mới;
+  `gieo:demo --s3` — ba nhà cung cấp luân phiên (nhapncc dựng, taichinh2 xác minh), mỗi gói chia nhỏ một người.
+- Sổ đăng ký: `migrations.int` (ba danh sách, hai hàm trợ giúp, một hàm `SETOF`, hai hàm trigger, một con trỏ), `danh-sach-ham-canh`,
+  `bac-chinh-sach` (cổng *một hàm chọn phiên bản*: `rfq_loi_moi_dem_duoc` THEO_ID thay `rfq_dem_ncc_canh_tranh`), `so-khai-nhan` (K3),
+  `docs/TEST-PLAN.md` hàng K3; `canh-tranh-toi-thieu` — tám đột biến của sáu vế *đếm được* dời sang hàm mới, đột biến *bỏ chốt READ
+  COMMITTED* của K2 gỡ thêm chốt riêng của K3.
+- Lượt `pnpm test` đầu đỏ P6, P8 (lời khai số bất biến 81 ⇒ 82) và — trước khi `git add` — P9b (cổng đếm migration đọc `git ls-files`).
+
+## 6. Phép đo — `apps/api/src/xoay-vong.int.test.ts`, 21 ca trên Postgres 16, qua HTTP và dưới `app_api`
+⑴ đối chứng dương: mời lại nhà cung cấp của gói vừa mở ⇒ 422 câu của chốt, MỘT hàng `CONTROL_DENIED`; thêm một nhà cung cấp mới ⇒ 200;
+lớp chặn cuối ở cạnh nộp; ⑵ cửa sổ — N = 2 suất; gói chưa mở (nháp, chờ duyệt) không chiếm suất; gói bậc 0 và gói huỷ không chiếm suất
+nhưng góp nhà cung cấp cũ trong khoảng, không góp khi mở trước suất xa nhất; lời mời sau khi ký không chiếm suất (ca C1) mà vẫn làm nhà
+cung cấp thành cũ; thu hồi trước lúc mở không tính; ⑶ người tạo nhờ đồng nghiệp mời, người thu hồi; ⑷ MST gốc, email người liên hệ phụ,
+chín số cuối; nhà cung cấp mới tinh không đếm được không cứu; ⑸ ROTATION còn sống / đã rút; N = 0; ⑹ hai gói nộp song song — mở cái đầu
+thì cái sau 422 ở cạnh mở, không vật liệu khoá; hai lần mở đồng thời — lần sau chờ khoá tư vấn rồi `ChotKiemSoatError` trước lần đúc
+khoá; câu mở thô ⇒ `k3_xoay_vong`; `opened_at` năm 2100 bị chặn ở tổ chức đã bật, đi ở tổ chức chưa bật; REPEATABLE READ ở cả hai cạnh;
+⑺ tổ chức chưa bật; tập mã bằng bảng. Lượt chạy đầu đỏ hai ca — cả hai do dàn cảnh: đột biến *bỏ vế `opened_at`* không đổi kết quả khi
+gói chưa mở không đẩy gói cũ ra (nay đo đúng tác hại: hai gói chưa mở chiếm hai suất mốc NULL, cửa sổ rỗng — fail-open); và ca cạnh mở
+dựng gói thứ hai SAU lần mở gói đầu nên bị chặn ngay lúc nộp.
+`canh-tranh-toi-thieu` 36/36 trên hàm *đếm được* tách mới; hai kịch bản 41 117/117. Lượt `pnpm test:int` đầy đủ trên `4995145`: 92
+tệp, 2184 ca đạt, 9 bỏ qua, 0 đỏ, 2042 giây — lượt đầu, không ca nào phải sửa.
+`gieo:demo --s3` chạy trọn trên một `postgres:16-alpine` dùng một lần (migrate bằng script tạm, vai `app_unseal_login` dựng tay,
+`TRUSTPROCURE_KEY_ADAPTER=local-dev`): thoát 0, 0 hàng `CONTROL_DENIED`; ba gói chia nhỏ mỗi gói một lời mời mới (`rfq_ncc_moi_xoay_vong`
+= 1), hai gói đầu OPEN, gói thứ ba chờ ghi nhận tín hiệu như trước.
+
+## 7. Đột biến
+Mười chín đột biến CSDL trong chính tệp — mỗi ca áp trong một giao dịch rồi ROLLBACK và đo kết quả đổi: tắt trigger nộp; nới cửa sổ một
+suất; bỏ vế `opened_at` (fail-open); cho gói bậc 0 chiếm suất; cho gói huỷ chiếm suất; bỏ vế `moi_sau_khi_ky` của suất; chỉ tính lời mời
+trước ký ở nhà cung cấp cũ; bỏ vế thu hồi; bỏ vế người tạo; bỏ vế người thu hồi; bỏ khoá MST, khoá email, khoá điện thoại; bỏ vế *đếm
+được*; bỏ vế ROTATION; bỏ vế N = 0 (hàm cửa sổ NÉM); tắt trigger mở (cùng câu mở năm 2100 đi qua); bỏ chốt READ COMMITTED ở trigger nộp
+và ở trigger mở. Sống, có lý do: khoá `S|` (dư bởi MST bất biến — ADR-148); lần lấy lại khoá chính sách trong trigger mở (dư bởi `102`
+và bởi `openRfq`).
+
+Năm đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256:
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | bỏ lần hỏi trước K3 ở `submitRfqForApproval` | 5/21 |
+| TS2 | bỏ lần hỏi trước K3 ở `openRfq` | 2/21 |
+| TS3 | bỏ khoá chính sách trước lần đúc khoá ở `openRfq` | 1/21 — hai lần mở đồng thời: lần sau qua lần hỏi trước rồi chỉ trigger chặn, lời không tên |
+| TS4 | `K3_KHONG_XOAY_VONG` không vào sổ | 8/21 |
+| TS5 | cạnh mở dùng câu của cạnh nộp (lọc `DRAFT`) — lần hỏi trước không thấy gói, chỉ trigger chặn | 2/21 |
+
+Năm sống: 0. Đối chứng sau khôi phục: 0/21 đỏ.
+
+## 8. Giới hạn còn lại
+- Lần mở trong một tổ chức xếp hàng; truy vấn cửa sổ chạy khi giữ khoá chuỗi sổ; không chỉ mục riêng (quy mô pilot).
+- Gói bị chặn ở cạnh mở phải trả về soạn thảo, kể cả khi lý do là xác minh hết hạn sau lúc nộp.
+- Khoản 319 còn mở ở tổ chức chưa bật.
+- K2b, K5b — S3.5; màn, lượt đi thử T4 — S3.3e.
+
+## 9. Số đo
+Trên `4c0c818` (nhánh dựng từ `master` `c8a369e`; số đã cấp: vòng 270, ADR-148,
+migration `108`; một chỗ số tạm trần trong chú thích sửa tay): `pnpm cap-so --kiem` sạch; `pnpm t0` xanh; `pnpm test` 150 tệp, 2525 ca
+đạt, 1 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 241 tệp, 4716 khẳng định (4706 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60
+nghiệp vụ + 22/22 hàng rào), 2047 giây; `evidence/INV-matrix.md` thêm đúng hàng K3 — 20 khẳng định mang nhãn — và đổi các con số đếm;
+mốc `MOC_GHIM.soPhuToiThieu` nâng tay 81 → 82: *"Cổng evidence: XANH"*. Trong lượt ấy: `xoay-vong` 21/21, `canh-tranh-toi-thieu`
+36/36, `migrations.int` 128/128, `hardening-suy-tu-tinh-chat` 38/38, hai kịch bản 41 32 + 85, `bac-chinh-sach` 42/42.
+Một lượt evidence trước đó trên `4515903` (trước cấp số) đỏ 14 ca, cả 14 ở cổng sổ nợ `so-no-tu-doi-chieu` (H20) — tài liệu của vòng
+chưa xong: nhãn đóng của khoản 234 viết `~~**[MỞ]**~~ **[ĐÓNG — …]**` thay vì `**[ĐÓNG]**` đứng đầu thân (P2, P3), lời khai số ADR và
+số khoản mở chưa đếm lại (P5, P7, P12), con trỏ tới biên bản của vòng chưa có đầu mục (P11). Sửa ở `8c7d3c5`; cổng 45/45; bản ma trận của lượt ấy
+thay bằng bản này.
+Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gia-lap` và tài liệu, không migration, không test tích hợp) và
+được gộp vào nhánh: ba xung đột tài liệu (`Handoff.md`, `docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc, cả hai biên bản, danh
+sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
+150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.

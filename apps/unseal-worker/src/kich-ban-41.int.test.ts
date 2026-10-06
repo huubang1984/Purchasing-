@@ -822,10 +822,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     // nộp duyệt KHÔNG một lời mời nào. Ba nhà cung cấp riêng của bước, dựng một lần; người mua mời cả ba vào mỗi gói ở DRAFT, trước
     // lần nộp (chữ ký mang danh sách lúc ký, K4b). Tín hiệu chia nhỏ đọc ngân sách và nhóm hàng, không đọc lời mời: bước này kể đúng
     // câu chuyện cũ. Người ký `gd1` nằm ngoài tập loại trừ của mỗi gói, nên K5 của bậc (`ky_danh_sach_moi`) cho lần mở qua.
+    // [S1.270 / S3.3d] Bậc ấy cũng xoay vòng (`xoay_vong_n` = 5, K3): gói sau mời lại hai nhà cung cấp đầu của gói trước, nên mỗi gói
+    // thêm một nhà cung cấp MỚI của riêng nó — năm nhà cung cấp, gói i mời {Mot, Hai} cộng người thứ (3 + i).
     const nccBuoc16 = batS3
       ? await withTenant(apiPool, orgA, async (c) => {
           const ra: { supplierId: string; contactId: string }[] = [];
-          for (const ten of ["Thep cong trinh Mot", "Thep cong trinh Hai", "Thep cong trinh Ba"]) ra.push(await dungNccDemDuoc(c, ten));
+          for (const ten of ["Thep cong trinh Mot", "Thep cong trinh Hai", "Thep cong trinh Ba", "Thep cong trinh Bon", "Thep cong trinh Nam"]) ra.push(await dungNccDemDuoc(c, ten));
           return ra;
         })
       : [];
@@ -853,7 +855,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         });
         const ns = await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: sMua });
         expect(ns.requiresDualApproval, "dưới ngưỡng kép 500 triệu — một chữ ký").toBe(false);
-        for (const n of nccBuoc16) {
+        for (const n of nccBuoc16.filter((_, k) => k < 2 || k === 2 + i)) {
           await createInvitation(c, orgA, { rfqId: r.id, supplierId: n.supplierId, contactId: n.contactId, linkChannel: "EMAIL", actorSessionId: sMua }, apiPool);
         }
         return r.id;
