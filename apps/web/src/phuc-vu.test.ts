@@ -209,7 +209,7 @@ describe("bề mặt tệp", () => {
       "chinh-sach": ["b2", "b3"],
       // [S1.199 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
       // [S1.234 / S4.3b] Bước 6 (hàng đợi ánh xạ) mở cho mọi người mua đã vào.
-      // [S1.9101 / S4.6a] Bước 7 (mốc giá ngoài, lịch sử ngoài) mở cùng điều kiện với bước 3 — `choGhi`.
+      // [S1.272 / S4.6a] Bước 7 (mốc giá ngoài, lịch sử ngoài) mở cùng điều kiện với bước 3 — `choGhi`.
       "du-lieu": ["b2", "b3", "b5", "b6", "b7"],
       // [S1.201 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
       "nhom-hang": ["b2", "b3"],
@@ -225,7 +225,7 @@ describe("bề mặt tệp", () => {
       // [S1.199 / S4.2b] Màn dữ liệu nền nạp danh sách hàng chuẩn rồi danh mục đơn vị.
       // [S1.234 / S4.3b] …rồi hàng đợi ánh xạ.
       // [S1.249 / khoản 291] Bước 1 của `/du-lieu` nay là `/lib/dang-nhap.js`: link đăng nhập gần đây TRƯỚC lời gọi riêng của màn.
-      // [S1.9101 / S4.6a] …và khi `choGhi`, danh sách lô mốc ngoài / lịch sử ngoài ngay sau danh sách hàng chuẩn (bước 7).
+      // [S1.272 / S4.6a] …và khi `choGhi`, danh sách lô mốc ngoài / lịch sử ngoài ngay sau danh sách hàng chuẩn (bước 7).
       "du-lieu": ["GET /auth/login-links", "GET /items", "GET /external-data/batches", "GET /uom", "GET /mapping-queue"],
       // [S1.216 / khoản 195] `/login` hỏi link đăng nhập gần đây của chính mình sau khi các bước mở.
       "mo-thau": ["GET /auth/login-links"],
@@ -2468,7 +2468,7 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-dung-phien");
       return p;
     };
-    // [S1.9101 / S4.6a] Khối nhập tay mốc giá ngoài ở bước 4 và cả bước 7 là phần ghi.
+    // [S1.272 / S4.6a] Khối nhập tay mốc giá ngoài ở bước 4 và cả bước 7 là phần ghi.
     const PHAN_GHI = ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv", "khoi-moc-ngoai", "b7"];
 
     it("[S1.199 / S4.2b · §8.10] du-lieu: tổ chức chưa ai giữ vai quản lý dữ liệu ⇒ câu đòi một NGƯỜI MỚI, không bước tạo, không khối ghi nào", async () => {
@@ -2525,7 +2525,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok5").hidden, "câu thành công của lần trước không nằm cạnh câu lỗi").toBe(true);
     });
 
-    // [S1.9101 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống. Màn của người mù giá: không cột giá, lỗi theo dòng.
+    // [S1.272 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống. Màn của người mù giá: không cột giá, lỗi theo dòng.
     const LO_NGOAI = {
       loai: "MOC_NGOAI", loNhapId: "l-1", soDong: 2, soDongConHieuLuc: 2, soHangChuan: 1, tuNgay: "2026-01-15", denNgay: "2026-02-01",
       tacGia: { userId: "u-1", hoTen: "Tran Quan Ly" }, ghiLuc: "2026-10-06T01:00:00Z",
@@ -2533,7 +2533,7 @@ describe("bề mặt tệp", () => {
     const chuCuaBang = (p: Awaited<ReturnType<typeof moDuLieu>>, id: string): string[][] =>
       p.el(id).querySelector("tbody").con.map((tr) => tr.con.map((td) => td.textContent));
 
-    it("[S1.9101 / S4.6a] du-lieu: bước 7 — lô sai ⇒ mỗi lỗi một dòng, không câu nào nhắc giá; lô đúng ⇒ ô dán xoá, danh sách đọc lại; quá 64 KB ⇒ không gọi", async () => {
+    it("[S1.272 / S4.6a] du-lieu: bước 7 — lô sai ⇒ mỗi lỗi một dòng, không câu nào nhắc giá; lô đúng ⇒ ô dán xoá, danh sách đọc lại; quá 64 KB ⇒ không gọi", async () => {
       let soLanNhap = 0;
       const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) => {
         if (l === "GET /external-data/batches") return Promise.resolve({ status: 200, body: { lo: soLanNhap > 1 ? [LO_NGOAI] : [] } });
@@ -2578,7 +2578,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("con-nua-lo").hidden).toBe(true);
     });
 
-    it("[S1.9101 / S4.6a] du-lieu: bước 7 — xem lô ⇒ bảng hàng KHÔNG cột giá; rút dòng và rút cả lô gọi đúng đường của loại; lịch sử ngoài đi đường riêng", async () => {
+    it("[S1.272 / S4.6a] du-lieu: bước 7 — xem lô ⇒ bảng hàng KHÔNG cột giá; rút dòng và rút cả lô gọi đúng đường của loại; lịch sử ngoài đi đường riêng", async () => {
       const HANG = [
         { id: "r-1", maHang: "THEP-D10", donVi: "kg", tienTe: "VND", ngay: "2026-01-15", nguon: "Bang gia HP", nhaCungCap: null, daRut: false },
         { id: "r-2", maHang: "THEP-D10", donVi: "cay", tienTe: "VND", ngay: "2026-02-01", nguon: "Bang gia HP", nhaCungCap: null, daRut: true },
@@ -2621,7 +2621,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok7").textContent).toBe("Đã nhập lô lịch sử mua ngoài hệ thống: 1 dòng, 1 hàng chuẩn.");
     });
 
-    it("[S1.9101 / S4.6a] du-lieu: mốc ngoài nhập tay ở bước 4 — gửi chuỗi đơn giá nguyên văn; ghi xong ô đơn giá xoá, danh sách lô đọc lại", async () => {
+    it("[S1.272 / S4.6a] du-lieu: mốc ngoài nhập tay ở bước 4 — gửi chuỗi đơn giá nguyên văn; ghi xong ô đơn giá xoá, danh sách lô đọc lại", async () => {
       const p = await moDuLieu({ ...{ hangChuan: [{ id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", trangThai: "DANG_DUNG" }] }, conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) => {
         if (l === "GET /items/h-1") {
           return Promise.resolve({ status: 200, body: {

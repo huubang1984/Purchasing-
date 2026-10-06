@@ -1144,7 +1144,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docQuanSatTaiMoc",
   "nhanMotDong",
   "truThang",
-  // [S1.9101 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: ba hàm GHI (nhập tay, nhập lô dán, rút) và hai hàm đọc CÓ CỔNG
+  // [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: ba hàm GHI (nhập tay, nhập lô dán, rút) và hai hàm đọc CÓ CỔNG
   // `item.manage` không cột giá. Bộ đọc văn bản dán (`docCsvNgoai`) không ra cửa: chỗ gọi duy nhất là `nhapDuLieuNgoai`.
   "khaiMocNgoai",
   "nhapDuLieuNgoai",

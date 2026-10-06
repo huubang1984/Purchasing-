@@ -22,7 +22,7 @@ const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.u
 /** Mọi bảng dữ liệu nền mang khuôn L1. Mỗi hạng mục S4 dựng một bảng nền thì thêm tên ở đây — test cuối tệp đòi hai chiều. */
 // [S1.197 / S4.2a] Bốn bảng hàng chuẩn vào cùng khuôn.
 // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục vào cùng khuôn (`089_anh_xa_hang_muc`).
-// [S1.9101 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống vào cùng khuôn (`9501_du_lieu_ngoai`).
+// [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống vào cùng khuôn (`109_du_lieu_ngoai`).
 const BANG_DU_LIEU_NEN = [
   "canonical_item_versions",
   "canonical_items",

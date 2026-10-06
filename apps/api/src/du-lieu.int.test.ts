@@ -107,7 +107,7 @@ describe("[S1.199 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng"
   it("mười ba route, đúng chín route ghi khai `item.manage`, bốn route đọc khai `agent: false`", () => {
     // [S1.251 / S4.4b] Route thứ mười hai là `GET /items/:itemId/price-history` (lịch sử giá, `apps/api/src/routes/lich-su-gia.ts`):
     // một route ĐỌC dưới cùng tiền tố, cổng `bid.view` nằm trong bộ đọc. Mười một route của S4.2b giữ nguyên.
-    // [S1.9101 / S4.6a] Route thứ mười ba là `POST /items/:itemId/external-references` (nhập tay một mốc giá ngoài,
+    // [S1.272 / S4.6a] Route thứ mười ba là `POST /items/:itemId/external-references` (nhập tay một mốc giá ngoài,
     // `apps/api/src/routes/du-lieu-ngoai.ts`): một route GHI thứ chín, cùng cổng `item.manage`; `du-lieu-ngoai.int.test.ts` đo nó.
     const cuaDuLieu = ROUTES.filter((r) => /^\/(?:items|uom)(?:\/|$)/u.test(r.path));
     expect(cuaDuLieu).toHaveLength(13);

@@ -1,5 +1,5 @@
-// [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — đường ghi, rút, danh sách không cột giá, trên Postgres thật
-// (spec S4 §4.7, §5.1 L1 · L3 · L15; ADR-096; ADR-9201).
+// [S1.272 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — đường ghi, rút, danh sách không cột giá, trên Postgres thật
+// (spec S4 §4.7, §5.1 L1 · L3 · L15; ADR-096; ADR-149).
 //
 // Bốn nhóm:
 //   ⑴ đường ứng dụng — lô dán và nhập tay ghi đúng, một lô một hàng sổ không mang giá; lô sai không ghi gì và trả lỗi theo dòng;
@@ -110,7 +110,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑴ đường ứng dụng — lô dán, nhập tay, một lô một hàng sổ không mang giá", () => {
+describe("[INV-L1] [INV-L15] [S1.272 / S4.6a] ⑴ đường ứng dụng — lô dán, nhập tay, một lô một hàng sổ không mang giá", () => {
   it("lô dán mốc ngoài: ba dòng, khoá đơn vị chuẩn hoá (`Kg`→`kg`, `cây`→`cay`), `seq` tăng, `ghi_luc` do trigger, một lô", async () => {
     const kq = await trong(orgA, (c) => nhapDuLieuNgoai(c, orgA, { loai: "MOC_NGOAI", vanBan: MOC_DAN, actorSessionId: quanLyA.phien }));
     expect(kq).toMatchObject({ nhan: true, loai: "MOC_NGOAI", soDong: 3, soHangChuan: 2 });
@@ -209,14 +209,14 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑴ đường ứng dụng — l�
       );
     expect(await nhap({ donVi: "m3" })).toBe("DON_VI_KHONG_QUY_DOI_DUOC");
     expect(await nhap({ donGia: "1,5" })).toBe("DON_GIA_SAI_HINH_DANG");
-    // [rà soát §S1.9101 CAO-1] `15.500` là mười lăm nghìn năm trăm trên bảng tính tiếng Việt — mơ hồ, từ chối có mã.
+    // [rà soát §S1.272 CAO-1] `15.500` là mười lăm nghìn năm trăm trên bảng tính tiếng Việt — mơ hồ, từ chối có mã.
     expect(await nhap({ donGia: "15.500" })).toBe("DON_GIA_MO_HO");
     expect(await nhap({ ngayHieuLuc: "30/02/2026" })).toBe("NGAY_SAI_HINH_DANG");
     expect(await nhap({ hangChuanId: "00000000-0000-4000-8000-000000000000" })).toBe("KHONG_CO_HANG_CHUAN");
   });
 });
 
-describe("[INV-L1] [S1.9101 / S4.6a] ⑵ rút — một hàng, cả lô; không xoá", () => {
+describe("[INV-L1] [S1.272 / S4.6a] ⑵ rút — một hàng, cả lô; không xoá", () => {
   it("rút một hàng: hàng rút trỏ `rut_cua`, không mang dữ liệu; rút lại ⇒ KHONG_CO_HANG_DU_LIEU; rút lô chỉ rút hàng còn hiệu lực", async () => {
     const lo = (await db.pool.query<{ lo: string; id: string }>(
       "SELECT lo_nhap_id AS lo, id FROM external_price_references WHERE org_id = $1 AND rut_cua IS NULL ORDER BY seq LIMIT 1",
@@ -252,7 +252,7 @@ describe("[INV-L1] [S1.9101 / S4.6a] ⑵ rút — một hàng, cả lô; không 
   });
 });
 
-describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑶ luật ở CSDL — câu SQL THÔ dưới `app_api`", () => {
+describe("[INV-L1] [INV-L15] [S1.272 / S4.6a] ⑶ luật ở CSDL — câu SQL THÔ dưới `app_api`", () => {
   const tho = (orgId: string, sql: string, thamSo: readonly unknown[]): Promise<string> =>
     loiCua(trong(orgId, (c) => c.query(sql, [...thamSo])));
   const CHEN =
@@ -291,7 +291,7 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑶ luật ở CSDL — câu SQL 
     ).toBe("external_price_references_hinh_dang");
   });
 
-  it("[chủ dự án chốt sau rà soát §S1.9101] ngày mua sau HÔM NAY (giờ Việt Nam) ⇒ từ chối có tên ở CSDL; hôm nay thì nhận; mốc ngoài ngày tương lai thì nhận", async () => {
+  it("[chủ dự án chốt sau rà soát §S1.272] ngày mua sau HÔM NAY (giờ Việt Nam) ⇒ từ chối có tên ở CSDL; hôm nay thì nhận; mốc ngoài ngày tương lai thì nhận", async () => {
     // Mỗi câu trong một giao dịch HUỶ ở cuối: hàng được nhận không thành lô thật, không làm lệch danh sách lô ở ⑷.
     const thoHuy = async (sql: string, thamSo: readonly unknown[]): Promise<string> => {
       let ma = "";
@@ -360,7 +360,7 @@ describe("[INV-L1] [INV-L15] [S1.9101 / S4.6a] ⑶ luật ở CSDL — câu SQL 
   });
 });
 
-describe("[INV-L15] [S1.9101 / S4.6a] ⑷ đọc — lô và hàng KHÔNG đơn giá, cổng `item.manage`", () => {
+describe("[INV-L15] [S1.272 / S4.6a] ⑷ đọc — lô và hàng KHÔNG đơn giá, cổng `item.manage`", () => {
   it("người quản lý dữ liệu: lô của cả hai bảng, mới nhất trước, với số còn hiệu lực; hàng của lô không có đơn giá", async () => {
     const { lo, conNua } = await trong(orgA, (c) => lietKeLoDuLieuNgoai(c, orgA, { actorSessionId: quanLyA.phien }, api));
     expect(conNua).toBe(false);

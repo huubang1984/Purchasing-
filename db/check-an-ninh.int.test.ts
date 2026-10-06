@@ -39,7 +39,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   canonical_item_versions_trang_thai_mien: "MIEN",
   canonical_item_versions_trong_yeu_co_gia_tri: "JSON",
   canonical_items_ma_hinh_dang: "DINH_DANG",
-  // [S1.9101 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: hình dạng hàng dữ liệu / hàng rút, đơn giá dương hữu hạn, khoá đơn vị đã
+  // [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: hình dạng hàng dữ liệu / hàng rút, đơn giá dương hữu hạn, khoá đơn vị đã
   // làm sạch, miền tiền tệ, độ dài nguồn và tên nhà cung cấp. Luật GHI (quy đổi được, rút đúng đích) ở trigger, không ở CHECK.
   external_price_references_don_gia_duong: "HUU_HAN",
   external_price_references_don_vi_da_lam_sach: "DINH_DANG",

@@ -27,8 +27,8 @@ export const ROUTES: readonly Route[] = [
   ...ROUTES_BUYER,
   // [S1.199 / S4.2b] Dữ liệu nền: hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
   ...ROUTES_DU_LIEU,
-  // [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống: nhập tay, dán CSV, rút; danh sách KHÔNG cột giá dưới
-  // `item.manage` trong gói, `agent: false` (spec S4 §4.7; ADR-096; ADR-9201).
+  // [S1.272 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống: nhập tay, dán CSV, rút; danh sách KHÔNG cột giá dưới
+  // `item.manage` trong gói, `agent: false` (spec S4 §4.7; ADR-096; ADR-149).
   ...ROUTES_DU_LIEU_NGOAI,
   // [S1.234 / S4.3b] Ánh xạ hạng mục: hàng đợi, trạng thái từng dòng, duyệt/bác/tạo hàng chuẩn, chuẩn hoá lại (spec S4 §4.4).
   ...ROUTES_ANH_XA,

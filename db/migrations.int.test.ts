@@ -2275,7 +2275,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_kiem_danh_tinh",
         "item_aliases_kiem_danh_tinh",
         "item_uom_conversions_kiem_danh_tinh",
-        // [S1.9101 / S4.6a] Hai bảng giá ngoài — cùng khuôn.
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — cùng khuôn.
         "external_price_references_kiem_danh_tinh",
         "external_purchase_history_kiem_danh_tinh",
         "unseal_requests_kiem_danh_tinh",
@@ -2439,7 +2439,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_dat_thu_tu",
         "item_aliases_dat_thu_tu",
         "item_uom_conversions_dat_thu_tu",
-        // [S1.9101 / S4.6a] Hai bảng giá ngoài — cùng hàm khuôn, thân không đổi.
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — cùng hàm khuôn, thân không đổi.
         "external_price_references_dat_thu_tu",
         "external_purchase_history_dat_thu_tu",
         // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — cùng hàm khuôn, thân không đổi.
@@ -2460,17 +2460,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_kiem_quyen_ghi",
         "item_aliases_kiem_quyen_ghi",
         "item_uom_conversions_kiem_quyen_ghi",
-        // [S1.9101 / S4.6a] Hai bảng giá ngoài — người ghi phải giữ `item.manage`.
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — người ghi phải giữ `item.manage`.
         "external_price_references_kiem_quyen_ghi",
         "external_purchase_history_kiem_quyen_ghi",
         "uom_aliases_kiem_quyen_ghi",
       ],
     },
-    // [S1.9101 / S4.6a / L4 · L15] Luật ghi của hai bảng giá ngoài. Một thân `RETURN NEW` sớm cho đơn vị không quy đổi được sang đơn
+    // [S1.272 / S4.6a / L4 · L15] Luật ghi của hai bảng giá ngoài. Một thân `RETURN NEW` sớm cho đơn vị không quy đổi được sang đơn
     // vị gốc vào bảng (phép đọc của S4.6b sẽ lặng lẽ bỏ hàng ấy), và cho hàng rút trỏ về một hàng rút.
     {
       ham: "du_lieu_ngoai_kiem_ghi",
-      migration: "9501_du_lieu_ngoai.sql",
+      migration: "109_du_lieu_ngoai.sql",
       trigger: ["external_price_references_kiem_ngoai", "external_purchase_history_kiem_ngoai"],
     },
     // [S1.201 / S3.6a] Bốn hàm trigger của nhóm hàng. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: vai tạo gói
@@ -4185,7 +4185,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
-        "9501_du_lieu_ngoai.sql",
+        "109_du_lieu_ngoai.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8838,7 +8838,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
-        "9501_du_lieu_ngoai.sql",
+        "109_du_lieu_ngoai.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9171,7 +9171,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
-        "9501_du_lieu_ngoai.sql",
+        "109_du_lieu_ngoai.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

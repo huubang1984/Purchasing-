@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.6a] ROUTE MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG QUA HTTP (spec S4 §3.5, §4.7; ADR-096; ADR-9201).
+// [S1.272 / S4.6a] ROUTE MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG QUA HTTP (spec S4 §3.5, §4.7; ADR-096; ADR-149).
 //
 //   ⑴ [INV-L3] mười route: bảy route ghi khai `item.manage`, ba route đọc khai `agent: false`. Người PROCUREMENT_MANAGER (giữ
 //      `bid.view` — người THẤY giá) gọi cả mười ⇒ 403: ghi bị cổng của bộ điều phối chặn, đọc bị cổng TRONG hàm đọc chặn (ADR-096 ⑵:
@@ -112,7 +112,7 @@ afterAll(async () => {
 const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 const BANG = ["external_price_references", "external_purchase_history"];
 
-describe("[S1.9101 / S4.6a] ⑴ cổng `item.manage` — ghi ở bộ điều phối, đọc trong hàm", () => {
+describe("[S1.272 / S4.6a] ⑴ cổng `item.manage` — ghi ở bộ điều phối, đọc trong hàm", () => {
   it("mười route: bảy route ghi khai `item.manage`, ba route đọc khai `agent: false`; cả mười có trong ROUTES", () => {
     expect(ROUTES_DU_LIEU_NGOAI).toHaveLength(10);
     for (const r of ROUTES_DU_LIEU_NGOAI) expect(ROUTES, `${r.method} ${r.path}`).toContain(r);
@@ -159,7 +159,7 @@ describe("[S1.9101 / S4.6a] ⑴ cổng `item.manage` — ghi ở bộ điều ph
   });
 });
 
-describe("[S1.9101 / S4.6a] ⑵ [INV-L1] trọn đường của người quản lý dữ liệu — không thân trả về nào mang giá", () => {
+describe("[S1.272 / S4.6a] ⑵ [INV-L1] trọn đường của người quản lý dữ liệu — không thân trả về nào mang giá", () => {
   it("dán lô sai ⇒ 422 với lỗi theo dòng, không hàng nào; lô đúng ⇒ 201; nhập tay ⇒ 201; danh sách, hàng của lô không con số giá nào; rút dòng, rút lô", async () => {
     const sai = await goi("POST", "/external-references/import", quanLy, {
       vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nTHEP-D10,${GIA_MOC},kg,VND,2026-01-15,Bang gia\nKHONG-CO,1,kg,EUR,2026-01-15,X\n`,
@@ -231,7 +231,7 @@ describe("[S1.9101 / S4.6a] ⑵ [INV-L1] trọn đường của người quản 
   });
 });
 
-describe("[S1.9101 / S4.6a] ⑶ ranh giới tổ chức, hình dạng đường và thân", () => {
+describe("[S1.272 / S4.6a] ⑶ ranh giới tổ chức, hình dạng đường và thân", () => {
   it("tổ chức B không thấy lô của A; hàng chuẩn của A không ghi được từ B ⇒ 422; id sai hình dạng ⇒ 404; thân thiếu trường ⇒ 422", async () => {
     const dsB = await goi("GET", "/external-data/batches", quanLyB);
     expect(dsB.status, dsB.text).toBe(200);

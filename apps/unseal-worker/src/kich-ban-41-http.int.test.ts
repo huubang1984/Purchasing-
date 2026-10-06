@@ -84,7 +84,7 @@ const MOI_GIA: readonly string[] = [...NHA_CUNG_CAP.map((n) => n.gia), GIA_SUA_L
 const SO_LUONG_DONG = 100;
 const donGiaCua = (tong: string): string => (Number(tong) / SO_LUONG_DONG).toFixed(2);
 /**
- * [S1.9101 / S4.6a] Hai KIM của dữ liệu ngoài (ADR-095 ⑹): đơn giá của một mốc giá ngoài và của một dòng lịch sử mua ngoài hệ thống,
+ * [S1.272 / S4.6a] Hai KIM của dữ liệu ngoài (ADR-095 ⑹): đơn giá của một mốc giá ngoài và của một dòng lịch sử mua ngoài hệ thống,
  * nhập ở bước 1 — TRƯỚC mọi lượt chấm, benchmark và xuất bộ bằng chứng — và quét ở bước 14. Hai con số không trùng giá nào của kịch
  * bản, và khác nhau, nên mỗi kim chỉ được phép đứng ở ĐÚNG bảng của nó.
  */
@@ -614,7 +614,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(bd.status, bd.text).toBe(201);
     const qd = await goi("POST", `/items/${trangThai.hangChuanId}/conversions`, dl, { tuDonVi: "tam", sangDonVi: "kg", heSo: HANG_CHUAN_CHINH.heSoTam });
     expect(qd.status, qd.text).toBe(201);
-    // [S1.9101 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
+    // [S1.272 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
     // kịch bản sau đó (chấm, benchmark, BAFO, xuất bộ bằng chứng) chạy trong một thế giới CÓ dữ liệu ngoài; bước 14 quét hai kim.
     const mn = await goi("POST", "/external-references/import", dl, {
       vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_MOC_NGOAI},kg,VND,2026-01-15,Bang gia nha may\n`,
@@ -1100,7 +1100,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
         case "POST /uom/aliases/withdraw":
           return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
-        // [S1.9101 / S4.6a] Bảy route ghi dữ liệu ngoài, trên hàng chuẩn hy sinh. Thứ tự của bảng route: nhập tay → dán mốc → dán lịch
+        // [S1.272 / S4.6a] Bảy route ghi dữ liệu ngoài, trên hàng chuẩn hy sinh. Thứ tự của bảng route: nhập tay → dán mốc → dán lịch
         // sử → rút lô mốc → rút lô lịch sử → rút hàng mốc → rút hàng lịch sử. Sáu route đi tới 201; route cuối rút một id không có
         // (không route nào trả id hàng của một lô dán) ⇒ 422 có tên `KHONG_CO_HANG_DU_LIEU`, tức vẫn qua bộ đọc thân.
         case "POST /items/:itemId/external-references":
@@ -2184,7 +2184,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     ).rows[0]!.v;
     expect(quyDoi.startsWith("10969.568")).toBe(true);
     expect((await quetGiaMoiQuanHe(db.pool, quyDoi)).dinh, "đơn giá quy đổi không được lưu ở đâu").toEqual([]);
-    // [S1.9101 / S4.6a — ADR-095 ⑸⑹, ADR-054] Hai bảng giá KHÔNG phải báo giá: mỗi kim của bước 1 chỉ ở đúng bảng của nó — không ở
+    // [S1.272 / S4.6a — ADR-095 ⑸⑹, ADR-054] Hai bảng giá KHÔNG phải báo giá: mỗi kim của bước 1 chỉ ở đúng bảng của nó — không ở
     // sổ kiểm toán (payload lần nhập không mang giá), không ở bảng chấm, benchmark hay bản lưu, không ở bảng kia.
     expect((await quetGiaMoiQuanHe(db.pool, KIM_MOC_NGOAI)).dinh, "mốc giá ngoài chỉ ở bảng của nó").toEqual(["external_price_references"]);
     expect((await quetGiaMoiQuanHe(db.pool, KIM_LICH_SU_NGOAI)).dinh, "lịch sử ngoài chỉ ở bảng của nó").toEqual(["external_purchase_history"]);

@@ -118,7 +118,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
-  // [S1.9101 / S4.6a / `9501_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn `079`: sửa bằng hàng rút, không UPDATE.
+  // [S1.272 / S4.6a / `109_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn `079`: sửa bằng hàng rút, không UPDATE.
   "external_price_references",
   "external_purchase_history",
   // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả
@@ -2029,7 +2029,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
   );
 
-  // ---- [S1.9101 / S4.6a / L1 · L3 · L15 / `9501_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống ---------------------------
+  // ---- [S1.272 / S4.6a / L1 · L3 · L15 / `109_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống ---------------------------
   // Mỗi bảng bốn bộ ba mới trên INSERT: `du_lieu_nen_dat_thu_tu`, `kiem_danh_tinh_theo_phien`, `du_lieu_nen_kiem_quyen_ghi` (hàm CŨ,
   // bảng MỚI) và luật ghi `du_lieu_ngoai_kiem_ghi` (hàm MỚI — từ chối CÓ ĐIỀU KIỆN). Đơn vị `kg` của hàng chuẩn `kg`: cùng đơn vị.
   await chenNC(

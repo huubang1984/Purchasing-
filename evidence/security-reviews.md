@@ -24886,7 +24886,7 @@ Sau lượt đo, `master` thêm `4653307` (PR #246, §S1.271 — `tools/pilot-gi
 sách khoản mở của `master` bỏ 234 —, lời khai đếm lại bằng `pnpm cap-so --dem`; `pnpm cap-so --kiem` sạch, `pnpm t0` xanh, `pnpm test`
 150 tệp, 2529 ca đạt, 1 bỏ qua, 0 đỏ. `pnpm evidence` không chạy lại trên cây gộp.
 
-# §S1.9101 — S4.6a: MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ, NGƯỜI NHẬP MÙ GIÁ, ĐỌC LẠI KHÔNG CỘT GIÁ (L1, L3 vế hai bảng; L15 vế ghi) — ADR-9201
+# §S1.272 — S4.6a: MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ, NGƯỜI NHẬP MÙ GIÁ, ĐỌC LẠI KHÔNG CỘT GIÁ (L1, L3 vế hai bảng; L15 vế ghi) — ADR-149
 
 ## 1. Vòng này là gì
 
@@ -24920,7 +24920,7 @@ dấu chấm, đúng ba chữ số sau) bị từ chối ở cả hai tiền t�
 
 ## 4. Thay đổi
 
-- `9501_du_lieu_ngoai`: hai bảng khuôn L1 (`lo_nhap_id`; hàng rút `rut_cua`, `UNIQUE (org_id, rut_cua)`; `CHECK` có tên: đơn giá dương
+- `109_du_lieu_ngoai`: hai bảng khuôn L1 (`lo_nhap_id`; hàng rút `rut_cua`, `UNIQUE (org_id, rut_cua)`; `CHECK` có tên: đơn giá dương
   hữu hạn, đơn vị đã làm sạch, tiền tệ `VND`/`USD`, nguồn 1–500, nhà cung cấp 1–300, hình dạng hàng dữ liệu / hàng rút; khoá ngoại tới
   hàng chuẩn, người ghi, hàng được rút); ENABLE + FORCE RLS, `_tenant_isolation`, `_khach` RESTRICTIVE; `GRANT SELECT` + `INSERT` theo
   cột. Hàm `du_lieu_ngoai_kiem_ghi`: đơn vị phải quy đổi được sang đơn vị gốc tại `clock_timestamp()` (`du_lieu_ngoai_don_vi_khong_quy_
@@ -24938,7 +24938,7 @@ dấu chấm, đúng ba chữ số sau) bị từ chối ở cả hai tiền t�
 - Sổ: barrel, `cong-quyen-route`, `ROUTE_DOC_KHONG_PHOI` của MCP, `ma-chep-api-worker`, `migration-shape`, `rls-coverage`, `check-an-ninh`,
   `migrations.int` (bốn danh sách migration, `HAM_51`/`HAM_56`), `hardening-suy-tu-tinh-chat`, `danh-sach-ham-canh`, `BANG_DU_LIEU_NEN`,
   danh mục `resourceType` (`EXTERNAL_DATA_BATCH`, `EXTERNAL_DATA_ROW`), sổ khai nhãn (L1, L3, L15).
-- Tài liệu: ADR-9201; ADR-054 hai dòng + đoạn bổ sung; spec §9 (S4.6a, S4.6b) và ⒅; STATE; PRODUCT; TEST-PLAN (L1, L15 mới);
+- Tài liệu: ADR-149; ADR-054 hai dòng + đoạn bổ sung; spec §9 (S4.6a, S4.6b) và ⒅; STATE; PRODUCT; TEST-PLAN (L1, L15 mới);
   Handoff (105 migration, 147 ADR, 82 bất biến).
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
@@ -25000,7 +25000,7 @@ chức hay vượt cổng quyền:
   `cot: "15500_75"`, `"2026_01_15"`, tên nhà cung cấp. Trái luật *không giá ở thân trả về nào*. **Sửa**: không ô nào là tên cột ⇒ một
   lỗi `KHONG_CO_TIEU_DE`; tên cột lạ chỉ nhắc khi chỉ gồm chữ thường và gạch dưới, không thì nêu vị trí; N15.
 - **THẤP-3 — lớp L15 là lớp chữ, dễ vượt** (`h.*`, `to_jsonb(h)`, `RETURNING don_gia`, hardening được miễn cả tệp). **Sửa**: bộ dò
-  đọc-cả-hàng có đối chứng cho từng mẫu; cấm `FROM`/`JOIN` hai bảng trong mọi migration. Ranh giới còn lại nói ra ở ADR-9201 ⑹.
+  đọc-cả-hàng có đối chứng cho từng mẫu; cấm `FROM`/`JOIN` hai bảng trong mọi migration. Ranh giới còn lại nói ra ở ADR-149 ⑹.
 - **THẤP-4 — ngày.** Ngày mua ở tương lai được nhận. Chủ dự án chốt: chặn sau HÔM NAY (giờ Việt Nam) ở bộ đọc và ở trigger; ngày hiệu
   lực của mốc ngoài không chặn. **Sửa**; N14. `03/04/2026` luôn là 3 tháng 4 — luật đã chốt, nói ra.
 - **THẤP-5 — chữ sau ngoặc kép đóng được ghép vào ô** (`"1"5` thành 15). **Sửa**: `NGOAC_KEP_HO`; N16.

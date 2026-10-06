@@ -1,4 +1,4 @@
-// [S1.9101 / S4.6a] Bộ đọc văn bản dán của mốc ngoài và lịch sử ngoài hệ thống — thuần, không CSDL (spec S4 §4.7; ADR-096 ⑸).
+// [S1.272 / S4.6a] Bộ đọc văn bản dán của mốc ngoài và lịch sử ngoài hệ thống — thuần, không CSDL (spec S4 §4.7; ADR-096 ⑸).
 // Mỗi luật hình dạng một ca, cộng phép đo rằng KHÔNG câu lỗi nào lặp lại giá trị của ô (người nhập mù giá không đọc lại được giá).
 import { describe, expect, it } from "vitest";
 import {
@@ -16,7 +16,7 @@ import {
 const loiCua = (kq: KetQuaDocCsv): readonly { dong: number; cot: string | null; ma: string }[] =>
   kq.hopLe ? [] : kq.loi.map(({ dong, cot, ma }) => ({ dong, cot, ma }));
 
-describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — dòng hợp lệ", () => {
+describe("[INV-L15] [S1.272 / S4.6a] đọc văn bản dán — dòng hợp lệ", () => {
   it("tiêu đề tiếng Việt có dấu, thứ tự tự do, phân cách phẩy; mã hàng hạ chữ được nâng; ngày DD/MM/YYYY thành ISO", () => {
     const kq = docCsvNgoai(
       "MOC_NGOAI",
@@ -64,7 +64,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — dòng hợp l�
   });
 });
 
-describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, theo dòng, không lặp lại ô", () => {
+describe("[INV-L15] [S1.272 / S4.6a] đọc văn bản dán — từ chối, theo dòng, không lặp lại ô", () => {
   const TIEU_DE = "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon";
 
   it("lô rỗng; chỉ tiêu đề; quá trần số dòng", () => {
@@ -100,7 +100,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
     expect(laDonGia("1.0000001")).toBe(false);
   });
 
-  it("[rà soát §S1.9101 CAO-1, chủ dự án chốt] `15.500` — một dấu chấm, đúng ba chữ số sau — là mơ hồ ở CẢ HAI tiền tệ; dạng khác vẫn nhận", () => {
+  it("[rà soát §S1.272 CAO-1, chủ dự án chốt] `15.500` — một dấu chấm, đúng ba chữ số sau — là mơ hồ ở CẢ HAI tiền tệ; dạng khác vẫn nhận", () => {
     for (const mo of ["15.500", "1.250", "999.999", "1.000"]) {
       for (const tienTe of ["VND", "USD"]) {
         const kq = docCsvNgoai("MOC_NGOAI", `ma_hang;don_gia;don_vi;tien_te;ngay_hieu_luc;nguon\nA1;${mo};kg;${tienTe};2026-01-01;X\n`);
@@ -111,7 +111,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
     expect(cauLoiDong("DON_GIA_MO_HO")).toMatch(/15500/u);
   });
 
-  it("[chủ dự án chốt sau rà soát §S1.9101] ngày mua sau HÔM NAY (giờ Việt Nam) bị từ chối; hôm nay thì nhận; ngày hiệu lực của mốc ngoài không chặn", () => {
+  it("[chủ dự án chốt sau rà soát §S1.272] ngày mua sau HÔM NAY (giờ Việt Nam) bị từ chối; hôm nay thì nhận; ngày hiệu lực của mốc ngoài không chặn", () => {
     const lichSu = (ngay: string): KetQuaDocCsv =>
       docCsvNgoai("LICH_SU_NGOAI", `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\nA1,1,kg,VND,${ngay},X,Y\n`, "2026-10-06");
     expect(loiCua(lichSu("2026-10-07"))).toEqual([{ dong: 2, cot: "ngay_mua", ma: "NGAY_MUA_SAU_HOM_NAY" }]);
@@ -165,7 +165,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
     ]);
   });
 
-  it("[rà soát §S1.9101 TRUNG-2] dán THIẾU dòng tiêu đề ⇒ một lỗi, không nhắc lại ô nào của dòng đầu — đơn giá, ngày, nhà cung cấp", () => {
+  it("[rà soát §S1.272 TRUNG-2] dán THIẾU dòng tiêu đề ⇒ một lỗi, không nhắc lại ô nào của dòng đầu — đơn giá, ngày, nhà cung cấp", () => {
     for (const [loai, vanBan] of [
       ["MOC_NGOAI", "THEP-D10,15500.75,kg,VND,2026-01-15,Bao gia Hoa Phat\nTHEP-D10,1,kg,VND,2026-01-16,X\n"],
       ["LICH_SU_NGOAI", "THEP-D10\t15500.75\tkg\tVND\t2025-11-20\tCong ty Thep Song Hong\tSo mua\nA1\t1\tkg\tVND\t2025-11-21\tB\tC\n"],
@@ -180,7 +180,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] đọc văn bản dán — từ chối, th
     expect(JSON.stringify(thua)).not.toContain("15500");
   });
 
-  it("[rà soát §S1.9101 THẤP-5] chữ ngay sau ngoặc kép đóng là lỗi của dòng, không phải một ô ghép (`\"1\"5` không thành 15)", () => {
+  it("[rà soát §S1.272 THẤP-5] chữ ngay sau ngoặc kép đóng là lỗi của dòng, không phải một ô ghép (`\"1\"5` không thành 15)", () => {
     const kq = docCsvNgoai("MOC_NGOAI", 'ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nA1,"1"5,kg,VND,2026-01-01,X\nA2,"2",kg,VND,2026-01-01,"Y"\n');
     expect(loiCua(kq)).toEqual([{ dong: 2, cot: null, ma: "NGOAC_KEP_HO" }]);
   });

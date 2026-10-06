@@ -673,7 +673,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "RIENG",
     doLuong: "KHONG",
     lyDo: "Bảng route ĐỌC của ~~hai~~ [S1.237 / gộp #217] ba tệp route người mua (thêm năm route ánh xạ của S4.3b) — nội dung khác nhau " +
-      "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới). [S1.9101 / S4.6a] Thêm tệp route mốc ngoài và lịch sử ngoài hệ thống.",
+      "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới). [S1.272 / S4.6a] Thêm tệp route mốc ngoài và lịch sử ngoài hệ thống.",
   },
   {
     ten: "doc",

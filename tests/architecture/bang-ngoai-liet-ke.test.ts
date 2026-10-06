@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [INV-L15] [S1.9101 / S4.6a] MỌI CHỖ CHẠM HAI BẢNG GIÁ NGOÀI ĐƯỢC LIỆT KÊ BẰNG TÊN — và chưa câu nào ĐỌC giá
+// [INV-L15] [S1.272 / S4.6a] MỌI CHỖ CHẠM HAI BẢNG GIÁ NGOÀI ĐƯỢC LIỆT KÊ BẰNG TÊN — và chưa câu nào ĐỌC giá
 //
 // `external_price_references` và `external_purchase_history` là hai bảng giá không phải báo giá (ADR-054, ADR-095 ⑸): vai ghi
 // `app_api` qua người giữ `item.manage`, cổng đọc GIÁ `bid.view` (ADR-096 ⑵). `app_api` có `SELECT` mức bảng — khuôn mọi bảng nền
@@ -9,7 +9,7 @@
 //      nó vào đây bằng một dòng có lý do;
 //   ⑶ L15 — *"không một phép đếm nào của cổng (e) đọc nó"*: không migration nào ngoài tệp dựng bảng và tệp ghim nhắc tên hai bảng,
 //      nên không view, hàm hay phép đếm SQL nào đọc chúng mà không qua lớp này.
-// [rà soát §S1.9101 THẤP-3] Bản đầu chỉ tìm chữ `don_gia`, nên `SELECT h.*`, `to_jsonb(h)`, `h::text` và `RETURNING don_gia` của một
+// [rà soát §S1.272 THẤP-3] Bản đầu chỉ tìm chữ `don_gia`, nên `SELECT h.*`, `to_jsonb(h)`, `h::text` và `RETURNING don_gia` của một
 // câu INSERT đi qua — đọc giá mà không viết tên cột. Nay ⑵ cấm thêm mọi cách đọc CẢ HÀNG (`*` ngoài `count(*)`, hàm đóng gói hàng,
 // bí danh của bảng đứng một mình hay ép kiểu), cấm `don_gia` sau `RETURNING` và ngoài danh sách cột của câu INSERT; ⑶ cấm mọi
 // `FROM`/`JOIN` hai bảng trong MỌI migration, kể cả tệp dựng bảng và tệp ghim. Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó.
@@ -55,7 +55,7 @@ function docCaHangHayGia(sql: string): string[] {
   return ly;
 }
 
-describe("[INV-L15] [S1.9101 / S4.6a] hai bảng giá ngoài — mọi chỗ chạm có tên", () => {
+describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ chạm có tên", () => {
   it("[INV-L15] tệp TypeScript sản xuất có câu SQL chạm hai bảng đúng bằng danh sách", () => {
     const tep = [...new Set(moiCauSql().filter((c) => BANG.test(c.sql)).map((c) => c.tep))].sort();
     expect(tep, "tệp mới chạm bảng giá ngoài: thêm một dòng CÓ LÝ DO vào TEP_TS — đọc giá thì dưới `bid.view` và kèm hàng sổ").toEqual(
@@ -107,7 +107,7 @@ describe("[INV-L15] [S1.9101 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
       .filter((t) => BANG.test(readFileSync(`${THU_MUC_MIGRATION}${t}`, "utf8")))
       .sort();
     expect(tep, "migration mới đọc bảng giá ngoài: cổng (e) không được đếm lịch sử ngoài hệ thống (ADR-096 ⑷, L15)").toEqual([
-      "9501_du_lieu_ngoai.sql",
+      "109_du_lieu_ngoai.sql",
       "hardening.always.sql",
     ]);
   });

@@ -31,7 +31,7 @@ let dangXem = null;
 /** [S1.234 / S4.3b] Hàng đợi đang hiện ở bước 6, và dòng đang mở ở khối xử lý — `null` khi khối đóng. */
 let hangDoi = { dong: [], conNua: false };
 let dangXuLy = null;
-/** [S1.9101 / S4.6a] Lô đang mở ở bước 7 — `{ loai, loNhapId }`, `null` khi khối đóng. */
+/** [S1.272 / S4.6a] Lô đang mở ở bước 7 — `{ loai, loNhapId }`, `null` khi khối đóng. */
 let loDangMo = null;
 
 async function goi(method, duong, than) {
@@ -242,7 +242,7 @@ async function napHangChuan() {
   bao($("vai-quan-ly"), cauVaiQuanLy(trangThai.choGhi, trangThai.soNguoiQuanLy) ?? "");
   hien($("b3"), trangThai.choGhi);
   for (const id of ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv", "khoi-moc-ngoai"]) hien($(id), trangThai.choGhi);
-  // [S1.9101 / S4.6a] Bước 7 chỉ cho người ghi được: danh sách lô đọc dưới `item.manage` ở máy chủ, nên người khác chỉ nhận 403.
+  // [S1.272 / S4.6a] Bước 7 chỉ cho người ghi được: danh sách lô đọc dưới `item.manage` ở máy chủ, nên người khác chỉ nhận 403.
   hien($("b7"), trangThai.choGhi);
   if (trangThai.choGhi) await napLo();
   bao($("con-nua"), trangThai.conNua
@@ -382,7 +382,7 @@ $("nut-quy-doi").addEventListener("click", motLan($("nut-quy-doi"), async () => 
   await ghiChiTiet("conversions", { tuDonVi: $("qd-tu").value.trim(), sangDonVi: $("qd-sang").value.trim(), heSo }, "Đã khai quy đổi riêng.");
 }));
 
-// [S1.9101 / S4.6a] Một mốc giá ngoài cho hàng đang mở. Màn không kiểm lại đơn giá hay đơn vị — gói và trigger CSDL nói (`422`). Ô đơn
+// [S1.272 / S4.6a] Một mốc giá ngoài cho hàng đang mở. Màn không kiểm lại đơn giá hay đơn vị — gói và trigger CSDL nói (`422`). Ô đơn
 // giá xoá sau khi ghi: màn của người mù giá không giữ lại con số nào (ADR-096 ⑵).
 $("nut-moc-ngoai").addEventListener("click", motLan($("nut-moc-ngoai"), async () => {
   bao($("loi4"), ""); bao($("ok4"), "");
@@ -580,7 +580,7 @@ $("nut-chuan-hoa-lai").addEventListener("click", motLanKhoi(async () => {
 }));
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096). Nhập lô bằng văn bản dán, rút
+// [S1.272 / S4.6a] Bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096). Nhập lô bằng văn bản dán, rút
 // theo lô hay theo dòng. Danh sách lô và hàng KHÔNG mang đơn giá: máy chủ không gửi, màn không có cột (chủ dự án chốt 2026-10-06).
 // ---------------------------------------------------------------------------------------------
 

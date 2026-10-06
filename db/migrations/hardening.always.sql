@@ -3789,8 +3789,8 @@ $ham$;
          ('public', 'bid_receipts', '018_vendor_bids'),
          ('public', 'canonical_item_versions', '083_hang_chuan'),
          ('public', 'canonical_items', '083_hang_chuan'),
-         ('public', 'external_price_references', '9501_du_lieu_ngoai'),
-         ('public', 'external_purchase_history', '9501_du_lieu_ngoai'),
+         ('public', 'external_price_references', '109_du_lieu_ngoai'),
+         ('public', 'external_purchase_history', '109_du_lieu_ngoai'),
          ('public', 'governance_signal_acks', '088_tin_hieu_chia_nho'),
          ('public', 'governance_signals', '088_tin_hieu_chia_nho'),
          ('public', 'guest_sessions', '010_invitations'),
@@ -13342,10 +13342,10 @@ $ham$;
                   'hàm public.goi_y_kiem_luat() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.goi_y_kiem_luat() và bảng public.rfq_item_goi_y (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.6a] Luat ghi du lieu ngoai: hang rut khong tro ve hang rut; don vi quy doi duoc sang don vi goc. Than `RETURN NEW` som nhan don vi khong quy doi duoc va rut cua hang rut.
+    -- [S1.272 / S4.6a] Luat ghi du lieu ngoai: hang rut khong tro ve hang rut; don vi quy doi duoc sang don vi goc. Than `RETURN NEW` som nhan don vi khong quy doi duoc va rut cua hang rut.
     ARRAY[
-      $q$hàm + trigger du_lieu_ngoai_kiem_ghi (9501_du_lieu_ngoai)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_du_lieu_ngoai.sql')$q$,
+      $q$hàm + trigger du_lieu_ngoai_kiem_ghi (109_du_lieu_ngoai)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '109_du_lieu_ngoai.sql')$q$,
       $q$DO $fn286$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13369,7 +13369,7 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-  -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
+  -- [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
   -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó.
   IF TG_TABLE_NAME = 'external_purchase_history' THEN
     IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN
@@ -13421,7 +13421,7 @@ $ham$;
          END
          $fn286$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE dich_rut uuid; goc text; ma_quy_doi text; BEGIN IF NEW.rut_cua IS NOT NULL THEN EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME) INTO dich_rut USING NEW.org_id, NEW.rut_cua; IF dich_rut IS NOT NULL THEN RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut'; END IF; RETURN NEW; END IF; -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó. IF TG_TABLE_NAME = 'external_purchase_history' THEN IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam' USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay'; END IF; END IF; SELECT ci.don_vi_goc INTO goc FROM public.canonical_items ci WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id; IF goc IS NULL THEN RETURN NEW; END IF; SELECT k.ma INTO ma_quy_doi FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id, (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi, goc, goc, pg_catalog.clock_timestamp()) k; IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE dich_rut uuid; goc text; ma_quy_doi text; BEGIN IF NEW.rut_cua IS NOT NULL THEN EXECUTE pg_catalog.format('SELECT h.rut_cua FROM public.%I h WHERE h.org_id = $1 AND h.id = $2', TG_TABLE_NAME) INTO dich_rut USING NEW.org_id, NEW.rut_cua; IF dich_rut IS NOT NULL THEN RAISE EXCEPTION 'Hang % la mot hang rut — chi rut hang du lieu', NEW.rut_cua USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_rut_hang_rut'; END IF; RETURN NEW; END IF; -- [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó. IF TG_TABLE_NAME = 'external_purchase_history' THEN IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN RAISE EXCEPTION 'Ngay mua sau ngay hom nay theo gio Viet Nam' USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_ngay_mua_sau_hom_nay'; END IF; END IF; SELECT ci.don_vi_goc INTO goc FROM public.canonical_items ci WHERE ci.org_id = NEW.org_id AND ci.id = NEW.canonical_item_id; IF goc IS NULL THEN RETURN NEW; END IF; SELECT k.ma INTO ma_quy_doi FROM public.quy_doi_da_giai(NEW.org_id, NEW.canonical_item_id, (SELECT u.code FROM public.uom_units u WHERE u.code = NEW.don_vi), NEW.don_vi, goc, goc, pg_catalog.clock_timestamp()) k; IF ma_quy_doi IS NULL OR ma_quy_doi = 'KHONG_QUY_DOI_DUOC' THEN RAISE EXCEPTION 'Don vi % khong quy doi duoc sang don vi goc % cua hang chuan %', NEW.don_vi, goc, NEW.canonical_item_id USING ERRCODE = 'check_violation', CONSTRAINT = 'du_lieu_ngoai_don_vi_khong_quy_doi_duoc'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog']
             AND p.pronargs = 0

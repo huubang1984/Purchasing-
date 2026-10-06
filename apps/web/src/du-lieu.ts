@@ -186,7 +186,7 @@ export function luaChonHangChuan(
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — bước 7. Không phép tính nào về GIÁ: màn của người quản lý dữ liệu
+// [S1.272 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — bước 7. Không phép tính nào về GIÁ: màn của người quản lý dữ liệu
 // không nhận lại đơn giá (ADR-096 ⑵; chủ dự án chốt 2026-10-06). Luật đọc văn bản dán ở `packages/du-lieu-nen/src/csv-ngoai.ts`.
 // ----------------------------------------------------------------------------------------------
 

@@ -41,7 +41,7 @@ export class DuLieuNenError extends Error {
       // [S1.234 / S4.3b, lượt soi L1 · L4] Hai phép kiểm ở tầng gói, không có ràng buộc CSDL đứng sau.
       | "HANG_NGUNG_DUNG"
       | "DONG_DA_DOI"
-      // [S1.9101 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống (`9501_du_lieu_ngoai`).
+      // [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống (`109_du_lieu_ngoai`).
       | "DON_VI_KHONG_QUY_DOI_DUOC"
       | "DON_GIA_SAI_HINH_DANG"
       | "DON_GIA_MO_HO"
@@ -92,7 +92,7 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   anh_xa_tu_dong_da_co_anh_xa: "DA_CO_ANH_XA",
   anh_xa_ma_ly_do_danh_rieng: "MA_LY_DO_DANH_RIENG",
   rfq_item_mappings_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
-  // [S1.9101 / S4.6a] Luật ghi và ràng buộc của hai bảng ngoài (`9501_du_lieu_ngoai`).
+  // [S1.272 / S4.6a] Luật ghi và ràng buộc của hai bảng ngoài (`109_du_lieu_ngoai`).
   du_lieu_ngoai_don_vi_khong_quy_doi_duoc: "DON_VI_KHONG_QUY_DOI_DUOC",
   du_lieu_ngoai_rut_hang_rut: "KHONG_CO_HANG_DU_LIEU",
   du_lieu_ngoai_ngay_mua_sau_hom_nay: "NGAY_MUA_SAU_HOM_NAY",

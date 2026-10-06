@@ -451,7 +451,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.197 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
   // ghi CSDL (L3); `ma-tran-quyen` khoá ba bản của danh sách loại trừ và cặp vai xung đột (L3, T1).
   // [S1.204 / S4.3a] `anh-xa` đo khuôn nền của hai bảng mới (L1), luật `TU_DONG` (L2), vế hành vi của L3 và L13.
-  // [S1.9101 / S4.6a] `du-lieu-ngoai` (gói) đo khuôn nền của hai bảng giá ngoài bằng câu SQL thô dưới `app_api` — chỉ-ghi-thêm, hàng
+  // [S1.272 / S4.6a] `du-lieu-ngoai` (gói) đo khuôn nền của hai bảng giá ngoài bằng câu SQL thô dưới `app_api` — chỉ-ghi-thêm, hàng
   // rút, cột ngoài GRANT, tác giả từ phiên; `du-lieu-ngoai` (apps/api) đo trọn đường ghi và rút qua HTTP, mỗi lần rút là hàng mới.
   L1: [
     "apps/api/src/du-lieu-ngoai.int.test.ts",
@@ -463,7 +463,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
   // [S1.234 / S4.3b] `anh-xa` (apps/api) đo cùng lớp cho ba route ghi ánh xạ: người tạo gói gọi ⇒ 403, không hàng ánh xạ nào.
-  // [S1.9101 / S4.6a] `du-lieu-ngoai` (apps/api) đo cùng lớp cho bảy route ghi và ba route đọc dữ liệu ngoài: người giữ `bid.view`
+  // [S1.272 / S4.6a] `du-lieu-ngoai` (apps/api) đo cùng lớp cho bảy route ghi và ba route đọc dữ liệu ngoài: người giữ `bid.view`
   // gọi cả mười ⇒ 403, mười hàng PERMISSION_DENIED, không hàng dữ liệu nào.
   L3: [
     "apps/api/src/anh-xa.int.test.ts",
@@ -516,7 +516,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "tools/bo-xuat-danh-gia/src/doc-lap/benchmark-lai.test.ts",
     "tools/bo-xuat-danh-gia/src/kiem-du-lieu-nen.test.ts",
   ],
-  // L15 — [S1.9101 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
+  // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở
   // tầng gói và tầng CSDL, đọc lại không giá; `bang-ngoai-liet-ke` là ranh giới tĩnh — mọi câu SQL chạm hai bảng có tên, `don_gia`
   // chỉ ở câu INSERT, không migration nào khác nhắc tên chúng (cổng (e) không đọc được lịch sử ngoài). Vế ĐỌC ở S4.6b.

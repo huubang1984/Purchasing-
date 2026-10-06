@@ -141,7 +141,7 @@ function thuocTinh(obj: ts.ObjectLiteralExpression, ten: string): ts.PropertyAss
   );
 }
 /**
- * [S1.9101 / S4.6a] Đối tượng CÓ thuộc tính `ten`, kể cả dạng viết tắt `{ path, … }`. Route dựng bằng hàm (`nhap(path, loai)` của
+ * [S1.272 / S4.6a] Đối tượng CÓ thuộc tính `ten`, kể cả dạng viết tắt `{ path, … }`. Route dựng bằng hàm (`nhap(path, loai)` của
  * `routes/du-lieu-ngoai.ts`) viết `path` tắt; bản trước chỉ nhận `path: …` nên bỏ qua cả đối tượng — `EXTERNAL_DATA_ROW` của hai route
  * rút theo hàng đi qua ⑶ mà không vào tập.
  */

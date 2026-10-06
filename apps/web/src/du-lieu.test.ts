@@ -187,7 +187,7 @@ describe("[S1.234 / S4.3b] hàng đợi ánh xạ", () => {
   });
 });
 
-describe("[S1.9101 / S4.6a] bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống", () => {
+describe("[S1.272 / S4.6a] bước 7 — mốc giá ngoài và lịch sử mua ngoài hệ thống", () => {
   it("dòng tiêu đề mẫu của màn là ĐÚNG bộ cột của bộ đọc ở gói (`COT_THEO_LOAI` của `csv-ngoai.ts`) — sửa một bên là đỏ ở đây", () => {
     const goi = nguon("packages/du-lieu-nen/src/csv-ngoai.ts");
     const chung = /const COT_CHUNG = \[([^\]]+)\] as const;/u.exec(goi)?.[1];

@@ -5716,8 +5716,8 @@ vai ghi được cùng đúng một cổng đọc.*
 |---|---|---|
 | `rfq_unsealed_bids` (019) | `app_unseal`, sau cổng bốn vế và đủ chữ ký phê duyệt | `bid.view` ở `buildComparisonTable` |
 | `rfq_evaluation_lines` (057) | `app_api` qua `taoLuotDanhGia`, `GRANT INSERT` theo **CỘT** | `bid.view` ở `docBangXepHang` |
-| **[S1.9101 / ADR-9201]** `external_price_references` (`9501`) — giá KHÔNG phải báo giá (ADR-095 ⑸) | `app_api` qua người giữ `item.manage` (`nhapDuLieuNgoai`, `khaiMocNgoai`), `GRANT INSERT` theo **CỘT**, trigger `du_lieu_nen_kiem_quyen_ghi` | `bid.view` — bộ đọc giá là của S4.6b; ở S4.6a **không câu nào đọc `don_gia`** (`tests/architecture/bang-ngoai-liet-ke.test.ts`) |
-| **[S1.9101 / ADR-9201]** `external_purchase_history` (`9501`) — giá KHÔNG phải báo giá | như dòng trên | như dòng trên |
+| **[S1.272 / ADR-149]** `external_price_references` (`109`) — giá KHÔNG phải báo giá (ADR-095 ⑸) | `app_api` qua người giữ `item.manage` (`nhapDuLieuNgoai`, `khaiMocNgoai`), `GRANT INSERT` theo **CỘT**, trigger `du_lieu_nen_kiem_quyen_ghi` | `bid.view` — bộ đọc giá là của S4.6b; ở S4.6a **không câu nào đọc `don_gia`** (`tests/architecture/bang-ngoai-liet-ke.test.ts`) |
+| **[S1.272 / ADR-149]** `external_purchase_history` (`109`) — giá KHÔNG phải báo giá | như dòng trên | như dòng trên |
 
 **Vì sao ⑵ KHÔNG phải một lần nới lỏng tự phục vụ.** Lớp bảo vệ của bảng thứ hai không thua bảng thứ
 nhất: ENABLE + FORCE RLS, policy `_tenant_isolation` cộng `_khach`, `GRANT` theo cột (`id` và
@@ -5752,7 +5752,7 @@ xuất. Mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, gi�
 (`GET /rfqs/:rfqId/evidence-bundle`, một hàng sổ `EVIDENCE_BUNDLE_EXPORTED`); công cụ vận hành `pnpm bang-chung xuat` giữ
 `DATABASE_URL`, tức đã đứng ngoài mọi cổng ứng dụng (spec S4 §2.5 ㉑).
 
-**[S1.9101 / S4.6a / ADR-9201] Hai dòng *"giá không phải báo giá"* của ADR-095 ⑸ nay có bảng.** Bước 14 của kịch bản 41 đo chúng bằng
+**[S1.272 / S4.6a / ADR-149] Hai dòng *"giá không phải báo giá"* của ADR-095 ⑸ nay có bảng.** Bước 14 của kịch bản 41 đo chúng bằng
 hai kim riêng (ADR-095 ⑹): một mốc giá ngoài và một dòng lịch sử ngoài nhập qua HTTP ở bước 1 — trước mọi lượt chấm, benchmark, BAFO
 và lần xuất bộ bằng chứng — và mỗi kim chỉ đứng ở đúng bảng của nó (không ở sổ kiểm toán, không ở bảng kia). Lời khai của dòng thứ
 nhất (giá dạng rõ chỉ ở `rfq_evaluation_lines`, `rfq_unsealed_bids`) không đổi: kim ấy là một TỔNG của báo giá. Cột *cổng ĐỌC* của
@@ -11637,7 +11637,7 @@ Câu hỏi của tầng gói lọc trạng thái theo cạnh (`DRAFT` ở nộp,
 
 ---
 
-## ADR-9201 — S4.6a: hai bảng giá không phải báo giá — người quản lý dữ liệu mù giá nhập tay hay dán CSV (tất-cả-hoặc-không, đơn vị phải quy đổi được lúc ghi), rút theo mã hàng, đọc lại KHÔNG cột giá; S4.6 chia hai PR
+## ADR-149 — S4.6a: hai bảng giá không phải báo giá — người quản lý dữ liệu mù giá nhập tay hay dán CSV (tất-cả-hoặc-không, đơn vị phải quy đổi được lúc ghi), rút theo mã hàng, đọc lại KHÔNG cột giá; S4.6 chia hai PR
 
 **Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-06, cả bốn theo đề xuất, sau phép đo
 (và hai điểm nữa sau rà soát đối kháng, cùng ngày, theo đề xuất — `15.500` mơ hồ, ngày mua không sau hôm nay; xem ⑷):
@@ -11646,10 +11646,10 @@ rồi nhập lại; ⑵ dải lịch sử ngoài lấy *(ngày mua, nhà cung c�
 bản chính sách đã ghim; ⑶ mốc ngoài hiện ở dòng của gói X là mốc có `ngay_hieu_luc` MỚI NHẤT ≤ mốc mở giá, trong cửa sổ của chính
 sách, cùng tiền tệ, `ghi_luc` < mốc (L1); ⑷ hai PR — **S4.6a** (vòng này): bảng, nhập tay + dán CSV ở `/du-lieu`, ADR-054, bước 14,
 L1/L15 vế GHI; **S4.6b**: hiện ở `/mo-thau` (mốc ngoài chỉ độ lệch, dải thứ ba nhãn riêng), L15 vế ĐỌC, kịch bản 41. ⑵ và ⑶ là
-luật của S4.6b, ghi ở đây để vòng sau không chọn lại · **[S1.9101]** · **Migration:** `9501_du_lieu_ngoai` · **Liên quan:** ADR-096
+luật của S4.6b, ghi ở đây để vòng sau không chọn lại · **[S1.272]** · **Migration:** `109_du_lieu_ngoai` · **Liên quan:** ADR-096
 (ai nhập, ai đọc, nhãn), ADR-095 ⑸⑹ (hai dòng ADR-054, kim riêng ở bước 14), ADR-054 (hai dòng mới), ADR-097 ⑺ (vai mù giá),
 ADR-136 (lõi quy đổi `quy_doi_da_giai`), ADR-145 (khuôn rút theo mã hàng của `105`) · **Spec:** S4 §3.5, §4.6, §4.7, §5.1 L1 · L3 ·
-L15, §9 S4.6 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+L15, §9 S4.6 · **Biên bản:** `evidence/security-reviews.md` §S1.272
 
 ### Bối cảnh — phép đo trước khi viết
 
@@ -11665,7 +11665,7 @@ L15, §9 S4.6 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
 
 ### Quyết định
 
-⑴ **Hai bảng, khuôn L1** (`9501`): `external_price_references` (hàng chuẩn, đơn giá, đơn vị, tiền tệ, `ngay_hieu_luc`, `nguon`) và
+⑴ **Hai bảng, khuôn L1** (`109`): `external_price_references` (hàng chuẩn, đơn giá, đơn vị, tiền tệ, `ngay_hieu_luc`, `nguon`) và
 `external_purchase_history` (thêm `ngay_mua` thay ngày hiệu lực, `nha_cung_cap_text`). Cả hai mang `lo_nhap_id`; `id`, `seq`,
 `ghi_luc` ngoài `GRANT`; ENABLE + FORCE RLS, `_tenant_isolation` + `_khach` RESTRICTIVE (L6: không phiên khách nào đọc). `CHECK`
 có tên: đơn giá dương hữu hạn, đơn vị đã làm sạch, tiền tệ `VND`/`USD`, nguồn 1–500 ký tự, nhà cung cấp 1–300, hình dạng hàng dữ
@@ -11701,7 +11701,7 @@ bị từ chối — danh sách là màn của người nhập. Nhập tay trả
 
 ⑹ **L15 vế ghi.** Không câu SQL nào ĐỌC `don_gia` của hai bảng ở vòng này — kể cả không viết tên cột: `*` ngoài `count(*)`, hàm
 đóng gói hàng (`to_jsonb`, `row_to_json`…), bí danh bảng đứng một mình hay ép kiểu, `RETURNING don_gia` đều bị nêu —, không migration
-nào (kể cả `9501` và tệp ghim) có `FROM`/`JOIN` hai bảng, và không migration nào ngoài hai tệp ấy nhắc tên chúng: không view, hàm hay
+nào (kể cả `109` và tệp ghim) có `FROM`/`JOIN` hai bảng, và không migration nào ngoài hai tệp ấy nhắc tên chúng: không view, hàm hay
 phép đếm SQL (cổng (e) của S4b) đọc được lịch sử ngoài mà không qua lớp đã liệt kê (`tests/architecture/bang-ngoai-liet-ke.test.ts`).
 Lớp ấy là lớp CHỮ: một câu SQL dựng động (`format('%I')`, như hai hàm trigger dùng chung) vượt qua nó — nói ra, không chặn. Bộ đọc giá
 dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do.

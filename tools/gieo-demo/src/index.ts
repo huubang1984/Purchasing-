@@ -336,7 +336,7 @@ async function chinh(): Promise<void> {
       }
     });
 
-    // [S1.9101 / S4.6a] Một lô mốc giá ngoài và một lô lịch sử mua ngoài hệ thống, dán như người quản lý dữ liệu dán ở bước 7 của
+    // [S1.272 / S4.6a] Một lô mốc giá ngoài và một lô lịch sử mua ngoài hệ thống, dán như người quản lý dữ liệu dán ở bước 7 của
     // `/du-lieu` — để demo thấy hai lô (không cột giá) và đi được việc rút. Hai lô qua đúng đường gói: lỗi theo dòng thì gieo dừng.
     // Lịch sử ngoài có một dòng tính theo TẤM — đơn vị đóng gói quy đổi riêng ở trên —, mốc ngoài theo kg.
     for (const [loai, vanBan] of [

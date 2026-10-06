@@ -64,8 +64,8 @@ export {
   type GhiAnhXaInput,
   type KetQuaLuotChuanHoa,
 } from "./anh-xa.js";
-// [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — đường ghi (nhập tay, dán CSV, rút) và danh sách KHÔNG cột giá
-// dưới cổng `item.manage` (ADR-096; ADR-9201). Bộ đọc giá dưới `bid.view` là của S4.6b.
+// [S1.272 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — đường ghi (nhập tay, dán CSV, rút) và danh sách KHÔNG cột giá
+// dưới cổng `item.manage` (ADR-096; ADR-149). Bộ đọc giá dưới `bid.view` là của S4.6b.
 export {
   type DongNgoaiDaDoc,
   type KetQuaDocCsv,

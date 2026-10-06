@@ -1,6 +1,6 @@
 // ==============================================================================================
-// [S1.9101 / S4.6a] MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — ĐƯỜNG GHI VÀ DANH SÁCH KHÔNG CỘT GIÁ (spec S4 §4.7; ADR-096;
-// ADR-9201; L1 · L3 · L15)
+// [S1.272 / S4.6a] MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — ĐƯỜNG GHI VÀ DANH SÁCH KHÔNG CỘT GIÁ (spec S4 §4.7; ADR-096;
+// ADR-149; L1 · L3 · L15)
 //
 // GHI — cùng ba bước của `hang-chuan.ts`: `assertTenantBound`, tác giả dẫn xuất từ phiên (ADR-016); câu INSERT vào bảng chỉ-ghi-
 // thêm (`seq`, `ghi_luc` do trigger khuôn L1 đặt; người ghi phải giữ `item.manage`; luật ghi `du_lieu_ngoai_kiem_ghi` từ chối đơn vị

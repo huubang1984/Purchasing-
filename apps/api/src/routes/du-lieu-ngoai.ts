@@ -1,6 +1,6 @@
 // ==============================================================================================
-// [S1.9101 / S4.6a] Route MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — đường ghi và danh sách KHÔNG cột giá (spec S4 §3.5, §4.7;
-// ADR-096; ADR-9201).
+// [S1.272 / S4.6a] Route MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — đường ghi và danh sách KHÔNG cột giá (spec S4 §3.5, §4.7;
+// ADR-096; ADR-149).
 //
 // GHI: mọi route khai `item.manage` — `requirePermission` của bộ điều phối TRƯỚC handler (ADR-016), trigger
 // `du_lieu_nen_kiem_quyen_ghi` dưới nó ở CSDL. Dán CSV là thân JSON `{ vanBan }`, không multipart (ADR-096 ⑸): trần thân 64 KB của

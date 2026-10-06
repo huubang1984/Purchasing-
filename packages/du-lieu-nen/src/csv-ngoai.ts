@@ -1,11 +1,11 @@
 // ==============================================================================================
-// [S1.9101 / S4.6a] ĐỌC VĂN BẢN DÁN VÀO Ô — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096 ⑸; ADR-9201)
+// [S1.272 / S4.6a] ĐỌC VĂN BẢN DÁN VÀO Ô — mốc giá ngoài và lịch sử mua ngoài hệ thống (spec S4 §4.7; ADR-096 ⑸; ADR-149)
 //
 // Thuần: không CSDL, không đồng hồ. Ra một danh sách dòng ĐÃ ĐỌC (chuỗi, chưa phân giải hàng chuẩn hay đơn vị — việc của
 // `du-lieu-ngoai.ts`, ở SQL) hoặc một danh sách lỗi theo SỐ DÒNG. Không lỗi nào lặp lại GIÁ TRỊ của ô: câu trả về màn của người
 // quản lý dữ liệu (mù giá, ADR-096 ⑵) chỉ nói dòng nào, cột nào, sai thế nào.
 //
-// HÌNH DẠNG (tự chốt trong phạm vi ADR-9201, nói ở biên bản):
+// HÌNH DẠNG (tự chốt trong phạm vi ADR-149, nói ở biên bản):
 //   • dòng đầu là tiêu đề; tên cột so sau khi bỏ dấu, hạ chữ, mọi ký tự ngoài [a-z0-9] thành `_` — *"Mã hàng"* là `ma_hang`;
 //     thứ tự cột tự do, cột lạ thì từ chối (một cột *"VAT"* bị lờ đi là một con số người dán tưởng đã vào);
 //   • phân cách là TAB nếu dòng tiêu đề có tab (dán thẳng từ bảng tính), không thì `;` nếu có, không thì `,`; ô có thể đặt trong
@@ -117,7 +117,7 @@ function tachDong(dong: string, phanCach: string): string[] | null {
         gt += dong[i];
         i += 1;
       }
-      // Sau ngoặc đóng chỉ được là phân cách hay hết dòng (RFC 4180). ~~Phần thừa nối vào ô~~ [rà soát §S1.9101 THẤP-5] `"1"5` ở cột
+      // Sau ngoặc đóng chỉ được là phân cách hay hết dòng (RFC 4180). ~~Phần thừa nối vào ô~~ [rà soát §S1.272 THẤP-5] `"1"5` ở cột
       // đơn giá thành `15` và được nhận — một ô sai hình dạng là một lỗi, không phải một ô ghép.
       o.push(gt);
       if (i >= dong.length) return o;
@@ -166,9 +166,9 @@ export function laDonGia(chuoi: string): boolean {
 }
 
 /**
- * [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] `15.500` — một đến ba chữ số, MỘT dấu chấm, ĐÚNG ba chữ số sau — là cách bảng tính
+ * [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] `15.500` — một đến ba chữ số, MỘT dấu chấm, ĐÚNG ba chữ số sau — là cách bảng tính
  * tiếng Việt hiện số 15500. Đọc theo luật dấu chấm thập phân nó thành 15,5, lệch nghìn lần, và người nhập mù giá không thấy lại con số.
- * Dạng ấy bị từ chối ở cả hai tiền tệ; `15.5`, `15.50`, `15.5000`, `0.500` vẫn nhận (rà soát §S1.9101 CAO-1).
+ * Dạng ấy bị từ chối ở cả hai tiền tệ; `15.5`, `15.50`, `15.5000`, `0.500` vẫn nhận (rà soát §S1.272 CAO-1).
  */
 export function laDonGiaMoHo(chuoi: string): boolean {
   return /^[1-9]\d{0,2}\.\d{3}$/u.test(chuoi);
@@ -229,7 +229,7 @@ export function docCsvNgoai(loai: LoaiDuLieuNgoai, vanBan: string, homNay: strin
     return TEN_KHAC[c] ?? c;
   });
   const can = COT_THEO_LOAI[loai];
-  // [rà soát §S1.9101 TRUNG-2] Dán thiếu dòng tiêu đề: dòng đầu là DỮ LIỆU, và bản trước nhắc lại từng ô của nó ở cột `cot` của lỗi
+  // [rà soát §S1.272 TRUNG-2] Dán thiếu dòng tiêu đề: dòng đầu là DỮ LIỆU, và bản trước nhắc lại từng ô của nó ở cột `cot` của lỗi
   // `COT_LA` — đơn giá, ngày, tên nhà cung cấp quay về màn của người mù giá. Không ô nào là tên cột ⇒ một lỗi, không nhắc ô nào.
   if (!cot.some((c) => can.includes(c))) return { hopLe: false, loi: [loi(tieuDe.so, null, "KHONG_CO_TIEU_DE")] };
   const loiTieuDe: LoiDongNgoai[] = [];

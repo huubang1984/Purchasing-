@@ -1,8 +1,8 @@
 -- =============================================================================================
--- 9501 — [S1.9101 / S4.6a] MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ (spec S4 §4.6, §4.7,
+-- 109 — [S1.272 / S4.6a] MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — HAI BẢNG GIÁ KHÔNG PHẢI BÁO GIÁ (spec S4 §4.6, §4.7,
 -- §5.1 L1 · L3 · L15; ADR-096, ADR-095 ⑸, ADR-054)
 -- =============================================================================================
--- Chủ dự án chốt ngày 2026-10-06 (ADR-9201), cả bốn theo đề xuất: người quản lý dữ liệu (mù giá) KHÔNG đọc lại giá mình nhập — màn
+-- Chủ dự án chốt ngày 2026-10-06 (ADR-149), cả bốn theo đề xuất: người quản lý dữ liệu (mù giá) KHÔNG đọc lại giá mình nhập — màn
 -- `/du-lieu` hiện hàng đã nhập không cột giá, cổng đọc giá giữ đúng `bid.view` của ADR-096 ⑵; dải lịch sử ngoài lấy (ngày mua, nhà
 -- cung cấp) làm "gói"; dòng của gói X hiện mốc ngoài MỚI NHẤT trong cửa sổ; S4.6 chia hai PR — vòng này (S4.6a) là đường GHI, phép
 -- đọc giá và màn `/mo-thau` ở S4.6b.
@@ -173,7 +173,7 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-  -- [S1.9101 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
+  -- [S1.272 / chủ dự án chốt sau rà soát 2026-10-06] Lịch sử mua là quá khứ: ngày mua sau HÔM NAY theo giờ Việt Nam (UTC+7, không
   -- giờ mùa hè) bị từ chối. IF lồng: `NEW.ngay_mua` chỉ có ở bảng lịch sử, và PL/pgSQL chỉ dịch biểu thức khi chạy tới nó.
   IF TG_TABLE_NAME = 'external_purchase_history' THEN
     IF NEW.ngay_mua > (pg_catalog.timezone('UTC', pg_catalog.clock_timestamp()) + '7 hours'::pg_catalog.interval)::pg_catalog.date THEN
