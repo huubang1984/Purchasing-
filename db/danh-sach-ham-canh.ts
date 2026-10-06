@@ -112,6 +112,9 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // [S1.197 / S4.2a / L3] Cổng GHI của dữ liệu nền — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN (người ghi không giữ `item.manage`).
   // Nhân chứng: năm câu chèn dữ liệu nền cuối `dungKichBan()`, dưới một `DATA_STEWARD`.
   "public.du_lieu_nen_kiem_quyen_ghi",
+  // [S1.9101 / S4.6a / `9501_du_lieu_ngoai`] Luật ghi của mốc ngoài và lịch sử ngoài hệ thống — BEFORE INSERT, từ chối CÓ ĐIỀU
+  // KIỆN (hàng rút trỏ về hàng rút; đơn vị không quy đổi được). Nhân chứng: hai câu chèn dữ liệu ngoài cuối `dungKichBan()`.
+  "public.du_lieu_ngoai_kiem_ghi",
   "public.kiem_tra_phan_tach_nhiem_vu",
   "public.loi_moi_khong_song_lai",
   "public.mfa_credentials_khoa_ho_so_da_xac_nhan",

@@ -14,6 +14,7 @@ import { ROUTES_AUTH, ROUTES_AUTH_SELF } from "./routes/auth.js";
 import { ROUTES_BENCHMARK } from "./routes/benchmark.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
 import { ROUTES_DU_LIEU } from "./routes/du-lieu.js";
+import { ROUTES_DU_LIEU_NGOAI } from "./routes/du-lieu-ngoai.js";
 import { ROUTES_GUEST } from "./routes/guest.js";
 import { ROUTES_LICH_SU_GIA } from "./routes/lich-su-gia.js";
 import { ROUTES_PUBLIC } from "./routes/public.js";
@@ -26,6 +27,9 @@ export const ROUTES: readonly Route[] = [
   ...ROUTES_BUYER,
   // [S1.199 / S4.2b] Dữ liệu nền: hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
   ...ROUTES_DU_LIEU,
+  // [S1.9101 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống: nhập tay, dán CSV, rút; danh sách KHÔNG cột giá dưới
+  // `item.manage` trong gói, `agent: false` (spec S4 §4.7; ADR-096; ADR-9201).
+  ...ROUTES_DU_LIEU_NGOAI,
   // [S1.234 / S4.3b] Ánh xạ hạng mục: hàng đợi, trạng thái từng dòng, duyệt/bác/tạo hàng chuẩn, chuẩn hoá lại (spec S4 §4.4).
   ...ROUTES_ANH_XA,
   // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — cổng `bid.view` trong gói, `agent: false` (spec S4 §4.5, L6).

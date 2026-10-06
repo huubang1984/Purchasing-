@@ -118,6 +118,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
+  // [S1.9101 / S4.6a / `9501_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn `079`: sửa bằng hàng rút, không UPDATE.
+  "external_price_references",
+  "external_purchase_history",
   // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả
   // hai `ENABLE ALWAYS`. Sửa được một hàng tín hiệu là đổi bằng chứng mà một lần ghi nhận đã trỏ tới.
   "governance_signal_acks",
@@ -2023,6 +2026,30 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
         "RETURNING id, org_id, rfq_id, line_no, nguon, canonical_item_id, ly_do, tac_gia, session_id",
       [org, rfq1, hc, ql.u, ql.s],
       { org_id: org, rfq_id: rfq1, line_no: 1, nguon: "NGUOI_DUYET", canonical_item_id: hc, ly_do: "khoi dong du lieu", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+
+  // ---- [S1.9101 / S4.6a / L1 · L3 · L15 / `9501_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống ---------------------------
+  // Mỗi bảng bốn bộ ba mới trên INSERT: `du_lieu_nen_dat_thu_tu`, `kiem_danh_tinh_theo_phien`, `du_lieu_nen_kiem_quyen_ghi` (hàm CŨ,
+  // bảng MỚI) và luật ghi `du_lieu_ngoai_kiem_ghi` (hàm MỚI — từ chối CÓ ĐIỀU KIỆN). Đơn vị `kg` của hàng chuẩn `kg`: cùng đơn vị.
+  await chenNC(
+    "public.external_price_references",
+    api(
+      "INSERT INTO external_price_references (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_hieu_luc, nguon, lo_nhap_id, tac_gia, session_id) " +
+        "VALUES ($1, $2, 15500, 'kg', 'VND', '2026-01-15', 'bao gia thi truong', gen_random_uuid(), $3, $4) " +
+        "RETURNING id, org_id, canonical_item_id, don_vi, tien_te, nguon, tac_gia, session_id",
+      [org, hc, ql.u, ql.s],
+      { org_id: org, canonical_item_id: hc, don_vi: "kg", tien_te: "VND", nguon: "bao gia thi truong", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+  await chenNC(
+    "public.external_purchase_history",
+    api(
+      "INSERT INTO external_purchase_history (org_id, canonical_item_id, don_gia, don_vi, tien_te, ngay_mua, nha_cung_cap_text, nguon, lo_nhap_id, tac_gia, session_id) " +
+        "VALUES ($1, $2, 15200, 'kg', 'VND', '2025-11-20', 'Cong ty Thep A', 'so mua hang 2025', gen_random_uuid(), $3, $4) " +
+        "RETURNING id, org_id, canonical_item_id, don_vi, tien_te, nha_cung_cap_text, nguon, tac_gia, session_id",
+      [org, hc, ql.u, ql.s],
+      { org_id: org, canonical_item_id: hc, don_vi: "kg", tien_te: "VND", nha_cung_cap_text: "Cong ty Thep A", nguon: "so mua hang 2025", tac_gia: ql.u, session_id: ql.s },
     ),
   );
 

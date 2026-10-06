@@ -669,11 +669,11 @@ const BANG_TEN: readonly HangTen[] = [
   {
     ten: "doc",
     loai: "const",
-    tep: [`${API}routes/anh-xa.ts`, `${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`],
+    tep: [`${API}routes/anh-xa.ts`, `${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`, `${API}routes/du-lieu-ngoai.ts`],
     xuLy: "RIENG",
     doLuong: "KHONG",
     lyDo: "Bảng route ĐỌC của ~~hai~~ [S1.237 / gộp #217] ba tệp route người mua (thêm năm route ánh xạ của S4.3b) — nội dung khác nhau " +
-      "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới).",
+      "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới). [S1.9101 / S4.6a] Thêm tệp route mốc ngoài và lịch sử ngoài hệ thống.",
   },
   {
     ten: "doc",
@@ -842,6 +842,7 @@ const BANG_MAU: readonly HangMau[] = [
       `${API}routes/anh-xa.ts`,
       `${API}routes/buyer.ts`,
       `${API}routes/du-lieu.ts`,
+      `${API}routes/du-lieu-ngoai.ts`,
       `${API}routes/guest.ts`,
       `${WEB}dang-nhap.ts`,
     ],
