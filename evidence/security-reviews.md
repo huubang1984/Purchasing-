@@ -25225,3 +25225,11 @@ phần in ra kể, mỗi người một ngữ cảnh trình duyệt: **18/18**.
 - K2b, K5b — kiểm lại lúc trao thầu — ở S3.5; KPI tỷ lệ ngoại lệ ở S3.9.
 
 ## 8. Số đo
+Nhánh dựng lại từ `master` `014a5ee` (PR #250 đã merge), gộp thêm `f7103ea` (PR #245 — khoản 336: tài liệu và terraform, không chạm mã
+của vòng này; gộp tự động, không xung đột) ở `2a85105`; số đã cấp ở `19cfce7` (vòng 275). Trên cây gộp: `pnpm t0` xanh; `pnpm test` 151 tệp,
+2586 ca đạt, 1 bỏ qua, 0 đỏ (bộ đối chiếu sổ nợ chạy với số tạm, lời khai đếm không đổi — không ADR, không khoản mới). Trên `19cfce7`:
+`pnpm cap-so --kiem` sạch; `pnpm evidence`: vitest thoát mã 0, 243 tệp, 4803 khẳng định (4793 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60
+nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*; `evidence/INV-matrix.md` đổi đúng ba con số — K2 29 → 31, K3 20 → 22, K5 13 → 15 (bước
+17 của tệp HTTP, hai luồng) —, không bất biến mới, mốc độ phủ giữ 82. Trong lượt ấy: hai kịch bản 41 34 + 87, `canh-tranh-toi-thieu` 36/36,
+`xoay-vong` 21/21, `man-kiem-soat` 15/15. Trước đó, trên mã chưa commit: cổng kiến trúc 46 tệp, 599 ca đạt (lượt đầu đỏ ở hai tệp `.int` vì
+Docker chưa chạy trong container — chạy lại sau khi bật Docker); hai kịch bản 41 xanh ngay lượt đầu (34/34, 87/87).
