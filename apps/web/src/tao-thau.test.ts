@@ -417,7 +417,7 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
 describe("[S1.273 / S3.3e1] bản sao để đọc của ba tập đóng và hai trần — khớp hằng của gói máy chủ", () => {
   it("loại, mã lý do, sàn OTHER và trần giải trình đúng bằng `packages/invitation/src/ngoai-le.ts`", () => {
     expect([...LOAI_NGOAI_LE]).toEqual([...GoiNgoaiLe.LOAI_NGOAI_LE]);
-    // [S1.9101 / S3.5b] Loại hậu kiểm là tập RIÊNG ở cả hai bên — ô chọn của `/tao-thau` không mời lập nó ở DRAFT.
+    // [S1.282 / S3.5b] Loại hậu kiểm là tập RIÊNG ở cả hai bên — ô chọn của `/tao-thau` không mời lập nó ở DRAFT.
     expect([...LOAI_NGOAI_LE_HAU_KIEM]).toEqual([...GoiNgoaiLe.LOAI_NGOAI_LE_HAU_KIEM]);
     expect(LOAI_NGOAI_LE_HAU_KIEM.some((l) => (LOAI_NGOAI_LE as readonly string[]).includes(l))).toBe(false);
     expect([...MA_LY_DO_NGOAI_LE]).toEqual([...GoiNgoaiLe.MA_LY_DO_NGOAI_LE]);
@@ -428,7 +428,7 @@ describe("[S1.273 / S3.3e1] bản sao để đọc của ba tập đóng và hai
   it("mọi loại và mọi mã lý do có nhãn tiếng Việt; mã lạ nói nguyên văn", () => {
     for (const l of LOAI_NGOAI_LE) expect(nhanLoaiNgoaiLe(l)).not.toBe(l);
     for (const m of MA_LY_DO_NGOAI_LE) expect(nhanMaLyDo(m)).not.toBe(m);
-    // [S1.9101 / S3.5b] Loại hậu kiểm có nhãn từ vòng này (bảng của `/mo-thau` đọc nó); mã lạ vẫn nguyên văn.
+    // [S1.282 / S3.5b] Loại hậu kiểm có nhãn từ vòng này (bảng của `/mo-thau` đọc nó); mã lạ vẫn nguyên văn.
     for (const l of LOAI_NGOAI_LE_HAU_KIEM) expect(nhanLoaiNgoaiLe(l)).not.toBe(l);
     expect(nhanLoaiNgoaiLe("LOW_ACTUAL_COMPETITION")).toBe("Cạnh tranh thực tế thấp (hậu kiểm)");
     expect(nhanLoaiNgoaiLe("LOAI_LA")).toBe("LOAI_LA");
@@ -485,12 +485,12 @@ describe("[S1.273 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫ
     expect(chiDanChot(42, true)).toBeNull();
   });
 
-  // [S1.9101 / S3.5b] Tám mã của trao thầu theo bậc (ADR-154) có câu; chỉ K2b *thiếu cạnh tranh thực* là việc của người giữ quyền mời.
+  // [S1.282 / S3.5b] Tám mã của trao thầu theo bậc (ADR-154) có câu; chỉ K2b *thiếu cạnh tranh thực* là việc của người giữ quyền mời.
   const MA_TRAO_THAU = [
     "K7_KHONG_BAC_GHIM", "K7_LECH_TIEN_TE", "K7_DAU_THAU_CHINH_THUC", "K7_SAI_VAI", "K7_TAC_GIA_CHINH_SACH",
     "K2B_THIEU_CANH_TRANH_THUC", "K2B_NGOAI_LE_SAI_TRANG_THAI", "K5B_THIEU_CHU_KY_DOC_LAP",
   ] as const;
-  it("[S1.9101 / S3.5b] tám mã của trao thầu theo bậc có câu, không nhắc lại câu máy chủ; K2b trỏ khối «Ngoại lệ hậu kiểm» và chỉ nó nhờ người mời được", () => {
+  it("[S1.282 / S3.5b] tám mã của trao thầu theo bậc có câu, không nhắc lại câu máy chủ; K2b trỏ khối «Ngoại lệ hậu kiểm» và chỉ nó nhờ người mời được", () => {
     for (const ma of MA_TRAO_THAU) {
       expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
       expect(chiDanChot(ma, true), ma).not.toBeNull();

@@ -717,7 +717,7 @@ async function chinh(): Promise<void> {
       dong: baDong,
       anhXaTay: { lineNo: 3, hangChuanId: buLong },
     });
-    // [S1.9101 / S3.5b] `--s3`: gói TRAO THẦU — một tỷ, bậc 2, năm mời, bốn nộp (`goi-trao-thau.ts`) — đi cùng lượt worker với ba gói
+    // [S1.282 / S3.5b] `--s3`: gói TRAO THẦU — một tỷ, bậc 2, năm mời, bốn nộp (`goi-trao-thau.ts`) — đi cùng lượt worker với ba gói
     // trên, rồi MỘT lượt chấm, dừng ở EVALUATING: người demo đi tay K2b → ngoại lệ hậu kiểm → đề xuất → hai chữ ký (K7) → K5b ở `/mo-thau`.
     // Nhóm hàng RIÊNG (`TRAO-THAU`) để không gói anh em nào cho K10a; soan3 làm mọi việc của người soạn vì soan và soan2 đã là người
     // chọn của các gói khác (K3 tính cửa sổ theo người chọn) và soan2 là người chấm rồi đề xuất.

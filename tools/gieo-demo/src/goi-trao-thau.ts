@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.5b] GÓI TRAO THẦU — MỘT TỶ, BẬC 2, NĂM MỜI, BỐN NỘP, ĐI TỚI LƯỢT CHẤM (spec S3 §9 dòng S3.5; ADR-154 ⑼)
+// [S1.282 / S3.5b] GÓI TRAO THẦU — MỘT TỶ, BẬC 2, NĂM MỜI, BỐN NỘP, ĐI TỚI LƯỢT CHẤM (spec S3 §9 dòng S3.5; ADR-154 ⑼)
 //
 // `gieo:demo --s3` dừng gói chính ở OPEN (nhà cung cấp nộp tay từ link in ra) và ba gói nhỏ ở UNSEALED (lịch sử giá). Không gói nào
 // tới trao thầu, nên người demo không gặp được một chốt nào của S3.5a. Gói này đi trọn đường sản phẩm bằng HÀM GÓI như ba gói của

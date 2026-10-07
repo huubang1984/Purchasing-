@@ -1609,7 +1609,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("ok7").textContent).toMatch(/^Đã ký\. Đề xuất còn chờ thêm chữ ký \(cần 2, đã có 1\)/u);
       });
 
-      // [S1.9101 / S3.5b] Nửa màn của S3.5: bảng *có M / cần N*, lời sau Đề xuất đọc lại số cần, câu chỉ dẫn theo mã chốt, khối ngoại lệ
+      // [S1.282 / S3.5b] Nửa màn của S3.5: bảng *có M / cần N*, lời sau Đề xuất đọc lại số cần, câu chỉ dẫn theo mã chốt, khối ngoại lệ
       // hậu kiểm (K2b) cho người giữ quyền mời. Thân `GET /rfqs/:id` mang `coQuyenMoi` (khoản 340) — trang đọc nó từ vòng này.
       const dungS35b = async (tuyChon: {
         trangThai?: string; coQuyenMoi?: boolean; award?: () => unknown; deXuat?: { status: number; body: unknown };
@@ -1644,7 +1644,7 @@ describe("bề mặt tệp", () => {
         await p.bam("nut-de-xuat");
       };
 
-      it("[S1.9101 / S3.5b] bảng nói *có M / cần N* kèm mốc giờ; thân không số cần thì chỉ *có M*; Đề xuất đọc lại rồi mới nói số cần", async () => {
+      it("[S1.282 / S3.5b] bảng nói *có M / cần N* kèm mốc giờ; thân không số cần thì chỉ *có M*; Đề xuất đọc lại rồi mới nói số cần", async () => {
         const mot = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [{ approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z" }] };
         const p = await dungS35b({ award: () => mot });
         await p.bam("nut-doc-award");
@@ -1662,7 +1662,7 @@ describe("bề mặt tệp", () => {
         expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
       });
 
-      it("[S1.9101 / S3.5b] lời từ chối có mã K2b ⇒ câu máy chủ rồi câu chỉ dẫn trỏ khối ngoại lệ hậu kiểm (nhờ người mời khi không giữ quyền); không mã ⇒ chỉ câu máy chủ", async () => {
+      it("[S1.282 / S3.5b] lời từ chối có mã K2b ⇒ câu máy chủ rồi câu chỉ dẫn trỏ khối ngoại lệ hậu kiểm (nhờ người mời khi không giữ quyền); không mã ⇒ chỉ câu máy chủ", async () => {
         const K2B = { status: 422, body: { error: "Gói chưa đủ cạnh tranh thực tế.", ma: "K2B_THIEU_CANH_TRANH_THUC" } };
         const p = await dungS35b({ deXuat: K2B });
         await deXuatVoi(p);
@@ -1676,7 +1676,7 @@ describe("bề mặt tệp", () => {
         expect(khongMa.el("loi7").textContent).toBe("Báo giá không có chi phí hiệu dụng.");
       });
 
-      it("[S1.9101 / S3.5b / K2b] khối ngoại lệ hậu kiểm: hiện cho người giữ quyền mời, ẩn với người khác; «Xem» đọc lại gói rồi danh sách; ô lập chỉ khi EVALUATING", async () => {
+      it("[S1.282 / S3.5b / K2b] khối ngoại lệ hậu kiểm: hiện cho người giữ quyền mời, ẩn với người khác; «Xem» đọc lại gói rồi danh sách; ô lập chỉ khi EVALUATING", async () => {
         const an = await dungS35b({ coQuyenMoi: false });
         expect(an.el("khoi-ngoai-le-hk").hidden).toBe(true);
         expect(an.trangThai.goi, "không tự đọc danh sách ngoại lệ khi nạp gói").not.toContain(`GET /rfqs/${RFQ}/exceptions`);
@@ -1695,7 +1695,7 @@ describe("bề mặt tệp", () => {
         expect(daTrao.el("ok-nlhk").textContent).toMatch(/^Gói đang ở AWARDED — ngoại lệ hậu kiểm chỉ lập hay rút khi gói ở EVALUATING/u);
       });
 
-      it("[S1.9101 / S3.5b / K2b] lập ngoại lệ hậu kiểm gửi đúng ba trường với loại LOW_ACTUAL_COMPETITION; OTHER dưới sàn không gửi; từ chối có mã K2b sai trạng thái kèm chỉ dẫn", async () => {
+      it("[S1.282 / S3.5b / K2b] lập ngoại lệ hậu kiểm gửi đúng ba trường với loại LOW_ACTUAL_COMPETITION; OTHER dưới sàn không gửi; từ chối có mã K2b sai trạng thái kèm chỉ dẫn", async () => {
         const p = await dungS35b({});
         await p.bam("nut-xem-ngoai-le-hk");
         p.el("ma-ly-do-hk").value = "OTHER";
@@ -1716,7 +1716,7 @@ describe("bề mặt tệp", () => {
         expect(sai.el("loi-nlhk").textContent).toMatch(/^Ngoại lệ hậu kiểm chỉ lập hay rút khi gói ở EVALUATING\. Rút đề xuất đang có/u);
       });
 
-      it("[S1.9101 / S3.5b / K2b] bảng: loại hậu kiểm còn sống ở EVALUATING có nút Rút (đòi lý do, gửi đúng thân); loại của danh sách mời và hàng đã rút thì không", async () => {
+      it("[S1.282 / S3.5b / K2b] bảng: loại hậu kiểm còn sống ở EVALUATING có nút Rút (đòi lý do, gửi đúng thân); loại của danh sách mời và hàng đã rút thì không", async () => {
         const NL = [
           { id: "e-1", loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "Bốn nộp", lapLuc: "2026-10-07T00:00:00Z", rut: null },
           { id: "e-2", loai: "LIMITED_COMPETITION", maLyDo: "EMERGENCY", giaiTrinh: "Vỡ ống", lapLuc: "2026-10-06T00:00:00Z", rut: null },

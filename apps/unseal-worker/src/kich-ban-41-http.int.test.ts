@@ -1993,7 +1993,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   // mà kịch bản đã dựng — và đúng ba vai khác nhau, nên J3 có việc thật để làm.
   // ============================================================================================
 
-  // [S1.9101 / S3.5b / K2b] Ngoại lệ HẬU KIỂM qua ĐƯỜNG CỦA MÀN: hai route ngoại lệ của `/tao-thau` (S3.3b) nay cũng là đường của khối
+  // [S1.282 / S3.5b / K2b] Ngoại lệ HẬU KIỂM qua ĐƯỜNG CỦA MÀN: hai route ngoại lệ của `/tao-thau` (S3.3b) nay cũng là đường của khối
   // «Ngoại lệ hậu kiểm» ở bước 7 `/mo-thau`. Tới vòng này loại `LOW_ACTUAL_COMPETITION` ở EVALUATING chỉ đo ở tầng gói
   // (`trao-thau-theo-bac.int`); đây là lần đầu nó đi qua HTTP — và ở ĐÚNG lúc màn gọi nó: sau lượt chấm, trước đề xuất.
   it("[INV-K2b] bước 12g2 — NGOẠI LỆ HẬU KIỂM qua HTTP ở EVALUATING: người giữ quyền mời lập 201 và rút 200; giám đốc không giữ `rfq.invite` ⇒ 403; luồng MVP1 ⇒ 422 không hàng sổ", async () => {
@@ -2067,7 +2067,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // `AWARDED` nghĩa là *ĐANG CÓ một award còn sống* (ADR-057), nên nó đặt ngay ở hàng PROPOSED.
     expect(await trangThaiRfq()).toBe("AWARDED");
 
-    // [S1.9101 / S3.5b / K2b] Có đề xuất rồi thì ngoại lệ hậu kiểm KHÔNG lập được nữa — câu của chốt mang mã, và màn `/mo-thau` đọc mã
+    // [S1.282 / S3.5b / K2b] Có đề xuất rồi thì ngoại lệ hậu kiểm KHÔNG lập được nữa — câu của chốt mang mã, và màn `/mo-thau` đọc mã
     // ấy thành câu chỉ dẫn («rút đề xuất đang có…»); đúng một hàng `CONTROL_DENIED` dưới người gọi.
     if (batS3) {
       const muon = await goi("POST", `/rfqs/${trangThai.rfqId}/exceptions`, trangThai.pm2.cookie, {

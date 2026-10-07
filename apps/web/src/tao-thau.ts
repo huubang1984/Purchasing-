@@ -340,7 +340,7 @@ export function loiLyDoGhiNhan(lyDo: string): string | null {
 export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
 export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number];
 /**
- * [S1.9101 / S3.5b] Loại ngoại lệ HẬU KIỂM (`LOAI_NGOAI_LE_HAU_KIEM` của gói): không vào ô chọn của `/tao-thau` — nó lập ở bước 7 của
+ * [S1.282 / S3.5b] Loại ngoại lệ HẬU KIỂM (`LOAI_NGOAI_LE_HAU_KIEM` của gói): không vào ô chọn của `/tao-thau` — nó lập ở bước 7 của
  * `/mo-thau`, khi gói ở EVALUATING và trước đề xuất trao thầu (ADR-154 ⑸).
  */
 export const LOAI_NGOAI_LE_HAU_KIEM = ["LOW_ACTUAL_COMPETITION"] as const;
@@ -366,7 +366,7 @@ const NHAN_LOAI: Readonly<Record<LoaiNgoaiLe | LoaiNgoaiLeHauKiem, string>> = {
   SINGLE_SOURCE: "Một nguồn duy nhất",
   LIMITED_COMPETITION: "Cạnh tranh hạn chế",
   ROTATION: "Miễn xoay vòng",
-  // [S1.9101 / S3.5b] Loại hậu kiểm có nhãn: bảng ngoại lệ của cả hai trang đọc cùng một hàm.
+  // [S1.282 / S3.5b] Loại hậu kiểm có nhãn: bảng ngoại lệ của cả hai trang đọc cùng một hàm.
   LOW_ACTUAL_COMPETITION: "Cạnh tranh thực tế thấp (hậu kiểm)",
 };
 
@@ -436,7 +436,7 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
         "«Miễn xoay vòng» (ROTATION) ở khối «Ngoại lệ cạnh tranh»." + nho;
     case "K5_THIEU_CHU_KY_DOC_LAP":
       return "Nhờ một người giữ quyền duyệt chưa làm việc nào kể trên với gói này ký, rồi mở lại.";
-    // [S1.9101 / S3.5b] Tám mã của trao thầu theo bậc (K7, K2b, K5b — ADR-154) đi ra ở bước 7 của `/mo-thau`: câu máy chủ nói luật,
+    // [S1.282 / S3.5b] Tám mã của trao thầu theo bậc (K7, K2b, K5b — ADR-154) đi ra ở bước 7 của `/mo-thau`: câu máy chủ nói luật,
     // câu này nói chỗ làm trên màn và người phải đổi.
     case "K2B_THIEU_CANH_TRANH_THUC":
       return "Trên màn: khối «Ngoại lệ hậu kiểm» ở bước 7 — lập «Cạnh tranh thực tế thấp» (LOW_ACTUAL_COMPETITION) khi gói còn ở lượt " +

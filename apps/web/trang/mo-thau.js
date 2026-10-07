@@ -15,7 +15,7 @@ import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
-// [S1.9101 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
+// [S1.282 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
 // ghim nó với gói.
 import { MA_LY_DO_NGOAI_LE, chiDanChot, loiGiaiTrinh, loiLyDo, nhanLoaiNgoaiLe, nhanMaLyDo, vanBanAnToan } from "/lib/tao-thau.js";
 
@@ -25,7 +25,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 // [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây: mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js` (bước 1 chung của bốn trang người mua). Phiên của trang chỉ còn hai con trỏ của các bước sau.
-// [S1.9101 / S3.5b] `trangThaiGoi` và `coQuyenMoi` đọc ở bước 2 (và đọc lại ở «Xem ngoại lệ»): khối ngoại lệ hậu kiểm hiện theo chúng.
+// [S1.282 / S3.5b] `trangThaiGoi` và `coQuyenMoi` đọc ở bước 2 (và đọc lại ở «Xem ngoại lệ»): khối ngoại lệ hậu kiểm hiện theo chúng.
 let phien = { rfqId: "", unsealRequestId: "", trangThaiGoi: "", coQuyenMoi: false };
 /**
  * [S1.255 / khoản 327] Người đang vào (`/me`.userId): nút «Rút đề xuất» chỉ hiện cho CHÍNH người đề xuất. Mọi lối mở các
@@ -330,7 +330,7 @@ $("nut-doc").addEventListener("click", async () => {
   await napYeuCau(id);
 });
 
-/** [S1.9101 / S3.5b] Trạng thái gói và cờ quyền mời từ thân `GET /rfqs/:id`; khối ngoại lệ hậu kiểm hiện cho người giữ quyền mời. */
+/** [S1.282 / S3.5b] Trạng thái gói và cờ quyền mời từ thân `GET /rfqs/:id`; khối ngoại lệ hậu kiểm hiện cho người giữ quyền mời. */
 function datTrangThaiGoi(than) {
   const tt = than?.rfq?.status;
   phien = { ...phien, trangThaiGoi: typeof tt === "string" ? tt : "", coQuyenMoi: than?.coQuyenMoi === true };
@@ -872,7 +872,7 @@ async function veTraoThau() {
     ["Dựa trên lượt chấm", a.evaluationId],
     ["Lý do", a.reason],
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
-    // [S1.9101 / S3.5b] *có M / cần N*: số cần là của bậc CAO HƠN trong hai bậc, máy chủ tính (`award_so_chu_ky_can`) — trang chỉ hiện; thân
+    // [S1.282 / S3.5b] *có M / cần N*: số cần là của bậc CAO HƠN trong hai bậc, máy chủ tính (`award_so_chu_ky_can`) — trang chỉ hiện; thân
     // không mang số cần (tổ chức chưa bật, hay hàng đã duyệt của luồng cũ) thì chỉ *có M*. Mốc giờ từng chữ ký theo sau.
     ["Chữ ký duyệt", `có ${String(a.approvals.length)}${a.chuKyCan == null ? "" : ` / cần ${String(a.chuKyCan)}`}${a.approvals.length === 0
       ? ""
@@ -882,7 +882,7 @@ async function veTraoThau() {
   return a;
 }
 
-/** [S1.9101 / S3.5b] Câu máy chủ rồi MỘT câu chỉ dẫn theo mã chốt (K7, K2b, K5b) — khuôn `/tao-thau`; không mã thì chỉ câu máy chủ. */
+/** [S1.282 / S3.5b] Câu máy chủ rồi MỘT câu chỉ dẫn theo mã chốt (K7, K2b, K5b) — khuôn `/tao-thau`; không mã thì chỉ câu máy chủ. */
 function loiChot(r, macDinh) {
   const cau = loiCua(r, macDinh);
   const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi);
@@ -899,7 +899,7 @@ $("nut-de-xuat").addEventListener("click", async () => {
   // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
   // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
   if (r.status !== 201) { bao($("loi7"), loiChot(r, "Không đề xuất được")); return; }
-  // [S1.9101 / S3.5b] Thân của lần đề xuất không mang số chữ ký cần; đọc lại rồi mới nói — trước vòng này câu luôn nói *MỘT người*.
+  // [S1.282 / S3.5b] Thân của lần đề xuất không mang số chữ ký cần; đọc lại rồi mới nói — trước vòng này câu luôn nói *MỘT người*.
   const a = await veTraoThau();
   const can = a?.chuKyCan;
   bao($("ok7"), `Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần ${typeof can === "number" ? String(can) : "một"} chữ ký phê duyệt của ` +
@@ -936,7 +936,7 @@ $("nut-duyet-award").addEventListener("click", async () => {
   if (r.status !== 201) { bao($("loi7"), loiChot(r, "Không duyệt được")); return; }
   // [S1.280 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
   // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. ~~Phần màn còn lại (cần N, còn M; ngoại lệ hậu
-  // kiểm) là S3.5b.~~ [S1.9101 / S3.5b] Bảng nói *có M / cần N*, khối ngoại lệ hậu kiểm ở dưới.
+  // kiểm) là S3.5b.~~ [S1.282 / S3.5b] Bảng nói *có M / cần N*, khối ngoại lệ hậu kiểm ở dưới.
   const sau = r.body.award ?? {};
   bao($("ok7"), sau.status === "APPROVED"
     ? "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất."
@@ -983,7 +983,7 @@ $("nut-huy-award").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / S3.5b / K2b] Ngoại lệ HẬU KIỂM — `LOW_ACTUAL_COMPETITION`, chỉ khi gói ở EVALUATING và trước đề xuất (ADR-154 ⑸,
+// [S1.282 / S3.5b / K2b] Ngoại lệ HẬU KIỂM — `LOW_ACTUAL_COMPETITION`, chỉ khi gói ở EVALUATING và trước đề xuất (ADR-154 ⑸,
 // `113` (11)). Khối dùng chính hai route của `/tao-thau`: cổng `rfq.invite` nằm trong thân route, trạng thái và loại ràng ở trigger
 // `ngoai_le_kiem` — màn chỉ hiện ô lập khi gói đang EVALUATING, và đọc LẠI trạng thái lúc bấm «Xem» vì bước 2 có thể đã đọc trước
 // lượt chấm. Ba loại của danh sách mời hiện trong bảng (đọc được) nhưng không rút được ở đây: chúng chỉ rút ở DRAFT, trên `/tao-thau`.
