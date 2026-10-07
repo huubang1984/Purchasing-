@@ -25797,8 +25797,8 @@ xanh (553 mô-đun, không vi phạm); `pnpm test` 151 tệp (2 bỏ qua), 2609 
 rào), *"Cổng evidence: XANH"*, 3821 s; `evidence/INV-matrix.md` thêm hàng K9 (12 ca), mốc độ phủ 83 → 84. Trong lượt ấy: hai kịch bản 41
 34/34 + 87/87, `canh-tranh-toi-thieu` 36/36, `xoay-vong` 21/21, `man-kiem-soat` 15/15, tệp K9 12/12.
 Sau lượt đo, `master` thêm `0e966bc` (PR #253, §S1.276 — S4.6b: migration `110_ban_luu_benchmark_ngoai`, ADR-151, hàng L1/L15 của ma
-trận; không bất biến mới, 83/83) và được gộp vào nhánh: gộp ở `6c1ce9b` — năm tệp xung đột gỡ tay, giữ cả hai phía, master trước (ba danh sách migration `110` rồi `9501`; ADR-151 rồi
-ADR-9201; ba cột mốc STATE; §S1.276, §S1.277 rồi §S1.9101; lời khai đếm lấy của master rồi `pnpm cap-so --dem`), mã tự gộp sạch; số cấp
+trận; không bất biến mới, 83/83) và được gộp vào nhánh: gộp ở `6c1ce9b` — năm tệp xung đột gỡ tay, giữ cả hai phía, master trước (ba danh sách migration `110` rồi `114`; ADR-151 rồi
+ADR-155; ba cột mốc STATE; §S1.276, §S1.277 rồi §S1.281; lời khai đếm lấy của master rồi `pnpm cap-so --dem`), mã tự gộp sạch; số cấp
 ở `ca416d9` (vòng 281, ADR-155, migration 114 — chín số trần `9501` trong chú thích thay tay); `pnpm cap-so --kiem` sạch. Trên cây gộp:
 `pnpm t0` xanh (556 mô-đun); `pnpm test` lượt đầu đỏ hai cổng H20 P6/P8 — lời khai *83 bất biến* của master đứng sống trong khi sổ đăng
 ký đã 84 (`--dem` không viết lại số bất biến; gạch [S1.272] 83, lên [S1.281] 84 ở `3e35b0f`), rồi 151 tệp xanh, 2635 ca đạt, 14 bỏ qua;
