@@ -1732,16 +1732,26 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // [S1.196 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`082`) đặt hai tên K8a — phép so gom cả năm thân.
   // [S1.253 / S4.5a] Và trigger L14: `rfq_evaluations_kiem_phien_ban_ghim` (`102`) đặt một tên — phép so gom cả sáu thân.
   // [S1.265 / S3.3b] Và trigger K4a thứ hai: `ngoai_le_kiem` (`105`) đặt một tên — phép so gom cả bảy thân.
-  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, trigger K8a, trigger L14 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.9101 / S3.4a / K9] Bảy trigger K9 đặt tên ĐỘNG — `CONSTRAINT = lower(ly_do)` từ mã ba hàm vị từ trả về (`coi_chot_hanh_dong`,
+  // `coi_chot_xac_minh`, `rfq_chot_chu_ky_xung_dot`); `coi_kiem_khai_bao` và `coi_kiem_trao_thau` đặt thêm một tên tĩnh. Phép so gom
+  // tên tĩnh ở mọi thân cộng mã `RETURN 'K9_…'` của ba hàm vị từ viết thường — một TẬP, vì một tên có thể đứng ở hai thân.
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, trigger K8a, trigger L14, các trigger K9 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure, " +
-        "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure, 'public.ngoai_le_kiem()'::regprocedure)",
+        "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure, 'public.ngoai_le_kiem()'::regprocedure, " +
+        "'public.coi_kiem_khai_bao()'::regprocedure, 'public.coi_kiem_trao_thau()'::regprocedure, " +
+        "'public.coi_chot_hanh_dong(uuid, uuid, uuid)'::regprocedure, 'public.coi_chot_xac_minh(uuid, uuid, uuid)'::regprocedure, " +
+        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure)",
     );
-    expect(rows).toHaveLength(7);
-    const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
-    expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
+    expect(rows).toHaveLength(12);
+    const trongThan = new Set<string>();
+    for (const r of rows) {
+      for (const m of r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)) trongThan.add(m[1]!);
+      for (const m of r.prosrc.matchAll(/RETURN '(K9_[A-Z_]+)'/gu)) trongThan.add(m[1]!.toLowerCase());
+    }
+    expect([...trongThan].sort()).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
 });
 

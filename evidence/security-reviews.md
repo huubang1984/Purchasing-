@@ -25402,8 +25402,8 @@ trước (hàm vị từ trả NULL) — cụm test hiện có là đối chứn
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-07: *"triển khai luôn hạng mục S3.4"*. S3.4 là hạng mục thứ tư của spec S3 §9 (xung đột lợi ích — `coi_declarations`,
 cổng ở bốn chỗ, K9, dòng PRODUCT §5), cộng ba cổng lượt soi hình dạng thêm (ADR-082 ⒄). Vòng này chia hai PR theo khuôn S3.6b1/S3.6b2:
-**S3.4a** — lớp CSDL, tầng gói, route, K9 vào sổ đăng ký (vòng này); **S3.4b** — màn khai báo, `gieo:demo --s3`, kịch bản 41, lượt đi
-thử T4. Việc chia là quyết định của vòng, ghi ở ADR-9201 ⑻ và chờ chủ dự án xác nhận lại.
+**S3.4a** — lớp CSDL, tầng gói, route, K9 vào sổ đăng ký, và kịch bản 41 hai bản (vòng này — §7); **S3.4b** — màn khai báo,
+`gieo:demo --s3`, lượt đi thử T4. Việc chia là quyết định của vòng, ghi ở ADR-9201 ⑻ và chờ chủ dự án xác nhận lại.
 
 ## 2. Đo trước (đọc mã trên `ca94227`)
 - Không một dòng mã nào của K9: không `coi_declarations`, không `CO_XUNG_DOT`/`KHONG_XUNG_DOT` ở `db/`, `packages/`, `apps/`, `tools/`;
@@ -25514,13 +25514,37 @@ Năm đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--
 
 Năm sống: 0. Đối chứng sau khôi phục: 0/12 đỏ, 17,3 s.
 
-## 7. Giới hạn còn lại
-- Màn khai báo, `gieo:demo --s3`, kịch bản 41, lượt đi thử T4 — S3.4b. Giữa hai PR, tổ chức demo (bậc mặc định `khai_xung_dot: true`)
-  bị K9 chặn ở nút ký trên màn: cùng khoảng trống S3.6b1 → S3.6b2.
+## 7. Lượt evidence đầu đỏ: sáu tệp int của `master` chưa biết K9
+`pnpm test` bỏ `*.int`, nên evidence là lượt int song song đầu tiên. Trên `802cf72`: vitest thoát mã 1, 4870 khẳng định, 59 ca đỏ ở
+sáu tệp — không ca nào là lỗi của lớp K9; cả sáu là tiền đề cũ của test gặp một cổng mới. Đọc từ `vitest-report.json`, từng ca:
+- `kich-ban-41.int` (15/34 đỏ) và `kich-ban-41-http.int` (37/87): luồng S3 dùng `BAC_MAC_DINH` (`khai_xung_dot: true`) nên hai giám đốc
+  ký ở bước 2 nhận `K9_CHUA_KHAI_XUNG_DOT`, mọi bước sau đổ theo; bộ quét rò rỉ đòi thân hợp lệ cho route ghi mới (sổ nợ 49). Sửa:
+  người của luồng S3 khai *không xung đột* ngay trước mỗi cổng — tầng gói qua `khaiBaoXungDot` trong giao dịch riêng (hàng `COI_DECLARED`
+  không chen vào giao dịch của chữ ký — [[hoi-chot-truoc-hang-so]]), HTTP qua chính route `POST /rfqs/:rfqId/coi-declarations`: hai giám
+  đốc / `pm2`, `pm3` ở bước 2; `pm2` ở hai gói hy sinh (thân của ca ký trong bộ quét là một lời hứa *khai rồi ký*, như ca xác minh); người
+  chấm ở 12b (lời khai sống tới 12g); `gd1` ở 12i; `pm2` ở ba gói bước 16; `pm3` ghi nhận g3; `pm2`/`pm4` ở bước 17. Bộ quét thêm ca
+  khai của `pm3` trên gói hy sinh B — S3 đi trọn tới 201, MVP1 dừng ở 422 có tên của trigger *tổ chức chưa bật*. Danh sách mời của luồng
+  S3 đứng yên từ DRAFT nên một lời khai sống trọn kịch bản; luồng MVP1 không khai. Thứ tự trigger theo tên giữ các lời từ chối cũ: D2,
+  J3, K10a, K8a, L14 đứng TRƯỚC `_kiem_xung_dot` ở bảng của chúng — ca *tự duyệt*, *tự đề xuất*, *tự ghi nhận* vẫn nhận mã cũ. Đây là
+  hạng mục *kịch bản 41* của S3.4b, kéo về S3.4a; các chuỗi sự kiện đúng-thứ-tự của hai tệp lọc theo tập hành động nên `COI_DECLARED`
+  không làm chúng đổi.
+- `lan-nop-da-xem.int` (3/39) và `rang-ngan-sach.int` (2/15): bốn đột biến nhắm vế *khớp băm* trong `rfq_chu_ky_con_hieu_luc` — vế ấy
+  nay ở `rfq_chu_ky_khop_bam`, đột biến dời theo (`voiHamDotBien` đòi khớp đúng một chỗ nên nó ĐỎ chứ không sống im). `rfq_approvals`
+  có BỐN trigger chuẩn: thêm `rfq_approvals_kiem_xung_dot`.
+- `rfq.int` (1/60): phép so hai chiều tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` chỉ đọc `CONSTRAINT = '…'` tĩnh; bảy trigger K9 đặt tên ĐỘNG
+  (`lower(ly_do)`). Phép so gom thêm năm thân — tên tĩnh của `coi_kiem_khai_bao`, `coi_kiem_trao_thau` cộng mã `RETURN 'K9_…'` của ba
+  hàm vị từ viết thường — thành một tập.
+- `danh-sach-moi.int` (1/23): gói có từ trước lần bật không bậc ghim — K9 coi như ĐÒI (fail-closed, cùng K5): người ký lại khai trước,
+  bằng chính câu chèn của `khaiBaoXungDot`.
+Không dòng mã sản xuất nào đổi ở lượt này. Sau bản vá: SAU_VA.
+
+## 8. Giới hạn còn lại
+- Màn khai báo, `gieo:demo --s3`, lượt đi thử T4 — S3.4b. Giữa hai PR, tổ chức demo (bậc mặc định `khai_xung_dot: true`) bị K9 chặn
+  ở nút ký trên màn: cùng khoảng trống S3.6b1 → S3.6b2.
 - Cổng ở THẨM ĐỊNH đầy đủ — S3.7 (K8b). `award_so_chu_ky_can` và vai theo bậc — S3.5: vế *hàng APPROVED đòi một chữ ký của người không
   có xung đột* đứng độc lập với `CHU_KY_CAN`, S3.5 gộp.
 - Khai báo là tự khai (§8.7); không lớp nào biết quan hệ thật. Một quản trị viên tự tạo tài khoản thứ hai vẫn phá được — giới hạn ADR-058.
 - Việc chia S3.4 hai PR và các chốt hình dạng ở §3 là quyết định của vòng; chủ dự án xác nhận lại ở lượt soi.
 
-## 8. Số đo
+## 9. Số đo
 SO_DO

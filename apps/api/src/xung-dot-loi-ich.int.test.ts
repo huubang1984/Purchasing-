@@ -31,7 +31,7 @@ import { deXuatTraoThau, duyetTraoThau, huyTraoThau, taoLuotDanhGia } from "@tru
 import { CHOT_VAO_SO } from "@trustprocure/identity";
 import { createInvitation } from "@trustprocure/invitation";
 import { ghiNhanTinHieu } from "@trustprocure/kiem-soat";
-import { addRfqItem, createProcurementPolicy, createRfq, openRfq, setRfqBudget } from "@trustprocure/rfq";
+import { addRfqItem, createProcurementPolicy, createRfq, setRfqBudget } from "@trustprocure/rfq";
 import { thuHoiXacMinhNhaCungCap } from "@trustprocure/supplier";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
@@ -464,7 +464,10 @@ describe("[S1.9101 / S3.4a / K9] khai báo và chữ ký mở gói — route, b�
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'COI_DECLARED' AND resource_id = $2",
       [t.org, g.rfqId],
     );
-    expect(so.rows.map((r) => r.payload)).toEqual([{ declarationId: expect.any(String), trangThai: "KHONG_XUNG_DOT", supplierId: null }]);
+    expect(so.rows).toHaveLength(1);
+    const { declarationId, ...conLai } = so.rows[0]!.payload;
+    expect(typeof declarationId).toBe("string");
+    expect(conLai).toEqual({ trangThai: "KHONG_XUNG_DOT", supplierId: null });
     expect((await mo(t, g.rfqId)).status).toBe(200);
   });
 
