@@ -9,6 +9,9 @@
 // không bao giờ *"tốt"*, và chỉ dẫn tới một yêu cầu làm rõ — không bao giờ là căn cứ loại một báo giá (§2.4 ⑾).
 // ĐỘ PHỦ (§2.5 ⒁): phần GIÁ TRỊ của báo giá nằm trên dòng đo được — nhãn có dải (`BINH_THUONG`, `LECH_VUA`, `LECH_CAO`). Dòng
 // `CHUA_DU_LICH_SU` và `KHONG_DO_DUOC` không phủ.
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-096 ⑷; ADR-151): nhãn theo dải lịch sử mua ngoài hệ thống có CHỮ RIÊNG ghi rõ nguồn
+// — *"lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập"* — không bao giờ lẫn với chữ của dải nội bộ; mốc ngoài không có nhãn,
+// chỉ cờ ở bảng và con số, độ lệch ở *Xem dải*. Độ phủ và cột Benchmark của bảng xếp hạng vẫn chỉ đọc nhãn NỘI BỘ.
 // ==============================================================================================
 
 import { nhomSo, sangNguyen } from "./so-tien.js";
@@ -195,4 +198,135 @@ export function chuDai(
       : `. Hàng nền ghi SAU mốc mở giá mà dải này không dùng: ${sau.map(([loai, n]) => `${String(n)} ${HOI_TO[loai] ?? loai}`).join(", ")}`;
   const lech = d.khopBanLuu ? "" : ". CẢNH BÁO: số đếm tính lại KHÁC bản lưu — dữ liệu nền đã đổi ngoài luật chỉ-ghi-thêm";
   return `${so}${chuSau}${lech}`;
+}
+
+// ----------------------------------------------------------------------------------------------
+// [S1.276 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài
+// ----------------------------------------------------------------------------------------------
+
+const NGUON_NGOAI = "lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập";
+
+/** Một hàng `dongNgoai[]` của `GET /rfqs/:rfqId/benchmark`, đúng các trường màn đọc. */
+export interface DongNgoai {
+  readonly bidVersionId: string;
+  readonly lineNo: number;
+  readonly nhan: string;
+  readonly chieu: string | null;
+  readonly soDong: number;
+  readonly soGoi: number;
+  readonly soNcc: number;
+  readonly soLoaiTienTe: number;
+  readonly soLoaiKhongQuyDoi: number;
+}
+
+/** `YYYY-MM-DD` → `DD/MM/YYYY`; chuỗi lạ in nguyên. */
+export function ngayVn(ngay: string): string {
+  const k = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(ngay);
+  return k === null ? ngay : `${k[3] ?? ""}/${k[2] ?? ""}/${k[1] ?? ""}`;
+}
+
+/** Nhãn theo dải lịch sử ngoài thành chữ — luôn nói nguồn. Nhãn lạ thì in nguyên mã. */
+export function chuNhanNgoai(d: DongNgoai): string {
+  const quyMo = `${String(d.soGoi)} lần mua theo ngày và nhà cung cấp, ${String(d.soNcc)} nhà cung cấp`;
+  switch (d.nhan) {
+    case "BINH_THUONG":
+      return `trong dải ${NGUON_NGOAI} (${quyMo})`;
+    case "LECH_VUA":
+      return `${d.chieu === "DUOI" ? "thấp hơn" : "cao hơn"} trung vị ${NGUON_NGOAI} — lệch vừa`;
+    case "LECH_CAO":
+      return d.chieu === "DUOI"
+        ? `Thấp bất thường so với ${NGUON_NGOAI} — nên yêu cầu làm rõ, không phải căn cứ loại báo giá`
+        : `Giá bất thường so với ${NGUON_NGOAI} — nên xem xét`;
+    case "CHUA_DU_LICH_SU":
+      return `chưa đủ ${NGUON_NGOAI} để so (${quyMo})`;
+    default:
+      return d.nhan;
+  }
+}
+
+/** Chữ của cột *Lịch sử ngoài* ở bảng benchmark cho một (báo giá, dòng). */
+export function chuCotNgoai(
+  dongNgoai: readonly DongNgoai[] | null,
+  bidVersionId: string,
+  lineNo: number,
+  doDuoc: boolean,
+): string {
+  if (!doDuoc) return "—";
+  if (dongNgoai === null) return "bản benchmark này tính trước khi có lịch sử ngoài — xem ở «Xem dải»";
+  const d = dongNgoai.find((x) => x.bidVersionId === bidVersionId && x.lineNo === lineNo);
+  return d === undefined ? "—" : chuNhanNgoai(d);
+}
+
+/** Cờ mốc ngoài của bảng benchmark: nguồn và ngày hiệu lực, không con số. */
+export function chuCoMocNgoai(m: { readonly nguon: string; readonly ngayHieuLuc: string } | undefined): string {
+  return m === undefined ? "—" : `có mốc ngoài (${m.nguon}, hiệu lực ${ngayVn(m.ngayHieuLuc)}) — số và độ lệch ở «Xem dải»`;
+}
+
+/** Độ lệch phần trăm (`"12.3"`, `"-4.5"`) thành chữ có dấu: `+12,3%`, `−4,5%`. */
+export function chuLech(lech: string | null): string {
+  if (lech === null) return "—";
+  const am = lech.startsWith("-");
+  const tuyet = am ? lech.slice(1) : lech;
+  const chu = tuyet.replace(".", ",");
+  return /^0(?:\.0)?$/u.test(tuyet) ? "0,0%" : `${am ? "−" : "+"}${chu}%`;
+}
+
+/** Một dải ngoài của *Xem dải* thành một câu. */
+export function chuDaiNgoai(
+  d: {
+    readonly tienTe: string;
+    readonly cuaSoTu: string;
+    readonly denNgay: string;
+    readonly duSan: boolean;
+    readonly q1: string | null;
+    readonly trungVi: string | null;
+    readonly q3: string | null;
+    readonly soDong: number;
+    readonly soGoi: number;
+    readonly soNcc: number;
+    readonly soLoaiTienTe: number;
+    readonly soLoaiKhongQuyDoi: number;
+    readonly nguon: readonly string[];
+    readonly sauMoc: { readonly GHI: number; readonly RUT: number };
+    readonly khopBanLuu: boolean | null;
+  },
+  donViGoc: string | null,
+): string {
+  const donVi = `${d.tienTe}/${donViGoc ?? "đơn vị gốc"}`;
+  const quyMo = `${String(d.soDong)} dòng, ${String(d.soGoi)} lần mua theo ngày và nhà cung cấp, ${String(d.soNcc)} nhà cung cấp`;
+  const so = d.duSan
+    ? `Q1 ${soDai(d.q1)} · trung vị ${soDai(d.trungVi)} · Q3 ${soDai(d.q3)} ${donVi} (${quyMo})`
+    : `chưa đủ lịch sử ngoài — không con số nào (${quyMo})`;
+  const cuaSo = `. Ngày mua từ ${ngayVn(d.cuaSoTu)} tới ${ngayVn(d.denNgay)}`;
+  const nguon =
+    d.nguon.length === 0
+      ? ""
+      : `. Nguồn (lời khai của người nhập): ${d.nguon.slice(0, 3).join("; ")}${d.nguon.length > 3 ? `; và ${String(d.nguon.length - 3)} nguồn khác` : ""}`;
+  const loai: string[] = [];
+  if (d.soLoaiTienTe > 0) loai.push(`${String(d.soLoaiTienTe)} khác tiền tệ`);
+  if (d.soLoaiKhongQuyDoi > 0) loai.push(`${String(d.soLoaiKhongQuyDoi)} không quy đổi được đơn vị`);
+  const chuLoai = loai.length === 0 ? "" : `. Đã loại ${loai.join(", ")}`;
+  const sau: string[] = [];
+  if (d.sauMoc.GHI > 0) sau.push(`${String(d.sauMoc.GHI)} dòng nhập SAU mốc mở giá (dải này không dùng)`);
+  if (d.sauMoc.RUT > 0) sau.push(`${String(d.sauMoc.RUT)} dòng đã vào dải bị rút SAU mốc mở giá (dải này vẫn dùng)`);
+  const chuSau = sau.length === 0 ? "" : `. ${sau.join("; ")}`;
+  const lech =
+    d.khopBanLuu === false ? ". CẢNH BÁO: nhãn ngoài tính lại KHÁC bản lưu — dữ liệu ngoài đã đổi ngoài luật chỉ-ghi-thêm" : "";
+  return `${so}${cuaSo}${nguon}${chuLoai}${chuSau}${lech}`;
+}
+
+/** Mốc ngoài của *Xem dải* thành một câu — con số theo đơn vị gốc, nguồn, ngày hiệu lực; không nhãn. */
+export function chuMocNgoai(
+  m: {
+    readonly tienTe: string;
+    readonly moc: { readonly nguon: string; readonly ngayHieuLuc: string; readonly donGiaQuyDoi: string } | null;
+    readonly ghiSauMoc: number;
+    readonly rutSauMoc: boolean;
+  },
+  donViGoc: string | null,
+): string {
+  const sau = m.ghiSauMoc > 0 ? `. ${String(m.ghiSauMoc)} mốc nhập SAU mốc mở giá (không dùng)` : "";
+  if (m.moc === null) return `không có mốc ngoài trong cửa sổ${sau}`;
+  const rut = m.rutSauMoc ? ". Mốc này đã bị rút SAU mốc mở giá — vẫn là mốc của gói này" : "";
+  return `${soDai(m.moc.donGiaQuyDoi)} ${m.tienTe}/${donViGoc ?? "đơn vị gốc"} (${m.moc.nguon}, hiệu lực ${ngayVn(m.moc.ngayHieuLuc)}) — chỉ để so độ lệch, không sinh nhãn${rut}${sau}`;
 }

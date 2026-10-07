@@ -4210,6 +4210,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-9201).
         "9501_trao_thau_theo_bac.sql",
         ]);
@@ -8865,6 +8867,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-9201).
         "9501_trao_thau_theo_bac.sql",
       ]);
@@ -9200,6 +9204,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-9201).
         "9501_trao_thau_theo_bac.sql",
       ]);

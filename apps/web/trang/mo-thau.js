@@ -11,7 +11,9 @@
 // ==============================================================================================
 
 import { tien } from "/lib/so-tien.js";
-import { chuDai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan } from "/lib/benchmark.js";
+import {
+  chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
+} from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
@@ -471,10 +473,13 @@ async function docBangSoSanh() {
     // bảng LỊCH SỬ, và người mua cần thấy ai hạ bao nhiêu. Không có cột vòng, hai dòng ấy trông
     // như một lỗi; `isLatestForBid` là thứ nói dòng nào đang có hiệu lực.
     if (h.isLatestForBid === false) tr.classList.add("mo");
+    // [S1.277 / khoản 334] `data-nhan`: dưới 480 px bảng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`).
+    const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
     tr.append(
-      td(h.supplierLegalName), td(tien(h.totalAmount), "so"), td(h.currency ?? "—"),
-      td(String(h.version ?? "—"), "so"),
-      td(h.bafoRoundNo === null || h.bafoRoundNo === undefined ? "vòng 1" : `BAFO ${h.bafoRoundNo}`),
+      coNhan(td(h.supplierLegalName), "Nhà cung cấp"), coNhan(td(tien(h.totalAmount), "so"), "Tổng"),
+      coNhan(td(h.currency ?? "—"), "Tiền tệ"),
+      coNhan(td(String(h.version ?? "—"), "so"), "Lần nộp"),
+      coNhan(td(h.bafoRoundNo === null || h.bafoRoundNo === undefined ? "vòng 1" : `BAFO ${h.bafoRoundNo}`), "Vòng"),
     );
     tbody.append(tr);
   }
@@ -576,13 +581,22 @@ async function veBenchmark() {
       const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
       // `data-nhan`: trên màn hẹp bảng xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`, khuôn `hang-gia` của `/nop-thau`).
       const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
+      // [S1.276 / S4.6b] Lịch sử ngoài: nhãn riêng của bản lưu; mốc ngoài: cờ theo (hàng chuẩn, tiền tệ) của dòng — không con số.
+      const doDuoc = d.nhan !== "KHONG_DO_DUOC";
+      const moc = doDuoc
+        ? (b.mocNgoai ?? []).find((m) => m.canonicalItemId === d.canonicalItemId && m.tienTe === d.tienTe)
+        : undefined;
+      const ngoai = (b.dongNgoai ?? []).find((x) => x.bidVersionId === d.bidVersionId && x.lineNo === lineNo);
       tr.append(
         o,
         coNhan(td(tenBaoGia(d.bidVersionId)), "Nhà cung cấp"),
         coNhan(td(gia === null ? "—" : tien(String(gia)), "so"), "Đơn giá chào"),
         coNhan(td(chuNhan(d)), "Benchmark"),
         coNhan(td(chuThanhPhan(d)), "Thành phần dải"),
+        coNhan(td(chuCotNgoai(b.dongNgoai ?? null, d.bidVersionId, lineNo, doDuoc), ngoai?.nhan === "LECH_CAO" ? "lech" : ""), "Lịch sử ngoài"),
+        coNhan(td(doDuoc ? chuCoMocNgoai(moc) : "—"), "Mốc ngoài"),
       );
+      // Tô cả hàng theo nhãn NỘI BỘ; nhãn ngoài lệch cao chỉ tô ô của nó (L15: hai nhãn không trộn).
       if (d.nhan === "LECH_CAO") tr.className = "lech";
       tbody.append(tr);
     }
@@ -606,12 +620,21 @@ async function veDai(lineNo) {
     hien($("khoi-dai"), true);
     return;
   }
+  // [S1.276 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn). Độ
+  // lệch chỉ in khi tiền tệ của CHÍNH báo giá có mốc (rà soát §S1.276: tiền tệ khác của dòng có mốc không được kéo theo "—").
   dienDl($("tt-dai"), [
     ...cu,
     ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),
+    ...(d.daiNgoai ?? []).map((x) => [
+      `Dòng ${String(lineNo)} — dải lịch sử mua ngoài hệ thống (${x.tienTe})`,
+      chuDaiNgoai(x, d.donViGoc),
+    ]),
+    ...(d.mocNgoai ?? []).map((m) => [`Dòng ${String(lineNo)} — mốc giá ngoài (${m.tienTe})`, chuMocNgoai(m, d.donViGoc)]),
     ...d.giaCuaGoi.map((g) => [
       `Đơn giá quy đổi — ${tenBaoGia(g.bidVersionId)}`,
-      g.donGiaQuyDoi === null ? `không quy đổi được (${g.trangThai})` : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}`,
+      g.donGiaQuyDoi === null
+        ? `không quy đổi được (${g.trangThai})`
+        : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}${g.lechMoc == null ? "" : ` · ${chuLech(g.lechMoc)} so với mốc ngoài`}`,
     ]),
   ]);
   hien($("khoi-dai"), true);
@@ -694,16 +717,19 @@ async function veXepHang() {
     const tr = document.createElement("tr");
     if (h.rank === 1) tr.className = "thap";
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
+    // [S1.277 / khoản 334] `data-nhan`: dưới 480 px bảng xếp hạng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình
+    // (`chung.css`) — đo trên Chromium ở 375×812: bảng bảy trăm px, cả trang cuộn ngang.
+    const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
     tr.append(
-      td(h.rank === null ? "—" : String(h.rank), "so"),
-      td(h.supplierName),
-      td(h.effectiveCost === null ? "—" : tien(h.effectiveCost), "so"),
+      coNhan(td(h.rank === null ? "—" : String(h.rank), "so"), "Hạng"),
+      coNhan(td(h.supplierName), "Nhà cung cấp"),
+      coNhan(td(h.effectiveCost === null ? "—" : tien(h.effectiveCost), "so"), "Chi phí hiệu dụng"),
     );
-    const o = document.createElement("td");
+    const o = coNhan(document.createElement("td"), "Thành phần");
     o.append(veThanhPhan(h.components ?? []));
     tr.append(o);
     // [S1.260 / S4.5c1] Nhãn ở bảng xếp hạng (spec S4 §4.6): tóm tắt theo lần đọc benchmark gần nhất ở bước 4.
-    const bm = td(typeof h.bidVersionId === "string" ? chuCotBenchmark(h.bidVersionId) : "—", "cot-benchmark");
+    const bm = coNhan(td(typeof h.bidVersionId === "string" ? chuCotBenchmark(h.bidVersionId) : "—", "cot-benchmark"), "Benchmark");
     bm.dataset.bidVersionId = typeof h.bidVersionId === "string" ? h.bidVersionId : "";
     oCotBenchmark.push(bm);
     tr.append(bm);

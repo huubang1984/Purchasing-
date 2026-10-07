@@ -102,7 +102,7 @@
   <section class="buoc" id="b4" hidden>
     <h2><span class="so">4</span> Bảng so sánh</h2>
     <button id="nut-bang" class="phu">Đọc bảng so sánh</button>
-    <table id="bang">
+    <table class="xep" id="bang">
       <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th><th>Vòng</th></tr></thead>
       <tbody></tbody>
     </table>
@@ -116,10 +116,15 @@
     <p class="ghi">So đơn giá của từng dòng với dải lịch sử NỘI BỘ của tổ chức — các gói đã mở trước gói này. Nhãn chỉ là tín hiệu
       để xem xét: «thấp bất thường» dẫn tới một yêu cầu làm rõ, không bao giờ là căn cứ loại một báo giá; «trong dải» không có
       nghĩa là sạch — dải có thể là dải của chính những người quen báo giá.</p>
+    <!-- [S1.276 / S4.6b] Cột riêng cho LỊCH SỬ MUA NGOÀI HỆ THỐNG (nhãn riêng, ghi rõ nguồn, không trộn vào dải nội bộ) và cờ MỐC NGOÀI
+         (chỉ độ lệch, không nhãn — số ở «Xem dải»). -->
+    <p class="ghi">Cột «Lịch sử ngoài» so cùng cách với lịch sử mua NGOÀI hệ thống do người quản lý dữ liệu nhập — lời khai, không
+      phải báo giá; nó không vào bảng xếp hạng. Cột «Mốc ngoài» chỉ nói dòng ấy có mốc giá ngoài hay không; con số và độ lệch của
+      từng báo giá ở «Xem dải».</p>
     <button id="nut-benchmark" class="phu">Đọc benchmark</button>
     <dl class="tt" id="tt-benchmark"></dl>
     <table id="bang-benchmark">
-      <thead><tr><th>Dòng</th><th>Nhà cung cấp</th><th class="so">Đơn giá chào</th><th>Benchmark</th><th>Thành phần dải</th></tr></thead>
+      <thead><tr><th>Dòng</th><th>Nhà cung cấp</th><th class="so">Đơn giá chào</th><th>Benchmark</th><th>Thành phần dải</th><th>Lịch sử ngoài</th><th>Mốc ngoài</th></tr></thead>
       <tbody></tbody>
     </table>
     <div id="khoi-dai" hidden>
@@ -138,7 +143,7 @@
       <button id="nut-xep-hang" class="phu">Đọc bảng xếp hạng</button>
     </div>
     <dl class="tt" id="tt-luot"></dl>
-    <table id="bang-hang">
+    <table class="xep" id="bang-hang">
       <thead><tr><th class="so">Hạng</th><th>Nhà cung cấp</th><th class="so">Chi phí hiệu dụng</th><th>Thành phần</th><th>Benchmark</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
