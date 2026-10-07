@@ -2405,10 +2405,15 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
 // `061` và `duyetTraoThau` từng khai: đổi hằng `CHU_KY_CAN` thành 2 là toàn bộ việc phải làm, và
 // lời gọi của người duyệt thứ hai đi qua. Sai: `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong
 // CÙNG một giao dịch, nên lần duyệt đầu bị từ chối và chữ ký của nó rơi theo giao dịch. `068` sửa
-// lời khai; khối này ghi hành vi thật. Khi S3.5 dựng chữ ký sống độc lập với hàng `APPROVED`, khối
-// này PHẢI lật — lật nó là việc có chủ ý của S3.5, không phải một test đỏ để xoá.
+// lời khai; khối này ghi hành vi thật. ~~Khi S3.5 dựng chữ ký sống độc lập với hàng `APPROVED`, khối
+// này PHẢI lật — lật nó là việc có chủ ý của S3.5, không phải một test đỏ để xoá.~~
+// **[S1.280 / S3.5a]** S3.5 đã dựng chữ ký sống độc lập — nhưng KHÔNG lật được khối này bằng chính đột biến của nó: số chữ ký
+// nay sống ở `award_so_chu_ky_can` (`113`), còn hằng `CHU_KY_CAN := 1` của `award_kiem_mot_award_song` là SÀN CHẾT — `069`
+// giới hạn `award_so_chu_ky ∈ {1, 2}` nên sàn không bao giờ ràng, và nâng RIÊNG nó vẫn làm trao thầu gãy đúng như đo ở đây (tầng
+// gói hỏi hàm sống, chèn `APPROVED` với một chữ ký, J7 từ chối, chữ ký rơi). Khối này GIỮ làm cổng cho lớp trôi ấy; khối LẬT thật
+// đứng ngay dưới, đột biến vào `award_so_chu_ky_can`.
 // =============================================================================================
-describe("[INV-J3] [S1.142 / khoản 242 ⑴] đổi CHU_KY_CAN thành 2 thì trao thầu KHÔNG BAO GIỜ duyệt được — đo, để S3.5 phải lật", { timeout: 300000 }, () => {
+describe("[INV-J3] [S1.142 / khoản 242 ⑴] hằng J7 là SÀN CHẾT: nâng riêng nó thành 2 thì trao thầu KHÔNG BAO GIỜ duyệt được — số chữ ký sống ở award_so_chu_ky_can (S1.280)", { timeout: 300000 }, () => {
   // Khai báo hằng trong thân `award_kiem_mot_award_song`, nguyên văn. Đột biến dưới đổi đúng chuỗi này.
   const HANG_MOT = "CHU_KY_CAN constant integer := 1;";
 
@@ -2455,6 +2460,54 @@ describe("[INV-J3] [S1.142 / khoản 242 ⑴] đổi CHU_KY_CAN thành 2 thì tr
     await duyet(sDuyet);
     expect(await soChuKy()).toBe(1);
     expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+});
+
+// =============================================================================================
+// [S1.280 / S3.5a / khoản 242 ⑴ — LẬT] CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`
+//
+// Đột biến `award_so_chu_ky_can` (`113`) để tổ chức CHƯA bật cần 2: lần duyệt đầu ghi chữ ký rồi DỪNG — hàng đề xuất vẫn
+// `PROPOSED`, chữ ký CÒN —, người thứ hai hoàn tất. Đúng điều khối trên đo là bất khả với hình dạng cũ. Tổ chức đã bật và bậc
+// thật đo ở `trao-thau-theo-bac.int.test.ts`.
+// =============================================================================================
+describe("[INV-K7] [S1.280 / S3.5a / khoản 242 ⑴ LẬT] award_so_chu_ky_can trả 2 ⇒ chữ ký đầu SỐNG, hàng PROPOSED đứng yên, người thứ hai ⇒ APPROVED", { timeout: 300000 }, () => {
+  it("hai chữ ký qua hai lời gọi, không chữ ký nào rơi; trả hàm về 1 thì một chữ ký lại đủ", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat }, apiPool),
+    );
+    const uDuyet2 = await taoNguoi("duyet-2-lat-242@vidu.vn", "FINANCE");
+    const sDuyet2 = await taoPhien(uDuyet2);
+    const duyet = (phien: string) =>
+      withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: phien }, apiPool));
+    const soChuKy = async (): Promise<number> =>
+      Number((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2", [orgA, dx.awardId])).rows[0]?.n ?? -1);
+
+    const { rows } = await db.pool.query<{ d: string }>("SELECT pg_get_functiondef('public.award_so_chu_ky_can(uuid, uuid)'::regprocedure) AS d");
+    const goc = rows[0]?.d ?? "";
+    expect(goc.split("RETURN 1;").length - 1, "tiền đề: nhánh chưa bật trả 1, đúng một chỗ").toBe(1);
+    await db.pool.query(goc.replace("RETURN 1;", "RETURN 2;"));
+    try {
+      const mot = await duyet(sDuyet);
+      expect([mot.status, mot.chuKyCan, mot.approvals.length], "chữ ký đầu SỐNG, đề xuất đứng yên").toEqual(["PROPOSED", 2, 1]);
+      expect(await soChuKy()).toBe(1);
+      expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+      const hai = await duyet(sDuyet2);
+      expect([hai.status, hai.approvals.length]).toEqual(["APPROVED", 2]);
+      expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+    } finally {
+      await db.pool.query(goc);
+    }
+    const sau = (await db.pool.query<{ d: string }>("SELECT pg_get_functiondef('public.award_so_chu_ky_can(uuid, uuid)'::regprocedure) AS d")).rows[0]?.d;
+    expect(sau, "khôi phục đúng bản gốc").toBe(goc);
+
+    // ĐỐI CHỨNG: hàm thật (1 ở tổ chức chưa bật) — một gói khác, một chữ ký là xong, cùng lời gọi.
+    const g2 = await sanSangTraoThau();
+    const dx2 = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId: g2.rfqId, bidVersionId: g2.banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat }, apiPool),
+    );
+    const kq = await withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId: g2.rfqId, awardId: dx2.awardId, actorSessionId: sDuyet }, apiPool));
+    expect([kq.status, kq.chuKyCan]).toEqual(["APPROVED", 1]);
   });
 });
 

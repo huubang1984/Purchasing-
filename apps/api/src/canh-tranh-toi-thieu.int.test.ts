@@ -384,7 +384,8 @@ const hoiDem = async (c: pg.PoolClient, org: string, rfqId: string): Promise<num
 const hoiK5 = async (c: pg.PoolClient, org: string, rfqId: string): Promise<string | null> =>
   (await c.query<{ m: string | null }>("SELECT public.rfq_chot_chu_ky_doc_lap($1, $2) AS m", [org, rfqId])).rows[0]!.m;
 
-const HAM_DEM = "public.rfq_dem_ncc_canh_tranh(uuid, uuid)";
+/** [S1.280 / S3.5a] Lõi đếm nhóm tách khỏi `rfq_dem_ncc_canh_tranh` (`113`) để K2 và K2b một phép gộp — ba đột biến khoá nhóm áp ở đây. */
+const HAM_DEM = "public.rfq_dem_nhom_loi_moi(uuid, uuid, uuid[])";
 /** [S1.270 / S3.3d] Vị từ *đếm được* tách khỏi `rfq_dem_ncc_canh_tranh` (`108_xoay_vong`) — các đột biến của sáu vế áp ở đây. */
 const HAM_DEM_DUOC = "public.rfq_loi_moi_dem_duoc(uuid, uuid)";
 const HAM_K2 = "public.rfq_chot_canh_tranh(uuid, uuid)";

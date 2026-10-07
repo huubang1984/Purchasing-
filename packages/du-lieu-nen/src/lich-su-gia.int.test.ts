@@ -843,7 +843,8 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
         "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%' " +
         "AND p.prokind IN ('f', 'p') AND pg_get_functiondef(p.oid) ~ 'rfq_unsealed_bids' ORDER BY 1",
     );
-    expect(rows.map((r) => r.ten)).toEqual(["public.anh_xa_kiem_luat", "public.goi_y_kiem_luat", "public.quan_sat_gia"]);
+    // [S1.280 / S3.5a / K7] `award_so_tien_trao` đọc số tiền và tiền tệ của báo giá được chọn để phân bậc trao thầu — cùng dòng ở lớp tĩnh.
+    expect(rows.map((r) => r.ten)).toEqual(["public.anh_xa_kiem_luat", "public.award_so_tien_trao", "public.goi_y_kiem_luat", "public.quan_sat_gia"]);
   });
 
   it("không view hay materialized view nào đọc bảng bản rõ, và `quan_sat_gia` chạy dưới quyền NGƯỜI GỌI", async () => {

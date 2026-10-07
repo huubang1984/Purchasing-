@@ -40,6 +40,9 @@ const TEP_TS: Readonly<Record<string, string>> = {
 /** Hàm SQL có thân chạm bảng bản rõ. */
 const HAM_SQL: Readonly<Record<string, string>> = {
   anh_xa_kiem_luat: "TỒN TẠI — L13: ánh xạ trên gói đã có bản rõ đòi lý do (`089`)",
+  // [S1.280 / S3.5a / K7] Số tiền và tiền tệ của báo giá ĐƯỢC CHỌN để phân bậc trao thầu — đọc qua `bid_so_tien`/`bid_currency`, không
+  // trả dòng nào ra ngoài; người gọi là các hàm theo bậc của `113` dưới `app_api`, vốn đã đọc được bảng (góc B⑧).
+  award_so_tien_trao: "ĐỌC — số tiền và tiền tệ của báo giá được chọn, để phân bậc trao thầu (K7, `113`)",
   goi_y_kiem_luat: "TỒN TẠI — gợi ý trên gói đã có bản rõ chỉ do người giữ `item.manage` ghi (`089`)",
   quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`096`)",
 };

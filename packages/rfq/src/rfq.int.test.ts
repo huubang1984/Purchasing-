@@ -1735,7 +1735,9 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // [S1.281 / S3.4a / K9] Bảy trigger K9 đặt tên ĐỘNG — `CONSTRAINT = lower(ly_do)` từ mã ba hàm vị từ trả về (`coi_chot_hanh_dong`,
   // `coi_chot_xac_minh`, `rfq_chot_chu_ky_xung_dot`); `coi_kiem_khai_bao` và `coi_kiem_trao_thau` đặt thêm một tên tĩnh. Phép so gom
   // tên tĩnh ở mọi thân cộng mã `RETURN 'K9_…'` của ba hàm vị từ viết thường — một TẬP, vì một tên có thể đứng ở hai thân.
-  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, các trigger K9 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.280 / S3.5a] Và ba trigger của award theo bậc (`113`): chúng đặt tên ràng buộc bằng `lower(ly_do)` — mã do bốn hàm vị từ trả —,
+  // nên vế *tên trong thân* gom thêm mọi `RETURN 'K…'` của bốn hàm vị từ (viết thường); `ngoai_le_kiem` (thân `113`) đặt thêm một tên K2b.
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ), các trigger K9 (qua ba hàm vị từ) và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
@@ -1747,12 +1749,27 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
         "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure)",
     );
     expect(rows).toHaveLength(13);
-    const trongThan = new Set<string>();
-    for (const r of rows) {
-      for (const m of r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)) trongThan.add(m[1]!);
-      for (const m of r.prosrc.matchAll(/RETURN '(K9_[A-Z_]+)'/gu)) trongThan.add(m[1]!.toLowerCase());
-    }
-    expect([...trongThan].sort()).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
+    const { rows: viTu } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_bac(uuid, uuid, uuid)'::regprocedure, " +
+        "'public.award_chot_nguoi_ky(uuid, uuid, uuid)'::regprocedure, 'public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'::regprocedure, " +
+        "'public.award_chot_doc_lap(uuid, uuid)'::regprocedure)",
+    );
+    expect(viTu).toHaveLength(4);
+    const { rows: triggerBac } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_kiem_theo_bac_khi_de_xuat()'::regprocedure, " +
+        "'public.award_kiem_theo_bac_khi_duyet()'::regprocedure, 'public.award_kiem_vai_theo_bac()'::regprocedure)",
+    );
+    expect(triggerBac).toHaveLength(3);
+    for (const r of triggerBac) expect(r.prosrc, "ba trigger đặt tên bằng chính mã viết thường").toMatch(/CONSTRAINT = lower\(ly_do\)/u);
+    // [S1.281 / S3.4a / K9] Ba hàm vị từ K9 nằm trong `rows`; `k9_chu_ky_co_xung_dot` đứng ở HAI thân (tên tĩnh của
+    // `coi_kiem_trao_thau` và `RETURN` của `rfq_chot_chu_ky_xung_dot`) nên phép so là một TẬP.
+    const trongThan = [
+      ...new Set([
+        ...rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1]!)),
+        ...[...rows, ...viTu].flatMap((r) => [...r.prosrc.matchAll(/RETURN '(K\w+)'/gu)].map((m) => m[1]!.toLowerCase())),
+      ]),
+    ].sort();
+    expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
 });
 

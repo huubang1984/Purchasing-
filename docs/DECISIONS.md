@@ -12095,6 +12095,115 @@ L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
 - Lời khai lưu cùng award, giải trình khi lệch hạng, bộ kiểm ngoại tuyến tính lại phép quy đổi (S4.7c, sau S3.5).
 - Đối chiếu lời khai với thực tế — hoá đơn, GRN (S5, §8.13).
 
+## ADR-154 — S3.5a: award theo bậc — số chữ ký của bậc CAO HƠN trong hai bậc, chữ ký sống độc lập với hàng `APPROVED`, vai theo bậc, hậu kiểm số báo giá (K2b) và chữ ký độc lập (K5b); S3.5 chia hai PR
+
+**Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai S3.5 luôn"*; sau lượt soi hình dạng,
+sáu câu, cả sáu theo đề xuất: ⑴ gói không bậc ghim ở tổ chức đã bật ⇒ từ chối (`K7_KHONG_BAC_GHIM`); ⑵ `tham_dinh_truoc_trao` CHƯA
+cưỡng chế (K8b là S3.7); ⑶ K5b áp thêm khi bậc trao CAO HƠN bậc ước lượng; ⑷ `award_vai_khac_nhau` là hệ đại diện phân biệt; ⑸ tập
+loại trừ của chữ ký trao thầu thêm người điều phối mở thầu và người xác minh nhà cung cấp thắng; ⑹ hai PR — **S3.5a** chốt, tầng gói,
+route, kịch bản 41, khối đo khoản 242 ⑴; **S3.5b** màn `/mo-thau`, `gieo:demo`, lượt đi thử T4 · **[S1.280]** · **Liên quan:** ADR-051,
+ADR-057, ADR-060, ADR-080, ADR-082 ⑹ ⑺ ⑽ ⒄, ADR-084 ⑷, ADR-085, ADR-108, ADR-121, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §2.4 ⑹iv
+⑺, §4.7, §5.1 K7 K2b K5b, §8.10, §9 S3.5 · **Biên bản:** `evidence/security-reviews.md` §S1.280
+
+### Bối cảnh
+
+Trao thầu tới trước vòng này là lớp của S2 (`061`, ADR-051/057): một đề xuất, MỘT chữ ký của người giữ `po.approve` khác người đề xuất,
+và hằng `CHU_KY_CAN := 1` trong `award_kiem_mot_award_song`. Khoản 242 ⑴ (S1.139, S1.142) đo được rằng đổi hằng ấy thành hai là
+trao thầu không bao giờ duyệt được: `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong CÙNG giao dịch, lần duyệt đầu bị J7 từ chối và
+chữ ký rơi theo. Spec S3 §4.7 đòi: số chữ ký đọc từ bậc CAO HƠN trong hai bậc (ước lượng và số tiền trao), vai người ký theo bậc, tác
+giả chính sách không ký, mọi chốt theo bậc kiểm lại ở bậc cao hơn lúc trao (K2b, K5b), và hậu kiểm số báo giá hợp lệ. S3.3 đã xong
+(K2, K3, K5 ở cạnh nộp duyệt và mở gói); S3.4 (K9) đang làm ở một nhánh khác.
+
+### Quyết định
+
+⑴ **Bậc của trao thầu là bậc CAO HƠN trong hai bậc** — bậc ước lượng (`rfq_bac_ghim`) và bậc của số tiền trao: `bid_so_tien(totalAmount)`
+của báo giá được chọn (`rfq_unsealed_bids`), phân bậc bằng `rfq_bac_cua` trên `rfq_budgets.policy_id` — phiên bản GHIM, không phải phiên
+bản hiện hành (§4.7). Số tiền trao là chi tiêu, không phải `effective_cost`. `award_bac_cao_hon` NÉM khi gói không bậc ghim, báo giá
+không đọc được số tiền, tiền tệ lệch chính sách (ADR-082 ⑽: hàm theo bậc không lặng lẽ cho qua); các hàm vị từ hỏi những ca ấy TRƯỚC và
+trả mã (`K7_KHONG_BAC_GHIM`, `K7_LECH_TIEN_TE`), nên NÉM là lớp hai cho người gọi thẳng. Gói không bậc ghim ở tổ chức đã bật — rời DRAFT
+trước lần bật, dữ liệu trước `097` — bị TỪ CHỐI (chủ dự án chốt): gói ấy không nói được nó cần bao nhiêu chữ ký; giá ghi ở *Cái giá*.
+
+⑵ **Số chữ ký cần là MỘT hàm, `award_so_chu_ky_can`** — khuôn `unseal_so_phe_duyet_can` (`019`): tầng gói và trigger cùng đọc. Chưa bật
+⇒ 1; đã bật ⇒ `award_so_chu_ky` của bậc cao hơn; khoá vắng (bậc đấu thầu chính thức) ⇒ NÉM. Hằng `CHU_KY_CAN := 1` của J7 (`094`) GIỮ
+NGUYÊN làm sàn chết: `069` giới hạn `award_so_chu_ky ∈ {1, 2}` nên sàn không bao giờ ràng; nâng RIÊNG nó vẫn làm trao thầu gãy đúng
+như S1.142 đo — khối đo ấy GIỮ làm cổng cho lớp trôi, và khối LẬT mới đứng cạnh nó (đột biến `award_so_chu_ky_can` trả 2 ⇒ chữ ký đầu
+sống). Không viết lại thân `094`: cổng trao thầu là ba trigger RIÊNG (§5.1 K7, khuôn `014` §(4)).
+
+⑶ **Chữ ký sống độc lập với hàng `APPROVED`.** `duyetTraoThau` ghi chữ ký, hỏi `award_du_chu_ky`, và CHỈ chèn hàng `APPROVED` khi đủ;
+chưa đủ thì đề xuất đứng yên ở `PROPOSED` với chữ ký còn đó, lời trả về (`TraoThauDayDu`: hàng, chữ ký, `chuKyCan`) nói còn cần bao
+nhiêu — cùng hình dạng `docTraoThau` nay trả. Người đã ký gọi lại ⇒ `DA_KY_DE_XUAT_NAY` (từ chối trạng thái có tên, vào sổ — ADR-060:
+một bước thừa của chuỗi *award → duyệt*). Tổ chức chưa bật: cần 1, nên cùng lời gọi cho cùng kết quả như trước — luồng MVP1 của kịch
+bản 41 nguyên văn. Hàng sổ mới `RFQ_AWARD_SIGNED` mỗi chữ ký; `RFQ_AWARD_APPROVED` mang `chuKyCan`.
+
+⑷ **Vai theo bậc, chụp lúc ký.** `award_vai_cua_nguoi` = vai của người TẠI LÚC HỎI ∩ `award_vai` của bậc cao hơn; trigger chữ ký chụp
+nó vào cột mới `rfq_award_approvals.vai_luc_ky` (ngoài `GRANT INSERT`, khuôn `tier_tu_so_tien`) — §4.7 đòi đọc vai tại thời điểm ký, và
+S3.9 phải tái lập được bậc từ dữ liệu. Không vai nào ⇒ `K7_SAI_VAI`; người khai phiên bản chính sách ghim ⇒ `K7_TAC_GIA_CHINH_SACH`
+(§2.4 ⑺). `award_vai_khac_nhau` (khi cần 2) đọc là **hệ đại diện phân biệt**: rút được hai vai KHÁC NHAU cho hai người ký từ `vai_luc_ky`
+— hai người cùng giữ {FINANCE, DIRECTOR} là đủ (chủ dự án chốt; cái giá ghi dưới).
+
+⑸ **K2b — hậu kiểm số báo giá, hỏi ở cạnh ĐỀ XUẤT.** Số NHÓM nhà cung cấp (khoá nhóm của K2) có báo giá hợp lệ ở lượt chấm của đề xuất
+(`rfq_evaluation_lines.effective_cost IS NOT NULL`) mà lời mời ĐẾM ĐƯỢC (`rfq_loi_moi_dem_duoc`, đọc hiện tại) < `so_ncc_toi_thieu` của bậc
+cao hơn ⇒ cần ngoại lệ `LOW_ACTUAL_COMPETITION` còn sống, không thì `K2B_THIEU_CANH_TRANH_THUC`. Lõi đếm nhóm tách thành
+`rfq_dem_nhom_loi_moi(org, gói, tập lời mời)`; `rfq_dem_ncc_canh_tranh` (K2) nay gọi nó với tập đếm được — K2 và K2b MỘT phép gộp. Hỏi ở
+cạnh đề xuất (số báo giá đã biết từ EVALUATING) nên ngoại lệ phải có TRƯỚC mọi chữ ký; hỏi lại ở cạnh duyệt làm lớp chặn cuối. Ngoại lệ hậu
+kiểm lập và rút CHỈ khi gói ở EVALUATING (`ngoai_le_kiem` viết lại; `K2B_NGOAI_LE_SAI_TRANG_THAI`): trước đề xuất, và không rút được sau
+khi award đã duyệt (lượt soi, TRUNG 2 và 3). Tập `LOAI_NGOAI_LE_HAU_KIEM` riêng ở tầng gói — ba loại danh sách mời không đổi.
+
+⑹ **K5b — một chữ ký trao thầu của người ngoài tập loại trừ**, khi bậc cao hơn bật `ky_danh_sach_moi`, HOẶC gói có ngoại lệ còn sống (bốn
+loại), HOẶC bậc trao CAO HƠN bậc ước lượng (chủ dự án chốt — ca T5 ⑶ khai thấp, lớp tới khi S3.6d). `award_tap_loai_tru` =
+`rfq_tap_loai_tru` (K5, ADR-121) ∪ tác giả `LOW_ACTUAL_COMPETITION` còn sống ∪ người khai phiên bản chính sách ghim ∪ MỌI người từng điều
+phối mở gói (`unseal_dispatch_history`, `unseal_requests` — cùng lý lẽ J3) ∪ người làm hàng xác minh mới nhất của nhà cung cấp THẮNG (lớp
+cho K8b tới S3.7; FINANCE giữ cả `supplier.qualify` lẫn `po.approve`). Người trong tập vẫn ký được; K5b đòi MỘT người ngoài tập. Hỏi SAU
+câu chèn chữ ký (tập phải gồm chữ ký vừa ghi) và TRƯỚC mọi hàng sổ của giao dịch — một hàng sổ giữ khoá chuỗi kiểm toán của tổ chức tới
+commit (`050`), mà `CONTROL_DENIED` ở giao dịch độc lập phải lấy đúng khoá ấy; hỏi sau hàng sổ là tự khoá mình (đo ở lượt đầu của tệp
+test: `DenialAuditFailedError`). Từ chối ⇒ giao dịch huỷ cùng chữ ký vừa ghi; người ký lại sau khi có người độc lập ký — một giao dịch,
+không hai bước (chủ dự án chốt).
+
+⑺ **Khuôn K12 (ADR-084 ⑷, ADR-147 ⑼):** bốn hàm vị từ `award_chot_bac`, `award_chot_nguoi_ky`, `award_chot_hau_kiem`, `award_chot_doc_lap`
+trả NULL hay một mã thuộc `CHOT_VAO_SO`; tầng gói hỏi trước (`hoiChot` trong `trao-thau.ts` — cùng thân `kiemChot` của `rfq`, gói này
+không phụ thuộc `rfq`); ba trigger riêng hỏi lại và đặt tên ràng buộc bằng chính mã viết thường, qua `CHOT_THEO_RANG_BUOC` (ADR-108) nên
+câu thô cũng vào sổ. Tám mã, cả tám vào sổ. Lời *chưa đủ chữ ký* ở trigger duyệt (`k7_thieu_chu_ky`) KHÔNG qua bảng: tầng gói hỏi
+`award_du_chu_ky` trước nên không bao giờ chạm; đó là lời đi sai thứ tự (ADR-060, khuôn K5 nhường K4b). Hai trigger của `rfq_awards` chỉ
+nhận dưới READ COMMITTED ở MỌI tổ chức (khuôn `107` (4)).
+
+⑻ **`tham_dinh_truoc_trao` chưa cưỡng chế** (chủ dự án chốt): K8b và `supplier_qualifications` là S3.7; cưỡng chế ngay thì bậc 2 của ma trận
+demo (cờ TRUE) không trao được. Tín hiệu `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu — S3.6d; K9 ở chữ ký trao thầu — S3.4.
+
+⑼ **S3.5 chia hai PR:** S3.5a (vòng này) — `113`, tầng gói, thân route (hình dạng trả về), kịch bản 41 luồng S3 hai chữ ký, khối đo khoản
+242 ⑴, lời sau khi bấm *Phê duyệt* ở `/mo-thau` đọc trạng thái máy chủ trả; S3.5b — màn (cần N, có M; khối lập ngoại lệ hậu kiểm ở
+EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
+
+### Cái giá, nói thẳng
+
+- **Gói đang chạy lúc tổ chức bật S3 không trao được** — phải huỷ và lập lại. Hôm nay không tổ chức thật nào bật (ADR-105).
+- **Hai người cùng giữ cả hai vai thoả `award_vai_khac_nhau`** — đúng chữ "hai vai khác nhau", chưa chắc đúng ý "hai góc nhìn"; D3
+  không cấm một người mang cả FINANCE lẫn DIRECTOR (§8.10).
+- **K2b đếm `rfq_loi_moi_dem_duoc` ĐỌC HIỆN TẠI:** xác minh hết hạn hay bị thu hồi sau lần nộp làm K2b đỏ dù K2 đã qua — lối ra là xác minh
+  lại hay lập ngoại lệ hậu kiểm. Gói có hàng lời mời thiếu `invited_by` (dữ liệu trước `013`) ⇒ đếm 0 ⇒ không trao được nếu không ngoại lệ.
+- **Người xác minh nhà cung cấp thắng ở trong tập loại trừ** là lớp cho K8b, không phải K8b: S3.7 thêm người thẩm định và quy tắc riêng.
+- **Hai người điều phối, hai người ký** — số người tối thiểu của một gói bậc 2 tăng thêm (§8.10): ba chữ ký của ba người ngoài tập khi
+  vai khác nhau và một trong hai người ký đã điều phối hay xác minh.
+- **`K7_DAU_THAU_CHINH_THUC` bị bỏ thì lớp hai NÉM không tên:** đo bằng đột biến — bậc đấu thầu chính thức không khai `so_ncc_toi_thieu`
+  nên `award_chot_hau_kiem` NÉM `check_violation` thường, không hàng sổ. Đúng cái giá của ADR-082 ⑽.
+- **Trigger chữ ký hỏi bậc mỗi lần ký** — vài câu đọc thêm trên một hành động hiếm.
+- **Lời ở `/mo-thau` chỉ mới đúng trạng thái**; màn chưa hiện *cần N* ở bảng khi chưa đọc lại — S3.5b.
+
+### Phương án đã loại
+
+- **Hai giao dịch (chữ ký commit, rồi lời gọi lặp "hoàn tất"):** hàng `APPROVED` không thuộc về một hành vi ký nào; sổ ghi người gọi lặp.
+- **Hỏi K2b chỉ ở cạnh duyệt:** hai người ký lên một đề xuất mà họ không thấy ngoại lệ; và ngoại lệ lập ở AWARDED rút được sau khi duyệt.
+- **Hàm vị từ NÉM cho gói không bậc ghim / tiền tệ lệch:** phá khuôn K12 — `hoiChot` chỉ đọc mã, lỗi ném thẳng không hàng sổ (lượt soi,
+  TRUNG 5).
+- **Đọc `user_roles` lúc duyệt thay vì chụp lúc ký:** trái §4.7 và S3.9 không tái lập được.
+- **K5b chỉ khi `ky_danh_sach_moi` hay có ngoại lệ (đúng chữ §5.1):** ca khai thấp với ma trận tắt ký danh sách để người đặt ngân sách tự ký.
+- **Thêm `LOW_ACTUAL_COMPETITION` vào `LOAI_NGOAI_LE`:** màn `/tao-thau` chép tập ấy và sẽ mời người dùng lập nó ở DRAFT.
+- **Viết lại `award_kiem_mot_award_song` để bỏ hằng:** ghim lại thân `094` và mất cổng cho lớp trôi.
+
+### Điều ADR này KHÔNG nói
+
+Màn, `gieo:demo`, T4 (S3.5b); K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); K9 ở chữ ký trao thầu (S3.4); bộ bằng
+chứng mang số tiền trao và bậc (S3.9).
+
 ---
 
 ## ADR-155 — S3.4a: K9 — khai báo xung đột lợi ích là lời khai chỉ-ghi-thêm ghim băm danh sách mời; `CO_XUNG_DOT` vĩnh viễn cho gói; cổng ở bảy chỗ; chữ ký của người có xung đột không đếm; S3.4 chia hai PR
@@ -12178,4 +12287,5 @@ S3.4b — cùng khoảng trống S3.6b1 đã để giữa K10a và màn ghi nh�
 ### Điều ADR này KHÔNG nói
 
 Màn, `gieo:demo`, lượt đi thử T4 (S3.4b); cổng ở THẨM ĐỊNH đầy đủ (K8b, S3.7); khai báo theo từng nhà cung cấp lúc mời
-(spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5); lớp bằng chứng (S3.9).
+(spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5 — đã vào ở S1.280, nhưng `award_du_chu_ky` CHƯA loại người có `CO_XUNG_DOT`
+khỏi phép đếm: việc của S3.4b hoặc S3.5b); lớp bằng chứng (S3.9).

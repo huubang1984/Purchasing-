@@ -2089,20 +2089,35 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
-    expect((ok.body as { award: { status: string } }).award.status).toBe("APPROVED");
+    const sauMot = (ok.body as { award: { status: string; chuKyCan: number; approvals: unknown[] } }).award;
+    // [S1.280 / S3.5a] Luồng S3: gói 1 tỷ ghim bậc 2 của §4.1 — `award_so_chu_ky` 2 — nên chữ ký đầu SỐNG mà đề xuất đứng yên ở
+    // `PROPOSED` (khoản 242 ⑴ lật); luồng MVP1 một chữ ký là xong, nguyên văn.
+    expect([sauMot.status, sauMot.chuKyCan, sauMot.approvals.length]).toEqual(batS3 ? ["PROPOSED", 2, 1] : ["APPROVED", 1, 1]);
+    if (batS3) {
+      // Cùng người ký lại ⇒ 422 có tên (`DA_KY_DE_XUAT_NAY`), chữ ký không nhân đôi; giám đốc THỨ HAI hoàn tất.
+      const lapLai = await goi("POST", duong, trangThai.gd1.cookie);
+      expect(lapLai.status, lapLai.text).toBe(422);
+      // [S1.281 / S3.4a / K9] Giám đốc thứ hai cũng khai *không xung đột* trước khi ký.
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
+      const hai = await goi("POST", duong, trangThai.gd2.cookie);
+      expect(hai.status, hai.text).toBe(201);
+      expect((hai.body as { award: { status: string } }).award.status).toBe("APPROVED");
+    }
 
     // Duyệt KHÔNG đổi trạng thái RFQ — nó đã ở `AWARDED` từ lúc có đề xuất.
     expect(await trangThaiRfq()).toBe("AWARDED");
 
     const doc = await goi("GET", `/rfqs/${trangThai.rfqId}/award`, trangThai.mua.cookie);
     expect(doc.status, doc.text).toBe(200);
-    const day = (doc.body as { award: { status: string; approvals: { approverUserId: string }[] } }).award;
+    const day = (doc.body as { award: { status: string; chuKyCan: number; approvals: { approverUserId: string }[] } }).award;
     expect(day.status).toBe("APPROVED");
-    // MỘT chữ ký, đúng §7 — và nó là của GIÁM ĐỐC, không của người đề xuất.
-    expect(day.approvals.map((c) => c.approverUserId)).toEqual([trangThai.gd1.id]);
+    // Luồng MVP1: MỘT chữ ký, đúng §7 — của GIÁM ĐỐC, không của người đề xuất. Luồng S3: HAI, cả hai DIRECTOR (bậc 2 cho
+    // FINANCE/DIRECTOR, không đòi hai vai khác nhau), và số cần đi ra tới người đọc.
+    expect(day.approvals.map((c) => c.approverUserId)).toEqual(batS3 ? [trangThai.gd1.id, trangThai.gd2.id] : [trangThai.gd1.id]);
+    expect(day.chuKyCan).toBe(batS3 ? 2 : 1);
 
-    // Lần duyệt THỨ HAI trên cùng đề xuất bị từ chối: hàng mới nhất nay là `APPROVED`.
-    const lai = await goi("POST", duong, trangThai.gd2.cookie);
+    // Lần duyệt NỮA trên cùng đề xuất bị từ chối: hàng mới nhất nay là `APPROVED`.
+    const lai = await goi("POST", duong, batS3 ? trangThai.gd1.cookie : trangThai.gd2.cookie);
     expect(lai.status, lai.text).toBe(422);
   });
 

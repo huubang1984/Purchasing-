@@ -2088,14 +2088,28 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.269 / S3.3c2] Bốn hàm của K2 và K5: bậc ghim — một thân trả bậc khác đọc sai ngưỡng —, số nhóm nhà cung cấp đếm được — một
     // thân trả hằng lớn cho nhà cung cấp vỏ qua —, và hai vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh.
     { ham: "rfq_bac_ghim", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
-    // [S1.270 / S3.3d] Thân `108`: vế *đếm được* đọc `rfq_loi_moi_dem_duoc` — con trỏ dời theo.
-    { ham: "rfq_dem_ncc_canh_tranh", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
+    // [S1.270 / S3.3d] Thân `108`: vế *đếm được* đọc `rfq_loi_moi_dem_duoc` — con trỏ dời theo. [S1.280 / S3.5a] Thân `113`: lời gọi lõi
+    // `rfq_dem_nhom_loi_moi` với tập đếm được — con trỏ dời theo lần nữa.
+    { ham: "rfq_dem_ncc_canh_tranh", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "rfq_chot_canh_tranh", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
     { ham: "rfq_chot_chu_ky_doc_lap", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
     // [S1.270 / S3.3d] Hai hàm của K3: số lời mời mới so với cửa sổ — một thân trả hằng dương cho nhóm quen xoay vòng mãi —, và vị từ
     // của chốt — một thân `RETURN NULL` tắt K3 ở tầng gói lẫn hai cạnh.
     { ham: "rfq_ncc_moi_xoay_vong", chuKy: "uuid, uuid, integer", migration: "108_xoay_vong.sql" },
     { ham: "rfq_chot_xoay_vong", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
+    // [S1.280 / S3.5a] Chín hàm của award theo bậc: bậc cao hơn — một thân trả bậc ước lượng cho khai thấp hạ số chữ ký —, số chữ ký cần
+    // và đủ chưa — một thân trả 1 hay bỏ vế vai khác nhau —, lõi đếm nhóm và số nhóm có báo giá, và bốn vị từ của chốt — một thân
+    // `RETURN NULL` tắt chốt ở cả tầng gói lẫn ba trigger. (`award_so_tien_trao` trả OUT, `award_vai_cua_nguoi` trả `text[]`,
+    // `award_tap_loai_tru` trả SETOF — ngoài khuôn `RETURNS \w+` của khối này; cái sau ở `HAM_ANH_XA`.)
+    { ham: "award_bac_cao_hon", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_so_chu_ky_can", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_du_chu_ky", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "rfq_dem_nhom_loi_moi", chuKy: "uuid, uuid, uuid[]", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_dem_nhom_bao_gia", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_chot_bac", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_chot_nguoi_ky", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_chot_hau_kiem", chuKy: "uuid, uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_chot_doc_lap", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     // [S1.281 / S3.4a] Năm hàm của K9: khoá (gói, người) — một thân rỗng thì CO_XUNG_DOT chen được vào giữa lần hỏi và câu ghi —, hai
     // hàm vị từ — một thân `RETURN NULL` tắt K9 ở mọi cổng —, năm vế *khớp băm* tách từ `107` và `112`, và vị từ cạnh mở gói — một thân
     // `RETURN NULL` để K4b nói thay mà không hàng sổ.
@@ -2105,7 +2119,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_chot_chu_ky_xung_dot", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ [S1.269] mười lăm hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2 và K5: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ ~~[S1.269] mười lăm~~ [S1.280] hai mươi bốn hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2, K5 và award theo bậc: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -2139,6 +2153,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_hang_muc_bam", chuKy: "uuid, uuid, integer", migration: "089_anh_xa_hang_muc.sql" },
     // [S1.265 / S3.3b] Thân hiện tại thêm vế tác giả ngoại lệ còn sống — `089` định nghĩa, `105` định nghĩa lại.
     { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
+    // [S1.280 / S3.5a] Tập loại trừ của chữ ký trao thầu (K5b) — `rfq_tap_loai_tru` cộng bốn nguồn; một thân bỏ một nguồn là một người
+    // đã chạm bản rõ hay đã đặt thước tự ký trao thầu.
+    { ham: "award_tap_loai_tru", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
     // [S1.279 / S4.7a / L16] `112_tco` định nghĩa lại — cộng vế số ngày giao; con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
@@ -2151,7 +2168,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];
 
-  it("[S1.204] ~~hai~~ [S1.269] ba hàm trợ giúp của ánh xạ hạng mục và chữ ký còn hiệu lực: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ [S1.280] bốn hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực và tập loại trừ trao thầu: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -2376,7 +2393,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
-    { ham: "ngoai_le_kiem", migration: "105_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
+    // [S1.280 / S3.5a] Thân `113`: ngoại lệ hậu kiểm `LOW_ACTUAL_COMPETITION` lập/rút chỉ ở EVALUATING — con trỏ dời theo.
+    { ham: "ngoai_le_kiem", migration: "113_trao_thau_theo_bac.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
     // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ thêm được người liên hệ. Một thân `RETURN NEW` cho người thứ hai thêm người liên hệ
     // vào hồ sơ người khác dựng — mất xác minh và mất đếm K2 của nhà cung cấp ấy.
     { ham: "ncc_kiem_them_lien_he", migration: "111_lien_he_chi_nguoi_dung_ho_so.sql", trigger: ["supplier_contacts_kiem_nguoi_them"] },
@@ -2530,6 +2548,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // cho các gói nộp song song cùng một bộ nhà cung cấp đều mở, và cho câu mở thô đặt `opened_at` tuỳ ý (khoản 319).
     { ham: "rfq_kiem_xoay_vong_khi_nop", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_nop"] },
     { ham: "rfq_kiem_xoay_vong_khi_mo", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_mo"] },
+    // [S1.280 / S3.5a] Ba trigger riêng của award theo bậc (K7, K2b, K5b). Một thân `RETURN NEW` ở cạnh đề xuất cho đề xuất ở bậc đấu
+    // thầu chính thức hay dưới ngưỡng hậu kiểm đi qua; ở cạnh duyệt cho hàng `APPROVED` thô bằng một chữ ký ở bậc đòi hai; ở chữ ký
+    // cho FINANCE ký ở bậc chỉ cho DIRECTOR và bỏ chụp `vai_luc_ky`.
+    { ham: "award_kiem_theo_bac_khi_de_xuat", migration: "113_trao_thau_theo_bac.sql", trigger: ["rfq_awards_kiem_theo_bac_khi_de_xuat"] },
+    { ham: "award_kiem_theo_bac_khi_duyet", migration: "113_trao_thau_theo_bac.sql", trigger: ["rfq_awards_kiem_theo_bac_khi_duyet"] },
+    { ham: "award_kiem_vai_theo_bac", migration: "113_trao_thau_theo_bac.sql", trigger: ["rfq_award_approvals_kiem_vai_theo_bac"] },
     // [S1.281 / S3.4a / K9] Bảy cổng của khai báo xung đột lợi ích. Một thân `RETURN NEW` ở mỗi cái cho người chưa khai hay đã khai CÓ
     // xung đột đi qua cổng ấy; ở cái cuối cho gói mở bằng chữ ký của người đã khai có xung đột (K4b vẫn chặn, nhưng không tên, không sổ).
     { ham: "coi_kiem_chu_ky_mo_goi", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_approvals_kiem_xung_dot"] },
@@ -2549,7 +2573,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
   const HAM_GHIM = [...HAM_51, ...HAM_56];
 
-  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ ~~BỐN MƯƠI BA~~ ~~BỐN MƯƠI LĂM~~ [S1.110] BỐN MƯƠI TÁM thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ ~~BỐN MƯƠI BA~~ ~~BỐN MƯƠI LĂM~~ ~~[S1.110] BỐN MƯƠI TÁM~~ [S1.280] NĂM MƯƠI MỐT thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
     const hardening = docFile("hardening.always.sql");
     const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
@@ -4227,6 +4251,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
         // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
         "112_tco.sql",
+        // [S1.280 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-154).
+        "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
         ]);
@@ -8888,6 +8914,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
         // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
         "112_tco.sql",
+        // [S1.280 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-154).
+        "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
       ]);
@@ -9229,6 +9257,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
         // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
         "112_tco.sql",
+        // [S1.280 / S3.5a / K7 K2b K5b] Award theo bậc: số chữ ký của bậc cao hơn, chữ ký sống độc lập, hậu kiểm, chữ ký độc lập (ADR-154).
+        "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
       ]);
