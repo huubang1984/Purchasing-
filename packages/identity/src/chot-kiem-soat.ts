@@ -87,6 +87,14 @@ export type MaChotKiemSoat =
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
   | "K5_THIEU_CHU_KY_DOC_LAP"
+  | "K5B_THIEU_CHU_KY_DOC_LAP"
+  | "K7_DAU_THAU_CHINH_THUC"
+  | "K7_KHONG_BAC_GHIM"
+  | "K7_LECH_TIEN_TE"
+  | "K7_SAI_VAI"
+  | "K7_TAC_GIA_CHINH_SACH"
+  | "K2B_NGOAI_LE_SAI_TRANG_THAI"
+  | "K2B_THIEU_CANH_TRANH_THUC"
   | "L14_PHIEN_BAN_KHONG_GHIM"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "K10A_TAC_GIA_CHINH_SACH"
@@ -204,6 +212,79 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "(tập loại trừ ADR-082 ⑿): không ai một mình chọn người dự thi rồi tự duyệt — kiểm toán viên hỏi tới đúng lần mở ấy",
     thongDiep:
       "Gói thầu cần một chữ ký duyệt của người KHÔNG tạo gói, không nộp, không mời hay thu hồi lời mời, không đặt ngân sách, không nhập nhà cung cấp trên danh sách và không lập ngoại lệ (K5).",
+  },
+  // [S1.9101 / S3.5a] Tám dòng của trao thầu theo bậc (`9501_trao_thau_theo_bac`) — K7, K2b, K5b. Khuôn K2/K5: bốn hàm vị từ, tầng gói
+  // hỏi trước, trigger riêng hỏi lại với tên ràng buộc bằng chính mã viết thường (bảng `CHOT_THEO_RANG_BUOC`).
+  K7_KHONG_BAC_GHIM: {
+    chot: "K7",
+    vaoSo: true,
+    lyDo:
+      "một người đề xuất, ký hay duyệt trao thầu một gói ở tổ chức đã bật S3 mà gói không có bậc ghim — rời DRAFT trước lần bật, hay " +
+      "dữ liệu trước `097` (ADR-082 ⑽: hàm theo bậc không lặng lẽ cho qua; chủ dự án chốt fail-closed ngày 2026-10-07): gói ấy không " +
+      "nói được nó cần bao nhiêu chữ ký, và trao nó là trao ngoài mọi bậc — kiểm toán viên hỏi tới",
+    thongDiep:
+      "Gói thầu không có bậc giá trị ghim (rời soạn thảo trước khi tổ chức bật kiểm soát) nên không trao thầu được theo bậc: huỷ và lập lại gói.",
+  },
+  K7_LECH_TIEN_TE: {
+    chot: "K7",
+    vaoSo: true,
+    lyDo:
+      "báo giá được chọn mang tiền tệ khác tiền tệ của chính sách ghim — bậc không quy đổi tiền tệ (`072`), nên số tiền trao không " +
+      "phân bậc được; cho qua là trao ngoài bậc, và lượt chấm đã đòi mọi báo giá cùng tiền tệ (J8) nên tới được đây là một lối thô",
+    thongDiep: "Tiền tệ của báo giá được chọn khác tiền tệ của chính sách nên không phân bậc trao thầu được.",
+  },
+  K7_DAU_THAU_CHINH_THUC: {
+    chot: "K7",
+    vaoSo: true,
+    lyDo:
+      "số tiền trao (hay ước lượng) rơi vào bậc ĐẤU THẦU CHÍNH THỨC (spec S3 §4.7): bậc ấy không bao giờ đi đường báo giá của nền " +
+      "tảng, và lần đề xuất, ký hay duyệt là đúng lần cố đi tắt thủ tục ấy bằng một ước lượng thấp — kiểm toán viên hỏi tới nó",
+    thongDiep: "Số tiền trao thầu thuộc bậc đấu thầu chính thức: gói này không trao được qua quy trình báo giá trên nền tảng.",
+  },
+  K7_SAI_VAI: {
+    chot: "K7",
+    vaoSo: true,
+    lyDo:
+      "một người ký duyệt trao thầu mà không giữ vai nào trong `award_vai` của bậc cao hơn (spec S3 §4.7 — đọc vai tại thời điểm ký): " +
+      "cổng `po.approve` của route cho qua mọi vai giữ mã ấy, còn bậc thì chọn vai; lần ký sai vai là đúng ca kiểm toán viên hỏi",
+    thongDiep: "Bậc của gói thầu chỉ nhận chữ ký trao thầu từ các vai đã khai trong chính sách; vai của bạn không thuộc danh sách ấy (K7).",
+  },
+  K7_TAC_GIA_CHINH_SACH: {
+    chot: "K7",
+    vaoSo: true,
+    lyDo:
+      "người khai phiên bản chính sách mà gói ghim cố ký duyệt trao thầu của gói ấy (spec S3 §2.4 ⑺): người đặt thước không cầm thứ " +
+      "bị đo — cùng khuôn `K10A_TAC_GIA_CHINH_SACH`",
+    thongDiep: "Người khai phiên bản chính sách mà gói ghim không ký duyệt trao thầu của gói (K7).",
+  },
+  K2B_THIEU_CANH_TRANH_THUC: {
+    chot: "K2b",
+    vaoSo: true,
+    lyDo:
+      "một người đề xuất hay duyệt trao thầu khi số nhóm nhà cung cấp có báo giá hợp lệ (đếm được theo luật K2) dưới ngưỡng của bậc cao " +
+      "hơn mà không có ngoại lệ LOW_ACTUAL_COMPETITION còn sống (spec S3 §2.4 ⑹iv): cạnh tranh THỰC TẾ dưới ngưỡng mà không ai ký " +
+      "lý do — đúng ca K2 lúc nộp không thấy được (báo giá chưa về)",
+    thongDiep:
+      "Số nhà cung cấp có báo giá hợp lệ thấp hơn ngưỡng của bậc trao thầu: lập ngoại lệ LOW_ACTUAL_COMPETITION (khi gói đang chấm, trước đề xuất) rồi đề xuất lại — chữ ký duyệt phải có người độc lập (K2b).",
+  },
+  K2B_NGOAI_LE_SAI_TRANG_THAI: {
+    chot: "K2b",
+    vaoSo: true,
+    lyDo:
+      "một người lập hay rút ngoại lệ LOW_ACTUAL_COMPETITION khi gói không ở EVALUATING — lập sau đề xuất là lập dưới chân chữ ký đã có, " +
+      "rút sau khi duyệt là rút lý do mà lần duyệt dựa vào (lượt soi hình dạng S3.5, TRUNG 2 và 3)",
+    thongDiep: "Ngoại lệ hậu kiểm chỉ lập hay rút khi gói đang chấm (EVALUATING), trước khi có đề xuất trao thầu (K2b).",
+  },
+  K5B_THIEU_CHU_KY_DOC_LAP: {
+    chot: "K5b",
+    vaoSo: true,
+    lyDo:
+      "một người duyệt trao thầu một gói mà bậc cao hơn đòi ký danh sách mời, hay gói có ngoại lệ còn sống, hay số tiền trao rơi bậc " +
+      "cao hơn ước lượng (khai thấp), khi mọi chữ ký trao thầu đều của người trong tập loại trừ — người chọn danh sách, tác giả ngoại " +
+      "lệ, tác giả chính sách, người điều phối mở thầu, người xác minh nhà cung cấp thắng (spec S3 §5.1 K5b; chủ dự án chốt " +
+      "2026-10-07): không ai chọn người dự thi rồi tự trao cho họ",
+    thongDiep:
+      "Trao thầu cần ít nhất một chữ ký duyệt của người KHÔNG tạo gói, không mời hay thu hồi lời mời, không đặt ngân sách, không nhập nhà cung cấp trên danh sách, không lập ngoại lệ, không khai chính sách, không điều phối mở thầu và không xác minh nhà cung cấp thắng (K5b).",
   },
   K10A_TAC_GIA_CHINH_SACH: {
     chot: "K10a",
@@ -369,6 +450,15 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.9101 / S3.5a] Tám tên của trao thầu theo bậc — ba trigger của `9501` đặt tên ràng buộc bằng chính mã viết thường (`lower(ly_do)`).
+  k7_khong_bac_ghim: "K7_KHONG_BAC_GHIM",
+  k7_lech_tien_te: "K7_LECH_TIEN_TE",
+  k7_dau_thau_chinh_thuc: "K7_DAU_THAU_CHINH_THUC",
+  k7_sai_vai: "K7_SAI_VAI",
+  k7_tac_gia_chinh_sach: "K7_TAC_GIA_CHINH_SACH",
+  k2b_thieu_canh_tranh_thuc: "K2B_THIEU_CANH_TRANH_THUC",
+  k2b_ngoai_le_sai_trang_thai: "K2B_NGOAI_LE_SAI_TRANG_THAI",
+  k5b_thieu_chu_ky_doc_lap: "K5B_THIEU_CHU_KY_DOC_LAP",
   // [S1.253 / S4.5a] Nhánh duy nhất của `rfq_evaluations_kiem_phien_ban_ghim` (`102_ghim_chinh_sach_luot_cham`).
   l14_phien_ban_khong_ghim: "L14_PHIEN_BAN_KHONG_GHIM",
 };

@@ -826,9 +826,9 @@ async function veTraoThau() {
     ["Dựa trên lượt chấm", a.evaluationId],
     ["Lý do", a.reason],
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
-    ["Chữ ký duyệt", a.approvals.length === 0
+    ["Chữ ký duyệt", `${a.approvals.length === 0
       ? "chưa có"
-      : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")],
+      : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")}${a.chuKyCan == null ? "" : ` (cần ${String(a.chuKyCan)})`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
 }
@@ -875,7 +875,13 @@ $("nut-duyet-award").addEventListener("click", async () => {
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
-  bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
+  // [S1.9101 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
+  // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. Phần màn còn lại (cần N, còn M; ngoại lệ hậu
+  // kiểm) là S3.5b.
+  const sau = r.body.award ?? {};
+  bao($("ok7"), sau.status === "APPROVED"
+    ? "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất."
+    : `Đã ký. Đề xuất còn chờ thêm chữ ký (cần ${String(sau.chuKyCan ?? "?")}, đã có ${String((sau.approvals ?? []).length)}) — của người khác, thuộc vai mà bậc của gói đòi.`);
   await veTraoThau();
 });
 

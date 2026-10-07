@@ -1453,7 +1453,12 @@ describe("bề mặt tệp", () => {
         awardId, rfqId: RFQ, evaluationId, bidVersionId: "bv-1", status: "PROPOSED", reason: "chi phí hiệu dụng thấp nhất",
         actedBy: A.userId, actedAt: "2026-10-01T01:00:00Z", approvals: [],
       });
-      const dung = async (traAward: () => { status: number; body: unknown }, duyet: { status: number; body: unknown } = { status: 201, body: {} }) => {
+      // [S1.9101 / S3.5a] Thân trả về của route duyệt theo hình dạng THẬT: hàng đã duyệt kèm chữ ký và số cần (`TraoThauDayDu`).
+      const daDuyet = (awardId: string) => ({
+        ...deXuat(awardId), status: "APPROVED", chuKyCan: 1,
+        approvals: [{ approverUserId: "u-duyet", approvedAt: "2026-10-01T02:00:00Z" }],
+      });
+      const dung = async (traAward: () => { status: number; body: unknown }, duyet: { status: number; body: unknown } = { status: 201, body: { award: daDuyet("aw-1") } }) => {
         const p = await dungTrang("mo-thau", {
           hash: "", cookie: B,
           thay: (l) => {
@@ -1500,6 +1505,15 @@ describe("bề mặt tệp", () => {
         await p.bam("nut-duyet-award");
         expect(daKy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-1/approve`]);
         expect(p.el("ok7").textContent).toMatch(/^Đã phê duyệt trao thầu/u);
+      });
+
+      it("[S1.9101 / S3.5a] bậc cần hai chữ ký: lần ký đầu trả đề xuất còn PROPOSED kèm số cần — lời nói *đã ký, còn chờ*, bảng nói *cần 2*", async () => {
+        const sauMot = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [{ approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z" }] };
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }), { status: 201, body: { award: sauMot } });
+        await p.bam("nut-duyet-award");
+        await p.bam("nut-duyet-award");
+        expect(daKy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-1/approve`]);
+        expect(p.el("ok7").textContent).toMatch(/^Đã ký\. Đề xuất còn chờ thêm chữ ký \(cần 2, đã có 1\)/u);
       });
 
       it("khoản 321: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {

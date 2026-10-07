@@ -62,8 +62,60 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import { PERMISSIONS, laMaChot, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
+
+// ==============================================================================================
+// [S1.9101 / S3.5a · spec S3 §4.7, §5.1 K7 · K2b · K5b] TRAO THẦU THEO BẬC — CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`
+//
+// `9501_trao_thau_theo_bac` đặt số chữ ký cần ở CSDL (`award_so_chu_ky_can` — bậc CAO HƠN trong hai bậc ước lượng và số tiền trao),
+// vai người ký theo bậc, hậu kiểm số báo giá (K2b) và chữ ký độc lập (K5b). Tầng gói đi khuôn K1/K2/K5 (ADR-084 ⑷, ADR-147 ⑼): hỏi
+// hàm vị từ TRƯỚC mọi tác dụng phụ — một mã ⇒ `CONTROL_DENIED` ở giao dịch độc lập —, còn trigger riêng ở cạnh hỏi lại làm lớp chặn
+// cuối cho câu viết tay (bắt theo tên ràng buộc, `maChotTuLoi`). Bốn câu hỏi đứng ở đây, cạnh câu ghi, vì bộ đọc QT3 rút câu theo TỆP.
+//
+// Và điều khoản 242 ⑴ đo được (S1.139, S1.142): chữ ký và hàng `APPROVED` trong CÙNG giao dịch thì cần hai chữ ký là không bao giờ
+// duyệt được. Nay `duyetTraoThau` ghi chữ ký, hỏi `award_du_chu_ky`, và CHỈ chèn hàng `APPROVED` khi đủ; chưa đủ thì đề xuất đứng
+// yên ở `PROPOSED` với chữ ký còn đó, và lời trả về nói còn cần bao nhiêu. Tổ chức chưa bật S3: `award_so_chu_ky_can` trả 1, nên
+// hành vi y như trước — một chữ ký, một hàng `APPROVED`, cùng lời gọi.
+// ==============================================================================================
+/** Chốt bậc — `$1` tổ chức, `$2` gói, `$3` phiên bản báo giá được chọn. */
+const CAU_CHOT_BAC =
+  "SELECT public.award_chot_bac($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS ly_do";
+/** Chốt hậu kiểm K2b — `$1` tổ chức, `$2` gói, `$3` lượt chấm của đề xuất, `$4` phiên bản báo giá. */
+const CAU_CHOT_HAU_KIEM =
+  "SELECT public.award_chot_hau_kiem($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid) AS ly_do";
+/** Chốt người ký K7 — `$1` tổ chức, `$2` đề xuất, `$3` người ký. */
+const CAU_CHOT_NGUOI_KY =
+  "SELECT public.award_chot_nguoi_ky($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS ly_do";
+/** Chốt chữ ký độc lập K5b — `$1` tổ chức, `$2` đề xuất. */
+const CAU_CHOT_DOC_LAP =
+  "SELECT public.award_chot_doc_lap($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
+/** Số chữ ký cần và đủ chưa — `$1` tổ chức, `$2` đề xuất. Một phép tính ở CSDL, không bản đếm nào ở lớp này. */
+const CAU_DU_CHU_KY =
+  "SELECT public.award_so_chu_ky_can($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS can, " +
+  "public.award_du_chu_ky($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS du";
+
+/**
+ * Hỏi một hàm vị từ rồi ném theo bảng `CHOT_VAO_SO` — cùng thân với `kiemChot` của `@trustprocure/rfq` (gói này không phụ thuộc
+ * `rfq`, và một cạnh phụ thuộc mới chỉ để dùng chung mười dòng là một cạnh depcruise phải bless). Mã lạ ⇒ lỗi KHÔNG tên.
+ */
+async function hoiChot(
+  client: pg.PoolClient,
+  auditPool: pg.Pool,
+  orgId: string,
+  actor: { readonly type: "USER"; readonly id: string },
+  rfqId: string,
+  cau: string,
+  thamSo: readonly unknown[],
+): Promise<void> {
+  const { rows } = await client.query<{ ly_do: string | null }>(cau, [...thamSo]);
+  const ma = rows[0]?.ly_do ?? null;
+  if (ma === null) return;
+  if (!laMaChot(ma)) {
+    throw new Error("hàm vị từ của chốt trao thầu trả một mã không có trong CHOT_VAO_SO — hai bên đã trôi khỏi nhau");
+  }
+  await tuChoiTheoChot(auditPool, orgId, actor, rfqId, ma);
+}
 
 // ==============================================================================================
 // [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, ~~RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER~~
@@ -96,6 +148,7 @@ export type LyDoTuChoiTraoThau = Extract<
   // [S1.231 / khoản 232] hai lối từ chối của lần RÚT.
   | "KHONG_PHAI_NGUOI_DE_XUAT"
   | "DE_XUAT_DA_CO_CHU_KY"
+  | "DA_KY_DE_XUAT_NAY"
 >;
 
 export class TraoThauTuChoiError extends Error {
@@ -131,6 +184,11 @@ export interface ChuKyDuyet {
 
 export interface TraoThauDayDu extends TraoThau {
   readonly approvals: readonly ChuKyDuyet[];
+  /**
+   * [S1.9101 / S3.5a] Số chữ ký mà đề xuất đang sống cần — `award_so_chu_ky_can` của bậc cao hơn (1 ở tổ chức chưa bật). `null` khi
+   * gói không có hàng đề xuất nào. Màn đọc *cần N, có M* từ đây, không tự đếm.
+   */
+  readonly chuKyCan: number | null;
 }
 
 export interface DeXuatTraoThauInput {
@@ -322,6 +380,12 @@ export async function deXuatTraoThau(
     );
   }
 
+  // [S1.9101 / S3.5a] Hỏi trước hai chốt của cạnh đề xuất: bậc (gói không bậc ghim, tiền tệ lệch, bậc đấu thầu chính thức) và hậu
+  // kiểm K2b — số nhóm có báo giá hợp lệ đã biết từ lúc chấm, nên ngoại lệ `LOW_ACTUAL_COMPETITION` phải có TRƯỚC đề xuất và mọi chữ ký
+  // ký lên một gói đã có nó. Phiên bản báo giá không phải một báo giá đã mở của gói ⇒ hàm vị từ cho qua để J5 nói ở trigger.
+  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, input.rfqId, input.bidVersionId]);
+  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_HAU_KIEM, [orgId, input.rfqId, lv.id, input.bidVersionId]);
+
   let award: HangAward[];
   try {
     ({ rows: award } = await client.query<HangAward>(
@@ -405,14 +469,16 @@ export async function deXuatTraoThau(
  * xuất KHÁC dựng lên; một lời gọi chỉ theo `rfqId` sẽ ký lên đề xuất mới trong im lặng, còn lời
  * gọi theo `awardId` thì bị chặn ngay vì hàng ấy không còn `PROPOSED`.
  *
- * Số chữ ký cần sống ở **CSDL** (`CHU_KY_CAN` trong `award_kiem_mot_award_song`), chốt là MỘT
- * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`~~; nếu ngày nào con số ấy
+ * Số chữ ký cần sống ở **CSDL** ~~(`CHU_KY_CAN` trong `award_kiem_mot_award_song`), chốt là MỘT
+ * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`~~; ~~nếu ngày nào con số ấy
  * thành hai, câu `INSERT` thứ hai từ chối với thông điệp gọi tên số chữ ký đang có, và lời gọi
  * của người duyệt thứ hai đi qua~~. **[S1.142 / khoản 242 ⑴] Vế vừa gạch SAI, và đã đo:** hai câu
  * `INSERT` nằm trong CÙNG một giao dịch, nên với `CHU_KY_CAN := 2` lời gọi đầu bị từ chối và chữ ký
  * của nó rơi theo giao dịch; người duyệt thứ hai gặp đúng lỗi ấy — trao thầu không bao giờ duyệt
- * được. Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5). Không có phép đếm nào ở lớp
- * này — hai bản đếm là hai bản trôi.
+ * được. ~~Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5).~~ **[S1.9101 / S3.5a] Nay là
+ * `award_so_chu_ky_can` (`9501`): bậc CAO HƠN trong hai bậc ước lượng và số tiền trao, 1 ở tổ chức chưa bật. Hàm này ghi chữ ký,
+ * hỏi `award_du_chu_ky`, và chỉ chèn hàng `APPROVED` khi đủ — chưa đủ thì chữ ký SỐNG và lời trả về nói còn cần bao nhiêu.** Không
+ * có phép đếm nào ở lớp này — hai bản đếm là hai bản trôi.
  *
  * **[S1.263 / khoản 338]** Câu *"bị chặn ngay vì hàng ấy không còn `PROPOSED`"* ở trên nói về một hàng không bao giờ đổi —
  * `rfq_awards` chỉ-ghi-thêm, hàng đề xuất mang `PROPOSED` mãi mãi; thứ chặn là trigger `award_kiem_mot_award_song` đọc hàng MỚI
@@ -426,7 +492,7 @@ export async function duyetTraoThau(
   orgId: string,
   input: DuyetTraoThauInput,
   auditPool: pg.Pool,
-): Promise<TraoThau> {
+): Promise<TraoThauDayDu> {
   await assertTenantBound(client, orgId, "duyetTraoThau");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
@@ -500,6 +566,34 @@ export async function duyetTraoThau(
     );
   }
 
+  // [S1.9101 / S3.5a] Một người ký rồi gọi lại khi đề xuất còn chờ chữ ký khác: lời có tên thay vì lỗi UNIQUE thô — chữ ký của
+  // họ đã đếm, người cần ký là người KHÁC. (Đề xuất đã duyệt thì hàng mới nhất là `APPROVED` và vế trên đã nói.)
+  const { rows: daKy } = await client.query<{ n: number }>(
+    `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
+       FROM public.rfq_award_approvals ap
+      WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND ap.award_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND ap.approver_user_id OPERATOR(pg_catalog.=) $3::pg_catalog.uuid`,
+    [orgId, dx.id, actor.id],
+  );
+  if ((daKy[0]?.n ?? 0) > 0) {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "DA_KY_DE_XUAT_NAY",
+        "Bạn đã ký đề xuất này; đề xuất còn chờ chữ ký của người KHÁC thuộc vai mà bậc của gói đòi.",
+      ),
+    );
+  }
+
+  // [S1.9101 / S3.5a] Hỏi trước hai chốt của chữ ký: bậc (trigger chữ ký hỏi lại) và người ký — vai thuộc `award_vai` của bậc cao hơn,
+  // không là tác giả phiên bản chính sách ghim (K7). Một mã ⇒ `CONTROL_DENIED` trước mọi câu ghi.
+  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, dx.rfq_id, dx.bid_version_id]);
+  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGUOI_KY, [orgId, dx.id, actor.id]);
+
   try {
     await client.query(
       `INSERT INTO public.rfq_award_approvals
@@ -510,33 +604,77 @@ export async function duyetTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
     // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi ~~chính lỗi trigger~~
-    // **[S1.180]** lời từ chối của chốt.
+    // **[S1.180]** lời từ chối của chốt. [S1.9101] Và lớp chặn cuối của K7 ở trigger chữ ký (`9501`) đi cùng lối.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
   }
 
+  // [S1.9101 / S3.5a] Đủ chữ ký chưa — hỏi CSDL, không đếm ở đây (hai bản đếm là hai bản trôi). Chưa đủ ⇒ chữ ký vừa ghi SỐNG
+  // (commit cùng giao dịch này), đề xuất đứng yên ở `PROPOSED`, và lời trả về mang đề xuất kèm số cần — đó chính là chỗ khoản 242 ⑴
+  // đo được rằng bản cũ không bao giờ tới.
+  const { rows: dem } = await client.query<{ can: number; du: boolean }>(CAU_DU_CHU_KY, [orgId, dx.id]);
+  const can = dem[0]?.can ?? 1;
+  const du = dem[0]?.du === true;
+
+  // Đủ ⇒ hai chốt của cạnh duyệt: hậu kiểm K2b (lớp chặn cuối — ngoại lệ đã phải có từ lúc đề xuất) và chữ ký độc lập K5b — đọc
+  // TẬP chữ ký kể cả chữ ký vừa ghi, nên hỏi SAU câu chèn và TRƯỚC mọi hàng sổ của giao dịch này: một hàng sổ giữ khoá chuỗi kiểm
+  // toán của tổ chức tới khi commit (`050`), mà lần từ chối ghi `CONTROL_DENIED` ở giao dịch độc lập phải lấy đúng khoá ấy — hỏi sau
+  // hàng sổ là tự khoá mình, ra `DenialAuditFailedError` (đo ở lượt đầu của `trao-thau-theo-bac.int.test.ts`). Một mã ⇒
+  // `CONTROL_DENIED`, giao dịch này huỷ cùng chữ ký vừa ghi: người ký lại sau khi có người độc lập ký, hay sau khi gói được huỷ và đề
+  // xuất lại với ngoại lệ (chủ dự án chốt phương án một giao dịch, 2026-10-07).
+  if (du) {
+    await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_HAU_KIEM, [orgId, dx.rfq_id, dx.evaluation_id, dx.bid_version_id]);
+    await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_DOC_LAP, [orgId, dx.id]);
+  }
+
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: actor.id,
+    action: "RFQ_AWARD_SIGNED",
+    resourceType: "rfq_award",
+    resourceId: dx.id,
+    payload: {
+      rfqId: dx.rfq_id,
+      evaluationId: dx.evaluation_id,
+      bidVersionId: dx.bid_version_id,
+      signedBySessionId: input.actorSessionId,
+      chuKyCan: can,
+    },
+  });
+  if (!du) {
+    return docDayDu(client, orgId, dx, can);
+  }
+
   // Hàng `APPROVED` phải chép ĐÚNG `evaluation_id`/`bid_version_id` của đề xuất —
   // `award_kiem_mot_award_song` từ chối nếu lệch, và vế ấy tồn tại để một hàng "duyệt" không nói
   // về một báo giá khác hẳn thứ đã được đề xuất.
-  const { rows: award } = await client.query<HangAward>(
-    `INSERT INTO public.rfq_awards
-       (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
-        acted_by, acted_by_session_id)
-     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
-             $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
-    [
-      orgId,
-      dx.rfq_id,
-      dx.evaluation_id,
-      dx.bid_version_id,
-      "APPROVED",
-      dx.reason,
-      actor.id,
-      input.actorSessionId,
-    ],
-  );
+  let award: HangAward[];
+  try {
+    ({ rows: award } = await client.query<HangAward>(
+      `INSERT INTO public.rfq_awards
+         (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
+          acted_by, acted_by_session_id)
+       VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
+               $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+      [
+        orgId,
+        dx.rfq_id,
+        dx.evaluation_id,
+        dx.bid_version_id,
+        "APPROVED",
+        dx.reason,
+        actor.id,
+        input.actorSessionId,
+      ],
+    ));
+  } catch (loi) {
+    // Lớp chặn cuối của cạnh APPROVED (`9501`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
+    throw loi;
+  }
   const a = award[0];
   if (a === undefined) throw new Error("Không ghi được lần phê duyệt trao thầu.");
 
@@ -552,10 +690,38 @@ export async function duyetTraoThau(
       evaluationId: dx.evaluation_id,
       bidVersionId: dx.bid_version_id,
       approvedBySessionId: input.actorSessionId,
+      chuKyCan: can,
     },
   });
 
-  return doiAward(a);
+  return docDayDu(client, orgId, a, can);
+}
+
+/**
+ * [S1.9101 / S3.5a] Hàng award kèm chữ ký của đề xuất đang sống và số chữ ký cần — hình dạng mà `duyetTraoThau` trả về ở CẢ hai lối
+ * (chưa đủ: hàng `PROPOSED`; đủ: hàng `APPROVED`), cùng hình dạng `docTraoThau`. `deXuat` là hàng `PROPOSED` mới nhất của gói.
+ */
+async function docDayDu(client: pg.PoolClient, orgId: string, h: HangAward, chuKyCan: number | null): Promise<TraoThauDayDu> {
+  const { rows: chuKy } = await client.query<{ approver_user_id: string; approved_at: Date }>(
+    `SELECT ap.approver_user_id, ap.approved_at
+       FROM public.rfq_award_approvals ap
+      WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND ap.award_id OPERATOR(pg_catalog.=) (
+              SELECT dx.id
+                FROM public.rfq_awards dx
+               WHERE dx.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+                 AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+                 AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
+               ORDER BY dx.acted_at DESC, dx.id DESC
+               LIMIT 1)
+      ORDER BY ap.approved_at ASC`,
+    [orgId, h.rfq_id],
+  );
+  return {
+    ...doiAward(h),
+    approvals: chuKy.map((c) => ({ approverUserId: c.approver_user_id, approvedAt: c.approved_at })),
+    chuKyCan,
+  };
 }
 
 /**
@@ -921,27 +1087,16 @@ export async function docTraoThau(
   // `PROPOSED` đều không muộn hơn nó — và còn là một bẫy: đưa `h.acted_at` (một `Date` của JS, độ chính
   // xác mili-giây) trở lại SQL so với cột micro-giây thì chính hàng mới nhất bị loại (đo: ca `docTraoThau
   // đọc chữ ký của ĐÚNG đề xuất mới nhất` đỏ với bản đầu của vá). Không tham số thời gian đi qua JS.
-  const { rows: chuKy } = await client.query<{ approver_user_id: string; approved_at: Date }>(
-    `SELECT ap.approver_user_id, ap.approved_at
-       FROM public.rfq_award_approvals ap
-      WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-        AND ap.award_id OPERATOR(pg_catalog.=) (
-              SELECT dx.id
-                FROM public.rfq_awards dx
-               WHERE dx.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-                 AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
-                 AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
-               ORDER BY dx.acted_at DESC, dx.id DESC
-               LIMIT 1)
-      ORDER BY ap.approved_at ASC`,
+  // [S1.9101 / S3.5a] Số chữ ký cần của đề xuất ấy — CSDL tính (`award_so_chu_ky_can`), `null` khi gói chưa có đề xuất nào.
+  const { rows: can } = await client.query<{ can: number | null }>(
+    `SELECT public.award_so_chu_ky_can($1::pg_catalog.uuid, dx.id) AS can
+       FROM public.rfq_awards dx
+      WHERE dx.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
+      ORDER BY dx.acted_at DESC, dx.id DESC
+      LIMIT 1`,
     [orgId, rfqId],
   );
-
-  return {
-    ...doiAward(h),
-    approvals: chuKy.map((c) => ({
-      approverUserId: c.approver_user_id,
-      approvedAt: c.approved_at,
-    })),
-  };
+  return docDayDu(client, orgId, h, can[0]?.can ?? null);
 }
