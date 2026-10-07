@@ -4,7 +4,24 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
-import { chuDai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan, type DongBenchmark } from "./benchmark.js";
+import {
+  chuCoMocNgoai,
+  chuCotNgoai,
+  chuDai,
+  chuDaiNgoai,
+  chuLech,
+  chuMocNgoai,
+  chuNhan,
+  chuNhanNgoai,
+  chuThanhPhan,
+  chuTrangThai,
+  doPhu,
+  ngayVn,
+  soDai,
+  tomTatNhan,
+  type DongBenchmark,
+  type DongNgoai,
+} from "./benchmark.js";
 
 const DONG: DongBenchmark = {
   bidVersionId: "b-1",
@@ -119,5 +136,104 @@ describe("[S1.260 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái kh
     expect(chuDai({ ...d, duSan: false, q1: null, trungVi: null, q3: null }, "kg")).not.toMatch(/\d+,\d\d/u);
     expect(chuDai({ ...d, sauMoc: { ANH_XA: 2, QUY_DOI: 0 } }, "kg")).toContain("2 ánh xạ");
     expect(chuDai({ ...d, khopBanLuu: false }, "kg")).toContain("KHÁC bản lưu");
+  });
+});
+
+describe("[S1.276 / S4.6b] lịch sử mua ngoài hệ thống và mốc ngoài — nhãn RIÊNG ghi rõ nguồn, mốc chỉ độ lệch", () => {
+  const NGOAI: DongNgoai = {
+    bidVersionId: "b-1",
+    lineNo: 1,
+    nhan: "BINH_THUONG",
+    chieu: null,
+    soDong: 7,
+    soGoi: 5,
+    soNcc: 4,
+    soLoaiTienTe: 0,
+    soLoaiKhongQuyDoi: 0,
+  };
+  const ngoai = (doi: Partial<DongNgoai>): DongNgoai => ({ ...NGOAI, ...doi });
+
+  it("mọi nhãn ngoài nói nguồn; không câu nào là chữ của dải nội bộ; thấp bất thường dẫn tới làm rõ, không căn cứ loại", () => {
+    for (const [nhan, chieu] of [
+      ["BINH_THUONG", null],
+      ["LECH_VUA", "TREN"],
+      ["LECH_VUA", "DUOI"],
+      ["LECH_CAO", "TREN"],
+      ["LECH_CAO", "DUOI"],
+      ["CHUA_DU_LICH_SU", null],
+    ] as const) {
+      const c = chuNhanNgoai(ngoai({ nhan, chieu }));
+      expect(c, nhan).toContain("lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập");
+      expect(c, nhan).not.toContain("nội bộ");
+      expect(c, nhan).not.toMatch(/sạch|tốt/u);
+    }
+    expect(chuNhanNgoai(NGOAI)).toBe(
+      "trong dải lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập (5 lần mua theo ngày và nhà cung cấp, 4 nhà cung cấp)",
+    );
+    const duoi = chuNhanNgoai(ngoai({ nhan: "LECH_CAO", chieu: "DUOI" }));
+    expect(duoi).toMatch(/^Thấp bất thường/u);
+    expect(duoi).toContain("không phải căn cứ loại");
+    expect(chuNhanNgoai(ngoai({ nhan: "LECH_VUA", chieu: "DUOI" }))).toMatch(/^thấp hơn/u);
+    expect(chuNhanNgoai(ngoai({ nhan: "NHAN_MOI" }))).toBe("NHAN_MOI");
+  });
+
+  it("cột Lịch sử ngoài: dòng không đo được là gạch; bản lưu trước S4.6b nói ra; không có hàng thì gạch", () => {
+    expect(chuCotNgoai([NGOAI], "b-1", 1, false)).toBe("—");
+    expect(chuCotNgoai(null, "b-1", 1, true)).toBe("bản benchmark này tính trước khi có lịch sử ngoài — xem ở «Xem dải»");
+    expect(chuCotNgoai([NGOAI], "b-2", 1, true)).toBe("—");
+    expect(chuCotNgoai([NGOAI], "b-1", 1, true)).toBe(chuNhanNgoai(NGOAI));
+  });
+
+  it("cờ mốc ngoài: nguồn và ngày theo kiểu Việt Nam, không con số; độ lệch có dấu, dấu phẩy thập phân", () => {
+    expect(chuCoMocNgoai(undefined)).toBe("—");
+    expect(chuCoMocNgoai({ nguon: "Bảng giá nhà máy", ngayHieuLuc: "2026-01-05" })).toBe(
+      "có mốc ngoài (Bảng giá nhà máy, hiệu lực 05/01/2026) — số và độ lệch ở «Xem dải»",
+    );
+    expect(ngayVn("2026-1-5")).toBe("2026-1-5");
+    expect(chuLech("12.3")).toBe("+12,3%");
+    expect(chuLech("-4.5")).toBe("−4,5%");
+    expect(chuLech("0.0")).toBe("0,0%");
+    expect(chuLech(null)).toBe("—");
+  });
+
+  it("dải ngoài của Xem dải: số khi đủ sàn, không số khi dưới sàn; cửa sổ, ba nguồn đầu, loại, ghi/rút sau mốc, lệch bản lưu", () => {
+    const d = {
+      tienTe: "VND",
+      cuaSoTu: "2025-10-01",
+      denNgay: "2026-10-01",
+      duSan: true,
+      q1: "100",
+      trungVi: "110.5",
+      q3: "120",
+      soDong: 9,
+      soGoi: 6,
+      soNcc: 3,
+      soLoaiTienTe: 2,
+      soLoaiKhongQuyDoi: 1,
+      nguon: ["A", "B", "C", "D", "E"],
+      sauMoc: { GHI: 2, RUT: 1 },
+      khopBanLuu: false,
+    };
+    const c = chuDaiNgoai(d, "kg");
+    expect(c).toMatch(/^Q1 100,00 · trung vị 110,50 · Q3 120,00 VND\/kg \(9 dòng, 6 lần mua theo ngày và nhà cung cấp, 3 nhà cung cấp\)/u);
+    expect(c).toContain("Ngày mua từ 01/10/2025 tới 01/10/2026");
+    expect(c).toContain("Nguồn (lời khai của người nhập): A; B; C; và 2 nguồn khác");
+    expect(c).toContain("Đã loại 2 khác tiền tệ, 1 không quy đổi được đơn vị");
+    expect(c).toContain("2 dòng nhập SAU mốc mở giá (dải này không dùng); 1 dòng đã vào dải bị rút SAU mốc mở giá (dải này vẫn dùng)");
+    expect(c).toContain("CẢNH BÁO: nhãn ngoài tính lại KHÁC bản lưu");
+    const duoiSan = chuDaiNgoai({ ...d, duSan: false, q1: null, trungVi: null, q3: null, nguon: [], sauMoc: { GHI: 0, RUT: 0 }, soLoaiTienTe: 0, soLoaiKhongQuyDoi: 0, khopBanLuu: null }, null);
+    expect(duoiSan).toBe(
+      "chưa đủ lịch sử ngoài — không con số nào (9 dòng, 6 lần mua theo ngày và nhà cung cấp, 3 nhà cung cấp). Ngày mua từ 01/10/2025 tới 01/10/2026",
+    );
+  });
+
+  it("mốc ngoài của Xem dải: con số theo đơn vị gốc, nguồn, ngày, KHÔNG nhãn; không có mốc; mốc rút sau mốc mở giá vẫn là mốc", () => {
+    const m = { tienTe: "VND", moc: { nguon: "Báo giá Hòa Bình", ngayHieuLuc: "2026-09-01", donGiaQuyDoi: "15500" }, ghiSauMoc: 0, rutSauMoc: false };
+    expect(chuMocNgoai(m, "kg")).toBe("15.500,00 VND/kg (Báo giá Hòa Bình, hiệu lực 01/09/2026) — chỉ để so độ lệch, không sinh nhãn");
+    expect(chuMocNgoai({ ...m, rutSauMoc: true, ghiSauMoc: 1 }, "kg")).toContain(
+      "Mốc này đã bị rút SAU mốc mở giá — vẫn là mốc của gói này. 1 mốc nhập SAU mốc mở giá (không dùng)",
+    );
+    expect(chuMocNgoai({ ...m, moc: null }, "kg")).toBe("không có mốc ngoài trong cửa sổ");
+    expect(chuMocNgoai(m, "kg")).not.toMatch(/bất thường|lệch vừa|trong dải/u);
   });
 });

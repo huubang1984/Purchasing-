@@ -13,6 +13,9 @@
 //     lấy trạng thái thật của dòng ấy tốn 84–88 s (biên bản §S1.235).
 //   • Dải của (hàng chuẩn, tiền tệ của báo giá) đọc tại MỐC MỞ GIÁ của X — `min(unsealed_at)`, đúng định nghĩa `moc_goi` của
 //     `quan_sat_gia` (`096`); lần đọc giá của chính X kiểm lại rằng hai định nghĩa cho cùng một mốc, lệch thì NÉM.
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-151): `kemNgoai` thêm nhãn theo dải lịch sử ngoài cho bản lưu của bảng so sánh — giá
+// của chính dòng đã có trong tay ở đây, nên nhãn ngoài tính cùng lần, không thêm lần đọc as-of nào; *Xem dải* (`tinhDaiDong`) thêm số của
+// dải ngoài, mốc ngoài và độ lệch. Hai bảng ngoài đọc qua `gia-ngoai.ts`; lượt chấm không bật `kemNgoai` (L15).
 // Thời điểm qua lại giữa SQL và TypeScript bằng MICRO GIÂY kể từ epoch (`extract('epoch', …)` là `numeric`, đi về bằng
 // `'epoch' + n · 1 µs` — khứ hồi chính xác tới năm 2255, đo ở biên bản): `Date` của JavaScript cắt mất ba chữ số.
 // ==============================================================================================
@@ -27,6 +30,8 @@ import {
   type NhomBenchmark,
   type QuanSatBenchmark,
 } from "./benchmark.js";
+import { chonMocNgoai, cuaSoNgayNgoai, lechPhanTram, tinhDaiNgoai, type DaiNgoai } from "./dai-ngoai.js";
+import { docLichSuNgoaiTaiMoc, docMocNgoaiCo, docMocNgoaiTaiMoc } from "./gia-ngoai.js";
 
 /** Một dòng kết quả: một (báo giá, dòng của gói). Không con số nào có đơn vị tiền. */
 export interface DongBenchmark {
@@ -55,6 +60,26 @@ export interface DaiCuaGoi extends DaiBenchmark {
   readonly canonicalItemId: string;
 }
 
+/**
+ * [S1.276 / S4.6b] Nhãn của một (báo giá, dòng) ĐO ĐƯỢC theo dải lịch sử mua ngoài hệ thống của (hàng chuẩn, tiền tệ) tại mốc mở giá
+ * (`dai-ngoai.ts`). Không con số nào có đơn vị tiền. Tách khỏi `DongBenchmark` (L15: nhãn ngoài không trộn vào nhãn nội bộ).
+ */
+export interface DongNgoai {
+  readonly bidVersionId: string;
+  readonly lineNo: number;
+  readonly canonicalItemId: string;
+  readonly tienTe: string;
+  readonly cuaSoTu: string;
+  readonly denNgay: string;
+  readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC">;
+  readonly chieu: ChieuLech | null;
+  readonly soDong: number;
+  readonly soGoi: number;
+  readonly soNcc: number;
+  readonly soLoaiTienTe: number;
+  readonly soLoaiKhongQuyDoi: number;
+}
+
 export interface BenchmarkGoi {
   readonly rfqId: string;
   readonly phuongPhap: typeof PHUONG_PHAP_BENCHMARK;
@@ -65,6 +90,11 @@ export interface BenchmarkGoi {
   readonly dong: readonly DongBenchmark[];
   /** Mọi dải đã tính — một mỗi (hàng chuẩn, tiền tệ) có ít nhất một dòng `HOP_LE` của X. */
   readonly dai: readonly DaiCuaGoi[];
+  /**
+   * [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng ĐO ĐƯỢC — chỉ khi gọi với `kemNgoai` (bản lưu của bảng so sánh); `null`
+   * ở lượt chấm: nhãn ngoài không vào lượt chấm, bộ bằng chứng hay cổng (e) (L15).
+   */
+  readonly ngoai: readonly DongNgoai[] | null;
 }
 
 export interface TinhBenchmarkGoiInput {
@@ -74,6 +104,11 @@ export interface TinhBenchmarkGoiInput {
   readonly nhom: NhomBenchmark;
   /** Micro giây; mặc định `now()` của giao dịch. Phép tính lại L7 truyền `ghi_luc` đã lưu. */
   readonly mocDoc?: bigint;
+  /**
+   * [S1.276 / S4.6b] Tính thêm nhãn theo dải lịch sử ngoài (`ngoai`). CHỈ bản lưu của bảng so sánh (`doc-benchmark.ts`, sau cổng
+   * `bid.view`) bật nó — `bang-ngoai-liet-ke.test.ts` ghim rằng lượt chấm không bật.
+   */
+  readonly kemNgoai?: boolean;
 }
 
 interface HangCuaX {
@@ -275,7 +310,51 @@ export async function tinhBenchmarkGoi(
     }
   }
 
-  return { rfqId: input.rfqId, phuongPhap: PHUONG_PHAP_BENCHMARK, mocMoGia, mocDoc, dong, dai: [...dai.values()] };
+  let ngoai: DongNgoai[] | null = null;
+  if (input.kemNgoai === true) {
+    // Dải ngoài đọc tại MỐC MỞ GIÁ của X (L1), cùng mốc của dải nội bộ; giá của chính dòng là giá đã đọc ở trên (tại `mocDoc`).
+    const doDuoc = dong.filter((d) => d.nhan !== "KHONG_DO_DUOC");
+    const hangNgoai = await docLichSuNgoaiTaiMoc(client, orgId, {
+      canonicalItemIds: [...new Set(doDuoc.map((d) => d.canonicalItemId as string))].sort(),
+      mocMicro: mocMoGia,
+      cuaSo: cuaSoNgayNgoai(mocMoGia, input.nhom.cuaSoThang),
+    });
+    const daiNgoai = new Map<string, DaiNgoai>();
+    ngoai = doDuoc.map((d) => {
+      const x = cuaX.get(`${d.bidVersionId}:${String(d.lineNo)}`);
+      if (x?.don_gia_quy_doi == null || d.canonicalItemId === null || d.tienTe === null) {
+        throw new Error("dòng đo được mà không có giá quy đổi, hàng chuẩn hay tiền tệ");
+      }
+      const hang = d.canonicalItemId;
+      const khoa = `${hang}|${d.tienTe}`;
+      let dn = daiNgoai.get(khoa);
+      if (dn === undefined) {
+        dn = tinhDaiNgoai(
+          hangNgoai.filter((h) => h.canonicalItemId === hang),
+          { tienTe: d.tienTe, mocMoGia, nhom: input.nhom },
+        );
+        daiNgoai.set(khoa, dn);
+      }
+      const { nhan, chieu } = ganNhan(x.don_gia_quy_doi, dn, input.nhom);
+      return {
+        bidVersionId: d.bidVersionId,
+        lineNo: d.lineNo,
+        canonicalItemId: hang,
+        tienTe: d.tienTe,
+        cuaSoTu: dn.cuaSoTu,
+        denNgay: dn.denNgay,
+        nhan,
+        chieu,
+        soDong: dn.soDong,
+        soGoi: dn.soGoi,
+        soNcc: dn.soNcc,
+        soLoaiTienTe: dn.soLoaiTienTe,
+        soLoaiKhongQuyDoi: dn.soLoaiKhongQuyDoi,
+      };
+    });
+  }
+
+  return { rfqId: input.rfqId, phuongPhap: PHUONG_PHAP_BENCHMARK, mocMoGia, mocDoc, dong, dai: [...dai.values()], ngoai };
 }
 
 export interface GhiBenchmarkInput {
@@ -434,6 +513,38 @@ export async function ghiBanLuuBenchmark(client: pg.PoolClient, orgId: string, i
       [orgId, hang.id, kq.rfqId, input.policyId, JSON.stringify(dong)],
     );
   }
+  // [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài — cùng giao dịch (`…_cung_ban_luu_fk` của `110`), sau các dòng mà nó trỏ về.
+  const ngoai = (kq.ngoai ?? []).map((d) => ({
+    bid_version_id: d.bidVersionId,
+    line_no: d.lineNo,
+    canonical_item_id: d.canonicalItemId,
+    tien_te: d.tienTe,
+    cua_so_tu: d.cuaSoTu,
+    den_ngay: d.denNgay,
+    nhan: d.nhan,
+    chieu: d.chieu,
+    so_dong: d.soDong,
+    so_goi: d.soGoi,
+    so_ncc: d.soNcc,
+    so_loai_tien_te: d.soLoaiTienTe,
+    so_loai_khong_quy_doi: d.soLoaiKhongQuyDoi,
+  }));
+  if (ngoai.length > 0) {
+    await client.query(
+      `INSERT INTO public.price_benchmark_snapshot_external_lines
+         (org_id, snapshot_id, rfq_id, policy_id, bid_version_id, line_no, canonical_item_id, tien_te, cua_so_tu, den_ngay, nhan, chieu,
+          so_dong, so_goi, so_ncc, so_loai_tien_te, so_loai_khong_quy_doi)
+       SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid, d.bid_version_id, d.line_no,
+              d.canonical_item_id, d.tien_te, d.cua_so_tu, d.den_ngay, d.nhan, d.chieu, d.so_dong, d.so_goi, d.so_ncc,
+              d.so_loai_tien_te, d.so_loai_khong_quy_doi
+         FROM pg_catalog.jsonb_to_recordset($5::pg_catalog.jsonb) AS d(
+                bid_version_id pg_catalog.uuid, line_no pg_catalog.int4, canonical_item_id pg_catalog.uuid, tien_te pg_catalog.text,
+                cua_so_tu pg_catalog.date, den_ngay pg_catalog.date, nhan pg_catalog.text, chieu pg_catalog.text,
+                so_dong pg_catalog.int4, so_goi pg_catalog.int4, so_ncc pg_catalog.int4, so_loai_tien_te pg_catalog.int4,
+                so_loai_khong_quy_doi pg_catalog.int4)`,
+      [orgId, hang.id, kq.rfqId, input.policyId, JSON.stringify(ngoai)],
+    );
+  }
   return hang.id;
 }
 
@@ -469,6 +580,32 @@ export interface GiaQuyDoiCuaX {
    */
   readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC"> | null;
   readonly chieu: ChieuLech | null;
+  /** [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài của tiền tệ ấy — so với nhãn ngoài đã lưu; `null` như `nhan`. */
+  readonly nhanNgoai: Exclude<NhanBenchmark, "KHONG_DO_DUOC"> | null;
+  readonly chieuNgoai: ChieuLech | null;
+  /** [S1.276 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ (`lechPhanTram`); `null` khi không có mốc. */
+  readonly lechMoc: string | null;
+}
+
+/** [S1.276 / S4.6b] Dải lịch sử ngoài của một (hàng chuẩn, tiền tệ) — số khi đủ sàn, nguồn, hàng ghi/rút sau mốc. */
+export interface DaiNgoaiDong extends DaiNgoai {
+  readonly canonicalItemId: string;
+}
+
+/** [S1.276 / S4.6b] Mốc ngoài của một (hàng chuẩn, tiền tệ) tại mốc mở giá — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
+export interface MocNgoaiDong {
+  readonly canonicalItemId: string;
+  readonly tienTe: string;
+  readonly moc: {
+    readonly id: string;
+    readonly nguon: string;
+    readonly ngayHieuLuc: string;
+    /** Theo đơn vị gốc, tại mốc mở giá. */
+    readonly donGiaQuyDoi: string;
+  } | null;
+  readonly ghiSauMoc: number;
+  /** Mốc được chọn đã bị rút SAU mốc mở giá — vẫn là mốc của gói này (L1). */
+  readonly rutSauMoc: boolean;
 }
 
 export interface KetQuaDaiDong {
@@ -476,6 +613,9 @@ export interface KetQuaDaiDong {
   readonly donViGoc: string | null;
   readonly dai: readonly DaiDong[];
   readonly giaCuaX: readonly GiaQuyDoiCuaX[];
+  /** [S1.276 / S4.6b] Một mỗi tiền tệ của `input.tienTe`. */
+  readonly daiNgoai: readonly DaiNgoaiDong[];
+  readonly mocNgoai: readonly MocNgoaiDong[];
 }
 
 /**
@@ -608,10 +748,42 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
     return { ...d, canonicalItemId: input.canonicalItemId, sauMoc };
   });
 
+  // [S1.276 / S4.6b] Dải lịch sử ngoài và mốc ngoài của hàng chuẩn tại MỐC MỞ GIÁ đã lưu (L1) — cùng mốc của dải nội bộ.
+  const docNgoai = {
+    canonicalItemIds: [input.canonicalItemId],
+    mocMicro: input.mocMoGia,
+    cuaSo: cuaSoNgayNgoai(input.mocMoGia, input.nhom.cuaSoThang),
+  };
+  const hangNgoai = await docLichSuNgoaiTaiMoc(client, orgId, docNgoai);
+  const hangMoc = await docMocNgoaiTaiMoc(client, orgId, docNgoai);
+  const tienTeDs = [...new Set(input.tienTe)].sort();
+  const daiNgoai: DaiNgoaiDong[] = tienTeDs.map((tienTe) => ({
+    ...tinhDaiNgoai(hangNgoai, { tienTe, mocMoGia: input.mocMoGia, nhom: input.nhom }),
+    canonicalItemId: input.canonicalItemId,
+  }));
+  const mocNgoai: MocNgoaiDong[] = tienTeDs.map((tienTe) => {
+    const c = chonMocNgoai(hangMoc, { tienTe, mocMoGia: input.mocMoGia, cuaSoThang: input.nhom.cuaSoThang });
+    if (c.moc !== null && c.moc.donGiaQuyDoi === null) throw new Error("mốc ngoài quy đổi được mà không có đơn giá quy đổi");
+    return {
+      canonicalItemId: input.canonicalItemId,
+      tienTe,
+      moc:
+        c.moc === null
+          ? null
+          : { id: c.moc.id, nguon: c.moc.nguon, ngayHieuLuc: c.moc.ngayHieuLuc, donGiaQuyDoi: c.moc.donGiaQuyDoi as string },
+      ghiSauMoc: c.ghiSauMoc,
+      rutSauMoc: c.rutSauMoc,
+    };
+  });
+
   const tapX = (await docTai(input.mocDoc)).filter((r) => r.rfqId === input.rfqId);
   const giaCuaX: GiaQuyDoiCuaX[] = tapX.map((r) => {
+    const hopLe = r.trangThai === "HOP_LE" && r.donGiaQuyDoi !== null ? r.donGiaQuyDoi : null;
     const d = dai.find((x) => x.tienTe === r.tienTe);
-    const gan = r.trangThai === "HOP_LE" && r.donGiaQuyDoi !== null && d !== undefined ? ganNhan(r.donGiaQuyDoi, d, input.nhom) : null;
+    const gan = hopLe !== null && d !== undefined ? ganNhan(hopLe, d, input.nhom) : null;
+    const dn = daiNgoai.find((x) => x.tienTe === r.tienTe);
+    const ganNgoai = hopLe !== null && dn !== undefined ? ganNhan(hopLe, dn, input.nhom) : null;
+    const moc = mocNgoai.find((x) => x.tienTe === r.tienTe)?.moc ?? null;
     return {
       bidVersionId: r.bidVersionId,
       lineNo: r.lineNo,
@@ -620,8 +792,52 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
       tienTe: r.tienTe,
       nhan: gan?.nhan ?? null,
       chieu: gan?.chieu ?? null,
+      nhanNgoai: ganNgoai?.nhan ?? null,
+      chieuNgoai: ganNgoai?.chieu ?? null,
+      lechMoc: hopLe !== null && moc !== null ? lechPhanTram(hopLe, moc.donGiaQuyDoi) : null,
     };
   });
   const donViGoc = tapX.find((r) => r.donViGoc !== null)?.donViGoc ?? tapDai.find((r) => r.donViGoc !== null)?.donViGoc ?? null;
-  return { donViGoc, dai, giaCuaX };
+  return { donViGoc, dai, giaCuaX, daiNgoai, mocNgoai };
+}
+
+/** [S1.276 / S4.6b] Cờ *"có mốc ngoài"* của một (hàng chuẩn, tiền tệ) ở bảng benchmark — nguồn và ngày hiệu lực, KHÔNG con số. */
+export interface CoMocNgoai {
+  readonly canonicalItemId: string;
+  readonly tienTe: string;
+  readonly nguon: string;
+  readonly ngayHieuLuc: string;
+}
+
+/**
+ * [S1.276 / S4.6b] Cờ mốc ngoài cho các (hàng chuẩn, tiền tệ) của bảng benchmark, tại mốc mở giá đã lưu — một lần đọc không đơn giá
+ * (`docMocNgoaiCo`), cùng luật chọn của *Xem dải* (`chonMocNgoai`). Đọc ở MỖI lần đọc bảng (chủ dự án chốt 2026-10-06: cờ ở bảng, số ở
+ * *Xem dải*): tất định vì mọi hàng đọc tại mốc đã lưu (L1). Chỉ trả cặp CÓ mốc. KHÔNG CỔNG (khối đầu tệp) — người gọi là
+ * `docBenchmark`.
+ */
+export async function docCoMocNgoai(
+  client: pg.PoolClient,
+  orgId: string,
+  input: {
+    readonly cap: readonly { readonly canonicalItemId: string; readonly tienTe: string }[];
+    readonly mocMoGia: bigint;
+    readonly cuaSoThang: number;
+  },
+): Promise<readonly CoMocNgoai[]> {
+  const khoa = [...new Set(input.cap.map((c) => `${c.canonicalItemId}|${c.tienTe}`))].sort();
+  const hang = await docMocNgoaiCo(client, orgId, {
+    canonicalItemIds: [...new Set(input.cap.map((c) => c.canonicalItemId))].sort(),
+    mocMicro: input.mocMoGia,
+    cuaSo: cuaSoNgayNgoai(input.mocMoGia, input.cuaSoThang),
+  });
+  const ra: CoMocNgoai[] = [];
+  for (const k of khoa) {
+    const [canonicalItemId, tienTe] = k.split("|") as [string, string];
+    const c = chonMocNgoai(
+      hang.filter((h) => h.canonicalItemId === canonicalItemId),
+      { tienTe, mocMoGia: input.mocMoGia, cuaSoThang: input.cuaSoThang },
+    );
+    if (c.moc !== null) ra.push({ canonicalItemId, tienTe, nguon: c.moc.nguon, ngayHieuLuc: c.moc.ngayHieuLuc });
+  }
+  return ra;
 }
