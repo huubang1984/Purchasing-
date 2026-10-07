@@ -4211,6 +4211,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "9501_khai_bao_xung_dot.sql",
         ]);
@@ -8866,6 +8868,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "9501_khai_bao_xung_dot.sql",
       ]);
@@ -9201,6 +9205,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "9501_khai_bao_xung_dot.sql",
       ]);

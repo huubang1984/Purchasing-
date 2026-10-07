@@ -206,15 +206,7 @@ export function tinhDai(quanSat: readonly QuanSatBenchmark[], vao: DaiInput): Da
   const soGoi = theoGoi.size;
   const soNcc = new Set(dung.map((q) => q.supplierId)).size;
   const duSan = soGoi >= vao.nhom.sanGoi && soNcc >= vao.nhom.sanNcc;
-  let mocSo: DaiBenchmark["mocSo"] = null;
-  if (duSan) {
-    const trungViGoi = sapTang([...theoGoi.values()].map((ds) => phanViTu(sapTang(ds), 2)));
-    mocSo = {
-      q1: chuoiThapPhan(phanViTu(trungViGoi, 1)),
-      trungVi: chuoiThapPhan(phanViTu(trungViGoi, 2)),
-      q3: chuoiThapPhan(phanViTu(trungViGoi, 3)),
-    };
-  }
+  const mocSo = duSan ? mocSoTheoGoi([...theoGoi.values()]) : null;
   return {
     tienTe: vao.tienTe,
     cuaSoTu,
@@ -231,10 +223,28 @@ export function tinhDai(quanSat: readonly QuanSatBenchmark[], vao: DaiInput): Da
   };
 }
 
-/** Nhãn của một đơn giá quy đổi so với dải. */
+/**
+ * ⑶ của khối đầu tệp: mỗi gói một trung vị trên các đơn giá của nó; mốc so là trung vị các trung vị gói; dải [Q1, Q3] trên các trung vị
+ * gói. [S1.276 / S4.6b] Tách ra để dải lịch sử ngoài (`dai-ngoai.ts`) tính CÙNG phương pháp (ADR-096 ⑷) — "gói" của nó là (ngày mua,
+ * nhà cung cấp đã làm sạch). Người gọi kiểm sàn trước; ném trên tập rỗng.
+ */
+export function mocSoTheoGoi(cacGoi: readonly (readonly ThapPhan[])[]): {
+  readonly q1: string;
+  readonly trungVi: string;
+  readonly q3: string;
+} {
+  const trungViGoi = sapTang(cacGoi.map((ds) => phanViTu(sapTang(ds), 2)));
+  return {
+    q1: chuoiThapPhan(phanViTu(trungViGoi, 1)),
+    trungVi: chuoiThapPhan(phanViTu(trungViGoi, 2)),
+    q3: chuoiThapPhan(phanViTu(trungViGoi, 3)),
+  };
+}
+
+/** Nhãn của một đơn giá quy đổi so với dải — dải nội bộ, hay [S1.276 / S4.6b] dải lịch sử ngoài (cùng ngưỡng của phiên bản ghim). */
 export function ganNhan(
   gia: string,
-  dai: DaiBenchmark,
+  dai: Pick<DaiBenchmark, "duSan" | "mocSo">,
   nhom: NhomBenchmark,
 ): { readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC">; readonly chieu: ChieuLech | null } {
   if (!dai.duSan || dai.mocSo === null) return { nhan: "CHUA_DU_LICH_SU", chieu: null };
