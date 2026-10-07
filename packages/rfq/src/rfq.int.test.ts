@@ -1732,7 +1732,9 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // [S1.196 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`082`) đặt hai tên K8a — phép so gom cả năm thân.
   // [S1.253 / S4.5a] Và trigger L14: `rfq_evaluations_kiem_phien_ban_ghim` (`102`) đặt một tên — phép so gom cả sáu thân.
   // [S1.265 / S3.3b] Và trigger K4a thứ hai: `ngoai_le_kiem` (`105`) đặt một tên — phép so gom cả bảy thân.
-  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, trigger K8a, trigger L14 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.9101 / S3.5a] Và ba trigger của award theo bậc (`9501`): chúng đặt tên ràng buộc bằng `lower(ly_do)` — mã do bốn hàm vị từ trả —,
+  // nên vế *tên trong thân* gom thêm mọi `RETURN 'K…'` của bốn hàm vị từ (viết thường); `ngoai_le_kiem` (thân `9501`) đặt thêm một tên K2b.
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ) và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
@@ -1740,7 +1742,22 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
         "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure, 'public.ngoai_le_kiem()'::regprocedure)",
     );
     expect(rows).toHaveLength(7);
-    const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
+    const { rows: viTu } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_bac(uuid, uuid, uuid)'::regprocedure, " +
+        "'public.award_chot_nguoi_ky(uuid, uuid, uuid)'::regprocedure, 'public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'::regprocedure, " +
+        "'public.award_chot_doc_lap(uuid, uuid)'::regprocedure)",
+    );
+    expect(viTu).toHaveLength(4);
+    const { rows: triggerBac } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_kiem_theo_bac_khi_de_xuat()'::regprocedure, " +
+        "'public.award_kiem_theo_bac_khi_duyet()'::regprocedure, 'public.award_kiem_vai_theo_bac()'::regprocedure)",
+    );
+    expect(triggerBac).toHaveLength(3);
+    for (const r of triggerBac) expect(r.prosrc, "ba trigger đặt tên bằng chính mã viết thường").toMatch(/CONSTRAINT = lower\(ly_do\)/u);
+    const trongThan = [
+      ...rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])),
+      ...viTu.flatMap((r) => [...r.prosrc.matchAll(/RETURN '(K\w+)'/gu)].map((m) => m[1]!.toLowerCase())),
+    ].sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
 });
