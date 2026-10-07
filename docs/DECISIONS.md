@@ -11944,3 +11944,82 @@ khác dạng.
 - Nhãn ngoài trong lượt chấm, bộ bằng chứng hay Risk Score — không có, và đổi điều ấy là một ADR mới (L15).
 - Quy đổi tiền tệ; tiền tệ khác `VND`/`USD`.
 - Nhập bằng tệp; khử trùng lô.
+
+## ADR-9201 — S4.7a: TCO ở CSDL và lượt chấm — năm mã có nguồn, kiểm phiên bản lúc chấm, chi phí trễ là tỷ lệ giá trị mỗi ngày, số ngày giao của gói chỉ đổi ở DRAFT và nằm trong chữ ký, tập mã chụp lúc mở; L8, L16
+
+**Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu ngày 2026-10-07, cả bốn theo đề xuất, sau phép đo:
+⑴ S4.7 tách BA phần — S4.7a CSDL và lượt chấm, S4.7b route và màn, S4.7c cam kết lưu cùng award, đi sau S3.5; ⑵ chi phí trễ giao là
+TỶ LỆ của giá trị báo giá mỗi ngày (`ty_le_tre_ngay`), không một số tiền cố định; ⑶ phiên bản ghim tính chi phí trễ mà gói không khai số
+ngày giao thì CHẶN Ở CẠNH MỞ; ⑷ số ngày giao vào chữ ký phê duyệt ở MỌI tổ chức, bằng một băm riêng và một trigger riêng — không định
+nghĩa lại `rfq_bam_noi_dung` hay `rfq_kiem_chuyen_trang_thai` · **[S1.9101]** · **Migration:** `9501_tco` · **Liên quan:** ADR-053 ⑶
+(vế hẹp *"chỉ `gia`"* — nay nới), ADR-097 ⑸ ⑻ ⒃ ⒇ ㉑ (ghim lúc mở, lời khai thành cam kết, kiểm lúc chấm, hàng L tách bằng số mới, khách
+đọc tập mã ghim), ADR-141 (phiên bản ghim lúc mở), ADR-060 (từ chối cấu hình không vào sổ), ADR-050 ⑴ (làm tròn nửa-ra-xa-0, từng thành
+phần rồi cộng) · **Spec:** S4 §2.4 ⑸ ⑻, §2.5 ⒃ ㉑, §4.1, §4.8, §5.1 L8, §9 S4.7 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — phép đo trước khi viết
+
+1. **Lượt chấm chỉ nhận ĐÚNG một thành phần `gia`/`TIEN`** (`luot-danh-gia.ts`, `THANH_PHAN_CHUA_CO_NGUON`); hàm thuần
+   `tinhChiPhiHieuDung` đã tổng quát. Không `CHECK` nào của `057` liệt kê mã — không phải nới `057` (§2.5 ⒃).
+2. **Không ô khai nào tồn tại:** `freight`, `importCost`, `paymentDays`, `leadTimeDays` cho 0 kết quả ở `apps/`, `packages/`, `db/`. Chính
+   sách chưa có nhóm khoá `tco`. Trang nộp thầu không đọc gì của chính sách — `org_procurement_policies_khach` là vị từ đóng (`027`).
+3. **Chữ ký ký ở `PENDING_APPROVAL`, phiên bản ghim chọn ở cạnh vào `OPEN`** (`102`). Câu §2.5 ㉑ *"tập mã TCO và số ngày giao chụp vào
+   một bảng theo gói lúc OPEN … và nằm trong một băm riêng được ký"* vì thế không làm được như viết: tập mã chọn SAU mọi chữ ký. Số ngày
+   giao — thứ người mua đặt ở DRAFT — thì ký được.
+4. **Mọi tổ chức** (cả MVP1) đếm chữ ký trên `approved_content_hash` ở cạnh mở (D2, `rfq_kiem_chuyen_trang_thai`); `rfq_bam_noi_dung`
+   không được định nghĩa lại (CAO ⑥ của §S1.139). Đường DUY NHẤT đổi số ngày giao sau khi đã ký là cạnh trả về DRAFT của tổ chức đã bật
+   S3 — trả về bởi người khác người ký thì chữ ký cũ vẫn còn hiệu lực (K4b), và nội dung không đổi.
+5. **S3.5 chưa bắt đầu.** `rfq_awards.reason` đã bắt buộc không rỗng ở MỌI lần đề xuất trao, nên luật *"lệch hạng thì giải trình"* đã
+   thoả về hình thức; phần còn lại thật sự là lưu lời khai TCO thành cam kết — chạm đúng đường đề xuất mà S3.5 dựng lại.
+
+### Quyết định
+
+⑴ **Nhóm khoá `tco`** trên phiên bản chính sách: `chi_phi_von_nam` (tỷ lệ (0, 1], ≤ 4 chữ số lẻ), `ngay_thanh_toan_chuan` ([0, 365]),
+`ty_le_tre_ngay` (tỷ lệ (0, 0.1], ≤ 6 chữ số lẻ) — chuỗi, mỗi khoá tuỳ chọn, hai khoá thanh toán cùng có hoặc cùng không, object rỗng bị
+từ chối; biên GIẢ ĐỊNH bằng `.double()` (§2.5 ㉒), phép tính đọc chính chuỗi. `INSERT` theo cột, không `UPDATE`.
+
+⑵ **Năm mã có nguồn** (`tco.ts`): `gia` ← `totalAmount`, `van_chuyen` ← `freight`, `nhap_khau` ← `importCost` qua `bid_so_tien`;
+`chi_phi_thanh_toan` = max(0, `ngay_thanh_toan_chuan` − `paymentDays`) × `chi_phi_von_nam` / 365 × `totalAmount`; `chi_phi_tre` =
+max(0, `leadTimeDays` − số ngày giao của gói) × `ty_le_tre_ngay` × `totalAmount`. Hai ô số ngày đọc bằng bộ đọc mới `bid_so_ngay`
+(số nguyên thập phân [0, 3650], không bao giờ `RAISE`). Phép tính trên `bigint`, làm tròn nửa-ra-xa-0 MỘT lần mỗi thành phần, rồi
+`tinhChiPhiHieuDung` cộng (ADR-050 ⑴). Mã quy đổi mang phép tính của nó trong `components` (`nguon`: cơ sở, ngày khai, ngày chuẩn hay
+yêu cầu, tỷ lệ) — §8.6 đòi tham số hiện cạnh con số; `057` chỉ đòi `ma` và `tien`, nên J1 và J2 không đổi.
+
+⑶ **Kiểm phiên bản LÚC CHẤM** (§2.5 ⒃), lời từ chối CẤU HÌNH gọi tên mã và phiên bản, không vào sổ (ADR-060, L12):
+`THANH_PHAN_CHUA_CO_NGUON` cho điểm phi giá, `chat_luong` (chưa có nguồn tới S5), `thue` (bỏ — ADR-097 ⑻), mã lạ, mã quy đổi thiếu tham
+số hay `chi_phi_tre` khi gói không có số ngày giao; mã MỚI `CHINH_SACH_TCO_SAI` cho mã trùng, thiếu `gia`, hệ số của mã tiền khác "1".
+
+⑷ **Ô thiếu gọi tên, không lấy `0`.** Báo giá vắng hay khai ngoài miền ô của một mã bật thì KHÔNG có hạng; cột mới
+`rfq_evaluation_lines.ma_thieu` gọi tên mọi mã thiếu, theo thứ tự chính sách (cả `gia` khi tổng không đọc được). Không báo giá nào có
+hạng ⇒ `KHONG_CO_BAO_GIA_DOC_DUOC` — ở chính sách chỉ `gia` hai điều kiện là một, nên luồng MVP1 không đổi.
+
+⑸ **Tập mã chụp lúc mở** — mặc định nói ra. Cột `rfq_packages.tco_ma_ghim` (ngoài mọi `GRANT` ghi) do trigger `rfq_packages_tco_khi_mo`
+đặt ở cạnh vào `OPEN`, từ phiên bản ghim; khách đọc hàng gói của mình qua route (S4.7b), không đọc bảng chính sách. Lượt chấm chỉ chạy khi
+tập ấy khớp phiên bản ghim. Một cột trên hàng gói, không một bảng riêng như §2.5 ㉑ viết: hàng gói đã có policy `_khach` hẹp, và tập mã là
+hàm của một hàng bất biến.
+
+⑹ **Số ngày giao của gói** (`rfq_packages.so_ngay_giao`, [1, 3650], tuỳ chọn) chỉ đổi ở DRAFT — trigger riêng `rfq_packages_so_ngay_giao`,
+khuôn `category_id` của `085` — và nằm trong chữ ký: `approved_delivery_hash` do trigger `rfq_approvals_dat_bam_giao_hang` đặt ở MỌI tổ
+chức; hai `UNIQUE` chữ ký nới thêm cột ấy, nên người đã ký ký lại được sau khi chỉ số ngày giao đổi. Cạnh mở đếm NGƯỜI (`DISTINCT`) ký trên
+nội dung hiện tại cộng số ngày giao hiện tại (cộng danh sách, ngân sách và hiệu lực K4b ở tổ chức đã bật) — và chỉ nói khi phép đếm gốc
+của D2/K4b đã đủ, nên không phụ thuộc thứ tự trigger và các lời từ chối cũ giữ nguyên văn. `DISTINCT` là chỗ chịu lực: sau `UNIQUE` mới,
+một người có hai hàng trên cùng nội dung, và `count(*)` của D2 đếm họ hai lần. Tầng gói: `datSoNgayGiao` (vào sổ `RFQ_DELIVERY_DAYS_SET`).
+
+⑺ **Thiếu số ngày giao khi phiên bản ghim tính chi phí trễ** ⇒ trigger cạnh mở từ chối với tên `tco_thieu_so_ngay_giao`; `openRfq` hỏi
+cùng câu TRƯỚC lần đúc khoá (khoản 31), dưới khoá chính sách vừa lấy, và từ chối CẤU HÌNH có tên — không vào sổ.
+
+⑻ **Hàng L tách bằng số mới** (ADR-097 ⒇): **L8** — TCO có nguồn; **L16** — thước TCO của gói cố định trước khi giá lộ, vế TCO và form của
+L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
+
+### Hệ quả
+
+- Ca lật, kê tên: đối chứng dương của ca đầu khối L14 ở `luot-danh-gia.int` (phiên bản hệ số `2.0000` nay bị từ chối khi chấm — cần
+  gạt đổi sang `van_chuyen` trên `freight`); giàn cảnh `bo-xuat.int` (hệ số `1.2345` nay bị từ chối — hệ số 1; luật làm tròn của bộ kiểm
+  trên hệ số khác 1 vẫn đo ở `kiem.test.ts`). Mọi ca khác xanh nguyên văn.
+- Một lượt chấm cũ ghi trước `9501` dưới hệ số khác 1 ở lại làm sự thật kiểm toán; bộ bằng chứng vẫn tính lại được nó.
+- `GET /policy/versions` mang thêm `tco` (S4.7b hiện nó).
+
+### Điều ADR này KHÔNG nói
+
+- Route, màn, ô khai ở `/nop-thau`, hai hạng ở `/mo-thau` (S4.7b).
+- Lời khai lưu cùng award, giải trình khi lệch hạng, bộ kiểm ngoại tuyến tính lại phép quy đổi (S4.7c, sau S3.5).
+- Đối chiếu lời khai với thực tế — hoá đơn, GRN (S5, §8.13).

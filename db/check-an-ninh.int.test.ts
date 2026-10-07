@@ -100,6 +100,10 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   // [S1.156 / S3.1a] Hai cột mức chính sách: tất-cả-hoặc-không (khuôn `danh_gia_du_bo`), và dương.
   org_procurement_policies_muc_s3_du_bo: "MOC",
   org_procurement_policies_muc_s3_duong: "SO",
+  // [S1.9101 / S4.7a] Nhóm khoá `tco`: hình dạng, cặp hai khoá, biên GIẢ ĐỊNH của ba tỷ lệ và số ngày. Luật chịu lực của L8 (mã có
+  // nguồn, hệ số mã tiền bằng 1, đủ tham số) chạy LÚC CHẤM ở `kiemChinhSachTco`; gỡ ràng buộc này thì một tỷ lệ sai định dạng làm
+  // lượt chấm NÉM, không ra một con số — biên là vệ sinh cấu hình, phiên bản vẫn ghim lúc mở, trước khi giá lộ.
+  org_procurement_policies_tco_hinh_dang: "JSON",
   org_procurement_policies_version_check: "SO",
   otp_rate_limits_bucket_kind_check: "MIEN",
   otp_rate_limits_hits_check: "SO",
@@ -181,6 +185,8 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_evaluation_lines_gia_hop_le: "HUU_HAN",
   rfq_evaluation_lines_gia_va_hang_du_bo: "MOC",
   rfq_evaluation_lines_hang_tu_mot: "SO",
+  // [S1.9101 / S4.7a] Mã thiếu ô khai chỉ ở hàng không số, không rỗng — sai thì sai lời giải thích, không đổi hạng nào.
+  rfq_evaluation_lines_ma_thieu_hinh_dang: "DINH_DANG",
   rfq_evaluations_currency_check: "MIEN",
   rfq_huy_thi_co_moc_huy: "MOC",
   rfq_invitations_link_channel_check: "MIEN",
@@ -196,6 +202,8 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_key_material_revoked_reason_check: "DO_DAI",
   rfq_key_material_wrapped_private_key_check: "DO_DAI",
   rfq_packages_early_close_reason_check: "DO_DAI",
+  // [S1.9101 / S4.7a] Miền của số ngày giao yêu cầu. Vế chịu lực của L16 — chỉ đổi ở DRAFT, nằm trong chữ ký — ở hai trigger.
+  rfq_packages_so_ngay_giao_mien: "SO",
   rfq_packages_title_check: "DO_DAI",
   // [S1.265 / S3.3b] Độ dài giải trình và lý do rút ngoại lệ — năm CHECK kia của bảng (hành động, loại, mã lý do, hình dạng, sàn
   // `OTHER`) nằm ở tập an ninh.

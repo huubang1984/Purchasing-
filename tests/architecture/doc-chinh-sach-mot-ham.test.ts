@@ -37,6 +37,9 @@ const TEP_DA_KHAI: readonly string[] = [
   "packages/danh-gia/src/luot-danh-gia.ts",
   "packages/danh-gia/src/vong-bafo.ts",
   "packages/rfq/src/procurement-policy.ts",
+  // [S1.9101 / S4.7a / L16] `openRfq` hỏi trước lần đúc khoá: phiên bản SẮP ghim (`chinh_sach_hieu_luc` lúc mở, dưới khoá chính sách)
+  // có tính chi phí trễ mà gói chưa khai số ngày giao không — qua hàm.
+  "packages/rfq/src/rfq.ts",
   "tools/gieo-demo/src/index.ts",
 ];
 

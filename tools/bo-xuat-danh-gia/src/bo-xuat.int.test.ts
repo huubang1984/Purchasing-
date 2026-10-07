@@ -44,7 +44,10 @@ const MIGRATIONS_DIR = join(GOC, "db", "migrations");
 const DANG_KY = pathToFileURL(join(GOC, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href;
 const KICH_BAN = join(GOC, "tools", "bo-xuat-danh-gia", "src", "index.ts");
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
-const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.2345"}]';
+// [S1.9101 / S4.7a / L8 — CA LẬT] ~~`he_so` "1.2345"~~ — L8 đòi hệ số của mọi mã `TIEN` bằng "1" lúc chấm (spec S4 §2.5 ⒃: tiền là
+// tiền), nên một phiên bản "1.2345" nay bị lượt chấm từ chối (`CHINH_SACH_TCO_SAI`) và giàn cảnh này không dựng được nữa. Luật làm
+// tròn của bộ kiểm trên hệ số khác 1 — thứ lượt chấm CŨ có thể đã ghi — vẫn đo ở `kiem.test.ts` (bundle tổng hợp, "1.2345").
+const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
 
 let db: TestDatabase;
 let apiPool: pg.Pool;
@@ -260,8 +263,8 @@ beforeAll(async () => {
 
   const csId = await taoChinhSach(TP_GIA);
   rfqId = await taoRfqMo(csId);
-  // Ba báo giá, và số tiền chọn để phép làm tròn CÓ VIỆC: `he_so = 1.2345`, nên
-  // `10.00 × 1.2345 = 12.345000` rơi đúng nửa xu — ca mà một luật làm tròn sai sẽ lệch.
+  // Ba báo giá. ~~Số tiền chọn để phép làm tròn CÓ VIỆC: `he_so = 1.2345`, nên `10.00 × 1.2345 = 12.345000` rơi đúng nửa xu.~~
+  // [S1.9101 / S4.7a] Hệ số 1: phép tính lại của bộ kiểm là một phép cộng (xem đầu tệp).
   const ban: [string, unknown][] = [];
   const ids: string[] = [];
   for (const [i, tien] of ["10.00", "20.00", "30.00"].entries()) {
@@ -331,7 +334,7 @@ describe("`pnpm bang-chung xuat` — bộ xuất mang đủ đầu vào để t�
   it("mang bộ trọng số của ĐÚNG phiên bản chính sách đã dùng, viết theo lối CSDL", async () => {
     const bo = docBo(JSON.parse(await readFile(join(boThuMuc, TEP_DU_LIEU), "utf8")));
     expect(bo.luotCham[0]?.chinhSachThanhPhan).toEqual([
-      { ma: "gia", don_vi: "TIEN", he_so: "1.2345" },
+      { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
     ]);
     expect(bo.luotCham[0]?.policyVersion).toBe(1);
   });
@@ -353,8 +356,8 @@ describe("`pnpm bang-chung xuat` — bộ xuất mang đủ đầu vào để t�
     expect(new Set(bo.traoThau.map((t) => t.evaluationId)).size).toBe(1);
     const hang = bo.luotCham[0]?.hang.find((h) => h.bidVersionId === bo.traoThau[0]?.bidVersionId);
     expect(hang?.rank).toBe(1);
-    // `10.00 × 1.2345 = 12.345000` → nửa-ra-xa-0 cho `12.35`. Một luật CẮT CỤT cho `12.34`.
-    expect(hang?.effectiveCost).toBe("12.35");
+    // ~~`10.00 × 1.2345 = 12.345000` → nửa-ra-xa-0 cho `12.35`.~~ [S1.9101] Hệ số 1 — xem đầu tệp.
+    expect(hang?.effectiveCost).toBe("10.00");
   });
 
   it("gói thầu CHƯA chấm lần nào ⇒ KHÔNG ghi một thư mục trông như bộ bằng chứng", async () => {
@@ -389,12 +392,12 @@ describe("`pnpm bang-chung kiem` — ĐẠT khi đã NGẮT KẾT NỐI", () => 
     expect(kq0.ma).toBe(0);
     const tep = join(ra, TEP_DU_LIEU);
     const goc = await readFile(tep, "utf8");
-    await writeFile(tep, goc.replace('"tien": "12.35"', '"tien": "12.34"'));
+    await writeFile(tep, goc.replace('"tien": "10.00"', '"tien": "10.01"'));
     const kq = chay(null, "kiem", "--bo", ra);
     expect(kq.ma).toBe(1);
     expect(kq.ra).toContain("ok=false");
     expect(kq.ra).toContain("LECH");
-    expect(kq.ra).toContain("tính lại ra 12.35");
+    expect(kq.ra).toContain("tính lại ra 10.00");
   }, 120000);
 
   it("sửa `DAC-TA.md` ⇒ ĐỎ ở lớp BĂM, trước khi đọc một con số nào", async () => {

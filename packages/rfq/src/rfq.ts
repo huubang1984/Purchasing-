@@ -400,6 +400,46 @@ export async function datNhomHangChoGoi(
   return doiRfq(hang);
 }
 
+/** [S1.9101 / S4.7a] Miền của số ngày giao yêu cầu — khớp `CHECK` `rfq_packages_so_ngay_giao_mien` (`9501`). */
+export const SO_NGAY_GIAO_TOI_DA = 3650;
+
+/**
+ * [S1.9101 / S4.7a / L16] Đặt, đổi hay xoá (`null`) số ngày giao yêu cầu của một gói ĐANG SOẠN — cơ sở của chi phí trễ giao
+ * (`chi_phi_tre`, spec S4 §4.8). Lớp chặn cuối là trigger `rfq_packages_so_ngay_giao` (`9501_tco`): cột chỉ đổi ở DRAFT. Vế
+ * `AND status = 'DRAFT'` là khuôn [H-3] của `datNhomHangChoGoi`. Con số nằm trong chữ ký phê duyệt (băm riêng của `9501` (3)): gói trả
+ * về DRAFT rồi đổi số ngày giao thì chữ ký cũ không mở được nó nữa.
+ */
+export async function datSoNgayGiao(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly soNgayGiao: number | null; readonly actorSessionId: string },
+): Promise<{ readonly rfqId: string; readonly soNgayGiao: number | null }> {
+  await assertTenantBound(client, orgId, "datSoNgayGiao");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  const n = input.soNgayGiao;
+  if (n !== null && (!Number.isInteger(n) || n < 1 || n > SO_NGAY_GIAO_TOI_DA)) {
+    throw new RfqError(`số ngày giao yêu cầu phải là số nguyên từ 1 đến ${String(SO_NGAY_GIAO_TOI_DA)}`);
+  }
+  const { rows } = await client.query<{ id: string; so_ngay_giao: number | null }>(
+    `UPDATE public.rfq_packages SET so_ngay_giao = $2::pg_catalog.int4
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'DRAFT' RETURNING id, so_ngay_giao`,
+    [input.rfqId, n],
+  );
+  const hang = rows[0];
+  if (hang === undefined) {
+    throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo");
+  }
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "RFQ_DELIVERY_DAYS_SET",
+    resourceType: "rfq_package",
+    resourceId: hang.id,
+    payload: { soNgayGiao: hang.so_ngay_giao },
+  });
+  return { rfqId: hang.id, soNgayGiao: hang.so_ngay_giao };
+}
+
 export async function addRfqItem(
   client: pg.PoolClient,
   orgId: string,
@@ -737,6 +777,25 @@ export async function openRfq(
   // [S1.270 / S3.3d / K3] Xoay vòng ở cạnh mở — cửa sổ chỉ đếm gói ĐÃ MỞ, nên các gói nộp song song cùng một bộ nhà cung cấp đều
   // qua lúc nộp; sau K10a, cùng thứ tự trigger (`…_kiem_xoay_vong_khi_mo` cuối cạnh).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_XOAY_VONG_MO, [orgId, input.rfqId]);
+  // [S1.9101 / S4.7a / L16] Phiên bản sắp ghim tính chi phí trễ mà gói chưa khai số ngày giao ⇒ từ chối CẤU HÌNH có tên, TRƯỚC lần đúc
+  // khoá (khoản 31). Dưới khoá chính sách vừa lấy, nên phiên bản hiệu lực không đổi giữa câu này và trigger `rfq_packages_tco_khi_mo`
+  // — trigger hỏi lại cùng câu trên phiên bản đã ghim. Không vào sổ (L12: từ chối vì cấu hình chưa sẵn sàng).
+  const { rows: tco } = await client.query<{ thieu: boolean }>(
+    `SELECT (p.so_ngay_giao IS NULL
+             AND pg_catalog.jsonb_path_exists(o.eval_components, '$[*] ? (@.ma == "chi_phi_tre")')) AS thieu
+       FROM public.rfq_packages p
+       JOIN public.org_procurement_policies o
+         ON o.org_id OPERATOR(pg_catalog.=) p.org_id
+        AND o.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc(p.org_id, pg_catalog.clock_timestamp())
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
+  );
+  if (tco[0]?.thieu === true) {
+    throw new RfqError(
+      "Phiên bản chính sách đang hiệu lực tính chi phí trễ giao, mà gói thầu chưa khai số ngày giao yêu cầu — " +
+        "trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại (L16).",
+    );
+  }
 
   // Sinh khoá TRƯỚC lần UPDATE. Xem khối chú thích trên.
   await issueRfqKeyPair(client, orgId, {

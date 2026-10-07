@@ -2428,6 +2428,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // `RETURN NEW` ở hàm đầu để mọi gói mới không phiên bản ghim; ở hàm sau mở lại đường chấm dưới phiên bản khai SAU khi thấy giá.
     { ham: "rfq_ghim_chinh_sach_khi_mo", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_packages_ghim_chinh_sach_khi_mo"] },
     { ham: "rfq_evaluations_kiem_phien_ban_ghim", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_evaluations_kiem_phien_ban_ghim"] },
+    // [S1.9101 / S4.7a / L16] Số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký, và tập mã TCO chụp lúc mở. Thân `RETURN NEW` ở hàm đầu
+    // cho đổi số ngày giao sau khi duyệt; ở hàm hai để chữ ký mang băm hằng; ở hàm ba bỏ ảnh chụp, lời đòi số ngày giao, và phép
+    // đếm người ký trên số ngày giao hiện tại.
+    { ham: "rfq_kiem_so_ngay_giao", migration: "9501_tco.sql", trigger: ["rfq_packages_so_ngay_giao"] },
+    { ham: "rfq_approvals_dat_bam_giao_hang", migration: "9501_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
+    { ham: "rfq_tco_khi_mo", migration: "9501_tco.sql", trigger: ["rfq_packages_tco_khi_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.

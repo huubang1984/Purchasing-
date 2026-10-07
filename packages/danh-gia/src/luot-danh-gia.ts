@@ -13,10 +13,15 @@
 // cung cấp khai phí vận chuyển riêng, và không có chỗ nào để ai chấm điểm kỹ thuật — màn chấm là
 // **S2.4**, và nó chưa có.
 //
-// Nên vòng này cưỡng chế một vế hẹp và NÓI RA: chính sách phải khai **đúng một** thành phần, mã
-// `gia`, đơn vị `TIEN`. Mọi hình dạng khác bị TỪ CHỐI bằng một câu gọi tên — chứ không âm thầm
+// ~~Nên vòng này cưỡng chế một vế hẹp và NÓI RA: chính sách phải khai **đúng một** thành phần, mã
+// `gia`, đơn vị `TIEN`.~~ Mọi hình dạng khác bị TỪ CHỐI bằng một câu gọi tên — chứ không âm thầm
 // lấy `0` cho thành phần không có nguồn. Một `0` ở đây là một con số đi vào bảng xếp hạng mà
 // không ai giải thích được, đúng thứ ràng buộc ⑷ của `PRODUCT` §8⑸ cấm.
+//
+// [S1.9101 / S4.7a / L8 / ADR-9201] Vế hẹp NỚI thành tập mã có nguồn của TCO (`tco.ts`): `gia`, `van_chuyen`, `nhap_khau` đọc từ ô
+// khai của phong bì qua bộ đọc SQL (`bid_so_tien`), `chi_phi_thanh_toan` và `chi_phi_tre` quy đổi từ ô số ngày (`bid_so_ngay`) theo
+// tham số của phiên bản ghim. Luật kiểm phiên bản (mã có nguồn, `he_so` của mã tiền bằng 1, đủ tham số) chạy LÚC CHẤM, câu gọi tên.
+// Một báo giá thiếu ô của mã chính sách bật thì KHÔNG CÓ HẠNG, và hàng của nó gọi tên mã thiếu (`ma_thieu`) — không lấy `0`.
 //
 // ----------------------------------------------------------------------------------------------
 // XẾP HẠNG: HAI BÁO GIÁ BẰNG NHAU NHẬN CÙNG MỘT HẠNG
@@ -37,9 +42,13 @@ import {
   type ThanhPhanChinhSach,
   type ThanhPhanDaQuyDoi,
 } from "./chi-phi-hieu-dung.js";
+import { MA_GIA, dauVaoTco, docNhomTco, kiemChinhSachTco, laThieuOKhai, type ThamSoTco } from "./tco.js";
 
-/** Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này — `bid_so_tien(payload->>'totalAmount')`. */
-export const MA_THANH_PHAN_GIA = "gia";
+/**
+ * ~~Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này~~ — `bid_so_tien(payload->>'totalAmount')`. [S1.9101 / S4.7a] Không còn duy
+ * nhất: tập mã có nguồn ở `tco.ts`.
+ */
+export const MA_THANH_PHAN_GIA = MA_GIA;
 
 /**
  * Các trạng thái RFQ mà một lượt chấm đi ra được — hai cạnh vào `EVALUATING` của bảng cạnh.
@@ -62,6 +71,7 @@ export type LyDoTuChoiLuot = Extract<
   | "RFQ_KHONG_CHAM_DUOC"
   | "CHINH_SACH_CHUA_KHAI_TRONG_SO"
   | "THANH_PHAN_CHUA_CO_NGUON"
+  | "CHINH_SACH_TCO_SAI"
   | "LECH_TIEN_TE"
   | "KHONG_CO_BAO_GIA_DOC_DUOC"
 >;
@@ -90,6 +100,8 @@ export interface HangXepHang {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanDaQuyDoi[];
+  /** [S1.9101 / S4.7a] Hàng không có số: các mã không có giá trị đọc được, theo thứ tự chính sách. `null` ở hàng có số. */
+  readonly maThieu: readonly string[] | null;
 }
 
 export interface LuotDanhGia {
@@ -117,6 +129,11 @@ export interface HangBaoGia {
   readonly bid_version_id: string;
   readonly tien: string | null;
   readonly currency: string | null;
+  /** [S1.9101 / S4.7a] Bốn ô khai TCO, qua bộ đọc SQL — `null` khi vắng hay ngoài miền. */
+  readonly phi_van_chuyen: string | null;
+  readonly chi_phi_nhap_khau: string | null;
+  readonly so_ngay_thanh_toan: number | null;
+  readonly so_ngay_giao_khai: number | null;
 }
 
 /**
@@ -144,6 +161,9 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark` của CÙNG phiên bản ghim — vế benchmark của L14. `null`: chưa cấu hình. */
   readonly benchmark: NhomBenchmark | null;
+  /** [S1.9101 / S4.7a] Nhóm khoá `tco` của CÙNG phiên bản ghim, và số ngày giao yêu cầu của gói. */
+  readonly tco: ThamSoTco;
+  readonly soNgayGiao: number | null;
 }> {
   // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách: một phiên bản có bậc chưa có chữ ký thứ hai TRƯỚC lúc gói mở
   // không áp cho gói (ADR-082 ⑺). [S1.253] Hàm ấy chạy MỘT lần, lúc gói mở, dưới khoá tư vấn chính sách; câu này đọc kết quả.
@@ -152,8 +172,11 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
     readonly version: number | null;
     readonly eval_components: HangChinhSach["eval_components"];
     readonly benchmark: unknown;
+    readonly tco: unknown;
+    readonly so_ngay_giao: number | null;
+    readonly tco_ma_ghim: readonly string[] | null;
   }>(
-    `SELECT o.id, o.version, o.eval_components, o.benchmark
+    `SELECT o.id, o.version, o.eval_components, o.benchmark, o.tco, r.so_ngay_giao, r.tco_ma_ghim
        FROM public.rfq_packages r
        LEFT JOIN public.org_procurement_policies o
          ON o.id OPERATOR(pg_catalog.=) r.chinh_sach_ghim_id
@@ -178,21 +201,36 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
         "phiên bản tạo sau lúc mở không áp cho gói này (L14).",
     );
   }
-  const tp = cs.eval_components.map((t) => ({ ma: t.ma, donVi: t.don_vi, heSo: t.he_so }));
-  // Vế HẸP của vòng này, nói ra ở khối đầu tệp: đúng một thành phần, mã `gia`, đơn vị `TIEN`.
-  const laVeHep = tp.length === 1 && tp[0]?.ma === MA_THANH_PHAN_GIA && tp[0]?.donVi === "TIEN";
-  if (!laVeHep) {
+  const tp = cs.eval_components.map((t) => ({ ma: t.ma, donVi: t.don_vi, heSo: t.he_so })) as readonly ThanhPhanChinhSach[];
+  // ~~Vế HẸP của vòng này, nói ra ở khối đầu tệp: đúng một thành phần, mã `gia`, đơn vị `TIEN`.~~
+  // [S1.9101 / S4.7a / L8] Luật kiểm của TCO — mã có nguồn, hệ số mã tiền bằng 1, đủ tham số — gọi tên mã hỏng.
+  const tco = docNhomTco(hang.tco);
+  const loi = kiemChinhSachTco(tp, tco, hang.so_ngay_giao);
+  if (loi !== null) {
     throw new DanhGiaTuChoiError(
-      "THANH_PHAN_CHUA_CO_NGUON",
-      `Chính sách phiên bản ${String(cs.version)} khai thành phần mà vòng này chưa có nguồn dữ liệu: ` +
-        `chỉ mã "${MA_THANH_PHAN_GIA}" (đơn vị TIEN) đọc được từ báo giá. Điểm phi giá cần màn chấm của S2.4.`,
+      loi.lyDo,
+      `Chính sách phiên bản ${String(cs.version)} — phiên bản gói thầu này ghim lúc mở — không chấm được: ${loi.cau}. ` +
+        "Phiên bản tạo sau lúc mở không áp cho gói này (L14).",
+    );
+  }
+  // [S1.9101 / S4.7a / L16] Tập mã nhà cung cấp thấy lúc nộp là cột CHỤP ở cạnh vào OPEN (`9501` (5)), từ CÙNG phiên bản ghim; lượt
+  // chấm dùng chính tập ấy. Hai thứ cùng sinh từ một hàng bất biến, nên lệch nhau chỉ khi trigger chụp không chạy (một đường ghi
+  // thứ hai, một trigger bị tắt) — khi ấy không chấm: một bảng xếp hạng trên ô nhà cung cấp không được hỏi là sai từ gốc.
+  const maChinhSach = tp.map((t) => t.ma);
+  const ghim = hang.tco_ma_ghim ?? [];
+  if (ghim.length !== maChinhSach.length || ghim.some((m, i) => m !== maChinhSach[i])) {
+    throw new Error(
+      `Tập mã thành phần chụp lúc mở gói (${ghim.join(", ") || "rỗng"}) khác tập mã của phiên bản ghim ` +
+        `(${maChinhSach.join(", ")}) — không chấm (L16).`,
     );
   }
   return {
     id: cs.id,
     version: cs.version,
-    thanhPhan: tp as readonly ThanhPhanChinhSach[],
+    thanhPhan: tp,
     benchmark: docNhomBenchmark(hang.benchmark),
+    tco,
+    soNgayGiao: hang.so_ngay_giao,
   };
 }
 
@@ -232,7 +270,11 @@ export async function docBaoGia(
     `SELECT DISTINCT ON (v.bid_id)
             u.bid_version_id,
             public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS tien,
-            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency')) AS currency
+            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency')) AS currency,
+            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'freight'))::pg_catalog.text AS phi_van_chuyen,
+            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'importCost'))::pg_catalog.text AS chi_phi_nhap_khau,
+            public.bid_so_ngay((u.payload OPERATOR(pg_catalog.->>) 'paymentDays')) AS so_ngay_thanh_toan,
+            public.bid_so_ngay((u.payload OPERATOR(pg_catalog.->>) 'leadTimeDays')) AS so_ngay_giao_khai
        FROM public.rfq_unsealed_bids u
        JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id
                                        AND v.org_id OPERATOR(pg_catalog.=) u.org_id
@@ -376,18 +418,44 @@ export async function taoLuotDanhGia(
   if (currency === "") throw new Error("đơn vị tiền rỗng sau khi đã lọc — bất khả");
 
   const tinh = baoGia.map((b) => {
-    if (b.tien === null) return { bidVersionId: b.bid_version_id, gia: null, components: [] as ThanhPhanDaQuyDoi[] };
-    const kq = tinhChiPhiHieuDung(cs.thanhPhan, [{ ma: MA_THANH_PHAN_GIA, giaTri: b.tien }]);
+    // [S1.9101 / S4.7a / L8] Mỗi mã một nguồn: ô khai qua bộ đọc SQL, hay quy đổi từ ô khai theo tham số của phiên bản ghim. Thiếu ô
+    // của một mã chính sách bật ⇒ hàng không số, gọi tên mã thiếu (`ma_thieu`) — kể cả `gia` khi `totalAmount` không đọc được.
+    const dv = dauVaoTco(cs.thanhPhan, cs.tco, cs.soNgayGiao, {
+      tongTien: b.tien,
+      phiVanChuyen: b.phi_van_chuyen,
+      chiPhiNhapKhau: b.chi_phi_nhap_khau,
+      soNgayThanhToan: b.so_ngay_thanh_toan,
+      soNgayGiaoKhai: b.so_ngay_giao_khai,
+    });
+    if (laThieuOKhai(dv)) {
+      return { bidVersionId: b.bid_version_id, gia: null, components: [] as ThanhPhanDaQuyDoi[], maThieu: dv.maThieu };
+    }
+    const kq = tinhChiPhiHieuDung(cs.thanhPhan, dv.dauVao);
     if (laTuChoi(kq)) {
-      // Không với tới được qua đường công khai: `docChinhSach` đã khẳng định hình dạng hẹp, và
+      // Không với tới được qua đường công khai: `docChinhSach` đã kiểm phiên bản (`kiemChinhSachTco`), và
       // `bid_so_tien` đã lọc bốn ca của `020`. Fail-closed tường minh thay vì một `null` im lặng.
       throw new DanhGiaTuChoiError(
         "THANH_PHAN_CHUA_CO_NGUON",
         `Không tính được chi phí hiệu dụng cho một báo giá (${kq.lyDo}).`,
       );
     }
-    return { bidVersionId: b.bid_version_id, gia: kq.effectiveCost, components: [...kq.components] };
+    // Mã quy đổi mang theo phép tính của nó (cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ lệ) — spec §8.6: tham số hiện NGAY CẠNH
+    // con số nó sinh ra. `057` chỉ đòi `ma` và `tien`; khoá thêm không đổi J1 hay J2.
+    const components = kq.components.map((c) => {
+      const n = dv.nguon.get(c.ma);
+      return n === undefined ? c : { ...c, nguon: n };
+    });
+    return { bidVersionId: b.bid_version_id, gia: kq.effectiveCost, components, maThieu: null };
   });
+
+  // [S1.9101 / S4.7a] Có báo giá đọc được giá mà KHÔNG báo giá nào đủ ô khai thì không có gì để xếp hạng — cùng câu với trên. Ở chính
+  // sách chỉ `gia`, hai điều kiện là một (đủ ô ⇔ đọc được giá), nên luồng MVP1 không đổi.
+  if (tinh.every((t) => t.gia === null)) {
+    throw new DanhGiaTuChoiError(
+      "KHONG_CO_BAO_GIA_DOC_DUOC",
+      "Không một báo giá nào của gói thầu này đủ ô khai mà chính sách ghim đòi; không có gì để xếp hạng.",
+    );
+  }
 
   const hang = xepHang(tinh.map((t) => t.gia));
 
@@ -416,16 +484,17 @@ export async function taoLuotDanhGia(
   for (const [i, t] of tinh.entries()) {
     await client.query(
       `INSERT INTO public.rfq_evaluation_lines
-         (org_id, evaluation_id, bid_version_id, effective_cost, components, rank)
+         (org_id, evaluation_id, bid_version_id, effective_cost, components, rank, ma_thieu)
        VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid,
-               $4::pg_catalog.numeric, $5::pg_catalog.jsonb, $6::pg_catalog.int4)`,
-      [orgId, evaluationId, t.bidVersionId, t.gia, JSON.stringify(t.components), hang[i] ?? null],
+               $4::pg_catalog.numeric, $5::pg_catalog.jsonb, $6::pg_catalog.int4, $7::pg_catalog.text[])`,
+      [orgId, evaluationId, t.bidVersionId, t.gia, JSON.stringify(t.components), hang[i] ?? null, t.maThieu],
     );
     lines.push({
       bidVersionId: t.bidVersionId,
       effectiveCost: t.gia,
       rank: hang[i] ?? null,
       components: t.components,
+      maThieu: t.maThieu,
     });
   }
 

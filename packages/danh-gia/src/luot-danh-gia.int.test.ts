@@ -94,16 +94,17 @@ async function taoPhien(userId: string, org: string = orgA): Promise<string> {
  * [S1.108 / S2.5] `topN` thêm ở vòng này, mặc định `0` = *"tổ chức này không dùng BAFO"* (quy ước
  * của `056`). Mặc định giữ nguyên hành vi cho ba mươi chỗ gọi đã có.
  */
-async function taoChinhSach(evalComponents: string | null, topN = 0): Promise<string> {
+async function taoChinhSach(evalComponents: string | null, topN = 0, tco: string | null = null): Promise<string> {
   const { rows: ke } = await db.pool.query<{ n: number }>(
     "SELECT coalesce(max(version), 0) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
     [orgA],
   );
+  // [S1.9101 / S4.7a] `tco` — nhóm khoá tham số quy đổi; mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
-      "eval_components, bafo_top_n, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE $6::integer END, $4, $5) RETURNING id",
-    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc, topN],
+      "eval_components, bafo_top_n, created_by, created_by_session_id, tco) " +
+      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE $6::integer END, $4, $5, $7::jsonb) RETURNING id",
+    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc, topN, tco],
   );
   return rows[0]?.id ?? "";
 }
@@ -117,18 +118,19 @@ async function taoChinhSach(evalComponents: string | null, topN = 0): Promise<st
  */
 const LUONG_CUA_PHIEN_BAN = new Map<string, { readonly bidId: string; readonly phienKhach: string }>();
 
-async function taoRfqMo(policyId: string): Promise<string> {
-  const rfqId = await taoRfqChoMo(policyId);
+async function taoRfqMo(policyId: string, soNgayGiao: number | null = null): Promise<string> {
+  const rfqId = await taoRfqChoMo(policyId, soNgayGiao);
   await moGoiDaDuyet(rfqId);
   return rfqId;
 }
 
 /** [S1.253 / S4.5a] Nửa đầu của `taoRfqMo`: gói ở `PENDING_APPROVAL`, đủ một chữ ký — mọi khoá tư vấn chính sách của cạnh nộp đã nhả. */
-async function taoRfqChoMo(policyId: string): Promise<string> {
+async function taoRfqChoMo(policyId: string, soNgayGiao: number | null = null): Promise<string> {
+  // [S1.9101 / S4.7a] `so_ngay_giao` khai lúc dựng gói (ở DRAFT) — mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
-      "created_by, created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
-    [orgA, MAI_SAU, uYc, sYc],
+      "created_by, created_by_session_id, so_ngay_giao) VALUES ($1, 'Mua thep tam', $2, false, $3, $4, $5) RETURNING id",
+    [orgA, MAI_SAU, uYc, sYc, soNgayGiao],
   );
   const rfqId = rows[0]?.id ?? "";
   await db.pool.query(
@@ -381,6 +383,8 @@ async function goiDaMo(
   evalComponents: string | null = TP_GIA,
   topN = 0,
   donGia: string | null = null,
+  /** [S1.9101 / S4.7a] Trường thêm vào MỌI phong bì — ô khai TCO (`freight`, `paymentDays`…). */
+  them: Readonly<Record<string, unknown>> = {},
 ): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
   const csId = await taoChinhSach(evalComponents, topN);
   const rfqId = await taoRfqMo(csId);
@@ -391,7 +395,9 @@ async function goiDaMo(
     ids.push(versionId);
     ban.push([
       versionId,
-      donGia === null ? { totalAmount: tien, currency: dv } : { totalAmount: tien, currency: dv, lines: [{ lineNo: 1, unitPrice: donGia, amount: tien }] },
+      donGia === null
+        ? { totalAmount: tien, currency: dv, ...them }
+        : { totalAmount: tien, currency: dv, lines: [{ lineNo: 1, unitPrice: donGia, amount: tien }], ...them },
     ]);
   }
   await moThau(rfqId, ban);
@@ -3669,10 +3675,14 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
 //
 // Hệ số `2.0000` cho mã `gia` là một CẦN GẠT ĐO, không một cấu hình hợp lệ về sản phẩm (L8 ở S4.7 sẽ đòi `he_so` của mã `TIEN`
 // bằng "1"): nó làm phiên bản nào đã áp đọc được ngay trên con số — gấp đôi hay không.
+// [S1.9101 / S4.7a / L8 — CA LẬT] L8 nay đòi đúng điều ấy lúc chấm, nên phiên bản hệ số 2 bị từ chối (`CHINH_SACH_TCO_SAI`) nếu nó
+// được CHẤM. Ở mọi ca dưới nó chỉ TỒN TẠI — chính sự có mặt của nó là thứ đo — trừ ĐỐI CHỨNG DƯƠNG của ca đầu: ca ấy nay dùng cần
+// gạt của TCO — phiên bản cộng `van_chuyen` trên phong bì khai `freight` bằng giá —, cùng con số gấp đôi.
 // ================================================================================================
 
 describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sách hiệu lực lúc gói mở", { timeout: 300000 }, () => {
   const TP_GIA_GAP_DOI = '[{"ma":"gia","don_vi":"TIEN","he_so":"2.0000"}]';
+  const TP_GIA_VAN_CHUYEN = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
 
   async function chinhSachCuaLuot(rfqId: string): Promise<readonly string[]> {
     const { rows } = await db.pool.query<{ policy_id: string }>(
@@ -3734,8 +3744,8 @@ describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sác
     expect(await chinhSachCuaLuot(rfqId)).toEqual([csId]);
 
     // ĐỐI CHỨNG DƯƠNG — gói mở SAU một phiên bản hệ số 2 thì chấm dưới phiên bản ấy. Không có vế này, ca trên xanh cả khi hệ số
-    // `2.0000` không bao giờ được áp ở đâu.
-    const sau = await goiDaMo([["100.00", "VND"]], TP_GIA_GAP_DOI);
+    // `2.0000` không bao giờ được áp ở đâu. [S1.9101 / S4.7a — ca lật, xem đầu khối] Cần gạt nay là `van_chuyen` trên `freight`.
+    const sau = await goiDaMo([["100.00", "VND"]], TP_GIA_VAN_CHUYEN, 0, null, { freight: "100.00" });
     const kqSau = await withTenant(apiPool, orgA, (c) =>
       taoLuotDanhGia(c, orgA, { rfqId: sau.rfqId, actorSessionId: sYc }, apiPool),
     );
@@ -3993,5 +4003,260 @@ describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sác
     }
     await mo;
     expect(await phienBanGhim(rfqId), "phiên bản commit trong lúc lần mở chờ là phiên bản đã hiệu lực khi gói thực sự mở").toBe(moiId);
+  });
+});
+
+// ================================================================================================
+// [S1.9101 / S4.7a / L8, L16 / ADR-9201] TCO — MỖI MÃ MỘT NGUỒN, KIỂM LÚC CHẤM, Ô THIẾU GỌI TÊN; TẬP MÃ CHỤP LÚC MỞ
+//
+// Spec S4 §4.8, §2.4 ⑻, §2.5 ⒃㉑. Năm mã có nguồn: `gia` (`totalAmount`), `van_chuyen` (`freight`), `nhap_khau` (`importCost`) qua
+// `bid_so_tien`; `chi_phi_thanh_toan` (`paymentDays`) và `chi_phi_tre` (`leadTimeDays`, số ngày giao của GÓI) quy đổi theo nhóm khoá
+// `tco` của phiên bản ghim — chủ dự án chốt 2026-10-07: chi phí trễ là TỶ LỆ giá trị mỗi ngày. Luật kiểm phiên bản (mã có nguồn,
+// hệ số mã tiền bằng 1, đủ tham số) chạy LÚC CHẤM; lần từ chối là từ chối CẤU HÌNH, không vào sổ (L12).
+// ================================================================================================
+
+const TP_TCO_DU =
+  '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},' +
+  '{"ma":"nhap_khau","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_thanh_toan","don_vi":"TIEN","he_so":"1.0000"},' +
+  '{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+const THAM_SO_TCO = '{"chi_phi_von_nam":"0.12","ngay_thanh_toan_chuan":"60","ty_le_tre_ngay":"0.001"}';
+
+/** Gói đã mở thầu dưới một phiên bản có `tco`, với phong bì cho trước nguyên văn. */
+async function goiTcoDaMo(
+  evalComponents: string,
+  tco: string | null,
+  soNgayGiao: number | null,
+  phongBi: readonly Readonly<Record<string, unknown>>[],
+): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
+  const csId = await taoChinhSach(evalComponents, 0, tco);
+  const rfqId = await taoRfqMo(csId, soNgayGiao);
+  const ban: [string, unknown][] = [];
+  for (const [i, p] of phongBi.entries()) {
+    const versionId = await nopBaoGia(rfqId, `NCC TCO ${String(i)} ${randomBytes(2).toString("hex")}`);
+    ban.push([versionId, p]);
+  }
+  await moThau(rfqId, ban);
+  return { rfqId, banRo: ban.map(([v]) => v), csId };
+}
+
+async function hangLuot(evaluationId: string): Promise<Map<string, { cost: string | null; rank: number | null; maThieu: string[] | null; components: unknown }>> {
+  const { rows } = await db.pool.query<{
+    bid_version_id: string;
+    cost: string | null;
+    rank: number | null;
+    ma_thieu: string[] | null;
+    components: unknown;
+  }>(
+    "SELECT bid_version_id, effective_cost::text AS cost, rank, ma_thieu, components FROM rfq_evaluation_lines WHERE evaluation_id = $1",
+    [evaluationId],
+  );
+  return new Map(rows.map((r) => [r.bid_version_id, { cost: r.cost, rank: r.rank, maThieu: r.ma_thieu, components: r.components }]));
+}
+
+describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, kiểm lúc chấm, ô thiếu gọi tên", { timeout: 300000 }, () => {
+  it("[INV-L8] năm mã: ô khai qua bộ đọc SQL, hai mã quy đổi theo tham số ghim; hạng theo TCO khác hạng theo giá; báo giá thiếu ô không có hạng và gọi tên mã thiếu", async () => {
+    const { rfqId, banRo } = await goiTcoDaMo(TP_TCO_DU, THAM_SO_TCO, 14, [
+      // A — rẻ nhất theo giá; trả SỚM hơn kỳ chuẩn 30 ngày, giao TRỄ 6 ngày. `paymentDays` là số JSON, `leadTimeDays` là chuỗi.
+      { totalAmount: "1000000.00", currency: "VND", freight: "25000.00", importCost: "0.00", paymentDays: 30, leadTimeDays: "20" },
+      // B — đắt hơn theo giá, không phí nào khác.
+      { totalAmount: "1010000.00", currency: "VND", freight: "0.00", importCost: "0.00", paymentDays: "60", leadTimeDays: 14 },
+      // C — không khai phí vận chuyển, số ngày thanh toán không phải số nguyên.
+      { totalAmount: "900000.00", currency: "VND", importCost: "0.00", paymentDays: "15.5", leadTimeDays: "14" },
+    ]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const [a, b, cc] = [banRo[0] ?? "", banRo[1] ?? "", banRo[2] ?? ""];
+    const h = await hangLuot(kq.evaluationId);
+    expect([h.get(a)?.cost, h.get(a)?.rank, h.get(a)?.maThieu]).toEqual(["1040863.01", 2, null]);
+    expect([h.get(b)?.cost, h.get(b)?.rank, h.get(b)?.maThieu]).toEqual(["1010000.00", 1, null]);
+    expect([h.get(cc)?.cost, h.get(cc)?.rank, h.get(cc)?.maThieu], "C rẻ nhất theo giá mà KHÔNG có hạng: thiếu ô, không lấy 0").toEqual([
+      null,
+      null,
+      ["van_chuyen", "chi_phi_thanh_toan"],
+    ]);
+    // Mã quy đổi mang phép tính của nó — spec §8.6: tham số hiện NGAY CẠNH con số.
+    expect(h.get(a)?.components).toEqual([
+      { ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: "1000000.00", tien: "1000000.00" },
+      { ma: "van_chuyen", donVi: "TIEN", heSo: "1.0000", giaTri: "25000.00", tien: "25000.00" },
+      { ma: "nhap_khau", donVi: "TIEN", heSo: "1.0000", giaTri: "0.00", tien: "0.00" },
+      {
+        ma: "chi_phi_thanh_toan",
+        donVi: "TIEN",
+        heSo: "1.0000",
+        giaTri: "9863.01",
+        tien: "9863.01",
+        nguon: { coSo: "1000000.00", ngayKhai: "30", ngayChuan: "60", tyLe: "0.12" },
+      },
+      {
+        ma: "chi_phi_tre",
+        donVi: "TIEN",
+        heSo: "1.0000",
+        giaTri: "6000.00",
+        tien: "6000.00",
+        nguon: { coSo: "1000000.00", ngayKhai: "20", ngayYeuCau: "14", tyLe: "0.001" },
+      },
+    ]);
+    expect(kq.lines.find((l) => l.bidVersionId === cc)?.maThieu).toEqual(["van_chuyen", "chi_phi_thanh_toan"]);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("[INV-L8] ô ngoài miền — phí âm, ba chữ số lẻ, số ngày âm hay quá 3650 — là ô KHÔNG đọc được, cùng hạng ô vắng", async () => {
+    const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+    const { rfqId, banRo } = await goiTcoDaMo(tp, '{"ty_le_tre_ngay":"0.001"}', 10, [
+      { totalAmount: "100.00", currency: "VND", freight: "-1.00", leadTimeDays: "10" },
+      { totalAmount: "100.00", currency: "VND", freight: "1.005", leadTimeDays: "-3" },
+      { totalAmount: "100.00", currency: "VND", freight: "1.00", leadTimeDays: "3651" },
+      { totalAmount: "100.00", currency: "VND", freight: "1.00", leadTimeDays: "10" },
+    ]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const h = await hangLuot(kq.evaluationId);
+    expect(banRo.map((v) => h.get(v)?.maThieu)).toEqual([["van_chuyen"], ["van_chuyen", "chi_phi_tre"], ["chi_phi_tre"], null]);
+    expect(h.get(banRo[3] ?? "")?.cost).toBe("101.00");
+  });
+
+  it("[INV-L8] không báo giá nào đủ ô ⇒ không có gì để xếp hạng; không lượt nào, RFQ đứng yên", async () => {
+    const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
+    const { rfqId } = await goiTcoDaMo(tp, null, null, [{ totalAmount: "100.00", currency: "VND" }]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toMatchObject({ lyDo: "KHONG_CO_BAO_GIA_DOC_DUOC" });
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+  });
+
+  it("[INV-L8] phiên bản ghim khai `chat_luong`, hệ số mã tiền khác 1, hay mã quy đổi không tham số ⇒ từ chối CẤU HÌNH gọi tên mã và phiên bản; không vào sổ, không lượt nào", async () => {
+    const ca: readonly (readonly [string, string, string])[] = [
+      ['[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chat_luong","don_vi":"TIEN","he_so":"1.0000"}]', "THANH_PHAN_CHUA_CO_NGUON", "chat_luong"],
+      ['[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"2.0000"}]', "CHINH_SACH_TCO_SAI", "van_chuyen"],
+      ['[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_thanh_toan","don_vi":"TIEN","he_so":"1.0000"}]', "THANH_PHAN_CHUA_CO_NGUON", "chi_phi_thanh_toan"],
+      ['[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"thue","don_vi":"TIEN","he_so":"1.0000"}]', "THANH_PHAN_CHUA_CO_NGUON", "thue"],
+    ];
+    for (const [tp, lyDo, ma] of ca) {
+      const { rfqId } = await goiTcoDaMo(tp, null, null, [
+        { totalAmount: "100.00", currency: "VND", freight: "1.00", paymentDays: "30" },
+      ]);
+      const { rows: ghim } = await db.pool.query<{ version: number }>(
+        "SELECT o.version FROM rfq_packages r JOIN org_procurement_policies o ON o.id = r.chinh_sach_ghim_id WHERE r.id = $1",
+        [rfqId],
+      );
+      const loi = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)).catch(
+        (e: unknown) => e,
+      );
+      expect(loi, ma).toBeInstanceOf(DanhGiaTuChoiError);
+      expect((loi as DanhGiaTuChoiError).lyDo, ma).toBe(lyDo);
+      expect((loi as DanhGiaTuChoiError).message, ma).toContain(`"${ma}"`);
+      expect((loi as DanhGiaTuChoiError).message, ma).toContain(`Chính sách phiên bản ${String(ghim[0]?.version)}`);
+      const { rows: so } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE resource_id = $1 AND action IN ('RFQ_STATE_DENIED', 'CONTROL_DENIED')",
+        [rfqId],
+      );
+      expect(so[0]?.n, `${ma}: từ chối CẤU HÌNH không vào sổ (L12)`).toBe("0");
+      const { rows: luot } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1", [rfqId]);
+      expect(luot[0]?.n).toBe("0");
+      expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+    }
+  });
+
+  it("luồng MVP1 KHÔNG ĐỔI: phiên bản chỉ `gia` không đọc ô TCO nào của phong bì; báo giá không đọc được giá gọi tên `gia`", async () => {
+    const { rfqId, banRo } = await goiTcoDaMo(TP_GIA, null, null, [
+      { totalAmount: "100.00", currency: "VND", freight: "999999.00", paymentDays: "0", leadTimeDays: "999" },
+      { totalAmount: "NaN", currency: "VND" },
+    ]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const h = await hangLuot(kq.evaluationId);
+    expect([h.get(banRo[0] ?? "")?.cost, h.get(banRo[0] ?? "")?.rank, h.get(banRo[0] ?? "")?.maThieu]).toEqual(["100.00", 1, null]);
+    expect(h.get(banRo[0] ?? "")?.components).toEqual([{ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: "100.00", tien: "100.00" }]);
+    expect([h.get(banRo[1] ?? "")?.cost, h.get(banRo[1] ?? "")?.maThieu]).toEqual([null, ["gia"]]);
+  });
+
+  it("[INV-L8] `ma_thieu` chỉ ở hàng KHÔNG số — câu ghi thẳng một hàng có số mang `ma_thieu` bị CSDL từ chối", async () => {
+    const { rfqId, banRo } = await goiTcoDaMo(TP_GIA, null, null, [{ totalAmount: "100.00", currency: "VND" }]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const lai = await withTenant(apiPool, orgA, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1 RETURNING id",
+        [kq.evaluationId],
+      );
+      return rows[0]?.id ?? "";
+    });
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank, ma_thieu) " +
+            "VALUES ($1, $2, $3, '100.00', $4::jsonb, 1, ARRAY['van_chuyen'])",
+          [orgA, lai, banRo[0], JSON.stringify([{ ma: "gia", tien: "100.00" }])],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514", constraint: "rfq_evaluation_lines_ma_thieu_hinh_dang" });
+  });
+});
+
+describe("[S1.9101 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên bản ghim; lượt chấm dùng chính tập ấy", { timeout: 300000 }, () => {
+  const TP_GIA_VC = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
+
+  async function tapMaGhim(rfqId: string): Promise<string[] | null> {
+    const { rows } = await db.pool.query<{ m: string[] | null }>("SELECT tco_ma_ghim AS m FROM rfq_packages WHERE id = $1", [rfqId]);
+    return rows[0]?.m ?? null;
+  }
+
+  it("[INV-L16] phiên bản bật `van_chuyen` khai SAU lúc mở không đổi tập mã của gói lẫn lượt chấm; ĐỐI CHỨNG DƯƠNG: gói mở sau nó chụp tập mới", async () => {
+    const { rfqId, banRo } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"]]);
+    expect(await tapMaGhim(rfqId)).toEqual(["gia"]);
+    await taoChinhSach(TP_GIA_VC);
+    expect(await tapMaGhim(rfqId), "cột chụp không đổi theo phiên bản mới").toEqual(["gia"]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const h = await hangLuot(kq.evaluationId);
+    expect(banRo.map((v) => [h.get(v)?.cost, h.get(v)?.maThieu]), "phong bì không khai `freight` vẫn có hạng: mã mới không chạm gói cũ").toEqual([
+      ["100.00", null],
+      ["90.00", null],
+    ]);
+
+    const sau = await goiDaMo([["100.00", "VND"]], TP_GIA_VC, 0, null, { freight: "5.00" });
+    expect(await tapMaGhim(sau.rfqId)).toEqual(["gia", "van_chuyen"]);
+    const kqSau = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId: sau.rfqId, actorSessionId: sYc }, apiPool));
+    expect(kqSau.lines.map((l) => l.effectiveCost)).toEqual(["105.00"]);
+  });
+
+  it("[INV-L16] `app_api` không ghi được cột tập mã ghim — UPDATE và INSERT mang cột ấy đều bị từ chối quyền (42501)", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query("UPDATE rfq_packages SET tco_ma_ghim = ARRAY['gia', 'van_chuyen'] WHERE id = $1", [rfqId])),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, tco_ma_ghim) " +
+            "VALUES ($1, 'Goi tu ghim ma', $2, false, $3, $4, ARRAY['gia'])",
+          [orgA, MAI_SAU, uYc, sYc],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("[INV-L16] tập mã chụp LỆCH phiên bản ghim (một đường ghi thứ hai) ⇒ lượt chấm không chạy, gọi tên L16; không lượt nào", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]]);
+    // Vai chủ cụm — đường ghi duy nhất còn lại sau `GRANT` — dựng đúng hàng mà một trigger chụp bị tắt sẽ để lại.
+    await db.pool.query("UPDATE rfq_packages SET tco_ma_ghim = ARRAY['gia', 'van_chuyen'] WHERE id = $1", [rfqId]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toThrow(/\(L16\)/u);
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1", [rfqId]);
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("[INV-L16] ĐỘT BIẾN: tắt `rfq_packages_tco_khi_mo` thì gói mở mà không có tập mã, và lượt chấm của nó dừng — lớp tầng gói đọc đúng cột", async () => {
+    const csId = await taoChinhSach(TP_GIA);
+    const rfqId = await taoRfqChoMo(csId);
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_tco_khi_mo");
+    try {
+      await moGoiDaDuyet(rfqId);
+    } finally {
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_tco_khi_mo");
+    }
+    expect(await tapMaGhim(rfqId)).toBeNull();
+    const ver = await nopBaoGia(rfqId, `NCC dot bien ${randomBytes(2).toString("hex")}`);
+    await moThau(rfqId, [[ver, { totalAmount: "100.00", currency: "VND" }]]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toThrow(/\(L16\)/u);
   });
 });
