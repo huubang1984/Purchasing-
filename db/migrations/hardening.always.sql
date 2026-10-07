@@ -1839,7 +1839,7 @@ $ham$;
        ('public.rfq_unsealed_bids', ARRAY['rfq_unsealed_bids_chan_truncate', 'rfq_unsealed_bids_chi_ghi_them', 'rfq_unsealed_bids_kiem_yeu_cau']),
        ('public.role_permissions', ARRAY['role_permissions_ma_tran_quyen', 'role_permissions_nguong_khong_cung_tay', 'role_permissions_quan_ly_du_lieu_mu_gia']),
        ('public.sessions', ARRAY['sessions_kiem_mfa_khi_tao', 'sessions_kiem_totp_gan_day']),
-       ('public.supplier_contacts', ARRAY['supplier_contacts_kiem_danh_tinh']),
+       ('public.supplier_contacts', ARRAY['supplier_contacts_kiem_danh_tinh', 'supplier_contacts_kiem_nguoi_them']),
        ('public.supplier_verifications', ARRAY['supplier_verifications_chan_truncate', 'supplier_verifications_chi_ghi_them', 'supplier_verifications_kiem_danh_tinh', 'supplier_verifications_kiem_xac_minh']),
        ('public.suppliers', ARRAY['suppliers_kiem_danh_tinh']),
        ('public.unseal_approvals', ARRAY['unseal_approvals_kiem_danh_tinh', 'unseal_approvals_kiem_nguoi_duyet']),
@@ -9953,6 +9953,79 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.ngoai_le_kiem()')),
                   'hàm public.ngoai_le_kiem() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.ngoai_le_kiem() và bảng public.rfq_sourcing_exceptions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / khoan 344 / K8a] Chi nguoi dung ho so nha cung cap them nguoi lien he vao ho so ay (rang buoc co ten). Than `RETURN NEW` cho mot nguoi giu supplier.manage them nguoi lien he vao ho so nguoi khac — mat xac minh va mat dem K2 cua nha cung cap ay.
+    ARRAY[
+      $q$hàm + trigger ncc_kiem_them_lien_he (9501_lien_he_chi_nguoi_dung_ho_so)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lien_he_chi_nguoi_dung_ho_so.sql')$q$,
+      $q$DO $fn344$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.ncc_kiem_them_lien_he()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.ncc_kiem_them_lien_he();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.ncc_kiem_them_lien_he() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  nguoi_dung uuid;
+BEGIN
+  SELECT s.created_by INTO nguoi_dung
+    FROM public.suppliers s
+   WHERE s.org_id = NEW.org_id AND s.id = NEW.supplier_id;
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+  IF nguoi_dung IS NULL OR nguoi_dung IS DISTINCT FROM NEW.created_by THEN
+    RAISE EXCEPTION 'Chi nguoi dung ho so nha cung cap moi them nguoi lien he vao ho so ay (K8a)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_lien_he_ho_so_nguoi_khac';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.supplier_contacts') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_contacts')
+                                 AND t.tgname = 'supplier_contacts_kiem_nguoi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.ncc_kiem_them_lien_he()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_contacts_kiem_nguoi_them BEFORE INSERT ON public.supplier_contacts FOR EACH ROW EXECUTE FUNCTION ncc_kiem_them_lien_he()$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_contacts_kiem_nguoi_them ON public.supplier_contacts;
+             CREATE TRIGGER supplier_contacts_kiem_nguoi_them BEFORE INSERT ON public.supplier_contacts FOR EACH ROW EXECUTE FUNCTION public.ncc_kiem_them_lien_he();
+             ALTER TABLE public.supplier_contacts ENABLE ALWAYS TRIGGER supplier_contacts_kiem_nguoi_them;
+           END IF;
+         END
+         $fn344$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE nguoi_dung uuid; BEGIN SELECT s.created_by INTO nguoi_dung FROM public.suppliers s WHERE s.org_id = NEW.org_id AND s.id = NEW.supplier_id; IF NOT FOUND THEN RETURN NEW; END IF; IF nguoi_dung IS NULL OR nguoi_dung IS DISTINCT FROM NEW.created_by THEN RAISE EXCEPTION 'Chi nguoi dung ho so nha cung cap moi them nguoi lien he vao ho so ay (K8a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_lien_he_ho_so_nguoi_khac'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.supplier_contacts')
+                           AND t.tgname = 'supplier_contacts_kiem_nguoi_them'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.ncc_kiem_them_lien_he()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_contacts_kiem_nguoi_them BEFORE INSERT ON public.supplier_contacts FOR EACH ROW EXECUTE FUNCTION ncc_kiem_them_lien_he()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_kiem_them_lien_he()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.ncc_kiem_them_lien_he()')),
+                  'hàm public.ncc_kiem_them_lien_he() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.ncc_kiem_them_lien_he() và bảng public.supplier_contacts (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.269 / S3.3c2 / K2] Canh DRAFT->PENDING_APPROVAL: chi duoi READ COMMITTED (moi to chuc), roi ham vi tu K2. Than `RETURN NEW` cho goi duoi nguong canh tranh di qua ma khong ngoai le; bo ve READ COMMITTED thi anh chup cu dem mot ngoai le da rut.

@@ -225,10 +225,18 @@ async function ncc(t: ToChuc, o: TuyChonNcc = {}): Promise<Ncc> {
   );
   for (const p of o.lienHePhu ?? []) {
     const ai = p.nhap ?? nhap;
-    await db.pool.query(
-      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) VALUES ($1, $2, 'Lien he phu', $3, $4, $5, $6)",
-      [t.org, id, p.email ?? `phu${randomBytes(6).toString("hex")}@vidu.vn`, p.phone === undefined ? dtNgauNhien() : p.phone, ai.u, ai.s],
-    );
+    // [S1.9101 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế
+    // chỉ còn là dữ liệu có trước `9501` — K2 vẫn phải loại nó. Dựng bằng superuser với trigger tạm tắt.
+    const cu = ai.u !== nhap.u;
+    if (cu) await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
+    try {
+      await db.pool.query(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) VALUES ($1, $2, 'Lien he phu', $3, $4, $5, $6)",
+        [t.org, id, p.email ?? `phu${randomBytes(6).toString("hex")}@vidu.vn`, p.phone === undefined ? dtNgauNhien() : p.phone, ai.u, ai.s],
+      );
+    } finally {
+      if (cu) await db.pool.query("ALTER TABLE supplier_contacts ENABLE ALWAYS TRIGGER supplier_contacts_kiem_nguoi_them");
+    }
   }
   const xm = o.xacMinh === undefined ? t.tc2 : o.xacMinh;
   if (xm !== null) await xacMinh(t, id, xm);

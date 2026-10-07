@@ -117,13 +117,23 @@ async function hoSo(t: ToChuc, tuyChon: { readonly mst?: boolean; readonly ai?: 
   );
   const lhAi = tuyChon.aiLienHe ?? ai;
   const duoi = randomBytes(6).toString("hex");
-  const lh = await withTenant(apiPool, t.org, async (c) =>
-    (await c.query<{ id: string }>(
-      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-        "VALUES ($1, $2, 'Nguoi ban hang', $3, $4, $5, $6) RETURNING id",
-      [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), lhAi.u, lhAi.s],
-    )).rows[0]!.id,
-  );
+  const cauLh =
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+    "VALUES ($1, $2, 'Nguoi ban hang', $3, $4, $5, $6) RETURNING id";
+  const thamSoLh = [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), lhAi.u, lhAi.s];
+  // [S1.9101 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế
+  // chỉ còn là dữ liệu có trước `9501` — nhánh K8a *người tạo một người liên hệ* vẫn phải chặn nó. Dựng bằng superuser, trigger tạm tắt.
+  let lh: string;
+  if (lhAi.u === ai.u) {
+    lh = await withTenant(apiPool, t.org, async (c) => (await c.query<{ id: string }>(cauLh, thamSoLh)).rows[0]!.id);
+  } else {
+    await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
+    try {
+      lh = (await db.pool.query<{ id: string }>(cauLh, thamSoLh)).rows[0]!.id;
+    } finally {
+      await db.pool.query("ALTER TABLE supplier_contacts ENABLE ALWAYS TRIGGER supplier_contacts_kiem_nguoi_them");
+    }
+  }
   return { ncc, lh };
 }
 

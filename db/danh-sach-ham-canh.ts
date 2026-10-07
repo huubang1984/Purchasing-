@@ -76,6 +76,9 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // [S1.196 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",
+  // [S1.9101 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ. Chỉ gắn INSERT ⇒ không thể là hàm canh;
+  // một hàng HỢP LỆ đi qua nó — `dungKichBan()` thêm người liên hệ dưới chính phiên đã dựng hồ sơ.
+  "public.ncc_kiem_them_lien_he",
   // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh. Chỉ gắn INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua nó —
   // `dungKichBan()` lập một ngoại lệ trên gói vừa trả về DRAFT.
   "public.ngoai_le_kiem",

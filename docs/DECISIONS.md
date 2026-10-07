@@ -11838,3 +11838,41 @@ lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng ch�
 
 `gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
 người liên hệ (khoản nợ mới).
+
+## ADR-9201 — Khoản 344: chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ vào nó
+
+**Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07 chọn trong ba hướng của khoản 344: *"Người dựng hồ sơ"*
+(không thêm vai xác minh làm lối ra, không hàng chờ duyệt) · **[S1.9101]** · **Liên quan:** ADR-081 ⑵, ADR-084 ⑷, ADR-114, ADR-147,
+ADR-148, ADR-150 ⑷ ⑹ · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Người liên hệ không sửa, không xoá được (`011`), và mỗi người liên hệ nằm trong ba phép tính: băm xác minh của hồ sơ (`082`), vế *mọi
+người liên hệ không do người chọn danh sách dựng* của K2 (`107`), và khoá nhóm của K3 (`108`). Trước vòng này mọi người giữ
+`supplier.manage` thêm được người liên hệ vào mọi hồ sơ của tổ chức (khoản 344): một lần thêm làm nhà cung cấp mất xác minh ở mọi gói, thôi
+được đếm ở gói của người thêm, hay đặt một người lạ vào đích nhận link mời và OTP của một hồ sơ thật. S3.3e1 chỉ khoá đường ấy trên màn
+(ADR-150 ⑹).
+
+### Quyết định
+
+⑴ **Chỉ người dựng hồ sơ** (`suppliers.created_by`, dẫn xuất từ phiên — `013`) thêm được người liên hệ, ở MỌI tổ chức. Vế ⒝ (người lạ nhận
+link) không cần S3, nên luật không đứng sau công tắc ADR-080. Hồ sơ không có người dựng (`created_by IS NULL`) không nhận người liên hệ
+nào: không ai chứng minh được mình là người dựng.
+
+⑵ **Lớp có thẩm quyền là CSDL**: trigger `ncc_kiem_them_lien_he` BEFORE INSERT `ENABLE ALWAYS` trên `supplier_contacts` (`9501`), xếp sau
+`_kiem_danh_tinh`, ghim ở hardening. Không thấy hồ sơ (khác tổ chức, RLS che) thì khoá ngoại hợp thành của `008` từ chối như trước.
+
+⑶ **Lần thử của người khác vào sổ**: tên ràng buộc `k8a_lien_he_ho_so_nguoi_khac` ⇒ mã `K8A_LIEN_HE_HO_SO_NGUOI_KHAC` của `CHOT_VAO_SO`,
+`vaoSo: true`, chốt K8a — thứ bị phá là tính toàn vẹn của hồ sơ mà xác minh ràng băm. `addSupplierContact` nhận `auditPool` và ghi
+`CONTROL_DENIED` ở giao dịch độc lập (khuôn ADR-114); route trả 422 mang mã (ADR-150 ⑵).
+
+### Hệ quả
+
+- Người dựng vắng mặt thì hồ sơ không thêm được người liên hệ nữa — dựng hồ sơ mới. Chủ dự án nhận đánh đổi này thay cho một vai miễn trừ.
+- Người liên hệ do người khác thêm TRƯỚC `9501` vẫn ở nguyên; K2, K3, K8a và màn A5 vẫn đọc chúng như cũ. Test dựng cảnh ấy như dữ liệu cũ
+  (superuser, trigger tạm tắt).
+
+### Điều ADR này KHÔNG nói
+
+Không thêm vai quản trị dữ liệu nhà cung cấp, không hàng chờ duyệt, không đường gỡ người liên hệ; không đổi luật của xác minh (K8a nhánh
+người tạo vẫn chặn cả người tạo một người liên hệ — nhánh ấy nay chỉ tới được với dữ liệu cũ hay khi người tạo hồ sơ cũng là người liên hệ).
