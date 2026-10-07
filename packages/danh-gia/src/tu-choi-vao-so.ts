@@ -54,6 +54,7 @@ export type MaTuChoiTrangThai =
   | "CHINH_SACH_TAT_BAFO"
   | "CHINH_SACH_TCO_SAI"
   | "CHUA_CHAM_LAN_NAO"
+  | "DA_KY_DE_XUAT_NAY"
   | "DE_XUAT_DA_CO_CHU_KY"
   | "KHONG_CO_AWARD_CON_SONG"
   | "KHONG_CO_BAO_GIA_DOC_DUOC"
@@ -109,6 +110,12 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   DE_XUAT_DA_CO_CHU_KY: {
     vaoSo: true,
     lyDo: "người đề xuất cố RÚT một đề xuất ĐÃ CÓ chữ ký duyệt — tức tháo một quyết định đã duyệt bằng chính tay mình mà không qua `po.approve`; đúng ca phê duyệt kép bị bào mòn mà ADR-057 dựng cổng huỷ để chặn",
+  },
+  // ---- [S1.280 / S3.5a] Lần ký LẶP — từ S3.5 chữ ký sống độc lập với hàng `APPROVED`, nên một người ký rồi gọi duyệt lần nữa
+  // là một bước thừa của chuỗi *award → duyệt*, không phải lỗi UNIQUE không tên
+  DA_KY_DE_XUAT_NAY: {
+    vaoSo: true,
+    lyDo: "một người đã ký đề xuất này bấm DUYỆT lần nữa khi đề xuất còn chờ chữ ký khác — chữ ký của họ đã đếm; người cần ký là người KHÁC, và lần gọi lặp là dấu vết của một người cố đẩy award qua một mình",
   },
   KHONG_CO_AWARD_CON_SONG: {
     vaoSo: true,

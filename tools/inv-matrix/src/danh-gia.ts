@@ -360,7 +360,8 @@ export interface MocGhim {
 // [S1.270 / S3.3d] 81 -> 82: K3 vào sổ đăng ký (xoay vòng ở cạnh nộp duyệt và cạnh mở gói).
 // [S1.272 / S4.6a] 82 -> 83: L15 vào sổ đăng ký với vế ghi của lịch sử mua ngoài hệ thống (và mốc giá ngoài).
 // [S1.279 / S4.7a] 83 -> 85: L8 (TCO có nguồn) và L16 (thước TCO cố định trước khi giá lộ — vế TCO và form của L14) vào sổ đăng ký.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 85, coDanhSachToiDa: 0 };
+// [S1.280 / S3.5a] 85 -> 88: K7, K2b, K5b vào sổ đăng ký — award theo bậc (`113_trao_thau_theo_bac`).
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 88, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

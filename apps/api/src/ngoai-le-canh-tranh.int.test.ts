@@ -705,7 +705,7 @@ describe("[S1.265 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm",
     expect(await soHang(rfqId)).toBe(1);
   });
 
-  it("⑸ loại hay mã ngoài tập, giải trình rỗng ⇒ 422 ở gói; `LOW_ACTUAL_COMPETITION` chèn thẳng ⇒ trigger từ chối (đường ghi của nó là trao thầu, S3.5)", async () => {
+  it("⑸ loại hay mã ngoài tập, giải trình rỗng ⇒ 422 ở gói; `LOW_ACTUAL_COMPETITION` chèn thẳng ở DRAFT ⇒ trigger từ chối (đường ghi của nó là trao thầu — từ S3.5a chỉ ở EVALUATING, mang tên ràng buộc K2b)", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     for (const tuyChon of [{ loai: "LOW_ACTUAL_COMPETITION" }, { loai: "single_source" }, { maLyDo: "CHEAPEST" }, { giaiTrinh: "   " }]) {
@@ -713,8 +713,10 @@ describe("[S1.265 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm",
       expect(r.status, `${JSON.stringify(tuyChon)}: ${r.text}`).toBe(422);
     }
     const thang = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_LAP, thamSoLap(t, rfqId, t.pm, "LOW_ACTUAL_COMPETITION"))));
-    // [lượt soi hình dạng, L1] Thông điệp không nội suy giá trị của người gọi — `loai` đi tới trigger TRƯỚC CHECK.
-    expect(thang?.message).toBe("Loai ngoai le nay khong lap o danh sach moi (K4a)");
+    // [lượt soi hình dạng, L1] Thông điệp không nội suy giá trị của người gọi — `loai` đi tới trigger TRƯỚC CHECK. [S1.280 / S3.5a] Loại
+    // hậu kiểm nay có đường ghi (EVALUATING, `113`): ở DRAFT nó là *sai trạng thái* có tên, không còn *loại không lập ở danh sách mời*.
+    expect(thang?.message).toBe("Ngoai le hau kiem chi lap hay rut khi goi o EVALUATING, truoc de xuat trao thau; goi dang o DRAFT (K2b)");
+    expect(thang?.constraint).toBe("k2b_ngoai_le_sai_trang_thai");
     expect(await soHang(rfqId)).toBe(0);
   });
 

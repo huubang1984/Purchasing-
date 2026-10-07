@@ -424,6 +424,16 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/man-kiem-soat.int.test.ts",
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
   ],
+  // K7 · K2b · K5b — [S1.280 / S3.5a] award theo bậc (`113_trao_thau_theo_bac`). `trao-thau-theo-bac` đo dưới `app_api` trên tổ chức
+  // đã bật: chữ ký sống độc lập (bậc cần hai: chữ ký đầu còn, gọi lặp có tên, người thứ hai hoàn tất), bậc CAO HƠN (khai thấp), vai
+  // theo bậc, tác giả chính sách, hai vai khác nhau (hệ đại diện phân biệt), đấu thầu chính thức, gói không bậc ghim, tiền tệ lệch,
+  // lớp chặn cuối ở trigger (K7); số nhóm có báo giá hợp lệ dưới ngưỡng, ngoại lệ LOW_ACTUAL_COMPETITION chỉ ở EVALUATING, nhà vỏ
+  // không nâng số đếm, lớp chặn cuối (K2b); tập loại trừ gồm người xác minh nhà cung cấp thắng và người điều phối, vế khai thấp, đối
+  // chứng âm (K5b); tập mã của năm hàm = bảng — mỗi vế một đột biến. `luot-danh-gia` lật khối đo khoản 242 ⑴ ở tổ chức chưa bật
+  // (đột biến `award_so_chu_ky_can` trả 2 ⇒ chữ ký đầu sống).
+  K7: ["packages/danh-gia/src/luot-danh-gia.int.test.ts", "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
+  K2b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
+  K5b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
   // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
   // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
   // người chọn (người tạo, người thu hồi), khoá nhóm, *đếm được*, ROTATION, N = 0, nộp song song bị bắt lúc mở, hai lần mở đồng thời,

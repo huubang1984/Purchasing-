@@ -885,6 +885,12 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
     // THEO_ID: đọc đúng phiên bản mà một hàng khác đã ghim. KHAC: không chọn phiên bản (đánh số, hỏi tồn tại).
     // Một hàm mới đọc bảng này mà chưa khai ⇒ ĐỎ: câu hỏi là *nó có tự chọn phiên bản không*.
     const KHAI: Readonly<Record<string, "CHON" | "QUA_HAM" | "THEO_ID" | "KHAC">> = {
+      // [S1.280 / S3.5a] Bốn hàm của award theo bậc đọc ĐÚNG phiên bản ngân sách ghim (`rfq_budgets.policy_id`): bậc cao hơn (phần tử
+      // bậc và tiền tệ), vị từ bậc (tiền tệ), vị từ người ký (tác giả phiên bản), tập loại trừ (tác giả phiên bản) — không tự chọn.
+      award_bac_cao_hon: "THEO_ID",
+      award_chot_bac: "THEO_ID",
+      award_chot_nguoi_ky: "THEO_ID",
+      award_tap_loai_tru: "THEO_ID",
       bafo_kiem_vong: "THEO_ID",
       chinh_sach_hieu_luc: "CHON",
       chinh_sach_kiem_nguoi_ky: "THEO_ID",

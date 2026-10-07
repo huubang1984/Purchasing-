@@ -1821,8 +1821,8 @@ $ham$;
        ('public.procurement_categories', ARRAY['procurement_categories_chan_truncate', 'procurement_categories_chi_ghi_them', 'procurement_categories_kiem_danh_tinh', 'procurement_categories_kiem_nguoi']),
        ('public.procurement_category_changes', ARRAY['procurement_category_changes_chan_truncate', 'procurement_category_changes_chi_ghi_them', 'procurement_category_changes_kiem_danh_tinh', 'procurement_category_changes_kiem_doi']),
        ('public.rfq_approvals', ARRAY['rfq_approvals_dat_bam_danh_sach', 'rfq_approvals_dat_bam_giao_hang', 'rfq_approvals_kiem_nguoi_duyet', 'rfq_approvals_so_lan_nop']),
-       ('public.rfq_award_approvals', ARRAY['rfq_award_approvals_chan_truncate', 'rfq_award_approvals_chi_ghi_them', 'rfq_award_approvals_kiem_danh_tinh', 'rfq_award_approvals_kiem_nguoi_duyet']),
-       ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song']),
+       ('public.rfq_award_approvals', ARRAY['rfq_award_approvals_chan_truncate', 'rfq_award_approvals_chi_ghi_them', 'rfq_award_approvals_kiem_danh_tinh', 'rfq_award_approvals_kiem_nguoi_duyet', 'rfq_award_approvals_kiem_vai_theo_bac']),
+       ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song', 'rfq_awards_kiem_theo_bac_khi_de_xuat', 'rfq_awards_kiem_theo_bac_khi_duyet']),
        ('public.rfq_bafo_rounds', ARRAY['rfq_bafo_rounds_kiem_danh_tinh', 'rfq_bafo_rounds_kiem_vong']),
        ('public.rfq_budgets', ARRAY['rfq_budgets_chi_sua_khi_soan', 'rfq_budgets_khong_ghim_ban_chua_ky', 'rfq_budgets_kiem_danh_tinh', 'rfq_budgets_xep_bac']),
        ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_thanh_phan']),
@@ -9849,10 +9849,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ncc_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.265 / S3.3b / K4a] Luat ghi ngoai le canh tranh: to chuc da bat, nguoi giu rfq.invite, goi o DRAFT (rang buoc co ten), hang rut tro ve mot ngoai le chua rut cua cung goi. Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky.
+    -- [S1.280 / S3.5a / K4a K2b] Than tu 113_trao_thau_theo_bac.sql: ba loai danh sach van chi o DRAFT (k4a_ngoai_le_sai_trang_thai); LOW_ACTUAL_COMPETITION lap va rut chi khi goi o EVALUATING — truoc de xuat, nen khong rut duoc sau khi award da duyet (k2b_ngoai_le_sai_trang_thai). Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky hay rut ngoai le hau kiem sau khi trao.
     ARRAY[
-      $q$hàm + trigger ngoai_le_kiem (105_ngoai_le_canh_tranh)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '105_ngoai_le_canh_tranh.sql')$q$,
+      $q$hàm + trigger ngoai_le_kiem (105_ngoai_le_canh_tranh, thân từ 113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9864,6 +9864,7 @@ $ham$;
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
   trang_thai text;
+  loai_goc text;
 BEGIN
   IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
     RAISE EXCEPTION 'Chi to chuc da bat S3 moi lap hay rut ngoai le canh tranh (ADR-080)'
@@ -9885,31 +9886,40 @@ BEGIN
     RAISE EXCEPTION 'Nguoi lap hay rut ngoai le phai giu rfq.invite (ADR-084)'
       USING ERRCODE = 'check_violation';
   END IF;
-  IF trang_thai <> 'DRAFT' THEN
-    RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
-      USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai';
-  END IF;
   IF NEW.hanh_dong = 'LAP' THEN
-    IF NEW.loai NOT IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN
-      RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)'
+    loai_goc := NEW.loai;
+  ELSE
+    SELECT e.loai INTO loai_goc
+      FROM public.rfq_sourcing_exceptions e
+     WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id
+       AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)'
         USING ERRCODE = 'check_violation';
+    END IF;
+    IF EXISTS (SELECT 1
+                 FROM public.rfq_sourcing_exceptions r
+                WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN
+      RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  IF loai_goc IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN
+    IF trang_thai <> 'DRAFT' THEN
+      RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai';
     END IF;
     RETURN NEW;
   END IF;
-  IF NOT EXISTS (SELECT 1
-                   FROM public.rfq_sourcing_exceptions e
-                  WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id
-                    AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP') THEN
-    RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)'
-      USING ERRCODE = 'check_violation';
+  IF loai_goc = 'LOW_ACTUAL_COMPETITION' THEN
+    IF trang_thai <> 'EVALUATING' THEN
+      RAISE EXCEPTION 'Ngoai le hau kiem chi lap hay rut khi goi o EVALUATING, truoc de xuat trao thau; goi dang o % (K2b)', trang_thai
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k2b_ngoai_le_sai_trang_thai';
+    END IF;
+    RETURN NEW;
   END IF;
-  IF EXISTS (SELECT 1
-               FROM public.rfq_sourcing_exceptions r
-              WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN
-    RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)'
-      USING ERRCODE = 'check_violation';
-  END IF;
-  RETURN NEW;
+  RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)'
+    USING ERRCODE = 'check_violation';
 END
 $ham$;
            IF to_regclass('public.rfq_sourcing_exceptions') IS NOT NULL
@@ -9927,7 +9937,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi lap hay rut ngoai le canh tranh (ADR-080)' USING ERRCODE = 'check_violation'; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua ngoai le (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'rfq.invite') THEN RAISE EXCEPTION 'Nguoi lap hay rut ngoai le phai giu rfq.invite (ADR-084)' USING ERRCODE = 'check_violation'; END IF; IF trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai'; END IF; IF NEW.hanh_dong = 'LAP' THEN IF NEW.loai NOT IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP') THEN RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; loai_goc text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi lap hay rut ngoai le canh tranh (ADR-080)' USING ERRCODE = 'check_violation'; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua ngoai le (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'rfq.invite') THEN RAISE EXCEPTION 'Nguoi lap hay rut ngoai le phai giu rfq.invite (ADR-084)' USING ERRCODE = 'check_violation'; END IF; IF NEW.hanh_dong = 'LAP' THEN loai_goc := NEW.loai; ELSE SELECT e.loai INTO loai_goc FROM public.rfq_sourcing_exceptions e WHERE e.org_id = NEW.org_id AND e.id = NEW.ngoai_le_id AND e.rfq_id = NEW.rfq_id AND e.hanh_dong = 'LAP'; IF NOT FOUND THEN RAISE EXCEPTION 'Hang rut phai tro ve mot ngoai le da lap cua cung goi thau (K4a)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = NEW.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = NEW.ngoai_le_id) THEN RAISE EXCEPTION 'Ngoai le nay da duoc rut (K4a)' USING ERRCODE = 'check_violation'; END IF; END IF; IF loai_goc IN ('SINGLE_SOURCE', 'LIMITED_COMPETITION', 'ROTATION') THEN IF trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Ngoai le chi lap hay rut khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_ngoai_le_sai_trang_thai'; END IF; RETURN NEW; END IF; IF loai_goc = 'LOW_ACTUAL_COMPETITION' THEN IF trang_thai <> 'EVALUATING' THEN RAISE EXCEPTION 'Ngoai le hau kiem chi lap hay rut khi goi o EVALUATING, truoc de xuat trao thau; goi dang o % (K2b)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k2b_ngoai_le_sai_trang_thai'; END IF; RETURN NEW; END IF; RAISE EXCEPTION 'Loai ngoai le nay khong lap o danh sach moi (K4a)' USING ERRCODE = 'check_violation'; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -10152,64 +10162,25 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bac_ghim(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.269 / S3.3c2 / K2] So nhom nha cung cap dem duoc. Mot than tra hang so lon thi moi goi qua K2 bang nha cung cap vo.
-    -- [S1.270 / S3.3d] Than tu 108_xoay_vong.sql: ve *dem duoc* doc `rfq_loi_moi_dem_duoc`; nhom van dung tren moi loi moi song.
+    -- [S1.280 / S3.5a / K2] Than tu 113_trao_thau_theo_bac.sql: rfq_dem_ncc_canh_tranh nay la loi goi rfq_dem_nhom_loi_moi voi tap rfq_loi_moi_dem_duoc — K2 va K2b MOT phep gop. Than cu (108) giu nguyen ket qua; mot than dem tren tap khac thi K2 va K2b troi khoi nhau.
     ARRAY[
-      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 108_xoay_vong)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '108_xoay_vong.sql')$q$,
+      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_dem_ncc_canh_tranh(p_org uuid, p_rfq uuid) RETURNS integer
-  LANGUAGE plpgsql
+  LANGUAGE sql
   STABLE
   SET search_path = pg_catalog, public
 AS $ham$
-DECLARE
-  so integer;
-BEGIN
-  WITH RECURSIVE
-  dem AS (
-    SELECT d AS id FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) d
-  ),
-  nut AS (
-    SELECT i.id, i.supplier_id, left(s.tax_code, 10) AS mst_goc,
-           EXISTS (SELECT 1 FROM dem WHERE dem.id = i.id) AS dem_duoc
-      FROM public.rfq_invitations i
-      JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id
-     WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL
-  ),
-  dich AS (
-    SELECT n.id, 'M|' || n.mst_goc AS d FROM nut n WHERE n.mst_goc IS NOT NULL
-    UNION
-    SELECT n.id, 'E|' || k.email
-      FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id
-    UNION
-    SELECT n.id, 'P|' || right(regexp_replace(k.phone, '[^0-9]', '', 'g'), 9)
-      FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id
-     WHERE k.phone IS NOT NULL
-  ),
-  canh AS (
-    SELECT DISTINCT a.id AS tu, b.id AS den FROM dich a JOIN dich b ON b.d = a.d
-  ),
-  toi (goc, nut) AS (
-    SELECT n.id, n.id FROM nut n
-    UNION
-    SELECT t.goc, c.den FROM toi t JOIN canh c ON c.tu = t.nut
-  ),
-  nhom AS (
-    SELECT t.nut, min(t.goc::text) AS dai_dien FROM toi t GROUP BY t.nut
-  )
-  SELECT count(DISTINCT g.dai_dien)::integer INTO so
-    FROM nhom g JOIN nut n ON n.id = g.nut
-   WHERE n.dem_duoc;
-  RETURN so;
-END
+  SELECT public.rfq_dem_nhom_loi_moi(p_org, p_rfq, ARRAY(SELECT d FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d)))
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE so integer; BEGIN WITH RECURSIVE dem AS ( SELECT d AS id FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) d ), nut AS ( SELECT i.id, i.supplier_id, left(s.tax_code, 10) AS mst_goc, EXISTS (SELECT 1 FROM dem WHERE dem.id = i.id) AS dem_duoc FROM public.rfq_invitations i JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL ), dich AS ( SELECT n.id, 'M|' || n.mst_goc AS d FROM nut n WHERE n.mst_goc IS NOT NULL UNION SELECT n.id, 'E|' || k.email FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id UNION SELECT n.id, 'P|' || right(regexp_replace(k.phone, '[^0-9]', '', 'g'), 9) FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id WHERE k.phone IS NOT NULL ), canh AS ( SELECT DISTINCT a.id AS tu, b.id AS den FROM dich a JOIN dich b ON b.d = a.d ), toi (goc, nut) AS ( SELECT n.id, n.id FROM nut n UNION SELECT t.goc, c.den FROM toi t JOIN canh c ON c.tu = t.nut ), nhom AS ( SELECT t.nut, min(t.goc::text) AS dai_dien FROM toi t GROUP BY t.nut ) SELECT count(DISTINCT g.dai_dien)::integer INTO so FROM nhom g JOIN nut n ON n.id = g.nut WHERE n.dem_duoc; RETURN so; END$than$
+                = $than$SELECT public.rfq_dem_nhom_loi_moi(p_org, p_rfq, ARRAY(SELECT d FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d)))$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 2
             AND p.prorettype = 'pg_catalog.int4'::regtype
-            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_dem_ncc_canh_tranh(uuid, uuid)'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
@@ -10856,6 +10827,892 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_kiem_xoay_vong_khi_mo()')),
                   'hàm public.rfq_kiem_xoay_vong_khi_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_xoay_vong_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] So tien va tien te cua bao gia duoc chon — doc qua bid_so_tien/bid_currency tu rfq_unsealed_bids, cung dai luong voi uoc luong (spec S3 §4.7). Mot than doc effective_cost thi bac do chi phi hieu dung, khong do chi tieu.
+    ARRAY[
+      $q$định nghĩa hàm award_so_tien_trao(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_so_tien_trao(p_org uuid, p_bid_version uuid, OUT so_tien numeric, OUT tien_te text)
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT public.bid_so_tien((u.payload ->> 'totalAmount')), public.bid_currency((u.payload ->> 'currency'))
+    FROM public.rfq_unsealed_bids u
+   WHERE u.org_id = p_org AND u.bid_version_id = p_bid_version
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT public.bid_so_tien((u.payload ->> 'totalAmount')), public.bid_currency((u.payload ->> 'currency')) FROM public.rfq_unsealed_bids u WHERE u.org_id = p_org AND u.bid_version_id = p_bid_version$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.record'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_so_tien_trao(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_so_tien_trao(uuid, uuid)')),
+                  'hàm public.award_so_tien_trao(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_so_tien_trao(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Bac CAO HON trong hai bac (uoc luong, so tien trao) — moi chot theo bac cua trao thau doc no. Mot than tra bac uoc luong thi khai thap uoc luong ha so chu ky; mot than tra NULL khi goi khong bac ghim thi chot theo bac lang le cho qua (ADR-082 (10)).
+    ARRAY[
+      $q$định nghĩa hàm award_bac_cao_hon(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_bac_cao_hon(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS jsonb
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  bac_ul jsonb;
+  cs uuid;
+  tien_te_cs text;
+  tien record;
+  tu_trao numeric;
+  tu_cao numeric;
+  bac jsonb;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  bac_ul := public.rfq_bac_ghim(p_org, p_rfq);
+  IF bac_ul IS NULL THEN
+    RAISE EXCEPTION 'Goi khong co bac ghim — khong phan bac trao thau duoc (K7)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_khong_bac_ghim';
+  END IF;
+  SELECT b.policy_id, p.currency INTO cs, tien_te_cs
+    FROM public.rfq_budgets b
+    JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id
+   WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  SELECT t.so_tien, t.tien_te INTO tien FROM public.award_so_tien_trao(p_org, p_bid_version) t;
+  IF tien.so_tien IS NULL OR tien.tien_te IS NULL THEN
+    RAISE EXCEPTION 'Bao gia duoc chon khong doc duoc so tien hay tien te — khong phan bac trao thau duoc (K7)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF tien.tien_te <> tien_te_cs THEN
+    RAISE EXCEPTION 'Tien te cua bao gia (%) khac tien te chinh sach (%) — khong quy doi (K7)', tien.tien_te, tien_te_cs
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_lech_tien_te';
+  END IF;
+  tu_trao := public.rfq_bac_cua(cs, tien.so_tien, tien.tien_te);
+  tu_cao := greatest(tu_trao, (bac_ul ->> 'tu_so_tien')::numeric);
+  SELECT e INTO bac
+    FROM public.org_procurement_policies p, jsonb_array_elements(p.tiers) e
+   WHERE p.org_id = p_org AND p.id = cs AND (e ->> 'tu_so_tien')::numeric = tu_cao;
+  IF bac IS NULL THEN
+    RAISE EXCEPTION 'Bac cao hon (tu %) khong co trong phien ban chinh sach ghim — ham theo bac khong tra loi duoc (K7, ADR-082 (10))', tu_cao
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN bac;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE bac_ul jsonb; cs uuid; tien_te_cs text; tien record; tu_trao numeric; tu_cao numeric; bac jsonb; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; bac_ul := public.rfq_bac_ghim(p_org, p_rfq); IF bac_ul IS NULL THEN RAISE EXCEPTION 'Goi khong co bac ghim — khong phan bac trao thau duoc (K7)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_khong_bac_ghim'; END IF; SELECT b.policy_id, p.currency INTO cs, tien_te_cs FROM public.rfq_budgets b JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id WHERE b.org_id = p_org AND b.rfq_id = p_rfq; SELECT t.so_tien, t.tien_te INTO tien FROM public.award_so_tien_trao(p_org, p_bid_version) t; IF tien.so_tien IS NULL OR tien.tien_te IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong doc duoc so tien hay tien te — khong phan bac trao thau duoc (K7)' USING ERRCODE = 'check_violation'; END IF; IF tien.tien_te <> tien_te_cs THEN RAISE EXCEPTION 'Tien te cua bao gia (%) khac tien te chinh sach (%) — khong quy doi (K7)', tien.tien_te, tien_te_cs USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_lech_tien_te'; END IF; tu_trao := public.rfq_bac_cua(cs, tien.so_tien, tien.tien_te); tu_cao := greatest(tu_trao, (bac_ul ->> 'tu_so_tien')::numeric); SELECT e INTO bac FROM public.org_procurement_policies p, jsonb_array_elements(p.tiers) e WHERE p.org_id = p_org AND p.id = cs AND (e ->> 'tu_so_tien')::numeric = tu_cao; IF bac IS NULL THEN RAISE EXCEPTION 'Bac cao hon (tu %) khong co trong phien ban chinh sach ghim — ham theo bac khong tra loi duoc (K7, ADR-082 (10))', tu_cao USING ERRCODE = 'check_violation'; END IF; RETURN bac; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.jsonb'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_bac_cao_hon(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_bac_cao_hon(uuid, uuid, uuid)')),
+                  'hàm public.award_bac_cao_hon(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_bac_cao_hon(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] So chu ky can — mot phep tinh, hai nguoi doc (tang goi va trigger), khuon unseal_so_phe_duyet_can (019). Mot than tra 1 o to chuc da bat thi bac 2 duyet bang mot chu ky; mot than tra NULL thay vi NEM o bac dau thau chinh thuc thi phep so sanh cho qua.
+    ARRAY[
+      $q$định nghĩa hàm award_so_chu_ky_can(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_so_chu_ky_can(p_org uuid, p_award uuid) RETURNS integer
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  a record;
+  bac jsonb;
+  n integer;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN 1;
+  END IF;
+  SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', p_award USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id);
+  n := (bac ->> 'award_so_chu_ky')::integer;
+  IF n IS NULL THEN
+    RAISE EXCEPTION 'Bac cao hon khong khai award_so_chu_ky (bac dau thau chinh thuc?) — khong dem chu ky duoc (K7, ADR-082 (10))'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN n;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE a record; bac jsonb; n integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN 1; END IF; SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', p_award USING ERRCODE = 'foreign_key_violation'; END IF; bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id); n := (bac ->> 'award_so_chu_ky')::integer; IF n IS NULL THEN RAISE EXCEPTION 'Bac cao hon khong khai award_so_chu_ky (bac dau thau chinh thuc?) — khong dem chu ky duoc (K7, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; RETURN n; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.int4'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_so_chu_ky_can(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_so_chu_ky_can(uuid, uuid)')),
+                  'hàm public.award_so_chu_ky_can(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_so_chu_ky_can(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Vai cua nguoi ky TAI LUC HOI giao voi award_vai cua bac cao hon — trigger chu ky chup no vao vai_luc_ky. Mot than tra moi vai cua nguoi (khong giao) thi mot FINANCE ky duoc o bac chi cho DIRECTOR.
+    ARRAY[
+      $q$định nghĩa hàm award_vai_cua_nguoi(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_vai_cua_nguoi(p_org uuid, p_award uuid, p_user uuid) RETURNS text[]
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  a record;
+  bac jsonb;
+  vai text[];
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', p_award USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id);
+  SELECT coalesce(array_agg(v ORDER BY v), ARRAY[]::text[]) INTO vai
+    FROM jsonb_array_elements_text(bac -> 'award_vai') AS t(v)
+   WHERE EXISTS (SELECT 1 FROM public.user_roles ur
+                  WHERE ur.org_id = p_org AND ur.user_id = p_user AND ur.role_code = t.v);
+  RETURN vai;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE a record; bac jsonb; vai text[]; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', p_award USING ERRCODE = 'foreign_key_violation'; END IF; bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id); SELECT coalesce(array_agg(v ORDER BY v), ARRAY[]::text[]) INTO vai FROM jsonb_array_elements_text(bac -> 'award_vai') AS t(v) WHERE EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.org_id = p_org AND ur.user_id = p_user AND ur.role_code = t.v); RETURN vai; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog._text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_vai_cua_nguoi(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_vai_cua_nguoi(uuid, uuid, uuid)')),
+                  'hàm public.award_vai_cua_nguoi(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_vai_cua_nguoi(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Du chu ky chua: so nguoi ky khac nhau >= can, va khi bac bat award_vai_khac_nhau phai rut duoc hai vai khac nhau cho hai nguoi ky (he dai dien phan biet — chu du an chot). Mot than bo ve vai khac nhau thi hai FINANCE duyet duoc bac doi hai goc nhin.
+    ARRAY[
+      $q$định nghĩa hàm award_du_chu_ky(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_du_chu_ky(p_org uuid, p_award uuid) RETURNS boolean
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  a record;
+  can integer;
+  co integer;
+  bac jsonb;
+BEGIN
+  can := public.award_so_chu_ky_can(p_org, p_award);
+  SELECT count(DISTINCT ap.approver_user_id)::integer INTO co
+    FROM public.rfq_award_approvals ap
+   WHERE ap.org_id = p_org AND ap.award_id = p_award;
+  IF co < can THEN
+    RETURN false;
+  END IF;
+  IF can = 1 THEN
+    RETURN true;
+  END IF;
+  IF can <> 2 THEN
+    RAISE EXCEPTION 'award_so_chu_ky_can tra % — ngoai mien {1, 2} cua 069 (K7)', can USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award;
+  bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id);
+  IF NOT coalesce((bac ->> 'award_vai_khac_nhau')::boolean, false) THEN
+    RETURN true;
+  END IF;
+  RETURN EXISTS (SELECT 1
+                   FROM public.rfq_award_approvals x
+                   JOIN public.rfq_award_approvals y ON y.org_id = x.org_id AND y.award_id = x.award_id
+                                                     AND y.approver_user_id <> x.approver_user_id,
+                        unnest(coalesce(x.vai_luc_ky, ARRAY[]::text[])) AS vx(v),
+                        unnest(coalesce(y.vai_luc_ky, ARRAY[]::text[])) AS vy(v)
+                  WHERE x.org_id = p_org AND x.award_id = p_award AND vx.v <> vy.v);
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE a record; can integer; co integer; bac jsonb; BEGIN can := public.award_so_chu_ky_can(p_org, p_award); SELECT count(DISTINCT ap.approver_user_id)::integer INTO co FROM public.rfq_award_approvals ap WHERE ap.org_id = p_org AND ap.award_id = p_award; IF co < can THEN RETURN false; END IF; IF can = 1 THEN RETURN true; END IF; IF can <> 2 THEN RAISE EXCEPTION 'award_so_chu_ky_can tra % — ngoai mien {1, 2} cua 069 (K7)', can USING ERRCODE = 'check_violation'; END IF; SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award; bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id); IF NOT coalesce((bac ->> 'award_vai_khac_nhau')::boolean, false) THEN RETURN true; END IF; RETURN EXISTS (SELECT 1 FROM public.rfq_award_approvals x JOIN public.rfq_award_approvals y ON y.org_id = x.org_id AND y.award_id = x.award_id AND y.approver_user_id <> x.approver_user_id, unnest(coalesce(x.vai_luc_ky, ARRAY[]::text[])) AS vx(v), unnest(coalesce(y.vai_luc_ky, ARRAY[]::text[])) AS vy(v) WHERE x.org_id = p_org AND x.award_id = p_award AND vx.v <> vy.v); END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.bool'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_du_chu_ky(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_du_chu_ky(uuid, uuid)')),
+                  'hàm public.award_du_chu_ky(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_du_chu_ky(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K5b] Tap loai tru cua chu ky trao thau: rfq_tap_loai_tru + tac gia LOW_ACTUAL_COMPETITION con song + nguoi khai phien ban chinh sach ghim + moi nguoi tung dieu phoi mo goi + nguoi lam hang xac minh moi nhat cua nha cung cap thang. Mot than bo mot ve la mot nguoi da cham ban ro hay da dat thuoc tu ky trao thau.
+    ARRAY[
+      $q$định nghĩa hàm award_tap_loai_tru(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_tap_loai_tru(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS SETOF uuid
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT DISTINCT n FROM (
+    SELECT t.n FROM public.rfq_tap_loai_tru(p_org, p_rfq) AS t(n)
+    UNION ALL
+    SELECT e.created_by
+      FROM public.rfq_sourcing_exceptions e
+     WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = 'LOW_ACTUAL_COMPETITION'
+       AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                        WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)
+    UNION ALL
+    SELECT p.created_by
+      FROM public.rfq_budgets b
+      JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id
+     WHERE b.org_id = p_org AND b.rfq_id = p_rfq
+    UNION ALL
+    SELECT h.dispatched_by FROM public.unseal_dispatch_history h WHERE h.org_id = p_org AND h.rfq_id = p_rfq
+    UNION ALL
+    SELECT r.dispatched_by FROM public.unseal_requests r WHERE r.org_id = p_org AND r.rfq_id = p_rfq
+    UNION ALL
+    SELECT m.created_by
+      FROM (SELECT v.created_by
+              FROM public.supplier_verifications v
+             WHERE v.org_id = p_org
+               AND v.supplier_id = (SELECT i.supplier_id
+                                      FROM public.vendor_bid_versions bv
+                                      JOIN public.vendor_bids bd ON bd.org_id = bv.org_id AND bd.id = bv.bid_id
+                                      JOIN public.rfq_invitations i ON i.org_id = bd.org_id AND i.id = bd.invitation_id
+                                     WHERE bv.org_id = p_org AND bv.id = p_bid_version)
+             ORDER BY v.thu_tu DESC
+             LIMIT 1) m
+  ) t
+  WHERE n IS NOT NULL
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT DISTINCT n FROM ( SELECT t.n FROM public.rfq_tap_loai_tru(p_org, p_rfq) AS t(n) UNION ALL SELECT e.created_by FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = 'LOW_ACTUAL_COMPETITION' AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id) UNION ALL SELECT p.created_by FROM public.rfq_budgets b JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id WHERE b.org_id = p_org AND b.rfq_id = p_rfq UNION ALL SELECT h.dispatched_by FROM public.unseal_dispatch_history h WHERE h.org_id = p_org AND h.rfq_id = p_rfq UNION ALL SELECT r.dispatched_by FROM public.unseal_requests r WHERE r.org_id = p_org AND r.rfq_id = p_rfq UNION ALL SELECT m.created_by FROM (SELECT v.created_by FROM public.supplier_verifications v WHERE v.org_id = p_org AND v.supplier_id = (SELECT i.supplier_id FROM public.vendor_bid_versions bv JOIN public.vendor_bids bd ON bd.org_id = bv.org_id AND bd.id = bv.bid_id JOIN public.rfq_invitations i ON i.org_id = bd.org_id AND i.id = bd.invitation_id WHERE bv.org_id = p_org AND bv.id = p_bid_version) ORDER BY v.thu_tu DESC LIMIT 1) m ) t WHERE n IS NOT NULL$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.uuid'::regtype
+            AND p.proretset
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_tap_loai_tru(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_tap_loai_tru(uuid, uuid, uuid)')),
+                  'hàm public.award_tap_loai_tru(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_tap_loai_tru(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K2 K2b] LOI dem nhom tach tu rfq_dem_ncc_canh_tranh (108): nut la moi loi moi con song, canh la khoa nhom (MST goc, email, chin so cuoi dien thoai), dem nhom co it nhat mot loi moi trong tap dem. K2 va K2b MOT phep gop. Mot than bo mot khoa nhom thi hai nha vo chung MST dem thanh hai.
+    ARRAY[
+      $q$định nghĩa hàm rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_dem_nhom_loi_moi(p_org uuid, p_rfq uuid, p_dem uuid[]) RETURNS integer
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  so integer;
+BEGIN
+  WITH RECURSIVE
+  nut AS (
+    SELECT i.id, i.supplier_id, left(s.tax_code, 10) AS mst_goc,
+           (i.id = ANY (p_dem)) AS dem_duoc
+      FROM public.rfq_invitations i
+      JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id
+     WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL
+  ),
+  dich AS (
+    SELECT n.id, 'M|' || n.mst_goc AS d FROM nut n WHERE n.mst_goc IS NOT NULL
+    UNION
+    SELECT n.id, 'E|' || k.email
+      FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id
+    UNION
+    SELECT n.id, 'P|' || right(regexp_replace(k.phone, '[^0-9]', '', 'g'), 9)
+      FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id
+     WHERE k.phone IS NOT NULL
+  ),
+  canh AS (
+    SELECT DISTINCT a.id AS tu, b.id AS den FROM dich a JOIN dich b ON b.d = a.d
+  ),
+  toi (goc, nut) AS (
+    SELECT n.id, n.id FROM nut n
+    UNION
+    SELECT t.goc, c.den FROM toi t JOIN canh c ON c.tu = t.nut
+  ),
+  nhom AS (
+    SELECT t.nut, min(t.goc::text) AS dai_dien FROM toi t GROUP BY t.nut
+  )
+  SELECT count(DISTINCT g.dai_dien)::integer INTO so
+    FROM nhom g JOIN nut n ON n.id = g.nut
+   WHERE n.dem_duoc;
+  RETURN so;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE so integer; BEGIN WITH RECURSIVE nut AS ( SELECT i.id, i.supplier_id, left(s.tax_code, 10) AS mst_goc, (i.id = ANY (p_dem)) AS dem_duoc FROM public.rfq_invitations i JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL ), dich AS ( SELECT n.id, 'M|' || n.mst_goc AS d FROM nut n WHERE n.mst_goc IS NOT NULL UNION SELECT n.id, 'E|' || k.email FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id UNION SELECT n.id, 'P|' || right(regexp_replace(k.phone, '[^0-9]', '', 'g'), 9) FROM nut n JOIN public.supplier_contacts k ON k.org_id = p_org AND k.supplier_id = n.supplier_id WHERE k.phone IS NOT NULL ), canh AS ( SELECT DISTINCT a.id AS tu, b.id AS den FROM dich a JOIN dich b ON b.d = a.d ), toi (goc, nut) AS ( SELECT n.id, n.id FROM nut n UNION SELECT t.goc, c.den FROM toi t JOIN canh c ON c.tu = t.nut ), nhom AS ( SELECT t.nut, min(t.goc::text) AS dai_dien FROM toi t GROUP BY t.nut ) SELECT count(DISTINCT g.dai_dien)::integer INTO so FROM nhom g JOIN nut n ON n.id = g.nut WHERE n.dem_duoc; RETURN so; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.int4'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_dem_nhom_loi_moi(uuid, uuid, uuid[])'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_dem_nhom_loi_moi(uuid, uuid, uuid[])')),
+                  'hàm public.rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K2b] So NHOM nha cung cap co bao gia hop le o luot cham cua de xuat (effective_cost khac NULL) ma loi moi DEM DUOC (luat K2). Mot than bo ve dem duoc thi mot nha vo nop bao gia nang so dem hau kiem.
+    ARRAY[
+      $q$định nghĩa hàm award_dem_nhom_bao_gia(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_dem_nhom_bao_gia(p_org uuid, p_rfq uuid, p_evaluation uuid) RETURNS integer
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT public.rfq_dem_nhom_loi_moi(p_org, p_rfq, ARRAY(
+    SELECT d
+      FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d)
+     WHERE EXISTS (SELECT 1
+                     FROM public.rfq_evaluation_lines l
+                     JOIN public.vendor_bid_versions bv ON bv.org_id = l.org_id AND bv.id = l.bid_version_id
+                     JOIN public.vendor_bids bd ON bd.org_id = bv.org_id AND bd.id = bv.bid_id
+                    WHERE l.org_id = p_org AND l.evaluation_id = p_evaluation AND l.effective_cost IS NOT NULL
+                      AND bd.invitation_id = t.d)))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT public.rfq_dem_nhom_loi_moi(p_org, p_rfq, ARRAY( SELECT d FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d) WHERE EXISTS (SELECT 1 FROM public.rfq_evaluation_lines l JOIN public.vendor_bid_versions bv ON bv.org_id = l.org_id AND bv.id = l.bid_version_id JOIN public.vendor_bids bd ON bd.org_id = bv.org_id AND bd.id = bv.bid_id WHERE l.org_id = p_org AND l.evaluation_id = p_evaluation AND l.effective_cost IS NOT NULL AND bd.invitation_id = t.d)))$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.int4'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_dem_nhom_bao_gia(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_dem_nhom_bao_gia(uuid, uuid, uuid)')),
+                  'hàm public.award_dem_nhom_bao_gia(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_dem_nhom_bao_gia(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Ham vi tu cua bac: goi khong bac ghim o to chuc da bat => K7_KHONG_BAC_GHIM (chu du an chot fail-closed); tien te bao gia lech chinh sach => K7_LECH_TIEN_TE; bac cao hon la dau thau chinh thuc => K7_DAU_THAU_CHINH_THUC. Mot than RETURN NULL cho trao thau o bac dau thau chinh thuc di qua bang bao gia tren nen tang.
+    ARRAY[
+      $q$định nghĩa hàm award_chot_bac(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_chot_bac(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  tien record;
+  tien_te_cs text;
+  bac jsonb;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  IF public.rfq_bac_ghim(p_org, p_rfq) IS NULL THEN
+    RETURN 'K7_KHONG_BAC_GHIM';
+  END IF;
+  SELECT t.so_tien, t.tien_te INTO tien FROM public.award_so_tien_trao(p_org, p_bid_version) t;
+  IF tien.so_tien IS NULL OR tien.tien_te IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT p.currency INTO tien_te_cs
+    FROM public.rfq_budgets b
+    JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id
+   WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  IF tien.tien_te <> tien_te_cs THEN
+    RETURN 'K7_LECH_TIEN_TE';
+  END IF;
+  bac := public.award_bac_cao_hon(p_org, p_rfq, p_bid_version);
+  IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN
+    RETURN 'K7_DAU_THAU_CHINH_THUC';
+  END IF;
+  RETURN NULL;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE tien record; tien_te_cs text; bac jsonb; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; IF public.rfq_bac_ghim(p_org, p_rfq) IS NULL THEN RETURN 'K7_KHONG_BAC_GHIM'; END IF; SELECT t.so_tien, t.tien_te INTO tien FROM public.award_so_tien_trao(p_org, p_bid_version) t; IF tien.so_tien IS NULL OR tien.tien_te IS NULL THEN RETURN NULL; END IF; SELECT p.currency INTO tien_te_cs FROM public.rfq_budgets b JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id WHERE b.org_id = p_org AND b.rfq_id = p_rfq; IF tien.tien_te <> tien_te_cs THEN RETURN 'K7_LECH_TIEN_TE'; END IF; bac := public.award_bac_cao_hon(p_org, p_rfq, p_bid_version); IF (bac ->> 'dau_thau_chinh_thuc')::boolean IS NOT FALSE THEN RETURN 'K7_DAU_THAU_CHINH_THUC'; END IF; RETURN NULL; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_bac(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_bac(uuid, uuid, uuid)')),
+                  'hàm public.award_chot_bac(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_chot_bac(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Ham vi tu cua nguoi ky: khong giu vai nao trong award_vai cua bac cao hon => K7_SAI_VAI; nguoi khai phien ban chinh sach ghim => K7_TAC_GIA_CHINH_SACH (spec S3 §2.4 (7)). Mot than RETURN NULL cho nguoi dat thuoc tu ky trao thau cua goi do minh do.
+    ARRAY[
+      $q$định nghĩa hàm award_chot_nguoi_ky(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_chot_nguoi_ky(p_org uuid, p_award uuid, p_user uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  vai text[];
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  vai := public.award_vai_cua_nguoi(p_org, p_award, p_user);
+  IF cardinality(vai) = 0 THEN
+    RETURN 'K7_SAI_VAI';
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.rfq_awards a
+               JOIN public.rfq_budgets b ON b.org_id = a.org_id AND b.rfq_id = a.rfq_id
+               JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id
+              WHERE a.org_id = p_org AND a.id = p_award AND p.created_by = p_user) THEN
+    RETURN 'K7_TAC_GIA_CHINH_SACH';
+  END IF;
+  RETURN NULL;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE vai text[]; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; vai := public.award_vai_cua_nguoi(p_org, p_award, p_user); IF cardinality(vai) = 0 THEN RETURN 'K7_SAI_VAI'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_awards a JOIN public.rfq_budgets b ON b.org_id = a.org_id AND b.rfq_id = a.rfq_id JOIN public.org_procurement_policies p ON p.org_id = b.org_id AND p.id = b.policy_id WHERE a.org_id = p_org AND a.id = p_award AND p.created_by = p_user) THEN RETURN 'K7_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_nguoi_ky(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_nguoi_ky(uuid, uuid, uuid)')),
+                  'hàm public.award_chot_nguoi_ky(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_chot_nguoi_ky(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K2b] Ham vi tu hau kiem: so nhom co bao gia hop le duoi so_ncc_toi_thieu cua bac cao hon ma khong ngoai le LOW_ACTUAL_COMPETITION con song => K2B_THIEU_CANH_TRANH_THUC (spec S3 §2.4 (6)iv). Hoi o canh de xuat va canh duyet. Mot than RETURN NULL cho trao thau mot bao gia o bac can nam ma khong ai ky ngoai le.
+    ARRAY[
+      $q$định nghĩa hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_chot_hau_kiem(p_org uuid, p_rfq uuid, p_evaluation uuid, p_bid_version uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  bac jsonb;
+  nguong integer;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  IF public.award_chot_bac(p_org, p_rfq, p_bid_version) IS NOT NULL THEN
+    RETURN NULL;
+  END IF;
+  bac := public.award_bac_cao_hon(p_org, p_rfq, p_bid_version);
+  nguong := (bac ->> 'so_ncc_toi_thieu')::integer;
+  IF nguong IS NULL THEN
+    RAISE EXCEPTION 'Bac cao hon thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K2b, ADR-082 (10))'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF public.award_dem_nhom_bao_gia(p_org, p_rfq, p_evaluation) >= nguong THEN
+    RETURN NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e
+              WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = 'LOW_ACTUAL_COMPETITION'
+                AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                                 WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN
+    RETURN NULL;
+  END IF;
+  RETURN 'K2B_THIEU_CANH_TRANH_THUC';
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE bac jsonb; nguong integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; IF public.award_chot_bac(p_org, p_rfq, p_bid_version) IS NOT NULL THEN RETURN NULL; END IF; bac := public.award_bac_cao_hon(p_org, p_rfq, p_bid_version); nguong := (bac ->> 'so_ncc_toi_thieu')::integer; IF nguong IS NULL THEN RAISE EXCEPTION 'Bac cao hon thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K2b, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; IF public.award_dem_nhom_bao_gia(p_org, p_rfq, p_evaluation) >= nguong THEN RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = 'LOW_ACTUAL_COMPETITION' AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; RETURN 'K2B_THIEU_CANH_TRANH_THUC'; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 4
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)')),
+                  'hàm public.award_chot_hau_kiem(uuid, uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K5b] Ham vi tu chu ky doc lap: bac cao hon bat ky_danh_sach_moi, hay goi co ngoai le con song, hay bac trao CAO HON bac uoc luong (khai thap) => can mot chu ky trao thau ngoai award_tap_loai_tru, khong thi K5B_THIEU_CHU_KY_DOC_LAP. Mot than RETURN NULL cho nguoi chon danh sach tu ky trao thau o bac doi.
+    ARRAY[
+      $q$định nghĩa hàm award_chot_doc_lap(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_chot_doc_lap(p_org uuid, p_award uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  a record;
+  bac_ul jsonb;
+  bac jsonb;
+  doi boolean;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K5b)', p_award USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF public.award_chot_bac(p_org, a.rfq_id, a.bid_version_id) IS NOT NULL THEN
+    RETURN NULL;
+  END IF;
+  bac_ul := public.rfq_bac_ghim(p_org, a.rfq_id);
+  bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id);
+  doi := coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true)
+         OR (bac ->> 'tu_so_tien')::numeric > (bac_ul ->> 'tu_so_tien')::numeric
+         OR EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e
+                     WHERE e.org_id = p_org AND e.rfq_id = a.rfq_id AND e.hanh_dong = 'LAP'
+                       AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                                        WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id));
+  IF NOT doi THEN
+    RETURN NULL;
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.rfq_award_approvals ap
+              WHERE ap.org_id = p_org AND ap.award_id = p_award
+                AND NOT EXISTS (SELECT 1 FROM public.award_tap_loai_tru(p_org, a.rfq_id, a.bid_version_id) AS t(n)
+                                 WHERE t.n = ap.approver_user_id)) THEN
+    RETURN NULL;
+  END IF;
+  RETURN 'K5B_THIEU_CHU_KY_DOC_LAP';
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE a record; bac_ul jsonb; bac jsonb; doi boolean; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = p_org AND x.id = p_award; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K5b)', p_award USING ERRCODE = 'foreign_key_violation'; END IF; IF public.award_chot_bac(p_org, a.rfq_id, a.bid_version_id) IS NOT NULL THEN RETURN NULL; END IF; bac_ul := public.rfq_bac_ghim(p_org, a.rfq_id); bac := public.award_bac_cao_hon(p_org, a.rfq_id, a.bid_version_id); doi := coalesce((bac ->> 'ky_danh_sach_moi')::boolean, true) OR (bac ->> 'tu_so_tien')::numeric > (bac_ul ->> 'tu_so_tien')::numeric OR EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = a.rfq_id AND e.hanh_dong = 'LAP' AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)); IF NOT doi THEN RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_award_approvals ap WHERE ap.org_id = p_org AND ap.award_id = p_award AND NOT EXISTS (SELECT 1 FROM public.award_tap_loai_tru(p_org, a.rfq_id, a.bid_version_id) AS t(n) WHERE t.n = ap.approver_user_id)) THEN RETURN NULL; END IF; RETURN 'K5B_THIEU_CHU_KY_DOC_LAP'; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_doc_lap(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chot_doc_lap(uuid, uuid)')),
+                  'hàm public.award_chot_doc_lap(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_chot_doc_lap(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7 K2b] Canh de xuat (hang PROPOSED): chi duoi READ COMMITTED (moi to chuc), roi hoi bac va hau kiem — ngoai le hau kiem phai co TRUOC moi chu ky. Than `RETURN NEW` cho de xuat o bac dau thau chinh thuc hay duoi nguong hau kiem di qua.
+    ARRAY[
+      $q$hàm + trigger award_kiem_theo_bac_khi_de_xuat (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_de_xuat()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_theo_bac_khi_de_xuat();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_theo_bac_khi_de_xuat() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  ly_do text;
+BEGIN
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'De xuat trao thau chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay lan rut ngoai le hay lan bat S3 vua commit (K7)',
+      pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation';
+  END IF;
+  ly_do := public.award_chot_bac(NEW.org_id, NEW.rfq_id, NEW.bid_version_id);
+  IF ly_do IS NULL THEN
+    ly_do := public.award_chot_hau_kiem(NEW.org_id, NEW.rfq_id, NEW.evaluation_id, NEW.bid_version_id);
+  END IF;
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'De xuat trao thau bi chan theo bac: %', ly_do
+      USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do);
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_kiem_theo_bac_khi_de_xuat'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_kiem_theo_bac_khi_de_xuat()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'PROPOSED'::text)) EXECUTE FUNCTION award_kiem_theo_bac_khi_de_xuat()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_kiem_theo_bac_khi_de_xuat ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN (NEW.status = 'PROPOSED') EXECUTE FUNCTION public.award_kiem_theo_bac_khi_de_xuat();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE ly_do text; BEGIN IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN RAISE EXCEPTION 'De xuat trao thau chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay lan rut ngoai le hay lan bat S3 vua commit (K7)', pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation'; END IF; ly_do := public.award_chot_bac(NEW.org_id, NEW.rfq_id, NEW.bid_version_id); IF ly_do IS NULL THEN ly_do := public.award_chot_hau_kiem(NEW.org_id, NEW.rfq_id, NEW.evaluation_id, NEW.bid_version_id); END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'De xuat trao thau bi chan theo bac: %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do); END IF; RETURN NEW; END$than$
+            AND p.provolatile = 'v'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_kiem_theo_bac_khi_de_xuat'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_kiem_theo_bac_khi_de_xuat()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'PROPOSED'::text)) EXECUTE FUNCTION award_kiem_theo_bac_khi_de_xuat()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_de_xuat()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_de_xuat()')),
+                  'hàm public.award_kiem_theo_bac_khi_de_xuat() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_theo_bac_khi_de_xuat() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7 K2b K5b] Canh duyet (hang APPROVED), xep sau khoa tu van cua J7: chi duoi READ COMMITTED, roi bac, du chu ky theo bac (k7_thieu_chu_ky — loi di sai thu tu, khong qua bang ten -> ma), hau kiem, chu ky doc lap. Than `RETURN NEW` cho hang APPROVED bang mot chu ky o bac doi hai, hay bang chu ky toan nguoi chon danh sach.
+    ARRAY[
+      $q$hàm + trigger award_kiem_theo_bac_khi_duyet (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_duyet()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_theo_bac_khi_duyet();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_theo_bac_khi_duyet() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  de_xuat uuid;
+  ly_do text;
+BEGIN
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'Duyet trao thau chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay chu ky, ngoai le hay lan bat S3 vua commit (K7)',
+      pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT a.id INTO de_xuat
+    FROM public.rfq_awards a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.rfq_id AND a.status = 'PROPOSED'
+   ORDER BY a.acted_at DESC, a.id DESC
+   LIMIT 1;
+  ly_do := public.award_chot_bac(NEW.org_id, NEW.rfq_id, NEW.bid_version_id);
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'Duyet trao thau bi chan theo bac: %', ly_do
+      USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do);
+  END IF;
+  IF de_xuat IS NULL OR NOT public.award_du_chu_ky(NEW.org_id, de_xuat) THEN
+    RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet hop le theo bac; chua du (K7)',
+      coalesce(public.award_so_chu_ky_can(NEW.org_id, de_xuat), 1)
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_thieu_chu_ky';
+  END IF;
+  ly_do := public.award_chot_hau_kiem(NEW.org_id, NEW.rfq_id, NEW.evaluation_id, NEW.bid_version_id);
+  IF ly_do IS NULL THEN
+    ly_do := public.award_chot_doc_lap(NEW.org_id, de_xuat);
+  END IF;
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'Duyet trao thau bi chan theo bac: %', ly_do
+      USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do);
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_kiem_theo_bac_khi_duyet'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_kiem_theo_bac_khi_duyet()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_duyet BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'APPROVED'::text)) EXECUTE FUNCTION award_kiem_theo_bac_khi_duyet()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_kiem_theo_bac_khi_duyet ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_duyet BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN (NEW.status = 'APPROVED') EXECUTE FUNCTION public.award_kiem_theo_bac_khi_duyet();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_theo_bac_khi_duyet;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE de_xuat uuid; ly_do text; BEGIN IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN RAISE EXCEPTION 'Duyet trao thau chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay chu ky, ngoai le hay lan bat S3 vua commit (K7)', pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation'; END IF; SELECT a.id INTO de_xuat FROM public.rfq_awards a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.rfq_id AND a.status = 'PROPOSED' ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; ly_do := public.award_chot_bac(NEW.org_id, NEW.rfq_id, NEW.bid_version_id); IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Duyet trao thau bi chan theo bac: %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do); END IF; IF de_xuat IS NULL OR NOT public.award_du_chu_ky(NEW.org_id, de_xuat) THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet hop le theo bac; chua du (K7)', coalesce(public.award_so_chu_ky_can(NEW.org_id, de_xuat), 1) USING ERRCODE = 'check_violation', CONSTRAINT = 'k7_thieu_chu_ky'; END IF; ly_do := public.award_chot_hau_kiem(NEW.org_id, NEW.rfq_id, NEW.evaluation_id, NEW.bid_version_id); IF ly_do IS NULL THEN ly_do := public.award_chot_doc_lap(NEW.org_id, de_xuat); END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Duyet trao thau bi chan theo bac: %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do); END IF; RETURN NEW; END$than$
+            AND p.provolatile = 'v'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_kiem_theo_bac_khi_duyet'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_kiem_theo_bac_khi_duyet()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_theo_bac_khi_duyet BEFORE INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'APPROVED'::text)) EXECUTE FUNCTION award_kiem_theo_bac_khi_duyet()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_duyet()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_theo_bac_khi_duyet()')),
+                  'hàm public.award_kiem_theo_bac_khi_duyet() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_theo_bac_khi_duyet() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.280 / S3.5a / K7] Chu ky trao thau o to chuc da bat: hoi bac va nguoi ky (vai thuoc award_vai cua bac cao hon, khong la tac gia chinh sach), roi chup vai_luc_ky (cot ngoai GRANT INSERT, khuon tier_tu_so_tien). Than `RETURN NEW` khong dat vai_luc_ky thi award_vai_khac_nhau khong bao gio du; than bo hoi vai thi FINANCE ky o bac chi cho DIRECTOR.
+    ARRAY[
+      $q$hàm + trigger award_kiem_vai_theo_bac (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_vai_theo_bac()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_vai_theo_bac();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_vai_theo_bac() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  a record;
+  ly_do text;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    NEW.vai_luc_ky := NULL;
+    RETURN NEW;
+  END IF;
+  SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = NEW.org_id AND x.id = NEW.award_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', NEW.award_id USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  ly_do := public.award_chot_bac(NEW.org_id, a.rfq_id, a.bid_version_id);
+  IF ly_do IS NULL THEN
+    ly_do := public.award_chot_nguoi_ky(NEW.org_id, NEW.award_id, NEW.approver_user_id);
+  END IF;
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'Chu ky trao thau bi chan theo bac: %', ly_do
+      USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do);
+  END IF;
+  NEW.vai_luc_ky := public.award_vai_cua_nguoi(NEW.org_id, NEW.award_id, NEW.approver_user_id);
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_award_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                                 AND t.tgname = 'rfq_award_approvals_kiem_vai_theo_bac'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_kiem_vai_theo_bac()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_vai_theo_bac BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION award_kiem_vai_theo_bac()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_approvals_kiem_vai_theo_bac ON public.rfq_award_approvals;
+             CREATE TRIGGER rfq_award_approvals_kiem_vai_theo_bac BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION public.award_kiem_vai_theo_bac();
+             ALTER TABLE public.rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_kiem_vai_theo_bac;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE a record; ly_do text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN NEW.vai_luc_ky := NULL; RETURN NEW; END IF; SELECT x.rfq_id, x.bid_version_id INTO a FROM public.rfq_awards x WHERE x.org_id = NEW.org_id AND x.id = NEW.award_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay de xuat trao thau % (K7)', NEW.award_id USING ERRCODE = 'foreign_key_violation'; END IF; ly_do := public.award_chot_bac(NEW.org_id, a.rfq_id, a.bid_version_id); IF ly_do IS NULL THEN ly_do := public.award_chot_nguoi_ky(NEW.org_id, NEW.award_id, NEW.approver_user_id); END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Chu ky trao thau bi chan theo bac: %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = lower(ly_do); END IF; NEW.vai_luc_ky := public.award_vai_cua_nguoi(NEW.org_id, NEW.award_id, NEW.approver_user_id); RETURN NEW; END$than$
+            AND p.provolatile = 'v'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                           AND t.tgname = 'rfq_award_approvals_kiem_vai_theo_bac'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_kiem_vai_theo_bac()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_vai_theo_bac BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION award_kiem_vai_theo_bac()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_vai_theo_bac()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_vai_theo_bac()')),
+                  'hàm public.award_kiem_vai_theo_bac() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_vai_theo_bac() và bảng public.rfq_award_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.198 / khoan 256] Dem lan nop o canh DRAFT->PENDING_APPROVAL. Than `RETURN NEW` giu lan nop dung yen: nop lai sau khi tra ve mang lai moc cu, va loi duyet tren lan xem truoc di qua.

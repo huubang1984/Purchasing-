@@ -2220,7 +2220,11 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(soDotBien, "phải có ít nhất hai bảng đổi được sang UNLOGGED, nếu không test này rỗng")
       .toBeGreaterThan(1);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 180000);
+    // [S1.280] Trần 600 s, cùng lý do với ca `[sổ nợ 73] RULE` (S1.198): ca này chạy một lần migrate() đầy đủ
+    // cho MỖI bảng đổi được sang UNLOGGED, nên thời gian lớn theo số bảng và số mục ghim. Đo 2026-10-07:
+    // chạy riêng 61,5 s ở máy (nhánh S3.5a), 69 s ở T3 CI master; dưới tải evidence 124,5 s ở CI master
+    // (69 % của 180 s) và QUÁ 180 s ở máy — tải, không phải hồi quy (hardening thêm 15 mục ghim: +4,4 % dòng).
+  }, 600_000);
 
   it("mọi bảng chỉ-ghi-thêm CHẶN CẢ TRUNCATE — không chỉ UPDATE và DELETE", async () => {
     // Ba bảng của S1 chỉ có trigger BEFORE DELETE OR UPDATE (tgtype 27). TRUNCATE đi qua chúng.

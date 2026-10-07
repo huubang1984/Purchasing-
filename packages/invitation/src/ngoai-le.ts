@@ -23,9 +23,14 @@ import { InvitationError } from "./invitation.js";
 // Chỉ ghi thêm: rút một ngoại lệ là một hàng `RUT` trỏ về nó, kèm lý do; không hàng nào bị sửa.
 // =============================================================================================
 
-/** Ba loại của danh sách mời — đường ghi của S3.3b. Hai loại còn lại của CHECK (`105`) thuộc trao thầu (S3.5) và OPEN (S3.6c). */
+/** Ba loại của danh sách mời — đường ghi của S3.3b; màn `/tao-thau` chép đúng ba loại này. Loại còn lại của CHECK (`105`) thuộc OPEN (S3.6c). */
 export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
-export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number];
+/**
+ * [S1.280 / S3.5a] Loại HẬU KIỂM của trao thầu (K2b): chỉ lập hay rút khi gói ở EVALUATING, trước đề xuất (`113`); không nằm trong băm
+ * danh sách, nên không chạm chữ ký K4b. Tập riêng để màn danh sách mời không mời người dùng lập nó ở DRAFT.
+ */
+export const LOAI_NGOAI_LE_HAU_KIEM = ["LOW_ACTUAL_COMPETITION"] as const;
+export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number] | (typeof LOAI_NGOAI_LE_HAU_KIEM)[number];
 
 /** Tập ĐÓNG của mã lý do (spec §4.4, V2.1 §12 11.2). */
 export const MA_LY_DO_NGOAI_LE = [
@@ -165,8 +170,8 @@ export async function lapNgoaiLe(
   auditPool: pg.Pool,
 ): Promise<NgoaiLeCanhTranh> {
   await assertTenantBound(client, orgId, "lapNgoaiLe");
-  if (!(LOAI_NGOAI_LE as readonly string[]).includes(input.loai)) {
-    throw new InvitationError(`Loại ngoại lệ phải là một trong: ${LOAI_NGOAI_LE.join(", ")}.`);
+  if (!(LOAI_NGOAI_LE as readonly string[]).includes(input.loai) && !(LOAI_NGOAI_LE_HAU_KIEM as readonly string[]).includes(input.loai)) {
+    throw new InvitationError(`Loại ngoại lệ phải là một trong: ${[...LOAI_NGOAI_LE, ...LOAI_NGOAI_LE_HAU_KIEM].join(", ")}.`);
   }
   if (!(MA_LY_DO_NGOAI_LE as readonly string[]).includes(input.maLyDo)) {
     throw new InvitationError(`Mã lý do phải là một trong: ${MA_LY_DO_NGOAI_LE.join(", ")}.`);
