@@ -25934,3 +25934,6 @@ nguyên vẫn xanh: nâng riêng hằng J7 vẫn làm trao thầu gãy.
     hợp trên cùng máy (container Postgres của testcontainers dựng ngoài lượt này). Không nới; xếp hàng chờ máy rảnh rồi chạy lại.
   - lượt 3, sau khi chờ máy rảnh 40 phút (không container test lạ 3 phút liên tiếp): vitest thoát mã 0, 86/86, 4912 khẳng định,
     1 796 s cả lượt (so 2 659 và 2 848 s); ca H19 LOGGED 64,9 s, ca H17 38,6 s; `migrations.int` 1 793 s. Ba lượt cùng một cây mã.
+- Gộp `origin/master` lần hai (PR #255 S1.278, #256 S1.279 — TCO, K8a) sau khi lượt 3 xanh: chín xung đột gỡ tay (danh sách migration
+  111/112/113, `MOC_GHIM` 85 → 88, cổng tên ràng buộc 8 hàm trigger + bốn hàm vị từ, tổng điều tra trigger); trên cây gộp `pnpm t0`,
+  `pnpm test` (153 tệp, 2658 ca) xanh; evidence lượt 4: vitest thoát mã 0, **88/88** bất biến (66 + 22), 4960 khẳng định, 1 800 s.
