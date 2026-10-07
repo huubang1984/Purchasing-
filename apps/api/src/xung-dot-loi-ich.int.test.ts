@@ -96,6 +96,8 @@ interface ToChuc {
   readonly tc: Nguoi;
   /** FINANCE — ký phiên bản ấy; xác minh nhà cung cấp; huỷ trao thầu. */
   readonly tc2: Nguoi;
+  /** FINANCE thứ ba — không tác giả, không ký bản v2: người ký thô *chưa khai* ở phép đột biến cổng chữ ký duyệt trao thầu. */
+  readonly tc3: Nguoi;
   /** DIRECTOR — duyệt mở thầu; ký duyệt trao thầu. */
   readonly gd: Nguoi;
   /** TECHNICAL — người nhập hồ sơ nhà cung cấp. */
@@ -128,6 +130,7 @@ async function taoToChuc(batS3 = true): Promise<ToChuc> {
   const pm3 = await nguoi("PROCUREMENT_MANAGER");
   const tc = await nguoi("FINANCE");
   const tc2 = await nguoi("FINANCE");
+  const tc3 = await nguoi("FINANCE");
   const gd = await nguoi("DIRECTOR");
   await withTenant(apiPool, org, (c) =>
     createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "1000000000.00", currency: "VND", actorSessionId: pm.s }),
@@ -157,7 +160,7 @@ async function taoToChuc(batS3 = true): Promise<ToChuc> {
     );
   }
   const nhap = await nguoiNhapNhaCungCap(db.pool, org);
-  return { org, daBat: batS3, pm, pm2, pm3, tc, tc2, gd, nhap };
+  return { org, daBat: batS3, pm, pm2, pm3, tc, tc2, tc3, gd, nhap };
 }
 
 const NHOM_CUA = new Map<string, string>();
@@ -694,10 +697,11 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
     expect((await trongDotBien(t.org, ["ALTER TABLE public.rfq_awards DISABLE TRIGGER rfq_awards_kiem_xung_dot"], (c) => c.query(cauDeXuat, [t.org, g.rfqId, dx.evaluationId, g.bidVersionId, t.pm2.u, t.pm2.s]))).rowCount).toBe(1);
     const dx2 = await withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId: g.rfqId, bidVersionId: g.bidVersionId, reason: "lai", actorSessionId: t.pm3.s }, auditPool));
     const cauKy = "INSERT INTO public.rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)";
-    // `tc` (FINANCE, po.approve) chưa khai.
-    const eK = await loi(trongDotBien(t.org, [], (c) => c.query(cauKy, [t.org, dx2.awardId, t.tc.u, t.tc.s])));
+    // `tc3` (FINANCE, po.approve) chưa khai — không dùng `tc`: tác giả bản v2, và `rfq_award_approvals_kiem_vai_theo_bac` (K7, `113`,
+    // gộp S1.280) đứng TRƯỚC `_kiem_xung_dot` theo tên nên `k7_tac_gia_chinh_sach` nói trước K9.
+    const eK = await loi(trongDotBien(t.org, [], (c) => c.query(cauKy, [t.org, dx2.awardId, t.tc3.u, t.tc3.s])));
     expect(eK).toMatchObject({ code: "23514", constraint: "k9_chua_khai_xung_dot" });
-    expect((await trongDotBien(t.org, ["ALTER TABLE public.rfq_award_approvals DISABLE TRIGGER rfq_award_approvals_kiem_xung_dot"], (c) => c.query(cauKy, [t.org, dx2.awardId, t.tc.u, t.tc.s]))).rowCount).toBe(1);
+    expect((await trongDotBien(t.org, ["ALTER TABLE public.rfq_award_approvals DISABLE TRIGGER rfq_award_approvals_kiem_xung_dot"], (c) => c.query(cauKy, [t.org, dx2.awardId, t.tc3.u, t.tc3.s]))).rowCount).toBe(1);
   });
 
   it("[INV-K9] xác minh nhà cung cấp: người đã khai CÓ xung đột với nhà cung cấp không thu hồi xác minh của nó ⇒ K9_XAC_MINH_NCC_XUNG_DOT, hàng sổ mang SUPPLIER; ĐỘT BIẾN tắt trigger ⇒ câu thô đi lọt", async () => {
