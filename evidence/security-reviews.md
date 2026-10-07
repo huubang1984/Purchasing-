@@ -25635,6 +25635,15 @@ Bốn câu, cả bốn theo đề xuất:
   đếm của tổ chức chưa bật (đường ghi thứ hai); cạnh mở thiếu số ngày giao ở tầng gói (trước lần đúc khoá, không sổ) và câu thô (tên ràng
   buộc), đối chứng chụp tập mã; nhóm khoá `tco` — bốn hợp lệ, mười ba sai, hình dạng ngoài, không `UPDATE`.
 - **Sổ CSDL**: `rls-coverage`, `check-an-ninh`, `hardening-suy-tu-tinh-chat`, `trigger-la-mac-dinh-dong`, `migration-shape` — 155/155.
+- **Ca lật, kê tên kèm lý do** (mỗi ca mang chú thích `CA LẬT` tại chỗ):
+  - đối chứng dương ở khối L14 của `luot-danh-gia.int` và giàn cảnh `bo-xuat.int` — L8 đòi hệ số mã tiền bằng 1;
+  - `lan-nop-da-xem.int`: bảng trigger của `rfq_approvals` có bốn trigger; ca đột biến D2 *"trigger so lần nộp không đặt cột về NULL"*;
+  - `danh-sach-moi.int` (lượt `pnpm evidence` đầu, 2 đỏ): hai ca đột biến D2 của tổ chức chưa bật — băm danh sách đặt cho mọi tổ chức, và
+    `UNIQUE` mất `NULLS NOT DISTINCT`.
+
+  Bốn ca đột biến D2 cùng một lý do: hai hàng ký của CÙNG một người, mà lớp đếm NGƯỜI của `rfq_packages_tco_khi_mo` ở tổ chức chưa bật
+  chặn với lời `giao_hang_chua_ky`; nên mỗi đột biến một mình không còn mở được gói. Ca đo lời từ chối ấy trước, rồi tắt thêm lớp L16
+  (trong cùng giao dịch ROLLBACK, hay `DISABLE` rồi `ENABLE ALWAYS`) và đo khoảng trống của điểm chịu lực D2 mở lại như cũ.
 
 ## 7. Đột biến
 
