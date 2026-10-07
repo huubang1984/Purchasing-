@@ -26130,4 +26130,12 @@ diff cắt vụn thành mười lăm hunk: ghép lại dải S3.5a rồi dải K
 tên ràng buộc gom bốn hàm vị từ award và ba hàm vị từ K9 thành một tập (`k9_chu_ky_co_xung_dot` đứng ở hai thân), `duyetTraoThau`
 (lớp chặn cuối của `113` và K9 chung một `catch`), bước 12i của kịch bản 41 HTTP — luồng S3 nay HAI giám đốc ký, cả hai khai trước;
 mốc độ phủ 89 (67 + 22). Giới hạn mới lộ ra ở giao điểm (§8): `award_du_chu_ky` (K7) đếm người ký KHÔNG loại người có `CO_XUNG_DOT`;
-K9 chỉ đòi hàng `APPROVED` có ít nhất một chữ ký của người không xung đột. Số đo trên cây gộp lần ba: SO_DO_GOP_3
+K9 chỉ đòi hàng `APPROVED` có ít nhất một chữ ký của người không xung đột. Số đo trên cây gộp lần ba (`d86b50e`):
+`cap-so --kiem` sạch; `migrate()` hai lần trên cụm dùng một lần OK (111 tệp, lần hai 0); `pnpm t0` xanh (559 mô-đun); `pnpm test` 153 tệp,
+2667 ca đạt, 14 bỏ qua; `pnpm evidence`: vitest thoát mã 1 — 1/4981 đỏ, ở CHÍNH tệp K9: câu ký thô của `tc` (phép đột biến cổng chữ ký
+duyệt trao thầu) nhận `k7_tac_gia_chinh_sach` thay vì `k9_chua_khai_xung_dot` — `tc` là tác giả bản v2 của fixture, và trigger K7
+`rfq_award_approvals_kiem_vai_theo_bac` (`113`) đứng TRƯỚC `_kiem_xung_dot` theo tên; 89/89 đọc được nhưng cổng không in XANH. Sửa
+fixture (FINANCE thứ ba, không tác giả, không ký bản v2) ở `37a2fbb`, không dòng mã sản xuất nào. Lượt bốn trên `37a2fbb`: vitest thoát mã
+0, 251 tệp, 4981 khẳng định (4958 đạt, 23 bỏ qua, 0 đỏ), 89/89 bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*,
+2014 s; ma trận sinh lại (K9 12 ca, tổng 89); hai kịch bản 41 34/34 + 87/87, `trao-thau-theo-bac` 15/15, K9 12/12. CI của PR #257 trên
+commit cuối: xem PR.
