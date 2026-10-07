@@ -25768,4 +25768,12 @@ Một lượt soi đối kháng độc lập trên diff, đo bằng đọc mã v
 
 ## 10. Đo cuối
 
-(điền)
+- `pnpm evidence` lượt một (trên `69d8004`, sau `cap-so`): 4927 khẳng định, **3 đỏ**.
+  - Hai ca đột biến D2 của `danh-sach-moi.int` là ca lật (mục 6). Job T3 của PR đỏ đúng hai ca ấy.
+  - Ca thứ ba là `canh-tranh-toi-thieu.int` K2 (i), *"NGƯỜI THU HỒI là người chọn"*: `users_org_id_email_key` vỡ khi dựng người thứ tư mang
+    vai `PROCUREMENT_MANAGER`. Đuôi email ngẫu nhiên của fixture chỉ 3 byte, bốn PM cùng tiền tố trong một tổ chức. Đây là va chạm
+    ngẫu nhiên, không do vòng này: tệp và bảng `users` không đổi; chạy lại 36/36, CI xanh. Nới đuôi ở mười sáu tệp test là một việc riêng.
+- Master nhận #254 (S1.277, khoản 334) trong lúc chạy; gộp bằng merge commit — hai xung đột tài liệu (`STATE.md`, biên bản), giữ cả hai
+  mục. Trên cây gộp: T0 xanh, unit toàn kho 2660/2660, `cap-so --kiem` sạch.
+- `pnpm evidence` trên cây gộp (`dc13204`): vitest thoát mã 0, 4928 khẳng định, **85/85** bất biến (63/63 nghiệp vụ + 22/22 hàng rào),
+  *"Cổng evidence: XANH"*. Ma trận đổi dòng đếm (61 → 63, 83 → 85), hai hàng mới L8 (24 khẳng định) và L16 (14), lời hàng L14.
