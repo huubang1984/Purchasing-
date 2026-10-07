@@ -881,7 +881,9 @@ describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại mộ
       ["USER", uYc, "RFQ", { rfqStatus: "UNSEALED", viewedBySessionId: sYc }],
       ["USER", uD1, "RFQ", { rfqStatus: "UNSEALED", viewedBySessionId: sD1 }],
     ]);
-    const van = JSON.stringify(rows);
+    // [S1.278] UUID của người đọc và phiên ra ngẫu nhiên, nên một UUID chứa `4440` làm phép so chuỗi đỏ dù payload không giá (đo:
+    // T3 của PR #255). Thay mọi UUID bằng một nhãn trước khi so; hình dạng payload đã được đòi trọn ở trên.
+    const van = JSON.stringify(rows).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu, "<uuid>");
     for (const gia of [GIA_A, GIA_B]) expect(van).not.toContain(gia.slice(0, 4));
   });
 
