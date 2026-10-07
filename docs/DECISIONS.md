@@ -11999,7 +11999,8 @@ hàm của một hàng bất biến.
 
 ⑹ **Số ngày giao của gói** (`rfq_packages.so_ngay_giao`, [1, 3650], tuỳ chọn) chỉ đổi ở DRAFT — trigger riêng `rfq_packages_so_ngay_giao`,
 khuôn `category_id` của `085` — và nằm trong chữ ký: `approved_delivery_hash` do trigger `rfq_approvals_dat_bam_giao_hang` đặt ở MỌI tổ
-chức; hai `UNIQUE` chữ ký nới thêm cột ấy (bên cạnh `lan_nop_da_xem` của `087`), nên người đã ký ký lại được sau khi chỉ số ngày giao đổi.
+chức. Hai `UNIQUE` chữ ký của `087` giữ nguyên: số ngày giao chỉ đổi ở DRAFT và mỗi lần nộp lại tăng `lan_nop`, nên `lan_nop_da_xem` đã
+tách hàng ký lại khỏi hàng cũ.
 Kiểm ở cạnh mở theo loại tổ chức (**[sau rà soát đối kháng]** — bản đầu ghép hai vế theo hai đơn vị khác nhau, xem ⑼):
 - **Đã bật S3** — đường DUY NHẤT đổi số ngày giao sau khi ký: vế số ngày giao nằm trong CHÍNH vị từ chữ ký còn hiệu lực
   `rfq_chu_ky_con_hieu_luc` (`107` (5), định nghĩa lại một dòng), xét trên CÙNG một hàng với vế *"chưa tự trả về"*; K4b đếm nó và nói lời
@@ -12017,8 +12018,9 @@ chức: đã bật thì chỉ lối trả về DRAFT; chưa bật thì nói th�
 L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
 
 ⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
-- **CAO-1** — bản đầu chép bộ cột `UNIQUE` của `086` thay vì `087`, đánh rơi `lan_nop_da_xem`: người duyệt đã trả gói về không ký lại được
-  trên chính nội dung ấy. Sửa: `UNIQUE` mang CẢ `lan_nop_da_xem` lẫn `approved_delivery_hash`.
+- **CAO-1** — bản đầu dựng lại hai `UNIQUE` chữ ký với băm số ngày giao, chép bộ cột của `086` thay vì `087`, nên đánh rơi
+  `lan_nop_da_xem`: người duyệt đã trả gói về không ký lại được trên chính nội dung ấy. Bản sửa thêm lại cột ấy, và đột biến bỏ băm số
+  ngày giao khỏi ràng buộc SỐNG (D9) — cột ấy thừa ở đó. Sửa cuối: không đụng hai `UNIQUE` của `087`.
 - **CAO-2** — phép đếm riêng của bản đầu xét hiệu lực theo NGƯỜI và số ngày giao theo HÀNG: chữ ký đã bị chính người ký rút trên số ngày cũ
   sống lại nhờ một chữ ký còn hiệu lực trên số ngày khác; K5 đếm chữ ký độc lập trên số ngày cũ. Sửa: ⑹ — vế số ngày giao vào vị từ một
   hàng mà K4b và K5 cùng đọc.

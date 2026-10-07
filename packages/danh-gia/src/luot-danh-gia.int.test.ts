@@ -4172,9 +4172,11 @@ describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
     ]);
   });
 
-  it("[rà soát §S1.9101 — TRUNG-4] ô tiền viết thừa số 0 (`100.000`, `5.0`) đọc theo GIÁ TRỊ — không làm cả lượt chấm bị từ chối như một lỗi cấu hình", async () => {
+  it("[rà soát §S1.9101 — TRUNG-4] ô tiền viết thừa số 0 (`100.000`, `5.000`) đọc theo GIÁ TRỊ — không làm cả lượt chấm bị từ chối như một lỗi cấu hình", async () => {
+    // Ba chữ số lẻ ở CẢ hai ô: `"5.0"` thì hàm thuần đã nhận được (một chữ số lẻ) và không phân biệt được có `round` hay không — đột
+    // biến T14 sống trên bản đầu của ca này.
     const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
-    const { rfqId } = await goiTcoDaMo(tp, null, null, [{ totalAmount: "100.000", currency: "VND", freight: "5.0" }]);
+    const { rfqId } = await goiTcoDaMo(tp, null, null, [{ totalAmount: "100.000", currency: "VND", freight: "5.000" }]);
     const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
     expect(kq.lines.map((l) => [l.effectiveCost, l.rank])).toEqual([["105.00", 1]]);
   });

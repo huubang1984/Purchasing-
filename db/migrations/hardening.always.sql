@@ -10216,9 +10216,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_chot_canh_tranh(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.269 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. Mot than bo ve tra ve thi chu ky cua nguoi da tra goi ve van dem o ca hai chot.
+    -- [S1.9101 / S4.7a / L16] Than `9501_tco` cong ve so ngay giao: mot than bo no thi chu ky tren so ngay giao cu mo duoc goi da tra ve va doi, va K5 dem chu ky doc lap tren so ngay cu.
     ARRAY[
-      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (107_canh_tranh_toi_thieu)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '107_canh_tranh_toi_thieu.sql')$q$,
+      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (9501_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -10230,13 +10231,14 @@ AS $ham$
      AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq)
      AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq)
      AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq)
+     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq)
      AND a.lan_nop_da_xem IS NOT NULL
      AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r
                       WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id
                         AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$SELECT DISTINCT a.approver_user_id FROM public.rfq_approvals a WHERE a.org_id = p_org AND a.rfq_id = p_rfq AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq) AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq) AND a.lan_nop_da_xem IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)$than$
+                = $than$SELECT DISTINCT a.approver_user_id FROM public.rfq_approvals a WHERE a.org_id = p_org AND a.rfq_id = p_rfq AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq) AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq) AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq) AND a.lan_nop_da_xem IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -13652,7 +13654,7 @@ $ham$;
                   'hàm public.rfq_approvals_dat_bam_giao_hang() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_giao_hang() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
+    -- [S1.9101 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va (to chuc chua bat S3) dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
     ARRAY[
       $q$hàm + trigger rfq_tco_khi_mo (9501_tco)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
@@ -13670,7 +13672,6 @@ DECLARE
   can integer;
   nen integer;
   co integer;
-  s3 boolean;
 BEGIN
   SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma
     FROM public.org_procurement_policies o,
@@ -13679,19 +13680,17 @@ BEGIN
   NEW.tco_ma_ghim := v_ma;
 
   IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN
-    RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau — tra goi ve DRAFT de khai (L16)'
+    RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao';
   END IF;
 
-  can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END;
-  s3 := public.to_chuc_da_bat_s3(NEW.org_id);
-  IF s3 THEN
-    SELECT count(*)::integer INTO nen FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id);
-  ELSE
-    SELECT count(*)::integer INTO nen
-      FROM public.rfq_approvals a
-     WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id);
+  IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RETURN NEW;
   END IF;
+  can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END;
+  SELECT count(*)::integer INTO nen
+    FROM public.rfq_approvals a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id);
   IF nen < can THEN
     RETURN NEW;
   END IF;
@@ -13700,13 +13699,9 @@ BEGIN
     FROM public.rfq_approvals a
    WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id
      AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)
-     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id)
-     AND (NOT s3
-          OR (a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)
-              AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)
-              AND a.approver_user_id IN (SELECT h.h FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id) AS h(h))));
+     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id);
   IF co < can THEN
-    RAISE EXCEPTION 'RFQ nay can % chu ky TREN SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co
+    RAISE EXCEPTION 'RFQ nay can % NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co
       USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky';
   END IF;
   RETURN NEW;
@@ -13727,7 +13722,7 @@ $ham$;
          END
          $fn289$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE v_ma text[]; can integer; nen integer; co integer; s3 boolean; BEGIN SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma FROM public.org_procurement_policies o, jsonb_array_elements(o.eval_components) WITH ORDINALITY AS c(value, thu_tu) WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id; NEW.tco_ma_ghim := v_ma; IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau — tra goi ve DRAFT de khai (L16)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao'; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; s3 := public.to_chuc_da_bat_s3(NEW.org_id); IF s3 THEN SELECT count(*)::integer INTO nen FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id); ELSE SELECT count(*)::integer INTO nen FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id); END IF; IF nen < can THEN RETURN NEW; END IF; SELECT count(DISTINCT a.approver_user_id)::integer INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id) AND (NOT s3 OR (a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id) AND a.approver_user_id IN (SELECT h.h FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id) AS h(h)))); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE v_ma text[]; can integer; nen integer; co integer; BEGIN SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma FROM public.org_procurement_policies o, jsonb_array_elements(o.eval_components) WITH ORDINALITY AS c(value, thu_tu) WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id; NEW.tco_ma_ghim := v_ma; IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao'; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(*)::integer INTO nen FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id); IF nen < can THEN RETURN NEW; END IF; SELECT count(DISTINCT a.approver_user_id)::integer INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

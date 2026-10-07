@@ -112,16 +112,33 @@ CREATE TRIGGER rfq_approvals_dat_bam_giao_hang
   FOR EACH ROW EXECUTE FUNCTION public.rfq_approvals_dat_bam_giao_hang();
 ALTER TABLE rfq_approvals ENABLE ALWAYS TRIGGER rfq_approvals_dat_bam_giao_hang;
 
--- Một người, một phiên — một lần trên mỗi bộ bốn băm. Giữ nguyên tên (lời từ chối D2 đọc tên ấy). Không thêm vế này thì người đã ký
--- KHÔNG ký lại được sau khi chỉ số ngày giao đổi, và gói không bao giờ mở được nữa.
-ALTER TABLE rfq_approvals DROP CONSTRAINT rfq_approvals_mot_nguoi_mot_lan;
-ALTER TABLE rfq_approvals ADD CONSTRAINT rfq_approvals_mot_nguoi_mot_lan
-  UNIQUE NULLS NOT DISTINCT (org_id, rfq_id, approver_user_id, approved_content_hash, approved_list_hash, approved_budget_hash,
-                             approved_delivery_hash);
-ALTER TABLE rfq_approvals DROP CONSTRAINT rfq_approvals_mot_phien_mot_lan;
-ALTER TABLE rfq_approvals ADD CONSTRAINT rfq_approvals_mot_phien_mot_lan
-  UNIQUE NULLS NOT DISTINCT (org_id, rfq_id, session_id, approved_content_hash, approved_list_hash, approved_budget_hash,
-                             approved_delivery_hash);
+-- KHÔNG đổi hai `UNIQUE` chữ ký của `087` (2b). Số ngày giao chỉ đổi ở DRAFT, và mỗi lần nộp lại tăng `lan_nop` — nên hai hàng cùng
+-- người, cùng nội dung, cùng `lan_nop_da_xem` luôn cùng số ngày giao, và người đã ký ký lại được ở lần nộp mới như hôm nay.
+-- [rà soát §S1.9101 — CAO-1, rồi đột biến D9] Bản đầu dựng lại hai ràng buộc với băm số ngày giao — chép bộ cột của `086` nên đánh rơi
+-- `lan_nop_da_xem` (người duyệt đã trả gói về không ký lại được); bản sửa thêm lại cột ấy, và đột biến bỏ băm số ngày giao khỏi
+-- ràng buộc thì SỐNG: cột ấy thừa ở đó. Không đổi là bản đúng.
+
+-- [rà soát §S1.9101 — CAO-2] Chữ ký CÒN HIỆU LỰC (`107` (5)) — vị từ MỘT HÀNG mà K4b đếm và K5 đọc — cộng vế số ngày giao. Phép đếm
+-- riêng của bản đầu ghép vế hiệu lực theo NGƯỜI với vế số ngày giao theo HÀNG: một người có một hàng còn hiệu lực trên số ngày cũ và
+-- một hàng đã bị chính họ rút trên số ngày hiện tại được đếm như một chữ ký hợp lệ; và K5 đếm chữ ký độc lập trên số ngày cũ. Ở tổ
+-- chức đã bật, đây là phép kiểm duy nhất trên số ngày giao — K4b nói lời từ chối. Thân `107` cộng đúng một dòng.
+CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT DISTINCT a.approver_user_id
+    FROM public.rfq_approvals a
+   WHERE a.org_id = p_org AND a.rfq_id = p_rfq
+     AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq)
+     AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq)
+     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq)
+     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq)
+     AND a.lan_nop_da_xem IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r
+                      WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id
+                        AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)
+$ham$;
 
 -- ============================================================================================
 -- (4) TẬP MÃ THÀNH PHẦN GHIM CỦA GÓI
@@ -147,11 +164,11 @@ UPDATE rfq_packages r
 -- Tên xếp SAU `rfq_packages_ghim_chinh_sach_khi_mo` (Postgres chạy trigger cùng sự kiện theo thứ tự tên), nên `NEW.chinh_sach_ghim_id`
 -- đã là phiên bản ghim, dưới khoá tư vấn chính sách trigger ấy đã lấy.
 --
--- Phép đếm chữ ký KHÔNG phụ thuộc thứ tự với D2 (`rfq_kiem_chuyen_trang_thai`) và K4b: nó chỉ nói khi phép đếm GỐC của chúng đã đủ —
--- D2 đếm `count(*)` trên băm nội dung ở tổ chức chưa bật S3, K4b đếm chữ ký còn hiệu lực ở tổ chức đã bật; thiếu ở đó thì hai
--- trigger ấy nói vì sao, nguyên văn như hôm nay. Đủ ở đó mà thiếu NGƯỜI (đếm `DISTINCT`) trên CÙNG bộ băm cộng băm số ngày giao
--- thì từ chối ở đây. `DISTINCT` là chỗ chịu lực: sau (3), một người có hai hàng trên cùng nội dung (hai số ngày giao), và `count(*)`
--- của D2 đếm họ HAI lần.
+-- Phép đếm chữ ký ở đây chỉ chạy ở tổ chức CHƯA bật S3 — ở tổ chức đã bật, vế số ngày giao nằm trong chính chữ ký còn hiệu lực (3),
+-- và K4b nói lời từ chối. Tổ chức chưa bật không có cạnh về DRAFT (`077`), nên số ngày giao không đổi được sau khi ký: phép đếm là
+-- lớp thứ hai, không phải đường duy nhất. Nó không phụ thuộc thứ tự với D2 (`rfq_kiem_chuyen_trang_thai`): chỉ nói khi `count(*)`
+-- của D2 trên băm nội dung đã đủ — thiếu ở đó thì D2 nói vì sao, nguyên văn như hôm nay —, và đếm NGƯỜI (`DISTINCT`) trên băm nội
+-- dung cộng băm số ngày giao.
 CREATE OR REPLACE FUNCTION public.rfq_tco_khi_mo() RETURNS trigger
   LANGUAGE plpgsql
   SET search_path = pg_catalog, public
@@ -161,7 +178,6 @@ DECLARE
   can integer;
   nen integer;
   co integer;
-  s3 boolean;
 BEGIN
   SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma
     FROM public.org_procurement_policies o,
@@ -170,19 +186,17 @@ BEGIN
   NEW.tco_ma_ghim := v_ma;
 
   IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN
-    RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau — tra goi ve DRAFT de khai (L16)'
+    RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao';
   END IF;
 
-  can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END;
-  s3 := public.to_chuc_da_bat_s3(NEW.org_id);
-  IF s3 THEN
-    SELECT count(*)::integer INTO nen FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id);
-  ELSE
-    SELECT count(*)::integer INTO nen
-      FROM public.rfq_approvals a
-     WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id);
+  IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RETURN NEW;
   END IF;
+  can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END;
+  SELECT count(*)::integer INTO nen
+    FROM public.rfq_approvals a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id);
   IF nen < can THEN
     RETURN NEW;
   END IF;
@@ -191,13 +205,9 @@ BEGIN
     FROM public.rfq_approvals a
    WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id
      AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)
-     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id)
-     AND (NOT s3
-          OR (a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)
-              AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)
-              AND a.approver_user_id IN (SELECT h.h FROM public.rfq_chu_ky_con_hieu_luc(NEW.org_id, NEW.id) AS h(h))));
+     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id);
   IF co < can THEN
-    RAISE EXCEPTION 'RFQ nay can % chu ky TREN SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co
+    RAISE EXCEPTION 'RFQ nay can % NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co
       USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky';
   END IF;
   RETURN NEW;

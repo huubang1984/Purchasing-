@@ -42,7 +42,16 @@ import {
   type ThanhPhanChinhSach,
   type ThanhPhanDaQuyDoi,
 } from "./chi-phi-hieu-dung.js";
-import { MA_GIA, dauVaoTco, docNhomTco, kiemChinhSachTco, laThieuOKhai, type ThamSoTco } from "./tco.js";
+import {
+  MA_GIA,
+  MA_TONG_VUOT_MIEN,
+  dauVaoTco,
+  docNhomTco,
+  kiemChinhSachTco,
+  laThieuOKhai,
+  vuotMienTien,
+  type ThamSoTco,
+} from "./tco.js";
 
 /**
  * ~~Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này~~ — `bid_so_tien(payload->>'totalAmount')`. [S1.9101 / S4.7a] Không còn duy
@@ -260,6 +269,11 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
  * khỏi cuộc thi; mời lại sau thu hồi là một luồng mới (`018`), nên thiếu vế này một doanh nghiệp đứng
  * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
  * `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba bộ đọc mang đúng một vế ấy.
+ *
+ * [S1.9101 / S4.7a — rà soát §S1.9101 TRUNG-4] Ba ô tiền đọc qua `round(bid_so_tien(…), 2)`: `bid_so_tien` giữ THANG của chuỗi nhà
+ * cung cấp gõ — `"100.000"` qua được (`n = round(n, 2)`) và ra chữ `"100.000"`, mà hàm thuần chỉ nhận tối đa hai chữ số lẻ, nên một
+ * ô như thế làm CẢ lượt chấm bị từ chối bằng một câu cấu hình sai. `round(n, 2)` không đổi giá trị (hàm đã đòi `n = round(n, 2)`),
+ * chỉ đổi thang về hai. Lỗ ấy có từ S2 ở `totalAmount`; vòng này nới nó ra ba ô, nên đóng nó ở cả ba.
  */
 export async function docBaoGia(
   client: pg.PoolClient,
@@ -269,10 +283,10 @@ export async function docBaoGia(
   const { rows } = await client.query<HangBaoGia>(
     `SELECT DISTINCT ON (v.bid_id)
             u.bid_version_id,
-            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS tien,
+            pg_catalog.round(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')), 2)::pg_catalog.text AS tien,
             public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency')) AS currency,
-            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'freight'))::pg_catalog.text AS phi_van_chuyen,
-            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'importCost'))::pg_catalog.text AS chi_phi_nhap_khau,
+            pg_catalog.round(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'freight')), 2)::pg_catalog.text AS phi_van_chuyen,
+            pg_catalog.round(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'importCost')), 2)::pg_catalog.text AS chi_phi_nhap_khau,
             public.bid_so_ngay((u.payload OPERATOR(pg_catalog.->>) 'paymentDays')) AS so_ngay_thanh_toan,
             public.bid_so_ngay((u.payload OPERATOR(pg_catalog.->>) 'leadTimeDays')) AS so_ngay_giao_khai
        FROM public.rfq_unsealed_bids u
@@ -441,6 +455,15 @@ export async function taoLuotDanhGia(
     }
     // Mã quy đổi mang theo phép tính của nó (cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ lệ) — spec §8.6: tham số hiện NGAY CẠNH
     // con số nó sinh ra. `057` chỉ đòi `ma` và `tien`; khoá thêm không đổi J1 hay J2.
+    // [rà soát §S1.9101 — CAO-3] Từng thành phần dưới trần mà TỔNG vượt `numeric(18, 2)` ⇒ không hạng, gọi tên — không để câu ghi nổ.
+    if (vuotMienTien(kq.effectiveCost)) {
+      return {
+        bidVersionId: b.bid_version_id,
+        gia: null,
+        components: [] as ThanhPhanDaQuyDoi[],
+        maThieu: [MA_TONG_VUOT_MIEN] as readonly string[],
+      };
+    }
     const components = kq.components.map((c) => {
       const n = dv.nguon.get(c.ma);
       return n === undefined ? c : { ...c, nguon: n };
