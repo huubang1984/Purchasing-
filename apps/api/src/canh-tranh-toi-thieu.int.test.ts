@@ -225,8 +225,8 @@ async function ncc(t: ToChuc, o: TuyChonNcc = {}): Promise<Ncc> {
   );
   for (const p of o.lienHePhu ?? []) {
     const ai = p.nhap ?? nhap;
-    // [S1.9101 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế
-    // chỉ còn là dữ liệu có trước `9501` — K2 vẫn phải loại nó. Dựng bằng superuser với trigger tạm tắt.
+    // [S1.278 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế
+    // chỉ còn là dữ liệu có trước `111` — K2 vẫn phải loại nó. Dựng bằng superuser với trigger tạm tắt.
     const cu = ai.u !== nhap.u;
     if (cu) await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
     try {

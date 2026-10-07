@@ -11839,11 +11839,11 @@ lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng ch�
 `gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
 người liên hệ (khoản nợ mới).
 
-## ADR-9201 — Khoản 344: chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ vào nó
+## ADR-152 — Khoản 344: chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ vào nó
 
 **Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07 chọn trong ba hướng của khoản 344: *"Người dựng hồ sơ"*
-(không thêm vai xác minh làm lối ra, không hàng chờ duyệt) · **[S1.9101]** · **Liên quan:** ADR-081 ⑵, ADR-084 ⑷, ADR-114, ADR-147,
-ADR-148, ADR-150 ⑷ ⑹ · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+(không thêm vai xác minh làm lối ra, không hàng chờ duyệt) · **[S1.278]** · **Liên quan:** ADR-081 ⑵, ADR-084 ⑷, ADR-114, ADR-147,
+ADR-148, ADR-150 ⑷ ⑹ · **Biên bản:** `evidence/security-reviews.md` §S1.278
 
 ### Bối cảnh
 
@@ -11859,7 +11859,7 @@ người liên hệ không do người chọn danh sách dựng* của K2 (`107`
 link) không cần S3, nên luật không đứng sau công tắc ADR-080. Hồ sơ không có người dựng (`created_by IS NULL`) không nhận người liên hệ
 nào: không ai chứng minh được mình là người dựng.
 
-⑵ **Lớp có thẩm quyền là CSDL**: trigger `ncc_kiem_them_lien_he` BEFORE INSERT `ENABLE ALWAYS` trên `supplier_contacts` (`9501`), xếp sau
+⑵ **Lớp có thẩm quyền là CSDL**: trigger `ncc_kiem_them_lien_he` BEFORE INSERT `ENABLE ALWAYS` trên `supplier_contacts` (`111`), xếp sau
 `_kiem_danh_tinh`, ghim ở hardening. Không thấy hồ sơ (khác tổ chức, RLS che) thì khoá ngoại hợp thành của `008` từ chối như trước.
 
 ⑶ **Lần thử của người khác vào sổ**: tên ràng buộc `k8a_lien_he_ho_so_nguoi_khac` ⇒ mã `K8A_LIEN_HE_HO_SO_NGUOI_KHAC` của `CHOT_VAO_SO`,
@@ -11869,7 +11869,7 @@ nào: không ai chứng minh được mình là người dựng.
 ### Hệ quả
 
 - Người dựng vắng mặt thì hồ sơ không thêm được người liên hệ nữa — dựng hồ sơ mới. Chủ dự án nhận đánh đổi này thay cho một vai miễn trừ.
-- Người liên hệ do người khác thêm TRƯỚC `9501` vẫn ở nguyên; K2, K3, K8a và màn A5 vẫn đọc chúng như cũ. Test dựng cảnh ấy như dữ liệu cũ
+- Người liên hệ do người khác thêm TRƯỚC `111` vẫn ở nguyên; K2, K3, K8a và màn A5 vẫn đọc chúng như cũ. Test dựng cảnh ấy như dữ liệu cũ
   (superuser, trigger tạm tắt).
 
 ### Điều ADR này KHÔNG nói

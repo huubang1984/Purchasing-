@@ -405,21 +405,21 @@ describe("[INV-K8a] [S1.273 / S3.3e1 · lượt soi CAO-2] A5 — hồ sơ xác 
     return h!;
   }
 
-  it("người liên hệ lạ thêm vào hồ sơ đã xác minh ⇒ ~~xác minh thôi hiệu lực~~ [S1.9101 / khoản 344] 422 K8a, hồ sơ và xác minh giữ nguyên; dữ liệu có trước `9501` vẫn hiện cờ «hồ sơ đổi» và người thêm", async () => {
+  it("người liên hệ lạ thêm vào hồ sơ đã xác minh ⇒ ~~xác minh thôi hiệu lực~~ [S1.278 / khoản 344] 422 K8a, hồ sơ và xác minh giữ nguyên; dữ liệu có trước `111` vẫn hiện cờ «hồ sơ đổi» và người thêm", async () => {
     const t = await taoToChuc();
     const n = await ncc(t);
     const truoc = await hoSo(t, n.ncc);
     expect([truoc.doiSauXacMinh, (truoc.xacMinh as { conHieuLuc: boolean }).conHieuLuc]).toEqual([false, true]);
     expect(truoc.bamHoSo).toMatch(/^[0-9a-f]{64}$/u);
     // PM2 — giữ quyền quản lý hồ sơ nhà cung cấp, không là người chọn của gói nào ở đây — thêm người liên hệ của chính mình.
-    // [S1.9101 / khoản 344] Hồ sơ do người khác dựng ⇒ trigger `ncc_kiem_them_lien_he` chặn; trước vòng ấy lần thêm này 201 và làm xác
+    // [S1.278 / khoản 344] Hồ sơ do người khác dựng ⇒ trigger `ncc_kiem_them_lien_he` chặn; trước vòng ấy lần thêm này 201 và làm xác
     // minh hết hiệu lực ở cả tổ chức.
     const r = await goi("POST", `/suppliers/${n.ncc}/contacts`, t.pm2.cookie, { fullName: "Lien he la", email: "la@vidu.vn", phone: "0912345678" });
     expect(r.status, r.text).toBe(422);
     expect(r.body.ma).toBe("K8A_LIEN_HE_HO_SO_NGUOI_KHAC");
     const giuNguyen = await hoSo(t, n.ncc);
     expect([giuNguyen.doiSauXacMinh, (giuNguyen.xacMinh as { conHieuLuc: boolean }).conHieuLuc, giuNguyen.bamHoSo]).toEqual([false, true, truoc.bamHoSo]);
-    // Dữ liệu có trước `9501`: người liên hệ do người khác thêm vẫn có thể nằm trên hồ sơ thật — dựng bằng superuser với trigger tạm tắt.
+    // Dữ liệu có trước `111`: người liên hệ do người khác thêm vẫn có thể nằm trên hồ sơ thật — dựng bằng superuser với trigger tạm tắt.
     // Màn vẫn phải nói ra (ADR-150 ⑷).
     await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
     try {
@@ -440,7 +440,7 @@ describe("[INV-K8a] [S1.273 / S3.3e1 · lượt soi CAO-2] A5 — hồ sơ xác 
 
   it("băm cũ ⇒ 422 có tên và KHÔNG hàng xác minh nào ở lại; băm vừa đọc ⇒ 201, còn hiệu lực", async () => {
     const t = await taoToChuc();
-    // [S1.9101 / khoản 344] PM2 dựng hồ sơ — chỉ người dựng thêm được người liên hệ, và lần thêm sau lúc đọc là thứ làm băm cũ.
+    // [S1.278 / khoản 344] PM2 dựng hồ sơ — chỉ người dựng thêm được người liên hệ, và lần thêm sau lúc đọc là thứ làm băm cũ.
     const n = await ncc(t, { xacMinh: false, nhap: t.pm2 });
     const cu = (await hoSo(t, n.ncc)).bamHoSo as string;
     expect((await goi("POST", `/suppliers/${n.ncc}/contacts`, t.pm2.cookie, { fullName: "Them sau", email: "sau@vidu.vn", phone: "0911111111" })).status).toBe(201);

@@ -146,8 +146,8 @@ async function moiNhaCungCap(
       [orgId, `NCC ${randomBytes(3).toString("hex")}`, ai.ncc.nguoi, ai.ncc.phien],
     )
   ).rows[0]!.id;
-  // [S1.9101 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế chỉ
-  // còn là dữ liệu có trước `9501` — vế *người dựng người liên hệ* của tập loại trừ vẫn phải đọc nó. Trigger tạm tắt khi hai người khác nhau.
+  // [S1.278 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế chỉ
+  // còn là dữ liệu có trước `111` — vế *người dựng người liên hệ* của tập loại trừ vẫn phải đọc nó. Trigger tạm tắt khi hai người khác nhau.
   const khac = ai.lienHe.nguoi !== ai.ncc.nguoi;
   if (khac) await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
   let contactId: string;

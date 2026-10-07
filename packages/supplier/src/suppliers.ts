@@ -366,7 +366,7 @@ export async function addSupplierContact(
   orgId: string,
   input: AddSupplierContactInput,
   /**
-   * [S1.9101 / khoản 344] Pool ĐỘC LẬP của sổ — lần thêm người liên hệ vào hồ sơ người khác dựng (K8a) để lại `CONTROL_DENIED` ở
+   * [S1.278 / khoản 344] Pool ĐỘC LẬP của sổ — lần thêm người liên hệ vào hồ sơ người khác dựng (K8a) để lại `CONTROL_DENIED` ở
    * giao dịch riêng rồi ném `ChotKiemSoatError` (422), khuôn `xacMinhNhaCungCap`.
    */
   auditPool: pg.Pool,
@@ -410,7 +410,7 @@ export async function addSupplierContact(
     throw new SupplierError("phone sai định dạng — chờ 8–15 chữ số, có thể có '+' ở đầu");
   }
 
-  // [S1.9101 / khoản 344] Trigger `ncc_kiem_them_lien_he` (`9501`) là lớp có thẩm quyền: chỉ người dựng hồ sơ thêm được người liên
+  // [S1.278 / khoản 344] Trigger `ncc_kiem_them_lien_he` (`111`) là lớp có thẩm quyền: chỉ người dựng hồ sơ thêm được người liên
   // hệ. Nhánh ấy mang tên ràng buộc ⇒ `CONTROL_DENIED` ở giao dịch độc lập rồi ném lời từ chối có tên; lỗi khác đi thẳng.
   let rows: HangContact[];
   try {

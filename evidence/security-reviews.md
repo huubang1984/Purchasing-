@@ -25393,22 +25393,22 @@ cụm test (bảng toàn cục, cụm riêng của tệp) — không khẳng đ�
 
 ---
 
-# §S1.9101 — KHOẢN 344 ĐÓNG: CHỈ NGƯỜI DỰNG HỒ SƠ NHÀ CUNG CẤP THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ (K8a, ADR-9201)
+# §S1.278 — KHOẢN 344 ĐÓNG: CHỈ NGƯỜI DỰNG HỒ SƠ NHÀ CUNG CẤP THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ (K8a, ADR-152)
 
 **Rổ và mảnh (ADR-043):** khoản 344 (chưa xếp rổ, đề xuất B) đóng. Chạm mảnh *mời nhà cung cấp* của `docs/PRODUCT.md` §11: người lạ trên
-hồ sơ thật là đích nhận link mời. Một migration (`9501_lien_he_chi_nguoi_dung_ho_so`), một mã chốt, một ADR.
+hồ sơ thật là đích nhận link mời. Một migration (`111_lien_he_chi_nguoi_dung_ho_so`), một mã chốt, một ADR.
 
 ## 1. Quyết định của chủ dự án
 Ngày 2026-10-07, trong ba hướng — *người dựng hồ sơ* (khuyên dùng), *người dựng + vai xác minh*, *người liên hệ chờ duyệt* — chủ dự án chọn
 người dựng hồ sơ. Luật áp ở mọi tổ chức (vế người lạ nhận link không cần S3).
 
 ## 2. Đo trước trên mã cũ
-Bỏ tạm `9501` khỏi thư mục migration, chạy năm ca mới của `packages/supplier/src/suppliers.int.test.ts`: bốn đỏ — người thứ hai cùng tổ
+Bỏ tạm `111` khỏi thư mục migration, chạy năm ca mới của `packages/supplier/src/suppliers.int.test.ts`: bốn đỏ — người thứ hai cùng tổ
 chức thêm được người liên hệ vào hồ sơ người khác dựng (hàng mới, không sổ); câu INSERT thô dưới `app_api` và dưới superuser đi qua; hồ
 sơ không người dựng nhận người liên hệ; đột biến thân rỗng không đổi gì vì không có thân —; ca đối chứng (người dựng thêm được) xanh.
 
 ## 3. Sửa
-- `9501`: hàm `ncc_kiem_them_lien_he()` + trigger `supplier_contacts_kiem_nguoi_them` BEFORE INSERT, `ENABLE ALWAYS`, tên xếp sau
+- `111`: hàm `ncc_kiem_them_lien_he()` + trigger `supplier_contacts_kiem_nguoi_them` BEFORE INSERT, `ENABLE ALWAYS`, tên xếp sau
   `supplier_contacts_kiem_danh_tinh` nên `created_by` đã là người của phiên. Người gọi khác `suppliers.created_by`, hay hồ sơ không người dựng
   ⇒ 23514 tên ràng buộc `k8a_lien_he_ho_so_nguoi_khac`. Không thấy hồ sơ ⇒ để khoá ngoại hợp thành của `008` từ chối (ca cô lập tổ chức cũ
   của `suppliers.int` vẫn đòi đúng lỗi khoá ngoại).
@@ -25422,7 +25422,7 @@ sơ không người dựng nhận người liên hệ; đột biến thân rỗn
   chuẩn từ hardening và lần thêm lại bị chặn kèm hàng `CONTROL_DENIED`.
 - `rfq.int` (tên ràng buộc ở thân trigger khớp `CHOT_THEO_RANG_BUOC` cả hai chiều — nay tám hàm).
 - `man-kiem-soat.int` A5: PM2 thêm người liên hệ vào hồ sơ người khác dựng ⇒ 422 `K8A_LIEN_HE_HO_SO_NGUOI_KHAC`, băm và xác minh giữ
-  nguyên; hàng người liên hệ lạ dựng như dữ liệu có trước `9501` vẫn làm cờ «hồ sơ đổi» bật và màn nói người thêm.
+  nguyên; hàng người liên hệ lạ dựng như dữ liệu có trước `111` vẫn làm cờ «hồ sơ đổi» bật và màn nói người thêm.
 - Bốn đồ gá dựng cảnh *người liên hệ do người khác thêm* (`canh-tranh-toi-thieu.int` K2 vế (i), `xac-minh.int` K8a người tạo một người liên
   hệ, `anh-xa.int` tập loại trừ L3, `man-kiem-soat.int` ca băm cũ — nay PM2 dựng hồ sơ) dựng nó bằng superuser với trigger tạm tắt: các vế
   ấy vẫn phải đọc đúng hàng cũ.
@@ -25430,5 +25430,5 @@ sơ không người dựng nhận người liên hệ; đột biến thân rỗn
   `migrations.int`), sau sửa xanh.
 
 ## 5. Giới hạn nói ra
-Người dựng vắng mặt thì hồ sơ không thêm được người liên hệ nữa (ADR-9201 Hệ quả). Người liên hệ do người khác thêm trước `9501` vẫn ở
+Người dựng vắng mặt thì hồ sơ không thêm được người liên hệ nữa (ADR-152 Hệ quả). Người liên hệ do người khác thêm trước `111` vẫn ở
 nguyên — không đường gỡ.

@@ -9955,10 +9955,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngoai_le_kiem() và bảng public.rfq_sourcing_exceptions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 344 / K8a] Chi nguoi dung ho so nha cung cap them nguoi lien he vao ho so ay (rang buoc co ten). Than `RETURN NEW` cho mot nguoi giu supplier.manage them nguoi lien he vao ho so nguoi khac — mat xac minh va mat dem K2 cua nha cung cap ay.
+    -- [S1.278 / khoan 344 / K8a] Chi nguoi dung ho so nha cung cap them nguoi lien he vao ho so ay (rang buoc co ten). Than `RETURN NEW` cho mot nguoi giu supplier.manage them nguoi lien he vao ho so nguoi khac — mat xac minh va mat dem K2 cua nha cung cap ay.
     ARRAY[
-      $q$hàm + trigger ncc_kiem_them_lien_he (9501_lien_he_chi_nguoi_dung_ho_so)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lien_he_chi_nguoi_dung_ho_so.sql')$q$,
+      $q$hàm + trigger ncc_kiem_them_lien_he (111_lien_he_chi_nguoi_dung_ho_so)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '111_lien_he_chi_nguoi_dung_ho_so.sql')$q$,
       $q$DO $fn344$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

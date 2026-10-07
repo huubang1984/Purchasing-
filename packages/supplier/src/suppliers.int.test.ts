@@ -580,14 +580,14 @@ describe("[S1.247 / khoản 283] dấu chấm cuối tên miền của người 
 });
 
 // =============================================================================================
-// [S1.9101 / khoản 344] CHỈ NGƯỜI DỰNG HỒ SƠ THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ
+// [S1.278 / khoản 344] CHỈ NGƯỜI DỰNG HỒ SƠ THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ
 //
 // Trước vòng này `addSupplierContact` không hỏi người gọi liên quan gì tới hồ sơ: người thứ hai trong cùng tổ chức thêm được người
 // liên hệ vào hồ sơ của người khác, và người liên hệ không xoá được — nên nhà cung cấp ấy mất xác minh (băm `082` phủ người liên hệ)
 // và thôi được đếm ở K2 của người thêm (`107`). Đo trên mã cũ: ca đầu ĐỎ (lần thêm đi qua, có hàng mới). Trigger
-// `ncc_kiem_them_lien_he` (`9501`) là lớp có thẩm quyền; tầng gói ghi `CONTROL_DENIED` ở giao dịch độc lập.
+// `ncc_kiem_them_lien_he` (`111`) là lớp có thẩm quyền; tầng gói ghi `CONTROL_DENIED` ở giao dịch độc lập.
 // =============================================================================================
-describe("[S1.9101 / khoản 344] chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ", () => {
+describe("[S1.278 / khoản 344] chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ", () => {
   let u2: string, s2: string;
   let ncc: string;
 

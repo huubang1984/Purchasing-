@@ -297,7 +297,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   // [S1.196 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
   // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
   // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
-  // [S1.9101 / khoản 344] Lời từ chối K8a thứ ba — trigger `ncc_kiem_them_lien_he` (`9501`) là lớp có thẩm quyền, tầng gói
+  // [S1.278 / khoản 344] Lời từ chối K8a thứ ba — trigger `ncc_kiem_them_lien_he` (`111`) là lớp có thẩm quyền, tầng gói
   // (`addSupplierContact`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Chủ dự án chốt ngày 2026-10-07: chỉ người dựng hồ sơ thêm được
   // người liên hệ, ở mọi tổ chức; lần thử của người khác vào sổ.
   K8A_LIEN_HE_HO_SO_NGUOI_KHAC: {
@@ -381,7 +381,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
-  // [S1.9101 / khoản 344] Nhánh từ chối của `ncc_kiem_them_lien_he` (`9501_lien_he_chi_nguoi_dung_ho_so`).
+  // [S1.278 / khoản 344] Nhánh từ chối của `ncc_kiem_them_lien_he` (`111_lien_he_chi_nguoi_dung_ho_so`).
   k8a_lien_he_ho_so_nguoi_khac: "K8A_LIEN_HE_HO_SO_NGUOI_KHAC",
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",

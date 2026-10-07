@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_lien_he_chi_nguoi_dung_ho_so — [S1.9101 / khoản 344] CHỈ NGƯỜI DỰNG HỒ SƠ NHÀ CUNG CẤP THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ
+-- 111_lien_he_chi_nguoi_dung_ho_so — [S1.278 / khoản 344] CHỈ NGƯỜI DỰNG HỒ SƠ NHÀ CUNG CẤP THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ
 --
 -- Khoản 344 (§S1.273, lượt soi hình dạng S3.3e1 TRUNG-1): `addSupplierContact` và `POST /suppliers/:supplierId/contacts` không hỏi
 -- người gọi liên quan gì tới hồ sơ. Người liên hệ không sửa, không xoá được (`011`); K2 loại nhà cung cấp có BẤT KỲ người liên hệ
