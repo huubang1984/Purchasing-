@@ -1857,6 +1857,17 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "rfq_packages",
   );
+  // [S1.279 / S4.7a / L16 / `112_tco`] Gói `rfqVe` vừa về DRAFT khai số ngày giao yêu cầu — nhân chứng UPDATE của
+  // `rfq_kiem_so_ngay_giao`. Băm số ngày giao đổi theo; gói nộp lại phía dưới và không mở, nên không chữ ký nào phải đếm lại.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET so_ngay_giao = 30 WHERE id = $1 RETURNING so_ngay_giao", [rfqVe], { so_ngay_giao: 30 }),
+    ),
+    1,
+    "rfq_packages",
+  );
   // ---- [S1.203 / S3.6b1 / `088_tin_hieu_chia_nho`] Tín hiệu chia nhỏ và lần ghi nhận: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới
   // Hai gói cùng nhóm `THEP` ghim phiên bản 2 — bậc của kịch bản có đúng một cận dương, 10 tỷ của đấu thầu chính thức: 6 tỷ + 5 tỷ
   // ≥ 10 tỷ, mỗi gói dưới 10 tỷ ⇒ một tín hiệu. Gói anh em do `pm2` tạo và nộp; `rfqVe` (của `pm`) nộp lại SAU nó. `pm3` — không

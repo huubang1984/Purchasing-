@@ -29,6 +29,7 @@ const { GIA, LUOT } = vi.hoisted(() => {
           effectiveCost: gia,
           rank: 1,
           components: [{ ma: "gia", donVi: "TIEN" as const, heSo: "1.0000", giaTri: gia, tien: gia }],
+          maThieu: null,
         },
       ],
     },

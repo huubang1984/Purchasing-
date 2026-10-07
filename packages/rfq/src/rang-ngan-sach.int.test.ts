@@ -586,8 +586,8 @@ describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () =
 
   it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
     // [S1.269 / S3.3c2] Phép đếm thứ ba nay ở `rfq_chu_ky_con_hieu_luc` (`107`): đột biến áp ở phép đếm thứ hai của trigger VÀ ở hàm ấy.
-    // [S1.281 / S3.4a / K9] Bốn vế *khớp băm* dời sang `rfq_chu_ky_khop_bam` (`114`) — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người
-    // có xung đột; đột biến áp ở bốn vế.
+    // [S1.281 / S3.4a / K9] Các vế *khớp băm* dời sang `rfq_chu_ky_khop_bam` (`114`) — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người
+    // có xung đột; đột biến áp ở các vế.
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",

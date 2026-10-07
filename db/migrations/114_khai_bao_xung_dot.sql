@@ -29,7 +29,7 @@
 --     chữ ký mở gói (`rfq_approvals`), lượt chấm (`rfq_evaluations`), đề xuất và HUỶ trao thầu (`rfq_awards` ở `PROPOSED`,
 --     `CANCELLED`), chữ ký duyệt trao thầu (`rfq_award_approvals`), xác minh nhà cung cấp (`supplier_verifications`), ghi nhận
 --     tín hiệu (`governance_signal_acks`). KHÔNG ở `unseal_approvals`: mở thầu chỉ giải mã, không chọn ai thắng (§4.5).
--- (5) PHÉP ĐẾM CHỮ KÝ LOẠI NGƯỜI CÓ `CO_XUNG_DOT` (ADR-082 ⒄, ADR-147 ⑺): bốn vế *còn hiệu lực* của `107` tách ra
+-- (5) PHÉP ĐẾM CHỮ KÝ LOẠI NGƯỜI CÓ `CO_XUNG_DOT` (ADR-082 ⒄, ADR-147 ⑺): năm vế *còn hiệu lực* của `107` và `112` tách ra
 --     `rfq_chu_ky_khop_bam`; `rfq_chu_ky_con_hieu_luc` = khớp băm TRỪ người có `CO_XUNG_DOT` — K4b (phép đếm thứ ba) và K5 đổi
 --     cùng nhau, không sửa chữ nào ở hai hàm ấy. Khai `CO_XUNG_DOT` SAU khi đã ký thì chữ ký thôi đếm. Hàm vị từ
 --     `rfq_chot_chu_ky_xung_dot(org, gói)` nói lời có tên khi CHỈ K9 làm thiếu chữ ký (`K9_CHU_KY_CO_XUNG_DOT`); thiếu vì lý do
@@ -409,7 +409,7 @@ ALTER TABLE governance_signal_acks ENABLE ALWAYS TRIGGER governance_signal_acks_
 -- ============================================================================================
 -- (5) PHÉP ĐẾM CHỮ KÝ LOẠI NGƯỜI CÓ `CO_XUNG_DOT`
 -- ============================================================================================
--- Bốn vế *còn hiệu lực* của `107` (5), nguyên văn, dưới tên mới.
+-- Năm vế *còn hiệu lực* — bốn của `107` (5) cộng vế số ngày giao của `112` (L16, gộp ở S1.279) —, nguyên văn, dưới tên mới.
 CREATE OR REPLACE FUNCTION public.rfq_chu_ky_khop_bam(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -421,6 +421,7 @@ AS $ham$
      AND a.approved_content_hash = public.rfq_bam_noi_dung(p_rfq)
      AND a.approved_list_hash = public.rfq_bam_danh_sach(p_rfq)
      AND a.approved_budget_hash = public.rfq_bam_ngan_sach(p_rfq)
+     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq)
      AND a.lan_nop_da_xem IS NOT NULL
      AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r
                       WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id

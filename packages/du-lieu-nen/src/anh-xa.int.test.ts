@@ -146,13 +146,22 @@ async function moiNhaCungCap(
       [orgId, `NCC ${randomBytes(3).toString("hex")}`, ai.ncc.nguoi, ai.ncc.phien],
     )
   ).rows[0]!.id;
-  const contactId = (
-    await db.pool.query<{ id: string }>(
-      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-        "VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) RETURNING id",
-      [orgId, supplierId, `${randomBytes(4).toString("hex")}@ncc.vn`, ai.lienHe.nguoi, ai.lienHe.phien],
-    )
-  ).rows[0]!.id;
+  // [S1.278 / khoản 344] Người liên hệ do người KHÁC người dựng hồ sơ thêm nay bị trigger `ncc_kiem_them_lien_he` chặn; hàng như thế chỉ
+  // còn là dữ liệu có trước `111` — vế *người dựng người liên hệ* của tập loại trừ vẫn phải đọc nó. Trigger tạm tắt khi hai người khác nhau.
+  const khac = ai.lienHe.nguoi !== ai.ncc.nguoi;
+  if (khac) await db.pool.query("ALTER TABLE supplier_contacts DISABLE TRIGGER supplier_contacts_kiem_nguoi_them");
+  let contactId: string;
+  try {
+    contactId = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) RETURNING id",
+        [orgId, supplierId, `${randomBytes(4).toString("hex")}@ncc.vn`, ai.lienHe.nguoi, ai.lienHe.phien],
+      )
+    ).rows[0]!.id;
+  } finally {
+    if (khac) await db.pool.query("ALTER TABLE supplier_contacts ENABLE ALWAYS TRIGGER supplier_contacts_kiem_nguoi_them");
+  }
   const loiMoi = (
     await db.pool.query<{ id: string }>(
       "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +

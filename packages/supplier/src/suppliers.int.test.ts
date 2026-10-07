@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { ChotKiemSoatError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -105,7 +106,7 @@ describe("sổ nhà cung cấp — cô lập tổ chức", () => {
         email: "a@vidu.vn",
         phone: "0900000001",
         actorSessionId: sA,
-      }),
+      }, apiPool),
     );
 
     const tuA = await withTenant(apiPool, orgA, (c) => listSupplierContacts(c, orgA, ncc.id));
@@ -221,7 +222,7 @@ describe("khoá ngoại HỢP THÀNH — và bằng chứng rằng khoá ngoại
           fullName: "Nguoi cua A",
           email: "x@vidu.vn",
           actorSessionId: sA,
-        }),
+        }, apiPool),
       ),
     ).rejects.toThrow(/foreign key|supplier_contacts_org_id_supplier_id_fkey/);
   });
@@ -456,7 +457,7 @@ describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII
     ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC email ASCII", actorSessionId: sA }))).id;
   });
   const them = (email: string) =>
-    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 71", email, actorSessionId: sA }));
+    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 71", email, actorSessionId: sA }, apiPool));
   const demLienHe = async (): Promise<number> =>
     (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM supplier_contacts WHERE supplier_id = $1", [ncc])).rows[0]!.n;
   const THONG_DIEP_ASCII = "email chứa ký tự ngoài ASCII in được — chỉ nhận địa chỉ ASCII, không dấu, không khoảng trắng";
@@ -528,7 +529,7 @@ describe("[S1.247 / khoản 283] dấu chấm cuối tên miền của người 
     ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC dấu chấm cuối", actorSessionId: sA }))).id;
   });
   const them = (email: string) =>
-    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 283", email, actorSessionId: sA }));
+    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 283", email, actorSessionId: sA }, apiPool));
   const emailDaCat = async (): Promise<string[]> =>
     (await db.pool.query<{ email: string }>("SELECT email FROM supplier_contacts WHERE supplier_id = $1 ORDER BY email", [ncc])).rows.map(
       (r) => r.email,
@@ -575,5 +576,117 @@ describe("[S1.247 / khoản 283] dấu chấm cuối tên miền của người 
     expect(await chen("dot-su-283@x.vn"), "đối chứng").toBeNull();
     expect(await chen("dot-su-283@x.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
     expect(await chen("hai-su-283@x.vn.."), "hai dấu chấm cuối").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
+  });
+});
+
+// =============================================================================================
+// [S1.278 / khoản 344] CHỈ NGƯỜI DỰNG HỒ SƠ THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ
+//
+// Trước vòng này `addSupplierContact` không hỏi người gọi liên quan gì tới hồ sơ: người thứ hai trong cùng tổ chức thêm được người
+// liên hệ vào hồ sơ của người khác, và người liên hệ không xoá được — nên nhà cung cấp ấy mất xác minh (băm `082` phủ người liên hệ)
+// và thôi được đếm ở K2 của người thêm (`107`). Đo trên mã cũ: ca đầu ĐỎ (lần thêm đi qua, có hàng mới). Trigger
+// `ncc_kiem_them_lien_he` (`111`) là lớp có thẩm quyền; tầng gói ghi `CONTROL_DENIED` ở giao dịch độc lập.
+// =============================================================================================
+describe("[S1.278 / khoản 344] chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ", () => {
+  let u2: string, s2: string;
+  let ncc: string;
+
+  beforeAll(async () => {
+    ({ userId: u2, sessionId: s2 } = await taoNguoiVaPhien(orgA));
+    ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC khoan 344", actorSessionId: sA }))).id;
+  });
+
+  const soLienHe = async (): Promise<number> =>
+    Number((await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM supplier_contacts WHERE supplier_id = $1", [ncc])).rows[0]?.n);
+  const soHangSo = async (): Promise<number> =>
+    Number(
+      (
+        await db.pool.query<{ n: string }>(
+          "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_type = 'SUPPLIER' " +
+            "AND resource_id = $2 AND actor_id = $3 AND payload ->> 'ma' = 'K8A_LIEN_HE_HO_SO_NGUOI_KHAC'",
+          [orgA, ncc, u2],
+        )
+      ).rows[0]?.n,
+    );
+
+  it("người thứ hai cùng tổ chức thêm người liên hệ vào hồ sơ người khác dựng ⇒ ChotKiemSoatError K8a, không hàng nào, một hàng CONTROL_DENIED", async () => {
+    const truoc = await soLienHe();
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi la 344", email: "la-344@x.vn", actorSessionId: s2 }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi, "phải bị từ chối").toBeInstanceOf(ChotKiemSoatError);
+    expect((loi as ChotKiemSoatError).lyDo).toBe("K8A_LIEN_HE_HO_SO_NGUOI_KHAC");
+    expect(await soLienHe(), "không người liên hệ nào được ghi").toBe(truoc);
+    expect(await soHangSo(), "lần thử vào sổ ở giao dịch độc lập").toBe(1);
+  });
+
+  it("đối chứng: chính người dựng thêm được — và không hàng CONTROL_DENIED mới nào", async () => {
+    const truocSo = await soHangSo();
+    const lh = await withTenant(apiPool, orgA, (c) =>
+      addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi ban hang 344", email: "ban-344@x.vn", actorSessionId: sA }, apiPool),
+    );
+    expect(lh.supplierId).toBe(ncc);
+    expect(await soHangSo()).toBe(truocSo);
+  });
+
+  it("lớp CSDL: câu INSERT thô dưới app_api mang phiên người thứ hai ⇒ 23514 `k8a_lien_he_ho_so_nguoi_khac`; dưới superuser cũng vậy (ENABLE ALWAYS)", async () => {
+    const chen = (pool: pg.Pool, email: string): Promise<string | null> =>
+      withTenant(pool, orgA, (c) =>
+        c.query(
+          "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi 344', $3, $4, $5)",
+          [orgA, ncc, email, u2, s2],
+        ),
+      ).then(
+        () => null,
+        (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+      );
+    expect(await chen(apiPool, "tho-344@x.vn")).toBe("23514 k8a_lien_he_ho_so_nguoi_khac");
+    const su = await db.pool
+      .query(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi 344', 'su-344@x.vn', $3, $4)",
+        [orgA, ncc, u2, s2],
+      )
+      .then(
+        () => null,
+        (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+      );
+    expect(su).toBe("23514 k8a_lien_he_ho_so_nguoi_khac");
+  });
+
+  it("hồ sơ không có người dựng (hàng thời trước `013`) ⇒ không ai thêm được người liên hệ", async () => {
+    await db.pool.query("ALTER TABLE suppliers DISABLE TRIGGER suppliers_kiem_danh_tinh");
+    let cu: string;
+    try {
+      cu = (await db.pool.query<{ id: string }>("INSERT INTO suppliers (org_id, legal_name) VALUES ($1, 'NCC cu 344') RETURNING id", [orgA]))
+        .rows[0]?.id ?? "";
+    } finally {
+      await db.pool.query("ALTER TABLE suppliers ENABLE ALWAYS TRIGGER suppliers_kiem_danh_tinh");
+    }
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      addSupplierContact(c, orgA, { supplierId: cu, fullName: "Nguoi 344", email: "cu-344@x.vn", actorSessionId: sA }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((loi as ChotKiemSoatError).lyDo).toBe("K8A_LIEN_HE_HO_SO_NGUOI_KHAC");
+  });
+
+  it("ĐỘT BIẾN: thân `RETURN NEW` ⇒ lần thêm của người thứ hai đi lọt; `migrate()` dựng lại thân chuẩn từ hardening và lần thêm lại bị chặn", async () => {
+    await db.pool.query("CREATE OR REPLACE FUNCTION public.ncc_kiem_them_lien_he() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$BEGIN RETURN NEW; END$$");
+    const lot = await withTenant(apiPool, orgA, (c) =>
+      addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi la 344b", email: "lot-344@x.vn", actorSessionId: s2 }, apiPool),
+    );
+    expect(lot.supplierId, "thân rỗng ruột ⇒ đi lọt — trigger là lớp duy nhất").toBe(ncc);
+    await migrate(db.pool, MIGRATIONS_DIR);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi la 344c", email: "lai-344@x.vn", actorSessionId: s2 }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((loi as ChotKiemSoatError).lyDo).toBe("K8A_LIEN_HE_HO_SO_NGUOI_KHAC");
   });
 });

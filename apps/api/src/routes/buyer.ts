@@ -1044,6 +1044,8 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/contacts",
     audience: "BUYER",
     mutates: true,
+    // [S1.278 / khoản 344] Cổng của bộ điều phối là `supplier.manage`; trigger `ncc_kiem_them_lien_he` đòi thêm: người gọi là người
+    // dựng hồ sơ. Nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
     permission: PERMISSIONS.SUPPLIER_MANAGE,
     resourceType: "SUPPLIER",
     resourceId: supplierIdParam,
@@ -1054,7 +1056,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         email: chuoiBatBuoc(ctx.req.body, "email"),
         phone: chuoiTuyChon(ctx.req.body, "phone"),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       return { status: 201, body: { contact } };
     },
   },

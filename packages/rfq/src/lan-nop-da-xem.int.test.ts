@@ -829,6 +829,9 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
   });
 
   it("[INV-D2] tổ chức chưa bật, trigger so lần nộp KHÔNG đặt cột về NULL ⇒ PM2 duyệt hai lần (không mốc, rồi mốc đúng) và gói cấp kép MỞ bằng một người", async () => {
+    // [S1.279 / S4.7a — CA LẬT] Từ `112_tco`, cạnh mở ở tổ chức chưa bật đếm NGƯỜI ký trên nội dung và số ngày giao hiện tại (lớp
+    // L16, `rfq_packages_tco_khi_mo`): hai hàng của cùng PM2 là MỘT người, nên đột biến này một mình KHÔNG còn mở được gói. Khoảng
+    // trống của vế này chỉ mở lại khi lớp ấy cũng tắt — ca đo đúng điều đó; lời từ chối của lớp L16 được đo trước.
     const a = await taoToChuc();
     const rfqId = await goiNhap(a, GOI_CAP_KEP);
     await nop(a, rfqId);
@@ -837,15 +840,21 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
       await duyetVoi(a, rfqId, await phienKhac(a, a.pm2), 1);
     });
     expect(await soChuKy(rfqId)).toBe(2);
-    expect(await loi(mo(a, rfqId))).toBeNull();
+    expect((await loi(mo(a, rfqId)))?.message).toBe("RFQ nay can 2 NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co 1 (L16)");
+    await db.pool.query("ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_tco_khi_mo");
+    try {
+      expect(await loi(mo(a, rfqId))).toBeNull();
+    } finally {
+      await db.pool.query("ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_tco_khi_mo");
+    }
     expect(await trangThaiGoi(rfqId)).toBe("OPEN");
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ vế *người ký chưa trả về* ⇒ chữ ký của chính người trả về vẫn mở gói", async () => {
     expect(
       // [S1.269 / S3.3c2] Phép đếm thứ ba nay đọc `rfq_chu_ky_con_hieu_luc` (`107`) — đột biến áp ở đó; K5 đọc cùng hàm.
-      // [S1.281 / S3.4a / K9] Bốn vế *khớp băm* dời sang `rfq_chu_ky_khop_bam` (`114`); `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại
-      // người có xung đột — đột biến áp ở bốn vế, K5 và cạnh mở gói vẫn đọc cùng một hàm.
+      // [S1.281 / S3.4a / K9] Các vế *khớp băm* dời sang `rfq_chu_ky_khop_bam` (`114`); `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại
+      // người có xung đột — đột biến áp ở các vế, K5 và cạnh mở gói vẫn đọc cùng một hàm.
       await voiHamDotBien(
         "public.rfq_chu_ky_khop_bam(uuid, uuid)",
         "\n     AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r\n                      WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id\n                        AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem)",
@@ -1106,9 +1115,11 @@ describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp
       const { rows } = await db.pool.query<{ ten: string }>(
         "SELECT tgname AS ten FROM pg_trigger WHERE tgrelid = 'public.rfq_approvals'::regclass AND NOT tgisinternal ORDER BY tgname",
       );
+      // [S1.279 / S4.7a — CA LẬT] ~~ba~~ BỐN: `rfq_approvals_dat_bam_giao_hang` (`112_tco`) đặt băm số ngày giao — không từ chối gì.
       // [S1.281 / S3.4a / K9] Trigger thứ tư: cổng K9 ở chữ ký — đứng sau D2 và trước phép so lần nộp theo tên.
-      expect(rows.map((r) => r.ten), "đúng bốn trigger chuẩn, theo đúng thứ tự tên").toEqual([
+      expect(rows.map((r) => r.ten), "đúng năm trigger chuẩn, theo đúng thứ tự tên").toEqual([
         "rfq_approvals_dat_bam_danh_sach",
+        "rfq_approvals_dat_bam_giao_hang",
         "rfq_approvals_kiem_nguoi_duyet",
         "rfq_approvals_kiem_xung_dot",
         "rfq_approvals_so_lan_nop",

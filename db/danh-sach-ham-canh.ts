@@ -73,9 +73,21 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // mở gói của `dungKichBan()` đi qua.
   "public.rfq_evaluations_kiem_phien_ban_ghim",
   "public.rfq_ghim_chinh_sach_khi_mo",
+  // [S1.279 / S4.7a / L16 / `112_tco`] BA hàm, từ chối CÓ ĐIỀU KIỆN hay không bao giờ: `rfq_kiem_so_ngay_giao` (BEFORE UPDATE OF
+  // `so_ngay_giao`) chỉ khi gói đã rời DRAFT — `dungKichBan()` khai số ngày giao cho gói vừa về DRAFT: một nhân chứng.
+  // `rfq_approvals_dat_bam_giao_hang` (BEFORE INSERT) không bao giờ từ chối — nó ĐẶT băm; mọi câu duyệt đi qua. `rfq_tco_khi_mo`
+  // (BEFORE UPDATE `WHEN` cạnh vào OPEN) chụp tập mã, và chỉ từ chối khi phiên bản ghim tính chi phí trễ mà gói không khai số ngày
+  // giao, hay — ở tổ chức chưa bật — D2 đủ mà thiếu NGƯỜI ký trên nội dung cộng số ngày giao hiện tại; mọi câu mở gói của
+  // `dungKichBan()` đi qua.
+  "public.rfq_kiem_so_ngay_giao",
+  "public.rfq_approvals_dat_bam_giao_hang",
+  "public.rfq_tco_khi_mo",
   // [S1.196 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",
+  // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ. Chỉ gắn INSERT ⇒ không thể là hàm canh;
+  // một hàng HỢP LỆ đi qua nó — `dungKichBan()` thêm người liên hệ dưới chính phiên đã dựng hồ sơ.
+  "public.ncc_kiem_them_lien_he",
   // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh. Chỉ gắn INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua nó —
   // `dungKichBan()` lập một ngoại lệ trên gói vừa trả về DRAFT.
   "public.ngoai_le_kiem",

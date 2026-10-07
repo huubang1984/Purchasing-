@@ -359,8 +359,9 @@ export interface MocGhim {
 // [S1.269 / S3.3c2] 79 -> 81: K2 và K5 vào sổ đăng ký (cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói).
 // [S1.270 / S3.3d] 81 -> 82: K3 vào sổ đăng ký (xoay vòng ở cạnh nộp duyệt và cạnh mở gói).
 // [S1.272 / S4.6a] 82 -> 83: L15 vào sổ đăng ký với vế ghi của lịch sử mua ngoài hệ thống (và mốc giá ngoài).
-// [S1.281 / S3.4a] 83 -> 84: K9 vào sổ đăng ký (khai báo xung đột lợi ích, cổng ở bảy chỗ, chữ ký của người có xung đột không đếm).
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 84, coDanhSachToiDa: 0 };
+// [S1.279 / S4.7a] 83 -> 85: L8 (TCO có nguồn) và L16 (thước TCO cố định trước khi giá lộ — vế TCO và form của L14) vào sổ đăng ký.
+// [S1.281 / S3.4a] 85 -> 86: K9 vào sổ đăng ký (khai báo xung đột lợi ích, cổng ở bảy chỗ, chữ ký của người có xung đột không đếm).
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 86, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

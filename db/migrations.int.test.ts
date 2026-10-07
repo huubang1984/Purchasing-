@@ -2097,7 +2097,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_ncc_moi_xoay_vong", chuKy: "uuid, uuid, integer", migration: "108_xoay_vong.sql" },
     { ham: "rfq_chot_xoay_vong", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
     // [S1.281 / S3.4a] Năm hàm của K9: khoá (gói, người) — một thân rỗng thì CO_XUNG_DOT chen được vào giữa lần hỏi và câu ghi —, hai
-    // hàm vị từ — một thân `RETURN NULL` tắt K9 ở mọi cổng —, bốn vế *khớp băm* tách từ `107`, và vị từ cạnh mở gói — một thân
+    // hàm vị từ — một thân `RETURN NULL` tắt K9 ở mọi cổng —, năm vế *khớp băm* tách từ `107` và `112`, và vị từ cạnh mở gói — một thân
     // `RETURN NULL` để K4b nói thay mà không hàng sổ.
     { ham: "coi_khoa_goi_nguoi", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     { ham: "coi_chot_hanh_dong", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
@@ -2141,10 +2141,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
+    // [S1.279 / S4.7a / L16] `112_tco` định nghĩa lại — cộng vế số ngày giao; con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     // [S1.281 / S3.4a] Thân `114`: khớp băm TRỪ người có `CO_XUNG_DOT` — một thân bỏ vế loại trừ thì chữ ký của người đã khai có xung
     // đột vẫn đếm ở K4b lẫn K5.
     { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
-    // [S1.281 / S3.4a] Bốn vế *khớp băm* của `107` dưới tên mới — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người có `CO_XUNG_DOT`.
+    // [S1.281 / S3.4a] Năm vế *khớp băm* (bốn của `107`, vế số ngày giao của `112`) dưới tên mới — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người có `CO_XUNG_DOT`.
     { ham: "rfq_chu_ky_khop_bam", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
@@ -2376,6 +2377,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
     { ham: "ngoai_le_kiem", migration: "105_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
+    // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ thêm được người liên hệ. Một thân `RETURN NEW` cho người thứ hai thêm người liên hệ
+    // vào hồ sơ người khác dựng — mất xác minh và mất đếm K2 của nhà cung cấp ấy.
+    { ham: "ncc_kiem_them_lien_he", migration: "111_lien_he_chi_nguoi_dung_ho_so.sql", trigger: ["supplier_contacts_kiem_nguoi_them"] },
     // [S1.281 / S3.4a / K9] Luật ghi khai báo xung đột — tổ chức đã bật, băm do trigger đặt, nhà cung cấp có lời mời, không gỡ được
     // CO_XUNG_DOT. Một thân `RETURN NEW` để băm NULL (NOT NULL chặn) hay gỡ được một CO_XUNG_DOT.
     { ham: "coi_kiem_khai_bao", migration: "114_khai_bao_xung_dot.sql", trigger: ["coi_declarations_kiem_khai_bao"] },
@@ -2444,6 +2448,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // `RETURN NEW` ở hàm đầu để mọi gói mới không phiên bản ghim; ở hàm sau mở lại đường chấm dưới phiên bản khai SAU khi thấy giá.
     { ham: "rfq_ghim_chinh_sach_khi_mo", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_packages_ghim_chinh_sach_khi_mo"] },
     { ham: "rfq_evaluations_kiem_phien_ban_ghim", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_evaluations_kiem_phien_ban_ghim"] },
+    // [S1.279 / S4.7a / L16] Số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký, và tập mã TCO chụp lúc mở. Thân `RETURN NEW` ở hàm đầu
+    // cho đổi số ngày giao sau khi duyệt; ở hàm hai để chữ ký mang băm hằng; ở hàm ba bỏ ảnh chụp, lời đòi số ngày giao, và phép
+    // đếm người ký trên số ngày giao hiện tại.
+    { ham: "rfq_kiem_so_ngay_giao", migration: "112_tco.sql", trigger: ["rfq_packages_so_ngay_giao"] },
+    { ham: "rfq_approvals_dat_bam_giao_hang", migration: "112_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
+    { ham: "rfq_tco_khi_mo", migration: "112_tco.sql", trigger: ["rfq_packages_tco_khi_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
@@ -4213,6 +4223,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
         ]);
@@ -8870,6 +8884,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
       ]);
@@ -9207,6 +9225,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
       ]);

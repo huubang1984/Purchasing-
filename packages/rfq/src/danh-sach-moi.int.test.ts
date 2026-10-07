@@ -818,6 +818,12 @@ describe("S3.2a — tổ chức chưa bật chạy nguyên MVP1; băm danh sách
 
   // Hai đột biến của điểm chịu lực: băm đặt cho MỌI tổ chức, và UNIQUE mất `NULLS NOT DISTINCT`. Cả hai cho cùng một người
   // ký hai lần trên cùng nội dung, và khối đếm `count(*)` của `071` đếm người ấy HAI lần — gói cấp kép mở với MỘT người.
+  //
+  // [S1.279 / S4.7a — CA LẬT] Từ `112_tco`, cạnh mở ở tổ chức chưa bật đếm NGƯỜI ký trên nội dung và số ngày giao hiện tại
+  // (lớp L16, `rfq_packages_tco_khi_mo`): hai hàng của cùng PM2 là MỘT người, nên mỗi đột biến một mình KHÔNG còn mở được gói.
+  // Khoảng trống của điểm chịu lực chỉ mở lại khi lớp ấy cũng tắt — ca đo đúng điều đó; lời từ chối của lớp L16 được đo trước.
+  const TAT_LOP_L16 = "ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_tco_khi_mo";
+  const LOI_L16 = "RFQ nay can 2 NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co 1 (L16)";
   const kichBanD2 = (t: ToChuc, rfqId: string, n: NhaCungCap) => async (c: pg.PoolClient) => {
     await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }, apiPool);
     await c.query(CAU_MOI, thamSoMoi(t, rfqId, n));
@@ -836,7 +842,8 @@ describe("S3.2a — tổ chức chưa bật chạy nguyên MVP1; băm danh sách
       "IF public.to_chuc_da_bat_s3(NEW.org_id) THEN",
       "IF true THEN",
     );
-    expect(await trongDotBien(t.org, [dotBien], kichBanD2(t, rfqId, n))).toBe("OPEN");
+    expect((await loi(trongDotBien(t.org, [dotBien], kichBanD2(t, rfqId, n))))?.message).toBe(LOI_L16);
+    expect(await trongDotBien(t.org, [dotBien, TAT_LOP_L16], kichBanD2(t, rfqId, n))).toBe("OPEN");
     expect(await trangThaiGoi(rfqId), "đột biến đã ROLLBACK").toBe("PENDING_APPROVAL");
   });
 
@@ -853,7 +860,8 @@ describe("S3.2a — tổ chức chưa bật chạy nguyên MVP1; băm danh sách
       "ALTER TABLE public.rfq_approvals ADD CONSTRAINT rfq_approvals_mot_phien_mot_lan " +
         "UNIQUE (org_id, rfq_id, session_id, approved_content_hash, approved_list_hash)",
     ];
-    expect(await trongDotBien(t.org, dotBien, kichBanD2(t, rfqId, n))).toBe("OPEN");
+    expect((await loi(trongDotBien(t.org, dotBien, kichBanD2(t, rfqId, n))))?.message).toBe(LOI_L16);
+    expect(await trongDotBien(t.org, [...dotBien, TAT_LOP_L16], kichBanD2(t, rfqId, n))).toBe("OPEN");
     const { rows } = await db.pool.query<{ d: string }>(
       "SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'rfq_approvals_mot_nguoi_mot_lan'",
     );
