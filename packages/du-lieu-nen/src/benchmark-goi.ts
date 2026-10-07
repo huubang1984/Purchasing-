@@ -13,7 +13,7 @@
 //     lấy trạng thái thật của dòng ấy tốn 84–88 s (biên bản §S1.235).
 //   • Dải của (hàng chuẩn, tiền tệ của báo giá) đọc tại MỐC MỞ GIÁ của X — `min(unsealed_at)`, đúng định nghĩa `moc_goi` của
 //     `quan_sat_gia` (`096`); lần đọc giá của chính X kiểm lại rằng hai định nghĩa cho cùng một mốc, lệch thì NÉM.
-// [S1.9101 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-9201): `kemNgoai` thêm nhãn theo dải lịch sử ngoài cho bản lưu của bảng so sánh — giá
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-151): `kemNgoai` thêm nhãn theo dải lịch sử ngoài cho bản lưu của bảng so sánh — giá
 // của chính dòng đã có trong tay ở đây, nên nhãn ngoài tính cùng lần, không thêm lần đọc as-of nào; *Xem dải* (`tinhDaiDong`) thêm số của
 // dải ngoài, mốc ngoài và độ lệch. Hai bảng ngoài đọc qua `gia-ngoai.ts`; lượt chấm không bật `kemNgoai` (L15).
 // Thời điểm qua lại giữa SQL và TypeScript bằng MICRO GIÂY kể từ epoch (`extract('epoch', …)` là `numeric`, đi về bằng
@@ -61,7 +61,7 @@ export interface DaiCuaGoi extends DaiBenchmark {
 }
 
 /**
- * [S1.9101 / S4.6b] Nhãn của một (báo giá, dòng) ĐO ĐƯỢC theo dải lịch sử mua ngoài hệ thống của (hàng chuẩn, tiền tệ) tại mốc mở giá
+ * [S1.276 / S4.6b] Nhãn của một (báo giá, dòng) ĐO ĐƯỢC theo dải lịch sử mua ngoài hệ thống của (hàng chuẩn, tiền tệ) tại mốc mở giá
  * (`dai-ngoai.ts`). Không con số nào có đơn vị tiền. Tách khỏi `DongBenchmark` (L15: nhãn ngoài không trộn vào nhãn nội bộ).
  */
 export interface DongNgoai {
@@ -91,7 +91,7 @@ export interface BenchmarkGoi {
   /** Mọi dải đã tính — một mỗi (hàng chuẩn, tiền tệ) có ít nhất một dòng `HOP_LE` của X. */
   readonly dai: readonly DaiCuaGoi[];
   /**
-   * [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng ĐO ĐƯỢC — chỉ khi gọi với `kemNgoai` (bản lưu của bảng so sánh); `null`
+   * [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng ĐO ĐƯỢC — chỉ khi gọi với `kemNgoai` (bản lưu của bảng so sánh); `null`
    * ở lượt chấm: nhãn ngoài không vào lượt chấm, bộ bằng chứng hay cổng (e) (L15).
    */
   readonly ngoai: readonly DongNgoai[] | null;
@@ -105,7 +105,7 @@ export interface TinhBenchmarkGoiInput {
   /** Micro giây; mặc định `now()` của giao dịch. Phép tính lại L7 truyền `ghi_luc` đã lưu. */
   readonly mocDoc?: bigint;
   /**
-   * [S1.9101 / S4.6b] Tính thêm nhãn theo dải lịch sử ngoài (`ngoai`). CHỈ bản lưu của bảng so sánh (`doc-benchmark.ts`, sau cổng
+   * [S1.276 / S4.6b] Tính thêm nhãn theo dải lịch sử ngoài (`ngoai`). CHỈ bản lưu của bảng so sánh (`doc-benchmark.ts`, sau cổng
    * `bid.view`) bật nó — `bang-ngoai-liet-ke.test.ts` ghim rằng lượt chấm không bật.
    */
   readonly kemNgoai?: boolean;
@@ -513,7 +513,7 @@ export async function ghiBanLuuBenchmark(client: pg.PoolClient, orgId: string, i
       [orgId, hang.id, kq.rfqId, input.policyId, JSON.stringify(dong)],
     );
   }
-  // [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài — cùng giao dịch (`…_cung_ban_luu_fk` của `9501`), sau các dòng mà nó trỏ về.
+  // [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài — cùng giao dịch (`…_cung_ban_luu_fk` của `110`), sau các dòng mà nó trỏ về.
   const ngoai = (kq.ngoai ?? []).map((d) => ({
     bid_version_id: d.bidVersionId,
     line_no: d.lineNo,
@@ -580,19 +580,19 @@ export interface GiaQuyDoiCuaX {
    */
   readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC"> | null;
   readonly chieu: ChieuLech | null;
-  /** [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài của tiền tệ ấy — so với nhãn ngoài đã lưu; `null` như `nhan`. */
+  /** [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài của tiền tệ ấy — so với nhãn ngoài đã lưu; `null` như `nhan`. */
   readonly nhanNgoai: Exclude<NhanBenchmark, "KHONG_DO_DUOC"> | null;
   readonly chieuNgoai: ChieuLech | null;
-  /** [S1.9101 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ (`lechPhanTram`); `null` khi không có mốc. */
+  /** [S1.276 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ (`lechPhanTram`); `null` khi không có mốc. */
   readonly lechMoc: string | null;
 }
 
-/** [S1.9101 / S4.6b] Dải lịch sử ngoài của một (hàng chuẩn, tiền tệ) — số khi đủ sàn, nguồn, hàng ghi/rút sau mốc. */
+/** [S1.276 / S4.6b] Dải lịch sử ngoài của một (hàng chuẩn, tiền tệ) — số khi đủ sàn, nguồn, hàng ghi/rút sau mốc. */
 export interface DaiNgoaiDong extends DaiNgoai {
   readonly canonicalItemId: string;
 }
 
-/** [S1.9101 / S4.6b] Mốc ngoài của một (hàng chuẩn, tiền tệ) tại mốc mở giá — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
+/** [S1.276 / S4.6b] Mốc ngoài của một (hàng chuẩn, tiền tệ) tại mốc mở giá — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
 export interface MocNgoaiDong {
   readonly canonicalItemId: string;
   readonly tienTe: string;
@@ -613,7 +613,7 @@ export interface KetQuaDaiDong {
   readonly donViGoc: string | null;
   readonly dai: readonly DaiDong[];
   readonly giaCuaX: readonly GiaQuyDoiCuaX[];
-  /** [S1.9101 / S4.6b] Một mỗi tiền tệ của `input.tienTe`. */
+  /** [S1.276 / S4.6b] Một mỗi tiền tệ của `input.tienTe`. */
   readonly daiNgoai: readonly DaiNgoaiDong[];
   readonly mocNgoai: readonly MocNgoaiDong[];
 }
@@ -748,7 +748,7 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
     return { ...d, canonicalItemId: input.canonicalItemId, sauMoc };
   });
 
-  // [S1.9101 / S4.6b] Dải lịch sử ngoài và mốc ngoài của hàng chuẩn tại MỐC MỞ GIÁ đã lưu (L1) — cùng mốc của dải nội bộ.
+  // [S1.276 / S4.6b] Dải lịch sử ngoài và mốc ngoài của hàng chuẩn tại MỐC MỞ GIÁ đã lưu (L1) — cùng mốc của dải nội bộ.
   const docNgoai = {
     canonicalItemIds: [input.canonicalItemId],
     mocMicro: input.mocMoGia,
@@ -801,7 +801,7 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
   return { donViGoc, dai, giaCuaX, daiNgoai, mocNgoai };
 }
 
-/** [S1.9101 / S4.6b] Cờ *"có mốc ngoài"* của một (hàng chuẩn, tiền tệ) ở bảng benchmark — nguồn và ngày hiệu lực, KHÔNG con số. */
+/** [S1.276 / S4.6b] Cờ *"có mốc ngoài"* của một (hàng chuẩn, tiền tệ) ở bảng benchmark — nguồn và ngày hiệu lực, KHÔNG con số. */
 export interface CoMocNgoai {
   readonly canonicalItemId: string;
   readonly tienTe: string;
@@ -810,7 +810,7 @@ export interface CoMocNgoai {
 }
 
 /**
- * [S1.9101 / S4.6b] Cờ mốc ngoài cho các (hàng chuẩn, tiền tệ) của bảng benchmark, tại mốc mở giá đã lưu — một lần đọc không đơn giá
+ * [S1.276 / S4.6b] Cờ mốc ngoài cho các (hàng chuẩn, tiền tệ) của bảng benchmark, tại mốc mở giá đã lưu — một lần đọc không đơn giá
  * (`docMocNgoaiCo`), cùng luật chọn của *Xem dải* (`chonMocNgoai`). Đọc ở MỖI lần đọc bảng (chủ dự án chốt 2026-10-06: cờ ở bảng, số ở
  * *Xem dải*): tất định vì mọi hàng đọc tại mốc đã lưu (L1). Chỉ trả cặp CÓ mốc. KHÔNG CỔNG (khối đầu tệp) — người gọi là
  * `docBenchmark`.

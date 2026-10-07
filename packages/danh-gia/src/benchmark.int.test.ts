@@ -15,7 +15,7 @@
 //      cổng và hàng sổ; vòng chào lại đang mở hay đã đóng ⇒ không nhãn, không dải; mở niêm phong vòng ấy ⇒ bản lưu MỚI cho lần mở thầu mới.
 //   ⑼ [S1.262 / S4.5c2] bộ bằng chứng mang lớp dữ liệu nền của gói X: bộ kiểm NGOẠI TUYẾN (CLI thật, `DATABASE_URL` đã xoá) tính lại
 //      đủ chín nhãn từ đơn giá đã quy đổi; định danh của gói khác và nhà cung cấp chỉ ra dạng băm, muối mỗi lần xuất; người ánh xạ.
-//   ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và mốc ngoài (L1, L15; ADR-9201): nhãn ngoài tính cùng lần đọc đầu và lưu (không số tiền),
+//   ⑽ [S1.276 / S4.6b] lịch sử mua ngoài và mốc ngoài (L1, L15; ADR-151): nhãn ngoài tính cùng lần đọc đầu và lưu (không số tiền),
 //      cờ mốc ngoài ở bảng, số của dải ngoài + mốc + độ lệch ở *Xem dải*; L1 tại mốc mở giá (ghi/rút sau mốc chỉ được đếm, quy đổi
 //      riêng rút trước mốc ⇒ không quy đổi được); bản lưu trước S4.6b; CSDL của bảng con.
 //
@@ -1713,7 +1713,7 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
   });
 });
 
-// ---- [S1.9101 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài ở bảng benchmark và *Xem dải* -----------------------------------
+// ---- [S1.276 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài ở bảng benchmark và *Xem dải* -----------------------------------
 // Dữ liệu thiết kế, hàng chuẩn N (gốc kg), không lịch sử nội bộ (dải nội bộ dưới sàn), phiên bản 3 = mẫu (5% / 10%, sàn 3 / 3):
 //   Lịch sử ngoài, nhập TRƯỚC khi X mở (ngày = hôm nay giờ Việt Nam − n ngày):
 //     (d10, "Công ty Thép Á") 100 kg + (d10, "cong ty thep a") 120000 t ⇒ MỘT gói (cùng nhà cung cấp đã làm sạch), trung vị 110
@@ -1725,7 +1725,7 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
 //   Mốc ngoài: d60 100 kg · d7 112000 t (= 112/kg, mới nhất) · hôm nay + 30 ngày 90 (hiệu lực sau mốc ⇒ bỏ) · d7 USD; sau khi X mở: d0 200.
 //   X: dòng 1 thép N 10 kg (ánh xạ trước khi mở), dòng 2 không ánh xạ; ba báo giá 1100 · 1500 · 900 ⇒ 110 · 150 · 90 /kg.
 //   Nhãn ngoài (5,375 / 10,75 quanh 107,5): BINH_THUONG · LECH_CAO TREN · LECH_CAO DUOI. Độ lệch so với 112: −1,8 · 33,9 · −19,6.
-describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và mốc ngoài", { timeout: 300_000 }, () => {
+describe("[INV-L15] [INV-L1] ⑽ [S1.276 / S4.6b] lịch sử mua ngoài và mốc ngoài", { timeout: 300_000 }, () => {
   let hangN = "";
   let rfqN = "";
   let bgN: readonly BaoGia[] = [];
@@ -1928,7 +1928,7 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.9101 / S4.6b] lịch sử mua ngoài và m�
     });
   });
 
-  it("[rà soát §S1.9101 THẤP-2] lô ngoài ghi TRƯỚC mốc mở giá mà commit SAU: lần đọc đầu CHỜ lô commit rồi thấy nó — bản lưu và Xem dải cùng một tập", async () => {
+  it("[rà soát §S1.276 THẤP-2] lô ngoài ghi TRƯỚC mốc mở giá mà commit SAU: lần đọc đầu CHỜ lô commit rồi thấy nó — bản lưu và Xem dải cùng một tập", async () => {
     const hangW = (
       await trong(orgA, (c) => taoHangChuan(c, orgA, { ma: "THEP-CHO-LO", ten: "Thép chờ lô", donViGoc: "kg", actorSessionId: ql.phien }))
     ).id;

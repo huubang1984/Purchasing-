@@ -225,7 +225,7 @@ export function tinhDai(quanSat: readonly QuanSatBenchmark[], vao: DaiInput): Da
 
 /**
  * ⑶ của khối đầu tệp: mỗi gói một trung vị trên các đơn giá của nó; mốc so là trung vị các trung vị gói; dải [Q1, Q3] trên các trung vị
- * gói. [S1.9101 / S4.6b] Tách ra để dải lịch sử ngoài (`dai-ngoai.ts`) tính CÙNG phương pháp (ADR-096 ⑷) — "gói" của nó là (ngày mua,
+ * gói. [S1.276 / S4.6b] Tách ra để dải lịch sử ngoài (`dai-ngoai.ts`) tính CÙNG phương pháp (ADR-096 ⑷) — "gói" của nó là (ngày mua,
  * nhà cung cấp đã làm sạch). Người gọi kiểm sàn trước; ném trên tập rỗng.
  */
 export function mocSoTheoGoi(cacGoi: readonly (readonly ThapPhan[])[]): {
@@ -241,7 +241,7 @@ export function mocSoTheoGoi(cacGoi: readonly (readonly ThapPhan[])[]): {
   };
 }
 
-/** Nhãn của một đơn giá quy đổi so với dải — dải nội bộ, hay [S1.9101 / S4.6b] dải lịch sử ngoài (cùng ngưỡng của phiên bản ghim). */
+/** Nhãn của một đơn giá quy đổi so với dải — dải nội bộ, hay [S1.276 / S4.6b] dải lịch sử ngoài (cùng ngưỡng của phiên bản ghim). */
 export function ganNhan(
   gia: string,
   dai: Pick<DaiBenchmark, "duSan" | "mocSo">,

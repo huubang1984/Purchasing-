@@ -1154,7 +1154,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "rutDuLieuNgoai",
   "lietKeLoDuLieuNgoai",
   "docLoDuLieuNgoai",
-  // [S1.9101 / S4.6b] Cờ mốc ngoài của bảng benchmark (không đơn giá) — không cổng, chỗ gọi duy nhất là `docBenchmark` (có cổng
+  // [S1.276 / S4.6b] Cờ mốc ngoài của bảng benchmark (không đơn giá) — không cổng, chỗ gọi duy nhất là `docBenchmark` (có cổng
   // `bid.view`), ghim ở `bang-ngoai-liet-ke.test.ts`. Nhãn ngoài đi qua `tinhBenchmarkGoi`/`ghiBanLuuBenchmark`, số qua `tinhDaiDong`.
   "docCoMocNgoai",
 ];

@@ -157,7 +157,7 @@ const HAM_CHI_DOC = [
   // [S1.262 / S4.5c2] `docQuanSatTaiMoc` — một lần đọc `quan_sat_gia` cho một hàng chuẩn tại một mốc; hai chỗ gọi: `tinhDaiDong` và
   // lớp dữ liệu nền của bộ bằng chứng (`dungBoBangChung`, cùng tư thế không cổng của nó). `ban-ro-liet-ke.test.ts` ghim tập chỗ gọi.
   "docQuanSatTaiMoc",
-  // [S1.9101 / S4.6b] `docCoMocNgoai` — cờ mốc ngoài của bảng benchmark (nguồn, ngày hiệu lực; KHÔNG đơn giá), đọc tại mốc mở giá đã
+  // [S1.276 / S4.6b] `docCoMocNgoai` — cờ mốc ngoài của bảng benchmark (nguồn, ngày hiệu lực; KHÔNG đơn giá), đọc tại mốc mở giá đã
   // lưu. Chỗ gọi duy nhất là `docBenchmark` (`bid.view`, hàng sổ) — `bang-ngoai-liet-ke.test.ts` ghim tập chỗ gọi.
   "docCoMocNgoai",
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role

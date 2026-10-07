@@ -1,4 +1,4 @@
-// [S1.9101 / S4.6b] PHÉP ĐO CỦA LÕI THUẦN DẢI LỊCH SỬ NGOÀI VÀ MỐC NGOÀI — mỗi luật một ca (`dai-ngoai.ts`; ADR-096 ⑷, ADR-149 ⑵ ⑶).
+// [S1.276 / S4.6b] PHÉP ĐO CỦA LÕI THUẦN DẢI LỊCH SỬ NGOÀI VÀ MỐC NGOÀI — mỗi luật một ca (`dai-ngoai.ts`; ADR-096 ⑷, ADR-149 ⑵ ⑶).
 import { describe, expect, it } from "vitest";
 import { NHOM_BENCHMARK_MAU, docNhomBenchmark, ganNhan } from "./benchmark.js";
 import {
@@ -35,7 +35,7 @@ const ls = (doi: Partial<HangLichSuNgoai> = {}): HangLichSuNgoai => {
 };
 const VAO = { tienTe: "VND", mocMoGia: MOC, nhom: NHOM };
 
-describe("[INV-L15] [S1.9101 / S4.6b] ngày Việt Nam và cửa sổ ngày", () => {
+describe("[INV-L15] [S1.276 / S4.6b] ngày Việt Nam và cửa sổ ngày", () => {
   it("ngày của mốc theo UTC+7: 17:00Z là sang ngày mới, 16:59:59.999999Z thì chưa", () => {
     expect(ngayVnTuMicro(micro("2026-10-05T17:00:00Z"))).toBe("2026-10-06");
     expect(ngayVnTuMicro(micro("2026-10-05T17:00:00Z") - 1n)).toBe("2026-10-05");
@@ -56,7 +56,7 @@ describe("[INV-L15] [S1.9101 / S4.6b] ngày Việt Nam và cửa sổ ngày", ()
   });
 });
 
-describe("[INV-L15] [INV-L1] [S1.9101 / S4.6b] dải lịch sử ngoài — cùng phương pháp, gói là (ngày mua, nhà cung cấp)", () => {
+describe("[INV-L15] [INV-L1] [S1.276 / S4.6b] dải lịch sử ngoài — cùng phương pháp, gói là (ngày mua, nhà cung cấp)", () => {
   it("trung vị các trung vị gói và [Q1, Q3] chính xác; hai dòng cùng (ngày, nhà cung cấp) là MỘT gói", () => {
     const hang = [
       ls({ donGiaQuyDoi: "100", nhaCungCap: "a", ngayMua: "2026-05-01" }),
@@ -128,7 +128,7 @@ describe("[INV-L15] [INV-L1] [S1.9101 / S4.6b] dải lịch sử ngoài — cùn
     expect(() => tinhDaiNgoai([ls({ donGiaQuyDoi: "0" })], VAO)).toThrow(/không dương/u);
   });
 
-  it("[rà soát §S1.9101 THẤP-4] ngày khác dạng YYYY-MM-DD (vd. DateStyle lệch) ⇒ NÉM, không lặng lẽ rơi khỏi cửa sổ", () => {
+  it("[rà soát §S1.276 THẤP-4] ngày khác dạng YYYY-MM-DD (vd. DateStyle lệch) ⇒ NÉM, không lặng lẽ rơi khỏi cửa sổ", () => {
     expect(() => tinhDaiNgoai([ls({ ngayMua: "01/06/2026" })], VAO)).toThrow(RangeError);
     expect(() => chonMocNgoai([mn({ ngayHieuLuc: "06/01/2026" })], VAO_MOC)).toThrow(RangeError);
   });
@@ -152,7 +152,7 @@ const mn = (doi: Partial<HangMocNgoai> = {}): HangMocNgoai => {
 };
 const VAO_MOC = { tienTe: "VND", mocMoGia: MOC, cuaSoThang: 12 };
 
-describe("[INV-L15] [INV-L1] [S1.9101 / S4.6b] mốc ngoài — mới nhất trong cửa sổ, cùng tiền tệ, quy đổi được, L1", () => {
+describe("[INV-L15] [INV-L1] [S1.276 / S4.6b] mốc ngoài — mới nhất trong cửa sổ, cùng tiền tệ, quy đổi được, L1", () => {
   it("ngày hiệu lực mới nhất ≤ ngày(mốc); ngày sau mốc và trước cửa sổ bỏ qua", () => {
     const a = mn({ ngayHieuLuc: "2026-08-01" });
     const b = mn({ ngayHieuLuc: "2026-10-06" });
@@ -186,7 +186,7 @@ describe("[INV-L15] [INV-L1] [S1.9101 / S4.6b] mốc ngoài — mới nhất tro
   });
 });
 
-describe("[INV-L15] [S1.9101 / S4.6b] độ lệch so với mốc — phần trăm một chữ số lẻ, nửa-ra-xa-0, chính xác", () => {
+describe("[INV-L15] [S1.276 / S4.6b] độ lệch so với mốc — phần trăm một chữ số lẻ, nửa-ra-xa-0, chính xác", () => {
   it("dương, âm, bằng, khác số chữ số lẻ", () => {
     expect(lechPhanTram("18600", "18000")).toBe("3.3");
     expect(lechPhanTram("17000", "18000")).toBe("-5.6");

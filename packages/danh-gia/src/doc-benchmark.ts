@@ -28,7 +28,7 @@
 //     một ảnh chụp. Lượt đọc đúng tại câu ấy; một cạnh commit sau câu ấy có thể đứng TRƯỚC hàng sổ của lượt đọc — cùng điều bảng so sánh
 //     đã chấp nhận (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi `COMPARISON_VIEWED`). ADR-143, đoạn bổ sung S1.274.
 //
-// [S1.9101 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-9201; chủ dự án chốt 2026-10-06): bản lưu mang thêm nhãn theo dải lịch sử mua ngoài
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-151; chủ dự án chốt 2026-10-06): bản lưu mang thêm nhãn theo dải lịch sử mua ngoài
 // hệ thống (tính cùng lần, `kemNgoai`), bảng đọc kèm cờ *"có mốc ngoài"* (nguồn, ngày hiệu lực — không con số); *Xem dải* tính số của dải
 // ngoài, con số mốc ngoài và độ lệch của từng báo giá. Nhãn ngoài không vào lượt chấm hay bộ bằng chứng (L15). Cùng cổng `bid.view`.
 // Cổng nằm THẲNG trong thân hàm (khoản 33; `cong-quyen-route.test.ts`). Kết quả của `docBenchmark` không mang con số nào có đơn vị
@@ -62,7 +62,7 @@ export const TRANG_THAI_BENCHMARK_HIEN = ["UNSEALED", "EVALUATING", "BAFO_UNSEAL
 export const TRANG_THAI_VONG_CHAO_LAI = ["BAFO_OPEN", "BAFO_CLOSED"] as const;
 
 /**
- * [S1.9101 / S4.6b] Nhãn của một (báo giá, dòng) đo được theo dải LỊCH SỬ MUA NGOÀI HỆ THỐNG, đọc từ bản lưu — tách khỏi nhãn nội bộ
+ * [S1.276 / S4.6b] Nhãn của một (báo giá, dòng) đo được theo dải LỊCH SỬ MUA NGOÀI HỆ THỐNG, đọc từ bản lưu — tách khỏi nhãn nội bộ
  * (L15). Không con số nào có đơn vị tiền; cửa sổ là NGÀY (giờ Việt Nam) của ngày mua.
  */
 export interface DongNgoaiHien {
@@ -129,11 +129,11 @@ export type BenchmarkCuaGoi =
       readonly tinhLuc: Date;
       readonly dong: readonly DongBenchmarkHien[];
       /**
-       * [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng đo được. `null`: bản lưu tính TRƯỚC khi có lịch sử ngoài (`9501`) —
+       * [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng đo được. `null`: bản lưu tính TRƯỚC khi có lịch sử ngoài (`110`) —
        * có dòng đo được mà không nhãn ngoài nào; *Xem dải* vẫn tính dải ngoài.
        */
       readonly dongNgoai: readonly DongNgoaiHien[] | null;
-      /** [S1.9101 / S4.6b] Cờ *"có mốc ngoài"* của các (hàng chuẩn, tiền tệ) đo được — nguồn và ngày hiệu lực, không con số. */
+      /** [S1.276 / S4.6b] Cờ *"có mốc ngoài"* của các (hàng chuẩn, tiền tệ) đo được — nguồn và ngày hiệu lực, không con số. */
       readonly mocNgoai: readonly CoMocNgoai[];
     };
 
@@ -276,7 +276,7 @@ interface HangLuuNgoai {
   readonly so_loai_khong_quy_doi: number;
 }
 
-/** [S1.9101 / S4.6b] Nhãn ngoài đã lưu của một bản lưu (hay một dòng của nó). Bảng không cột tiền — không chạm hai bảng ngoài. */
+/** [S1.276 / S4.6b] Nhãn ngoài đã lưu của một bản lưu (hay một dòng của nó). Bảng không cột tiền — không chạm hai bảng ngoài. */
 async function docDongNgoaiBanLuu(
   client: pg.PoolClient,
   orgId: string,
@@ -439,14 +439,14 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
   if (dau === undefined) {
     if (bc.moHonGiaoDich) return { trangThai: "THU_LAI", rfqStatus: bc.status };
     const baoGia = await docBaoGia(client, orgId, rfqId);
-    // [S1.9101 / S4.6b] `kemNgoai`: nhãn theo dải lịch sử ngoài tính cùng lần — giá của chính các dòng đã có trong tay (ADR-9201).
+    // [S1.276 / S4.6b] `kemNgoai`: nhãn theo dải lịch sử ngoài tính cùng lần — giá của chính các dòng đã có trong tay (ADR-151).
     const kq = await tinhBenchmarkGoi(client, orgId, {
       rfqId,
       bidVersionIds: baoGia.map((b) => b.bid_version_id),
       nhom: bc.nhom,
       kemNgoai: true,
     });
-    // [rà soát §S1.9101] Cờ mốc ngoài đọc TRƯỚC khoá hàng gói: lần đọc hai bảng ngoài có thể chờ một lô đang ghi (khoá tư vấn dùng chung
+    // [rà soát §S1.276] Cờ mốc ngoài đọc TRƯỚC khoá hàng gói: lần đọc hai bảng ngoài có thể chờ một lô đang ghi (khoá tư vấn dùng chung
     // của `gia-ngoai.ts`), và cửa sổ `FOR SHARE` của S1.274 phải giữ ngắn. Cùng cặp (hàng chuẩn, tiền tệ), cùng mốc với bản sắp ghi.
     mocNgoaiDaTinh = await docCoMocNgoai(client, orgId, {
       cap: kq.dong.filter((d) => d.nhan !== "KHONG_DO_DUOC").map((d) => ({ canonicalItemId: d.canonicalItemId as string, tienTe: d.tienTe as string })),
@@ -466,7 +466,7 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
     if (doi !== undefined) return doi;
   }
   const dong = await docDongBanLuu(client, orgId, dau.id);
-  // [S1.9101 / S4.6b] Nhãn ngoài đã lưu; cờ mốc ngoài đọc tại mốc mở giá đã lưu (không đơn giá) — chủ dự án chốt 2026-10-06.
+  // [S1.276 / S4.6b] Nhãn ngoài đã lưu; cờ mốc ngoài đọc tại mốc mở giá đã lưu (không đơn giá) — chủ dự án chốt 2026-10-06.
   const doDuocDs = dong.filter(doDuoc);
   const ngoai = await docDongNgoaiBanLuu(client, orgId, dau.id);
   const mocNgoai =
@@ -574,7 +574,7 @@ export interface DaiHien {
 }
 
 /**
- * [S1.9101 / S4.6b] Dải lịch sử ngoài của dòng: một (hàng chuẩn, tiền tệ). Số là CHUỖI thập phân theo đơn vị gốc; `null` khi dưới sàn.
+ * [S1.276 / S4.6b] Dải lịch sử ngoài của dòng: một (hàng chuẩn, tiền tệ). Số là CHUỖI thập phân theo đơn vị gốc; `null` khi dưới sàn.
  * Cửa sổ là NGÀY mua (giờ Việt Nam).
  */
 export interface DaiNgoaiHien {
@@ -625,12 +625,12 @@ export type DaiCuaDong =
         readonly trangThai: string;
         readonly donGiaQuyDoi: string | null;
         readonly tienTe: string | null;
-        /** [S1.9101 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ; `null` khi không có mốc. */
+        /** [S1.276 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ; `null` khi không có mốc. */
         readonly lechMoc: string | null;
       }[];
-      /** [S1.9101 / S4.6b] Dải lịch sử ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng. */
+      /** [S1.276 / S4.6b] Dải lịch sử ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng. */
       readonly daiNgoai: readonly DaiNgoaiHien[];
-      /** [S1.9101 / S4.6b] Mốc ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
+      /** [S1.276 / S4.6b] Mốc ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
       readonly mocNgoai: readonly MocNgoaiDong[];
     };
 
@@ -731,7 +731,7 @@ export async function docDaiBenchmark(
               khopBanLuu: khop,
             });
           }
-          // [S1.9101 / S4.6b] Dải ngoài: so nhãn ngoài tính lại (giá của chính dòng tại `ghi_luc`, dải tại mốc) với nhãn ngoài đã lưu.
+          // [S1.276 / S4.6b] Dải ngoài: so nhãn ngoài tính lại (giá của chính dòng tại `ghi_luc`, dải tại mốc) với nhãn ngoài đã lưu.
           for (const d of kq.daiNgoai) {
             const luu = ngoaiLuu.filter((r) => r.canonical_item_id === hang && r.tien_te === d.tienTe);
             const khop =

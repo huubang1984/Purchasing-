@@ -9,7 +9,7 @@
 // không bao giờ *"tốt"*, và chỉ dẫn tới một yêu cầu làm rõ — không bao giờ là căn cứ loại một báo giá (§2.4 ⑾).
 // ĐỘ PHỦ (§2.5 ⒁): phần GIÁ TRỊ của báo giá nằm trên dòng đo được — nhãn có dải (`BINH_THUONG`, `LECH_VUA`, `LECH_CAO`). Dòng
 // `CHUA_DU_LICH_SU` và `KHONG_DO_DUOC` không phủ.
-// [S1.9101 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-096 ⑷; ADR-9201): nhãn theo dải lịch sử mua ngoài hệ thống có CHỮ RIÊNG ghi rõ nguồn
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-096 ⑷; ADR-151): nhãn theo dải lịch sử mua ngoài hệ thống có CHỮ RIÊNG ghi rõ nguồn
 // — *"lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập"* — không bao giờ lẫn với chữ của dải nội bộ; mốc ngoài không có nhãn,
 // chỉ cờ ở bảng và con số, độ lệch ở *Xem dải*. Độ phủ và cột Benchmark của bảng xếp hạng vẫn chỉ đọc nhãn NỘI BỘ.
 // ==============================================================================================
@@ -201,7 +201,7 @@ export function chuDai(
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài
+// [S1.276 / S4.6b] Lịch sử mua ngoài hệ thống và mốc ngoài
 // ----------------------------------------------------------------------------------------------
 
 const NGUON_NGOAI = "lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập";

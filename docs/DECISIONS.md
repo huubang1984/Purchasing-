@@ -5716,7 +5716,7 @@ vai ghi được cùng đúng một cổng đọc.*
 |---|---|---|
 | `rfq_unsealed_bids` (019) | `app_unseal`, sau cổng bốn vế và đủ chữ ký phê duyệt | `bid.view` ở `buildComparisonTable` |
 | `rfq_evaluation_lines` (057) | `app_api` qua `taoLuotDanhGia`, `GRANT INSERT` theo **CỘT** | `bid.view` ở `docBangXepHang` |
-| **[S1.272 / ADR-149]** `external_price_references` (`109`) — giá KHÔNG phải báo giá (ADR-095 ⑸) | `app_api` qua người giữ `item.manage` (`nhapDuLieuNgoai`, `khaiMocNgoai`), `GRANT INSERT` theo **CỘT**, trigger `du_lieu_nen_kiem_quyen_ghi` | `bid.view` — ~~bộ đọc giá là của S4.6b; ở S4.6a **không câu nào đọc `don_gia`**~~ **[S1.9101 / ADR-9201]** ở `docBenchmark`/`docDaiBenchmark`, qua bộ đọc `packages/du-lieu-nen/src/gia-ngoai.ts` — tệp DUY NHẤT đọc `don_gia` (`tests/architecture/bang-ngoai-liet-ke.test.ts`) |
+| **[S1.272 / ADR-149]** `external_price_references` (`109`) — giá KHÔNG phải báo giá (ADR-095 ⑸) | `app_api` qua người giữ `item.manage` (`nhapDuLieuNgoai`, `khaiMocNgoai`), `GRANT INSERT` theo **CỘT**, trigger `du_lieu_nen_kiem_quyen_ghi` | `bid.view` — ~~bộ đọc giá là của S4.6b; ở S4.6a **không câu nào đọc `don_gia`**~~ **[S1.276 / ADR-151]** ở `docBenchmark`/`docDaiBenchmark`, qua bộ đọc `packages/du-lieu-nen/src/gia-ngoai.ts` — tệp DUY NHẤT đọc `don_gia` (`tests/architecture/bang-ngoai-liet-ke.test.ts`) |
 | **[S1.272 / ADR-149]** `external_purchase_history` (`109`) — giá KHÔNG phải báo giá | như dòng trên | như dòng trên |
 
 **Vì sao ⑵ KHÔNG phải một lần nới lỏng tự phục vụ.** Lớp bảo vệ của bảng thứ hai không thua bảng thứ
@@ -11720,7 +11720,7 @@ bị từ chối — danh sách là màn của người nhập. Nhập tay trả
 nào (kể cả `109` và tệp ghim) có `FROM`/`JOIN` hai bảng, và không migration nào ngoài hai tệp ấy nhắc tên chúng: không view, hàm hay
 phép đếm SQL (cổng (e) của S4b) đọc được lịch sử ngoài mà không qua lớp đã liệt kê (`tests/architecture/bang-ngoai-liet-ke.test.ts`).
 Lớp ấy là lớp CHỮ: một câu SQL dựng động (`format('%I')`, như hai hàm trigger dùng chung) vượt qua nó — nói ra, không chặn. Bộ đọc giá
-dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do. **[S1.9101 / ADR-9201]** Đã vào: `gia-ngoai.ts`, đúng hai câu đọc giá.
+dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do. **[S1.276 / ADR-151]** Đã vào: `gia-ngoai.ts`, đúng hai câu đọc giá.
 
 ### Đo bằng gì
 
@@ -11750,8 +11750,8 @@ dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do.
 
 ### Điều ADR này KHÔNG nói
 
-- Phép đọc giá, độ lệch của mốc ngoài, dải lịch sử ngoài và nhãn ở `/mo-thau` — S4.6b, theo ⑵ ⑶ của chủ dự án ở trên. **[S1.9101]**
-  ADR-9201.
+- Phép đọc giá, độ lệch của mốc ngoài, dải lịch sử ngoài và nhãn ở `/mo-thau` — S4.6b, theo ⑵ ⑶ của chủ dự án ở trên. **[S1.276]**
+  ADR-151.
 - Nhập bằng tệp (multipart) — ADR-096 ⑸ giữ dán văn bản.
 - Tiền tệ khác `VND`/`USD`, và quy đổi tiền tệ.
 
@@ -11842,17 +11842,17 @@ người liên hệ (khoản nợ mới).
 
 ---
 
-## ADR-9201 — S4.6b: lịch sử mua ngoài hệ thống và mốc ngoài ở `/mo-thau` — nhãn ngoài tính cùng bản lưu và lưu không số tiền, cờ mốc ngoài ở bảng, số và độ lệch ở *Xem dải*, L1 tại mốc mở giá, L15 vế đọc
+## ADR-151 — S4.6b: lịch sử mua ngoài hệ thống và mốc ngoài ở `/mo-thau` — nhãn ngoài tính cùng bản lưu và lưu không số tiền, cờ mốc ngoài ở bảng, số và độ lệch ở *Xem dải*, L1 tại mốc mở giá, L15 vế đọc
 
 **Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt hai câu ngày 2026-10-06, cả hai theo đề xuất, sau phép đo:
 ⑴ nhãn của mỗi báo giá theo dải lịch sử mua ngoài hệ thống TÍNH cùng lần tính bản lưu nội bộ (ADR-143) và LƯU — nhãn, chiều, số đếm,
 không số tiền — ở một bảng con; bảng benchmark theo dòng có cột riêng *"Lịch sử ngoài"*; cột Benchmark của bảng xếp hạng giữ NỘI BỘ;
 ⑵ mốc ngoài: bảng chỉ hiện CỜ *"có mốc ngoài (nguồn, ngày hiệu lực)"*, con số theo đơn vị gốc và độ lệch phần trăm của từng báo giá ở
-*Xem dải*. Sáu mặc định kỹ thuật nói ra cùng lúc và không bị phản đối (⑶–⑻ dưới) · **[S1.9101]** · **Migration:**
-`9501_ban_luu_benchmark_ngoai` · **Liên quan:** ADR-096 ⑵ ⑷ (người đọc `bid.view`; mốc chỉ độ lệch, lịch sử ngoài dải riêng), ADR-149
+*Xem dải*. Sáu mặc định kỹ thuật nói ra cùng lúc và không bị phản đối (⑶–⑻ dưới) · **[S1.276]** · **Migration:**
+`110_ban_luu_benchmark_ngoai` · **Liên quan:** ADR-096 ⑵ ⑷ (người đọc `bid.view`; mốc chỉ độ lệch, lịch sử ngoài dải riêng), ADR-149
 ⑵ ⑶ ⑹ (gói của dải ngoài, luật chọn mốc, L15 vế ghi), ADR-143 (bản lưu một lần mỗi lần mở thầu), ADR-142 (lõi benchmark), ADR-136
 (lõi quy đổi `quy_doi_da_giai`), ADR-054 (hai dòng của hai bảng ngoài) · **Spec:** S4 §2.4 ⑽, §4.6, §4.7, §5.1 L1 · L15, §9 S4.6b ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+**Biên bản:** `evidence/security-reviews.md` §S1.276
 
 ### Bối cảnh — phép đo trước khi viết
 
@@ -11866,7 +11866,7 @@ không số tiền — ở một bảng con; bảng benchmark theo dòng có c�
 
 ### Quyết định
 
-⑴ **Nhãn ngoài trong bản lưu** (`9501`): `price_benchmark_snapshot_external_lines` — một hàng mỗi (báo giá, dòng) ĐO ĐƯỢC của bản lưu:
+⑴ **Nhãn ngoài trong bản lưu** (`110`): `price_benchmark_snapshot_external_lines` — một hàng mỗi (báo giá, dòng) ĐO ĐƯỢC của bản lưu:
 nhãn (`BINH_THUONG` · `LECH_VUA` · `LECH_CAO` · `CHUA_DU_LICH_SU`), chiều, cửa sổ ngày, số dòng / gói / nhà cung cấp, số loại vì tiền tệ
 và vì đơn vị. Không cột tiền. Khoá ngoại cùng giao dịch tới bản lưu (khuôn `…_cung_ban_luu_fk` của `104`) và khoá ngoại sáu cột tới
 DÒNG ĐO ĐƯỢC của bản lưu (cùng hàng chuẩn, cùng tiền tệ — dòng `KHONG_DO_DUOC` có tiền tệ NULL nên không trỏ được). Chỉ-ghi-thêm bằng

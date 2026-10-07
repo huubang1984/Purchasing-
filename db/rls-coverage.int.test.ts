@@ -814,7 +814,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "price_benchmark_results", quyen: "SELECT" },
       // [S1.260 / S4.5c1] Bản lưu benchmark của bảng so sánh: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột (không `id`, không
       // `ghi_luc`), không UPDATE/DELETE. `app_unseal` không có dòng nào — đường mở thầu không chạm bản lưu (spec S4 §3.1).
-      // [S1.9101 / S4.6b] Nhãn theo dải lịch sử ngoài trong bản lưu: cùng khuôn — CHỈ ĐỌC mức bảng, ghi thêm theo cột.
+      // [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài trong bản lưu: cùng khuôn — CHỈ ĐỌC mức bảng, ghi thêm theo cột.
       { grantee: "app_api", bang: "price_benchmark_snapshot_external_lines", quyen: "SELECT" },
       { grantee: "app_api", bang: "price_benchmark_snapshot_lines", quyen: "SELECT" },
       { grantee: "app_api", bang: "price_benchmark_snapshots", quyen: "SELECT" },
@@ -1348,7 +1348,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "price_benchmark_results", cot: "so_quan_sat", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_results", cot: "so_quan_sat_hoi_to", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_results", cot: "tien_te", quyen: "INSERT" },
-      // [S1.9101 / S4.6b] Nhãn ngoài của bản lưu: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cung_ban_luu_fk`).
+      // [S1.276 / S4.6b] Nhãn ngoài của bản lưu: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cung_ban_luu_fk`).
       { grantee: "app_api", bang: "price_benchmark_snapshot_external_lines", cot: "bid_version_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_snapshot_external_lines", cot: "canonical_item_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_snapshot_external_lines", cot: "chieu", quyen: "INSERT" },
@@ -2198,7 +2198,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "outbox_jobs",
       // [S1.256 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
       "price_benchmark_inputs", "price_benchmark_results",
-      // [S1.260 / S4.5c1] L6: không phiên khách nào đọc bản lưu benchmark. [S1.9101 / S4.6b] Kể cả nhãn ngoài của nó.
+      // [S1.260 / S4.5c1] L6: không phiên khách nào đọc bản lưu benchmark. [S1.276 / S4.6b] Kể cả nhãn ngoài của nó.
       "price_benchmark_snapshot_external_lines", "price_benchmark_snapshot_lines", "price_benchmark_snapshots",
       // [S1.201 / S3.6a] Nhóm hàng là việc nội bộ bên mua — nhà cung cấp không đọc được gói mình dự thuộc nhóm nào, hay nhóm nào
       // đã ngừng dùng.

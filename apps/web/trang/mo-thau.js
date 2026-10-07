@@ -578,7 +578,7 @@ async function veBenchmark() {
       const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
       // `data-nhan`: trên màn hẹp bảng xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`, khuôn `hang-gia` của `/nop-thau`).
       const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
-      // [S1.9101 / S4.6b] Lịch sử ngoài: nhãn riêng của bản lưu; mốc ngoài: cờ theo (hàng chuẩn, tiền tệ) của dòng — không con số.
+      // [S1.276 / S4.6b] Lịch sử ngoài: nhãn riêng của bản lưu; mốc ngoài: cờ theo (hàng chuẩn, tiền tệ) của dòng — không con số.
       const doDuoc = d.nhan !== "KHONG_DO_DUOC";
       const moc = doDuoc
         ? (b.mocNgoai ?? []).find((m) => m.canonicalItemId === d.canonicalItemId && m.tienTe === d.tienTe)
@@ -617,8 +617,8 @@ async function veDai(lineNo) {
     hien($("khoi-dai"), true);
     return;
   }
-  // [S1.9101 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn). Độ
-  // lệch chỉ in khi tiền tệ của CHÍNH báo giá có mốc (rà soát §S1.9101: tiền tệ khác của dòng có mốc không được kéo theo "—").
+  // [S1.276 / S4.6b] Dải lịch sử ngoài (nhãn riêng, ghi rõ nguồn) và mốc ngoài (con số, độ lệch của từng báo giá — không nhãn). Độ
+  // lệch chỉ in khi tiền tệ của CHÍNH báo giá có mốc (rà soát §S1.276: tiền tệ khác của dòng có mốc không được kéo theo "—").
   dienDl($("tt-dai"), [
     ...cu,
     ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),

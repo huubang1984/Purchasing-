@@ -139,7 +139,7 @@ describe("[S1.260 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái kh
   });
 });
 
-describe("[S1.9101 / S4.6b] lịch sử mua ngoài hệ thống và mốc ngoài — nhãn RIÊNG ghi rõ nguồn, mốc chỉ độ lệch", () => {
+describe("[S1.276 / S4.6b] lịch sử mua ngoài hệ thống và mốc ngoài — nhãn RIÊNG ghi rõ nguồn, mốc chỉ độ lệch", () => {
   const NGOAI: DongNgoai = {
     bidVersionId: "b-1",
     lineNo: 1,

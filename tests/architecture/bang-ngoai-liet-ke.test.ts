@@ -15,7 +15,7 @@
 // `FROM`/`JOIN` hai bảng trong MỌI migration, kể cả tệp dựng bảng và tệp ghim. Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó.
 // Ranh giới nói ra: hai hàm trigger dùng chung (`du_lieu_nen_dat_thu_tu`, `du_lieu_ngoai_kiem_ghi`) chạm bảng bằng tên ĐỘNG
 // (`TG_TABLE_NAME`) — lớp văn bản không thấy chúng; chúng chỉ đọc `seq` và `rut_cua`, và thân của chúng ghim ở hardening.
-// [S1.9101 / S4.6b] VẾ ĐỌC (ADR-9201): bộ đọc giá dưới `bid.view` vào bằng MỘT tệp có lý do — `gia-ngoai.ts` — và ⑵ nay nói: `don_gia`
+// [S1.276 / S4.6b] VẾ ĐỌC (ADR-151): bộ đọc giá dưới `bid.view` vào bằng MỘT tệp có lý do — `gia-ngoai.ts` — và ⑵ nay nói: `don_gia`
 // chỉ được ĐỌC ở tệp ấy, đúng hai câu (lịch sử ngoài, mốc ngoài có số); câu đọc CỜ mốc ngoài của bảng benchmark không đọc giá. ⑷ mới:
 // chỗ gọi của ba hàm đọc ghim theo KÝ HIỆU (khuôn `ban-ro-liet-ke.test.ts`) — chúng chỉ đi qua `benchmark-goi.ts`, mà các hàm của tệp
 // ấy chỉ `doc-benchmark.ts` (cổng `bid.view`) gọi; lượt chấm không bật `kemNgoai`, nên nhãn ngoài không vào lượt chấm, bộ bằng chứng hay
@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { moiCauSql } from "./qt3-doc-sql.js";
 
-// [rà soát §S1.9101 THẤP-3] Cờ `i`: SQL không phân biệt hoa thường — `EXTERNAL_PURCHASE_HISTORY` hay `h.DON_GIA` vượt bản đầu.
+// [rà soát §S1.276 THẤP-3] Cờ `i`: SQL không phân biệt hoa thường — `EXTERNAL_PURCHASE_HISTORY` hay `h.DON_GIA` vượt bản đầu.
 const BANG = /\bexternal_(?:price_references|purchase_history)\b/iu;
 const THU_MUC_MIGRATION = fileURLToPath(new URL("../../db/migrations/", import.meta.url));
 
@@ -35,7 +35,7 @@ const THU_MUC_MIGRATION = fileURLToPath(new URL("../../db/migrations/", import.m
 const TEP_TS: Readonly<Record<string, string>> = {
   "packages/du-lieu-nen/src/du-lieu-ngoai.ts":
     "GHI (nhập lô, nhập tay, rút) dưới `item.manage`; ĐỌC lô và hàng KHÔNG đơn giá dưới cổng `item.manage` trong hàm",
-  // [S1.9101 / S4.6b] Bộ đọc giá của ADR-096 ⑵ — người đọc `bid.view`: cổng ở `doc-benchmark.ts`, chỗ gọi ghim ở ca ⑷ dưới.
+  // [S1.276 / S4.6b] Bộ đọc giá của ADR-096 ⑵ — người đọc `bid.view`: cổng ở `doc-benchmark.ts`, chỗ gọi ghim ở ca ⑷ dưới.
   "packages/du-lieu-nen/src/gia-ngoai.ts":
     "ĐỌC giá tại mốc mở giá cho dải lịch sử ngoài và mốc ngoài — sau cổng `bid.view` của `docBenchmark`/`docDaiBenchmark`",
 };
@@ -82,7 +82,7 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
     expect(cau.length, "bộ đọc mù: không thấy câu nào chạm hai bảng").toBeGreaterThan(5);
     const ngoaiBoDocGia = cau.filter((c) => c.tep !== TEP_DOC_GIA);
     expect(ngoaiBoDocGia.flatMap((c) => docCaHangHayGia(c.sql).map((ly) => `${c.tep}:${String(c.dong)} ${ly}`))).toEqual([]);
-    // [S1.9101 / S4.6b] Ở bộ đọc giá: đọc `don_gia` bằng TÊN cột thì được, đọc cả hàng thì không — mọi lý do khác của bộ dò vẫn đỏ.
+    // [S1.276 / S4.6b] Ở bộ đọc giá: đọc `don_gia` bằng TÊN cột thì được, đọc cả hàng thì không — mọi lý do khác của bộ dò vẫn đỏ.
     const boDocGia = cau.filter((c) => c.tep === TEP_DOC_GIA);
     expect(
       boDocGia.flatMap((c) =>
@@ -98,7 +98,7 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
     expect(cau.filter((c) => /^\s*INSERT/iu.test(c.sql) && /\bdon_gia\b/iu.test(c.sql)).length).toBe(2);
   });
 
-  it("[INV-L15] [S1.9101 / S4.6b] ba hàm đọc giá chỉ đi qua `benchmark-goi.ts`, và các hàm ấy chỉ `doc-benchmark.ts` (cổng `bid.view`) gọi; lượt chấm không bật `kemNgoai`", () => {
+  it("[INV-L15] [S1.276 / S4.6b] ba hàm đọc giá chỉ đi qua `benchmark-goi.ts`, và các hàm ấy chỉ `doc-benchmark.ts` (cổng `bid.view`) gọi; lượt chấm không bật `kemNgoai`", () => {
     const goc = fileURLToPath(new URL("../../", import.meta.url));
     const tepSanXuat = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
       .split(/\r?\n/u)
@@ -119,7 +119,7 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
     expect(docBm.match(/permission: PERMISSIONS\.BID_VIEW/gu)?.length).toBe(2);
   });
 
-  it("[INV-L15] [rà soát §S1.9101 THẤP-3] tên bảng viết HOA vẫn là chạm hai bảng", () => {
+  it("[INV-L15] [rà soát §S1.276 THẤP-3] tên bảng viết HOA vẫn là chạm hai bảng", () => {
     expect(BANG.test("SELECT h.id FROM public.EXTERNAL_PURCHASE_HISTORY h")).toBe(true);
     expect(BANG.test("'EXTERNAL_PRICE_REFERENCES_IMPORTED'"), "mã hành động sổ không phải tên bảng").toBe(false);
   });
@@ -136,13 +136,13 @@ describe("[INV-L15] [S1.272 / S4.6a] hai bảng giá ngoài — mọi chỗ ch�
       [`SELECT h.don_gia FROM ${E} h`, "đọc don_gia"],
       [`INSERT INTO ${E} (org_id, don_gia) SELECT $1, $2 RETURNING id, don_gia`, "RETURNING mang don_gia"],
       [`INSERT INTO ${E} (org_id, don_gia) SELECT o.org_id, o.don_gia FROM ${E} o`, "đọc don_gia"],
-      // [rà soát §S1.9101 THẤP-3] Viết hoa vẫn là đọc giá.
+      // [rà soát §S1.276 THẤP-3] Viết hoa vẫn là đọc giá.
       [`SELECT h.DON_GIA FROM ${E} h`, "đọc don_gia"],
     ] as const) {
       expect(docCaHangHayGia(sql), sql).toContain(ly);
     }
     expect(docCaHangHayGia(`SELECT pg_catalog.count(*) FROM ${E} h WHERE h.org_id = $1`)).toEqual([]);
-    // [S1.9101 / S4.6b] Phép nhân có ghim không phải đọc cả hàng; một `*` trần cạnh nó thì vẫn là.
+    // [S1.276 / S4.6b] Phép nhân có ghim không phải đọc cả hàng; một `*` trần cạnh nó thì vẫn là.
     expect(docCaHangHayGia(`SELECT h.id, ($1::pg_catalog.int8 OPERATOR(pg_catalog.*) 2) FROM ${E} h`)).toEqual([]);
     expect(docCaHangHayGia(`SELECT h.*, ($1::pg_catalog.int8 OPERATOR(pg_catalog.*) 2) FROM ${E} h`)).toContain("đọc cả hàng (*)");
     expect(docCaHangHayGia(`INSERT INTO ${E} (org_id, don_gia) SELECT $1, ($2::pg_catalog.text[])[d.i] FROM pg_catalog.unnest($3) d(x, i) RETURNING id`)).toEqual([]);

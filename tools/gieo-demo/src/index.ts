@@ -339,7 +339,7 @@ async function chinh(): Promise<void> {
     // [S1.272 / S4.6a] Một lô mốc giá ngoài và một lô lịch sử mua ngoài hệ thống, dán như người quản lý dữ liệu dán ở bước 7 của
     // `/du-lieu` — để demo thấy hai lô (không cột giá) và đi được việc rút. Hai lô qua đúng đường gói: lỗi theo dòng thì gieo dừng.
     // Lịch sử ngoài có một dòng tính theo TẤM — đơn vị đóng gói quy đổi riêng ở trên —, mốc ngoài theo kg.
-    // [S1.9101 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam (UTC+7): `/mo-thau` đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên
+    // [S1.276 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam (UTC+7): `/mo-thau` đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên
     // ngày viết cứng rơi khỏi cửa sổ sau vài tháng và demo lặng lẽ mất dải ngoài. Thép tấm có BA lần mua của ba nhà cung cấp — đủ sàn
     // mẫu (3 gói, 3 nhà cung cấp) để dải lịch sử ngoài hiện con số ở «Xem dải».
     const ngayLui = (n: number): string => new Date(Date.now() + 7 * 3_600_000 - n * 86_400_000).toISOString().slice(0, 10);

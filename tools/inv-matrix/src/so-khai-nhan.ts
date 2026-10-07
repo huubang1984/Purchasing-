@@ -460,7 +460,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // rút, cột ngoài GRANT, tác giả từ phiên; `du-lieu-ngoai` (apps/api) đo trọn đường ghi và rút qua HTTP, mỗi lần rút là hàng mới.
   L1: [
     "apps/api/src/du-lieu-ngoai.int.test.ts",
-    // [S1.9101 / S4.6b] vế ĐỌC của hai bảng ngoài: dải và mốc của gói X chỉ đọc hàng ghi trước mốc mở giá, chưa rút trước mốc; ghi và
+    // [S1.276 / S4.6b] vế ĐỌC của hai bảng ngoài: dải và mốc của gói X chỉ đọc hàng ghi trước mốc mở giá, chưa rút trước mốc; ghi và
     // rút sau mốc chỉ được đếm — `dai-ngoai` đo ở lõi thuần, `benchmark.int` ⑽ trên dữ liệu thiết kế (kể cả gói Y mở sau thấy hàng mà
     // X không thấy).
     "packages/danh-gia/src/benchmark.int.test.ts",
@@ -531,7 +531,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở
   // tầng gói và tầng CSDL, đọc lại không giá; `bang-ngoai-liet-ke` là ranh giới tĩnh — mọi câu SQL chạm hai bảng có tên, `don_gia`
   // chỉ ở câu INSERT, không migration nào khác nhắc tên chúng (cổng (e) không đọc được lịch sử ngoài). Vế ĐỌC ở S4.6b.
-  // [S1.9101 / S4.6b] vế ĐỌC: `dai-ngoai` đo lõi thuần của dải thứ ba (cùng phương pháp, gói là ngày mua × nhà cung cấp) và của mốc
+  // [S1.276 / S4.6b] vế ĐỌC: `dai-ngoai` đo lõi thuần của dải thứ ba (cùng phương pháp, gói là ngày mua × nhà cung cấp) và của mốc
   // ngoài (chỉ độ lệch); `benchmark.int` ⑽ đo nhãn ngoài trong bản lưu tách khỏi nhãn nội bộ, cờ mốc không con số, *Xem dải*, và bảng con
   // ở CSDL; `bang-ngoai-liet-ke` nay ghim `don_gia` chỉ ở bộ đọc `gia-ngoai.ts` và chỗ gọi của nó — lượt chấm không bật nhãn ngoài.
   L15: [

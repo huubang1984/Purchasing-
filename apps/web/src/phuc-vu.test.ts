@@ -1266,7 +1266,7 @@ describe("bề mặt tệp", () => {
         trangThai: "CO", nguon: "TINH_MOI", snapshotId: "s-1", unsealRequestId: "u-1", bafoRoundId: null, policyId: "p-1", policyVersion: 1,
         phuongPhap: "TRUNG_VI_THEO_GOI_V1", mocMoGia: "2026-10-01T00:00:00Z", tinhLuc: "2026-10-01T01:00:00Z",
         dong: [dongBm("bv-1", 1, "BINH_THUONG"), dongBm("bv-2", 1, "LECH_CAO", "TREN"), dongBm("bv-1", 2, "KHONG_DO_DUOC"), dongBm("bv-2", 2, "KHONG_DO_DUOC")],
-        // [S1.9101 / S4.6b] Nhãn ngoài của hai dòng đo được; cờ mốc ngoài của (ci-1, VND).
+        // [S1.276 / S4.6b] Nhãn ngoài của hai dòng đo được; cờ mốc ngoài của (ci-1, VND).
         dongNgoai: [dongNgoai("bv-1", "LECH_CAO", "TREN"), dongNgoai("bv-2", "BINH_THUONG")],
         mocNgoai: [{ canonicalItemId: "ci-1", tienTe: "VND", nguon: "Bảng giá nhà máy", ngayHieuLuc: "2026-09-15" }],
       };
@@ -1276,7 +1276,7 @@ describe("bề mặt tệp", () => {
           soQuanSat: 9, soGoi: 3, soNcc: 5, soGoiCungNguoiTao: 1, soQuanSatHoiTo: 9, soLoaiTienTe: 0, soLoaiGia0: 0, sauMoc: { ANH_XA: 1 }, khopBanLuu: true }],
         giaCuaGoi: [{ bidVersionId: "bv-1", trangThai: "HOP_LE", donGiaQuyDoi: "18600", tienTe: "VND", lechMoc: "3.3" },
           { bidVersionId: "bv-2", trangThai: "HOP_LE", donGiaQuyDoi: "25000.125", tienTe: "VND", lechMoc: "38.9" }],
-        // [S1.9101 / S4.6b] Dải lịch sử ngoài và mốc ngoài của dòng.
+        // [S1.276 / S4.6b] Dải lịch sử ngoài và mốc ngoài của dòng.
         daiNgoai: [{ canonicalItemId: "ci-1", tienTe: "VND", cuaSoTu: "2025-10-01", denNgay: "2026-10-01", duSan: true, q1: "17000",
           trungVi: "17500", q3: "18000", soDong: 6, soGoi: 4, soNcc: 3, soLoaiTienTe: 1, soLoaiKhongQuyDoi: 0,
           nguon: ["Sổ mua 2025", "Sổ mua 2026"], sauMoc: { GHI: 0, RUT: 1 }, khopBanLuu: true }],
@@ -1438,7 +1438,7 @@ describe("bề mặt tệp", () => {
         ]);
       });
 
-      it("[S1.9101 / S4.6b] cột Lịch sử ngoài in nhãn RIÊNG ghi rõ nguồn, tô riêng ô của nó; cột Mốc ngoài chỉ là cờ, không con số; dòng không đo được là gạch", async () => {
+      it("[S1.276 / S4.6b] cột Lịch sử ngoài in nhãn RIÊNG ghi rõ nguồn, tô riêng ô của nó; cột Mốc ngoài chỉ là cờ, không con số; dòng không đo được là gạch", async () => {
         const p = await dung(BM_CO);
         await p.bam("nut-benchmark");
         const hang = chuHang(p, "bang-benchmark").map((h) => h.split("|"));
@@ -1461,7 +1461,7 @@ describe("bề mặt tệp", () => {
         ]);
       });
 
-      it("[S1.9101 / S4.6b] bản lưu tính trước khi có lịch sử ngoài (`dongNgoai: null`) ⇒ cột nói ra và chỉ sang Xem dải", async () => {
+      it("[S1.276 / S4.6b] bản lưu tính trước khi có lịch sử ngoài (`dongNgoai: null`) ⇒ cột nói ra và chỉ sang Xem dải", async () => {
         const p = await dung({ ...BM_CO, dongNgoai: null, mocNgoai: [] });
         await p.bam("nut-benchmark");
         const hang = chuHang(p, "bang-benchmark").map((h) => h.split("|"));
@@ -1469,7 +1469,7 @@ describe("bề mặt tệp", () => {
         expect(hang[2]?.slice(5)).toEqual(["—", "—"]);
       });
 
-      it("[S1.9101 / S4.6b] Xem dải in dải lịch sử ngoài (số, cửa sổ ngày, nguồn, rút sau mốc), mốc ngoài (con số, không nhãn) và độ lệch của từng báo giá", async () => {
+      it("[S1.276 / S4.6b] Xem dải in dải lịch sử ngoài (số, cửa sổ ngày, nguồn, rút sau mốc), mốc ngoài (con số, không nhãn) và độ lệch của từng báo giá", async () => {
         const p = await dung(BM_CO);
         await p.bam("nut-benchmark");
         const nut = p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
@@ -1483,7 +1483,7 @@ describe("bề mặt tệp", () => {
         );
         expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Một|18.600,00 VND/kg · +3,3% so với mốc ngoài");
         expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Hai|25.000,13 VND/kg · +38,9% so với mốc ngoài");
-        // [rà soát §S1.9101] Báo giá mà tiền tệ của nó không có mốc: không câu "so với mốc ngoài" nào, kể cả khi tiền tệ khác của dòng có.
+        // [rà soát §S1.276] Báo giá mà tiền tệ của nó không có mốc: không câu "so với mốc ngoài" nào, kể cả khi tiền tệ khác của dòng có.
         const q = await dung(BM_CO, SO_SANH, {
           ...DAI,
           giaCuaGoi: [DAI.giaCuaGoi[0], { ...DAI.giaCuaGoi[1], tienTe: "USD", lechMoc: null }],

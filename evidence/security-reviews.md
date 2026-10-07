@@ -25282,7 +25282,7 @@ Một lượt đọc của agent rơi vào lúc đột biến N5 đang đặt tr
   nghiệp vụ + 22/22 hàng rào), 2232 giây, *"Cổng evidence: XANH"*. Mười ca bỏ qua: một ca chỉ chạy trên CI, chín ca phong bì lớn bật
   bằng tay.
 
-# §S1.9101 — S4.6b: LỊCH SỬ MUA NGOÀI HỆ THỐNG VÀ MỐC NGOÀI Ở `/mo-thau` — NHÃN NGOÀI TÍNH CÙNG BẢN LƯU, CỜ MỐC Ở BẢNG, SỐ VÀ ĐỘ LỆCH Ở *XEM DẢI* (L1, L15 vế đọc) — ADR-9201
+# §S1.276 — S4.6b: LỊCH SỬ MUA NGOÀI HỆ THỐNG VÀ MỐC NGOÀI Ở `/mo-thau` — NHÃN NGOÀI TÍNH CÙNG BẢN LƯU, CỜ MỐC Ở BẢNG, SỐ VÀ ĐỘ LỆCH Ở *XEM DẢI* (L1, L15 vế đọc) — ADR-151
 
 ## 1. Vòng này là gì
 
@@ -25313,7 +25313,7 @@ vào lượt chấm, bộ bằng chứng, Risk Score, cổng (e); cổng `bid.vi
 
 ## 4. Thay đổi
 
-- `9501_ban_luu_benchmark_ngoai`: `price_benchmark_snapshot_external_lines` — một hàng mỗi (báo giá, dòng) ĐO ĐƯỢC của một bản lưu:
+- `110_ban_luu_benchmark_ngoai`: `price_benchmark_snapshot_external_lines` — một hàng mỗi (báo giá, dòng) ĐO ĐƯỢC của một bản lưu:
   nhãn (4 giá trị, không `KHONG_DO_DUOC`), chiều, cửa sổ ngày, số dòng / gói / nhà cung cấp, số loại vì tiền tệ và vì đơn vị; KHÔNG cột
   tiền; khoá ngoại cùng giao dịch tới bản lưu (`…_cung_ban_luu_fk`), khoá ngoại sáu cột tới DÒNG ĐO ĐƯỢC của bản lưu (`…_dong_do_duoc_fk`,
   đích là `UNIQUE` mới `price_benchmark_snapshot_lines_dong_do_duoc_key`); năm `CHECK` có tên; RLS + `_khach`; `GRANT SELECT` + `INSERT`
@@ -25334,7 +25334,7 @@ vào lượt chấm, bộ bằng chứng, Risk Score, cổng (e); cổng `bid.vi
 - Sổ: `bang-ngoai-liet-ke` (tệp đọc giá có lý do, `don_gia` chỉ ở đó, đúng hai câu, chỗ gọi ghim theo ký hiệu, bộ dò `*` bỏ qua phép
   nhân có ghim), barrel, `cong-quyen-route` (`HAM_CHI_DOC`), `migration-shape`, `migrations.int` (ba danh sách), `rls-coverage`,
   `check-an-ninh`, sổ khai nhãn (L1, L15), số migration và ADR ở `Handoff.md`/`STATE.md`.
-- Tài liệu: ADR-9201; ADR-054 dòng cổng đọc; ADR-149 hai chỗ trỏ; spec §9 S4.6b; TEST-PLAN L15; STATE; PRODUCT.
+- Tài liệu: ADR-151; ADR-054 dòng cổng đọc; ADR-149 hai chỗ trỏ; spec §9 S4.6b; TEST-PLAN L15; STATE; PRODUCT.
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -25410,7 +25410,7 @@ Một agent đọc toàn bộ thay đổi, chạy unit test và thử hàm thu�
 - **THẤP-3 — lớp L15 phân biệt hoa thường** (`h.DON_GIA`, `EXTERNAL_PURCHASE_HISTORY` đi qua). **Sửa**: cờ `i`, hai ca đối chứng.
 - **THẤP-4 — `date::text` phụ thuộc `DateStyle`**: lệch dạng thì mọi hàng lặng lẽ rơi khỏi cửa sổ. **Sửa**: `to_char(…, 'YYYY-MM-DD')`, lõi
   ném trên ngày khác dạng; ca đo.
-- **THẤP-5 — migration khoá bảng lúc dựng chỉ mục `UNIQUE`.** **Nói ra** ở ADR-9201 (bảng nhỏ ở thí điểm; `CONCURRENTLY` không chạy trong
+- **THẤP-5 — migration khoá bảng lúc dựng chỉ mục `UNIQUE`.** **Nói ra** ở ADR-151 (bảng nhỏ ở thí điểm; `CONCURRENTLY` không chạy trong
   giao dịch của `migrate()`).
 - **THẤP-6 — lặt vặt.** Cờ mốc đọc trong cửa sổ `FOR SHARE` ⇒ nay đọc TRƯỚC khoá hàng gói ở lần đọc đầu; ca ⑽ chụp "hôm nay" lúc dựng cảnh
   (chập chờn qua nửa đêm giờ Việt Nam) ⇒ kỳ vọng suy từ mốc đã lưu; *Xem dải* in "— so với mốc ngoài" cho báo giá mà tiền tệ của nó không
@@ -25443,4 +25443,4 @@ L1 so `<`/`>=` chính xác trên mốc dựng lại từ micro giây; quy đổi
 - `db/migrations.int.test.ts` đầy đủ một lượt: 128/128 (43 phút); mọi tệp `db/` và `packages/db` khác xanh.
 - Sau các sửa của mục 8: unit toàn kho 2640/2640; `benchmark.int` 78/78, `du-lieu-ngoai.int` 15/15; kịch bản 41 qua HTTP 85/85.
 - M15 chạy SAU `migrations.int` (nó sửa tệp migration): đỏ. Hai mươi hai đột biến, cả hai mươi hai đỏ.
-- Số tạm (S1.9101, ADR-9201, `9501`) giữ tới lúc mở PR: `pnpm cap-so` cấp số thật, rồi `pnpm evidence` sinh lại ma trận.
+- Số tạm (S1.276, ADR-151, `110`) giữ tới lúc mở PR: `pnpm cap-so` cấp số thật, rồi `pnpm evidence` sinh lại ma trận.

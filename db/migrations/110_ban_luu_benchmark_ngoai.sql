@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 9501_ban_luu_benchmark_ngoai — [S1.9101 / S4.6b của spec S4] NHÃN THEO DẢI LỊCH SỬ NGOÀI TRONG BẢN LƯU BENCHMARK: TÍNH CÙNG LẦN TÍNH
--- BẢN LƯU, KHÔNG SỐ TIỀN, TÁCH KHỎI NHÃN NỘI BỘ (spec S4 §4.6, §2.4 ⑽; L1, L6, L15; ADR-096 ⑷, ADR-143, ADR-149 ⑵; ADR-9201)
+-- 110_ban_luu_benchmark_ngoai — [S1.276 / S4.6b của spec S4] NHÃN THEO DẢI LỊCH SỬ NGOÀI TRONG BẢN LƯU BENCHMARK: TÍNH CÙNG LẦN TÍNH
+-- BẢN LƯU, KHÔNG SỐ TIỀN, TÁCH KHỎI NHÃN NỘI BỘ (spec S4 §4.6, §2.4 ⑽; L1, L6, L15; ADR-096 ⑷, ADR-143, ADR-149 ⑵; ADR-151)
 --
--- Chủ dự án chốt 2026-10-06 sau phép đo (ADR-9201): nhãn của mỗi báo giá theo dải lịch sử mua ngoài hệ thống TÍNH ở lần đọc đầu, cùng
+-- Chủ dự án chốt 2026-10-06 sau phép đo (ADR-151): nhãn của mỗi báo giá theo dải lịch sử mua ngoài hệ thống TÍNH ở lần đọc đầu, cùng
 -- giao dịch tính bản lưu nội bộ (`104`) — lúc ấy đơn giá quy đổi của chính các báo giá đã có trong tay; mọi lần đọc sau đọc lại nhãn ấy.
 -- Đo: tính lại nhãn ngoài ở MỖI lần đọc cần đơn giá quy đổi của gói, tức đúng lần đọc as-of `quan_sat_gia` đắt mà `104` sinh ra để tránh
 -- (18–19 s một gói 20 dòng ở 5.000 gói, §S1.256).

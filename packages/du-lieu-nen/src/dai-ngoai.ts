@@ -1,4 +1,4 @@
-// [S1.9101 / S4.6b] LÕI THUẦN CỦA DẢI LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (spec S4 §4.6, §4.7, §2.4 ⑽; ADR-096 ⑷; ADR-149 ⑵ ⑶; ADR-9201).
+// [S1.276 / S4.6b] LÕI THUẦN CỦA DẢI LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (spec S4 §4.6, §4.7, §2.4 ⑽; ADR-096 ⑷; ADR-149 ⑵ ⑶; ADR-151).
 //
 // Tất định: không I/O, không đồng hồ, không `double` trên giá. Đầu vào là các hàng của `gia-ngoai.ts` — MỌI hàng dữ liệu của hàng chuẩn,
 // kể cả hàng ghi sau mốc và hàng đã rút, mỗi hàng mang ba cờ thời điểm — và mọi phép lọc nằm ở đây, cùng tư thế `benchmark.ts`.
@@ -101,7 +101,7 @@ export interface DaiNgoaiInput {
 }
 
 /**
- * So CHỮ `YYYY-MM-DD` là so ngày — chỉ khi đúng dạng ấy. [rà soát §S1.9101 THẤP-4] Một ngày khác dạng (vd. `DateStyle` lệch) làm mọi hàng
+ * So CHỮ `YYYY-MM-DD` là so ngày — chỉ khi đúng dạng ấy. [rà soát §S1.276 THẤP-4] Một ngày khác dạng (vd. `DateStyle` lệch) làm mọi hàng
  * lặng lẽ rơi khỏi cửa sổ ⇒ NÉM, không đoán.
  */
 const trongCuaSo = (ngay: string, cs: { readonly tu: string; readonly den: string }): boolean => {

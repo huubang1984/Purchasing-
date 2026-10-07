@@ -183,7 +183,7 @@ function viTriGanTrongSet(sql: string): ReadonlySet<number> {
 }
 
 /**
- * Tên của mọi CTE — `WITH x AS (…)`. [H14-M4] Chúng KHÔNG phải bảng; đòi `public.x` là SQL sai. [S1.9101 / S4.6b] Hai chỗ sửa, đo bằng
+ * Tên của mọi CTE — `WITH x AS (…)`. [H14-M4] Chúng KHÔNG phải bảng; đòi `public.x` là SQL sai. [S1.276 / S4.6b] Hai chỗ sửa, đo bằng
  * bộ đọc giá `gia-ngoai.ts` (ba CTE, hai `MATERIALIZED`): ⑴ dạng `x AS [NOT] MATERIALIZED (…)` (PostgreSQL 12+); ⑵ bản cũ viết
  * `\b(?:WITH|,)` — `\b` trước dấu phẩy đòi một ký tự chữ ngay trước nó, mà sau `)` không có, nên CTE THỨ HAI trở đi chưa bao giờ được nhận
  * (trước vòng này chưa câu nào có hai CTE).
@@ -345,7 +345,7 @@ describe("[INV-H21] QT3: ghim thì phải ghim ĐỦ", () => {
     expect(viPhamGhim("SELECT * FROM pg_catalog.unnest($1::pg_catalog.text[]) AS k(ten)")).toEqual([]);
     // [H14-M4] tên CTE không phải tên bảng — đòi `public.x` ở đây là dạy người ta viết SQL sai.
     expect(viPhamGhim("WITH x AS (SELECT 1) SELECT * FROM x JOIN public.t ON TRUE")).toEqual([]);
-    // [S1.9101 / S4.6b] `MATERIALIZED` và `NOT MATERIALIZED` vẫn là CTE; một tên KHÔNG khai là CTE vẫn bị đòi ghim.
+    // [S1.276 / S4.6b] `MATERIALIZED` và `NOT MATERIALIZED` vẫn là CTE; một tên KHÔNG khai là CTE vẫn bị đòi ghim.
     expect(viPhamGhim("WITH x AS MATERIALIZED (SELECT 1), y AS NOT MATERIALIZED (SELECT 2) SELECT * FROM x JOIN y ON TRUE")).toEqual([]);
     expect(viPhamGhim("WITH x AS MATERIALIZED (SELECT 1) SELECT * FROM x JOIN z ON TRUE")).not.toEqual([]);
   });

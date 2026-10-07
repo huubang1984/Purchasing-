@@ -628,7 +628,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(qd.status, qd.text).toBe(201);
     // [S1.272 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
     // kịch bản sau đó (chấm, benchmark, BAFO, xuất bộ bằng chứng) chạy trong một thế giới CÓ dữ liệu ngoài; bước 14 quét hai kim.
-    // [S1.9101 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam: S4.6b đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên một ngày
+    // [S1.276 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam: S4.6b đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên một ngày
     // viết cứng là quả bom hẹn giờ — rơi khỏi cửa sổ thì dải và mốc ngoài lặng lẽ rỗng mà kịch bản vẫn xanh ở mọi phép đo cũ.
     const ngayLui = async (n: number): Promise<string> =>
       (
@@ -1396,7 +1396,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect((dai.body as { dai: { trangThai: string } }).dai.trangThai).toBe("CO");
     const cuoi = trangThai.loiMoi.map((lm) => lm.gia).sort();
     expect([...quetDonGiaQuyDoi(dai.text)].sort(), "bộ quét phải THẤY đơn giá quy đổi ở Xem dải ngay khi gói UNSEALED").toEqual(cuoi);
-    // [S1.9101 / S4.6b — L15 vế ĐỌC] Dữ liệu ngoài của bước 1 đi qua đường đọc `bid.view`: bản lưu mang nhãn ngoài (một dòng lịch sử
+    // [S1.276 / S4.6b — L15 vế ĐỌC] Dữ liệu ngoài của bước 1 đi qua đường đọc `bid.view`: bản lưu mang nhãn ngoài (một dòng lịch sử
     // ⇒ dưới sàn) và cờ mốc ngoài KHÔNG con số; Xem dải THẤY mốc ngoài theo kg (đối chứng dương của bộ đọc giá) và dải ngoài một dòng
     // không con số; mỗi báo giá có độ lệch so với mốc.
     const bn = (bm.body as { benchmark: { dongNgoai: { nhan: string; soDong: number }[] | null; mocNgoai: { nguon: string }[] } }).benchmark;
@@ -2140,7 +2140,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Ghi đúng như trình duyệt ghi: văn bản → byte UTF-8, không phân tích lại.
       for (const [ten, noiDung] of Object.entries(eb.tep)) await writeFile(join(quaHttp, ten), Buffer.from(noiDung, "utf8"));
 
-      // [S1.9101 / S4.6b — L15] Nhãn ngoài không vào lượt chấm, nên không vào bộ bằng chứng; hai kim ngoài không ở tệp nào của bộ.
+      // [S1.276 / S4.6b — L15] Nhãn ngoài không vào lượt chấm, nên không vào bộ bằng chứng; hai kim ngoài không ở tệp nào của bộ.
       for (const [ten, noiDung] of Object.entries(eb.tep)) {
         expect(noiDung, `${ten} mang kim mốc ngoài`).not.toContain(KIM_MOC_NGOAI);
         expect(noiDung, `${ten} mang kim lịch sử ngoài`).not.toContain(KIM_LICH_SU_NGOAI);

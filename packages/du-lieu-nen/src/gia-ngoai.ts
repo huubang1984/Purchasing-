@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.6b] BỘ ĐỌC GIÁ CỦA HAI BẢNG NGOÀI TẠI MỘT MỐC — đường ĐỌC của L15 (spec S4 §4.6, §4.7; ADR-096 ⑵ ⑷; ADR-149 ⑹; ADR-9201).
+// [S1.276 / S4.6b] BỘ ĐỌC GIÁ CỦA HAI BẢNG NGOÀI TẠI MỘT MỐC — đường ĐỌC của L15 (spec S4 §4.6, §4.7; ADR-096 ⑵ ⑷; ADR-149 ⑹; ADR-151).
 //
 // KHÔNG CỔNG Ở ĐÂY, nói ra — cùng tư thế `benchmark-goi.ts`: ba hàm của tệp là phép ĐỌC chỉ `benchmark-goi.ts` gọi — khi tính bản lưu
 // của bảng so sánh, khi đọc cờ mốc ngoài của bảng, và khi bấm *Xem dải* —, mà các hàm ấy chỉ `packages/danh-gia/src/doc-benchmark.ts`
@@ -16,13 +16,13 @@ import type { HangLichSuNgoai, HangMocNgoai } from "./dai-ngoai.js";
 
 // Các câu viết TRỌN, không ghép bằng `${…}`: bộ đọc SQL của lớp máy (`tests/architecture/qt3-doc-sql.ts`) ghép chuỗi liền kề nối bằng
 // `+` và không thấy nội suy. Mốc (`$3`, micro giây) thành `timestamptz` bằng cùng biểu thức của `benchmark-goi.ts`.
-// [rà soát §S1.9101 TRUNG-1] Bản đầu đọc MỌI hàng của hàng chuẩn và quy đổi TỪNG hàng — đo: 50 000 dòng lịch sử một hàng chuẩn ⇒ 14,4 s,
+// [rà soát §S1.276 TRUNG-1] Bản đầu đọc MỌI hàng của hàng chuẩn và quy đổi TỪNG hàng — đo: 50 000 dòng lịch sử một hàng chuẩn ⇒ 14,4 s,
 // sát trần `statement_timeout` 15 s, mà người nhập (mù giá) dán được bao nhiêu lô tuỳ ý. Nay: chỉ hàng trong CỬA SỔ NGÀY (`$4`..`$5`) —
 // tương đương chính xác, vì lõi bỏ hàng ngoài cửa sổ trước mọi phép đếm —, và quy đổi MỘT lần cho mỗi (hàng chuẩn, đơn vị) trong một
 // CTE `MATERIALIZED` (khuôn `quan_sat_gia`). Ngày ra bằng `to_char` — không phụ thuộc `DateStyle` của phiên (rà soát THẤP-4).
 
 /**
- * [rà soát §S1.9101 THẤP-2] Khoá tư vấn DÙNG CHUNG trên cả hai bảng của tổ chức — cùng khoá mà `du_lieu_nen_dat_thu_tu` (`079`) lấy
+ * [rà soát §S1.276 THẤP-2] Khoá tư vấn DÙNG CHUNG trên cả hai bảng của tổ chức — cùng khoá mà `du_lieu_nen_dat_thu_tu` (`079`) lấy
  * ĐỘC QUYỀN trước khi đặt `ghi_luc`. `ghi_luc` là lúc INSERT, không phải lúc commit: một lô dài vắt qua mốc mở giá mang `ghi_luc` < mốc mà
  * chưa thấy được. Chờ khoá ⇒ mọi hàng có `ghi_luc` < mốc đã commit lúc đọc, và lô bắt đầu sau lúc đọc mang `ghi_luc` sau lúc ấy — bản lưu
  * và *Xem dải* thấy cùng một tập (không `khopBanLuu: false` giả). Thứ tự cố định (mốc rồi lịch sử); người ghi chỉ giữ một bảng mỗi giao dịch.
