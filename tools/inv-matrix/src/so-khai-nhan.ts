@@ -411,13 +411,26 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký — mỗi vế của hai hàm vị từ một đột biến.
   // [S1.273 / S3.3e1] `man-kiem-soat` đo hợp đồng mà màn đọc: lời từ chối K2/K5 mang mã của bảng qua HTTP, và số NHÓM đếm được của
   // danh sách lời mời bằng đúng hàm K2 dùng (hai nhà cung cấp chung MST gốc ⇒ một nhóm; tổ chức chưa bật ⇒ không khối ấy).
-  K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
-  K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
+  // [S1.275 / S3.3e2] `kich-ban-41-http` bước 17 đo câu chuyện đầu-cuối qua đúng các route màn `/tao-thau` gọi: gói một lời mời bị K2
+  // chặn rồi `SINGLE_SOURCE` cứu, chữ ký của người lập ngoại lệ bị K5 chặn ở lần mở rồi người độc lập ký — sổ kể đúng thứ tự, lời từ
+  // chối mang mã; luồng MVP1 không chốt nào và không lập được ngoại lệ.
+  K2: [
+    "apps/api/src/canh-tranh-toi-thieu.int.test.ts",
+    "apps/api/src/man-kiem-soat.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+  ],
+  K5: [
+    "apps/api/src/canh-tranh-toi-thieu.int.test.ts",
+    "apps/api/src/man-kiem-soat.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+  ],
   // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
   // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
   // người chọn (người tạo, người thu hồi), khoá nhóm, *đếm được*, ROTATION, N = 0, nộp song song bị bắt lúc mở, hai lần mở đồng thời,
   // `opened_at` (khoản 319), READ COMMITTED, lớp chặn cuối — mỗi vế của hàm cửa sổ và hàm vị từ một đột biến.
-  K3: ["apps/api/src/xoay-vong.int.test.ts"],
+  // [S1.275 / S3.3e2] `kich-ban-41-http` bước 17: gói mời lại ba nhà cung cấp đếm được đã có trong các gói gần đây của người mua bị K3
+  // chặn lúc nộp, `ROTATION` cứu, rồi mở — qua HTTP, sổ kể đúng thứ tự.
+  K3: ["apps/api/src/xoay-vong.int.test.ts", "apps/unseal-worker/src/kich-ban-41-http.int.test.ts"],
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",

@@ -439,6 +439,9 @@ importers:
       '@trustprocure/sealed-envelope':
         specifier: workspace:*
         version: link:../../packages/sealed-envelope
+      '@trustprocure/supplier':
+        specifier: workspace:*
+        version: link:../../packages/supplier
       '@trustprocure/tenancy':
         specifier: workspace:*
         version: link:../../packages/tenancy

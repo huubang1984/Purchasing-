@@ -25282,6 +25282,115 @@ Một lượt đọc của agent rơi vào lúc đột biến N5 đang đặt tr
   nghiệp vụ + 22/22 hàng rào), 2232 giây, *"Cổng evidence: XANH"*. Mười ca bỏ qua: một ca chỉ chạy trên CI, chín ca phong bì lớn bật
   bằng tay.
 
+# §S1.275 — S3.3e2: `gieo:demo --s3` ĐỂ GÓI MỘT NGUỒN CHỜ Ở CẠNH BỊ CHẶN (K2 → `SINGLE_SOURCE` → K5 → CHỮ KÝ ĐỘC LẬP); XÁC MINH CỦA CÔNG CỤ RÀNG BĂM; KỊCH BẢN 41 BƯỚC 17; S3.3 XONG
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi. Không migration, không route, không hàm gói mới; mã sản phẩm
+không đổi một dòng. Đổi: công cụ dev `tools/gieo-demo` (thêm phụ thuộc `@trustprocure/supplier`), hai tệp kịch bản 41, sổ khai nhãn.
+Không ADR mới, không khoản nợ.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-06: *"Chạy gieo"* — hỏi lại, chủ dự án chọn *bắt đầu S3.3e2* — nửa sau của S3.3e (ADR-150 chia hai PR): `gieo:demo`
+và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua. Bản hình dạng S3.3e đã chốt: kịch bản 41 hai tệp; `gieo:demo --s3` thêm gói đi
+qua ngoại lệ, xác minh qua hàm gói thay câu INSERT thẳng.
+
+## 2. Đo trước (đọc mã trên `014a5ee`)
+- `gieo:demo --s3` dựng tám nhà cung cấp đếm được và xác minh bằng HAI khối `INSERT INTO supplier_verifications` thẳng: trigger `082` vẫn
+  kiểm luật người, nhưng cổng `supplier.qualify`, hàng sổ `SUPPLIER_VERIFIED` và phép so băm đã thấy (S3.3e1, lượt soi CAO-2) không đi qua
+  lượt demo nào. Đo trên cụm `pilot:gia-lap`: tổ chức gieo trước vòng này có 8 hàng xác minh, 0 hàng sổ `SUPPLIER_VERIFIED`.
+- Không ngoại lệ nào; mọi gói của `--s3` đi đường xanh của K2/K3/K5. Đường *"chặn rồi qua"* duy nhất cho người demo là K10a (gói 490 triệu).
+- Kịch bản 41 (hai tệp × hai luồng): K2/K3/K5 chỉ đi đường xanh; ngoại lệ chỉ xuất hiện ở bộ quét HTTP, trên gói hy sinh đã huỷ (từ chối).
+  Không ca nào lập ngoại lệ thành công, không ca nào bị K2/K3/K5 chặn rồi qua.
+- Từng chốt đã có ca riêng ở `apps/api` (`canh-tranh-toi-thieu`, `xoay-vong`, `ngoai-le-canh-tranh`, `man-kiem-soat`): vòng này không thêm
+  luật, nó nối các chốt thành câu chuyện đầu-cuối và đưa câu chuyện ấy vào demo.
+
+## 3. Câu hỏi của chủ dự án (2026-10-06)
+Gói demo — **dừng ở cạnh bị chặn** (khuôn K10a, chủ dự án chốt 2026-09-30: người demo tự đi đường bị chặn); đường demo — **K2 + K5** (K3 và
+`ROTATION` chỉ ở kịch bản 41: một gói thứ hai làm demo dài thêm nhiều bước tay); T4 — **có, ngắn**. Cả ba theo đề xuất.
+
+## 4. Thay đổi
+- `tools/gieo-demo/src/index.ts` — `xacMinhQuaMan`: đọc băm hồ sơ bằng `docHoSoXacMinh` (đúng câu màn `/nha-cung-cap` đọc) rồi
+  `xacMinhNhaCungCap` ràng băm ấy, dưới phiên `taichinh2`; thay hai khối INSERT thẳng (năm nhà cung cấp của gói chính, ba người luân phiên).
+  Gói một nguồn (`--s3`): nhóm hàng `MOT-NGUON` (không gói anh em nào cho K10a), van điều áp 200 triệu — bậc từ 100 triệu: ba nhà cung cấp,
+  ký danh sách, xoay vòng 5 —, `soan` tạo và mời MỘT nhà cung cấp do `nhapncc` dựng, `taichinh2` xác minh; MST đầu `05`, điện thoại đầu `07`
+  — mới với cửa sổ K3 của `soan`. Gói ở DRAFT, chưa nộp. Phần in ra kể năm bước: soan nộp (K2 chặn) → soan2 lập «Một nguồn duy nhất» → soan
+  nộp, soan2 duyệt → soan mở (K5 chặn: người lập ngoại lệ thuộc tập loại trừ) → soan3 duyệt, soan mở.
+- `tools/gieo-demo/package.json` thêm `@trustprocure/supplier`; `pnpm-lock.yaml` thêm đúng ba dòng ở importer `tools/gieo-demo` — lần
+  `pnpm install` cục bộ (pnpm 10) viết lại 137 dòng không liên quan (`libc`, peer `supports-color`); bỏ, sửa tay, `pnpm install
+  --frozen-lockfile` sạch (CI dùng pnpm 9).
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`, bước 17 (cả hai luồng). Luồng S3, nhóm hàng `van` riêng, hai gói ở bậc từ 100 triệu
+  (tổng 450 triệu — không cận K10a nào):
+  - gói A mời MỘT nhà cung cấp đếm được mới (`pm3` dựng, `taiChinh2` xác minh qua route với băm đã đọc). ⑴ nộp ⇒ 422 `{ error, ma:
+    K2_THIEU_CANH_TRANH }`, danh sách lời mời `canhTranh` = 1/3; ⑵ `pm2` lập `SINGLE_SOURCE`; `GET …/exceptions` mang `lanNop` bằng của gói, ở
+    DRAFT; ⑶ nộp ⇒ 200, `pm2` ký; ⑷ mở ⇒ 422 `{ error, ma: K5_THIEU_CHU_KY_DOC_LAP }`, không khoá, không link; ⑸ `pm4` — người dùng mới của
+    bước (thêm từ đầu luồng thì đổi số người ghi nhận được tín hiệu ở bước 16) — ký, mở ⇒ 200, link đi đúng một lời mời;
+  - gói B mời ba nhà cung cấp phụ đầu (đã ở bước 16): nộp ⇒ 422 `{ ma: K3_KHONG_XOAY_VONG }`; `pm2` lập `ROTATION`; nộp, `pm4` ký, mở ⇒ 200;
+  - sổ kể lại mỗi gói theo `seq` kèm người làm (`CONTROL_DENIED:K2@mua`, `SOURCING_EXCEPTION_CREATED@pm2`, … `RFQ_OPENED@mua`); ba hàng
+    `CONTROL_DENIED` của hai gói theo đúng thứ tự K2, K5, K3.
+  Luồng MVP1: lập ngoại lệ ⇒ 422 (*tổ chức chưa bật*), không hàng ngoại lệ; gói không lời mời nộp, ký, mở; không hàng chốt nào.
+- `apps/unseal-worker/src/kich-ban-41.int.test.ts`, bước 17: cùng câu chuyện qua hàm gói — `lapNgoaiLe`, `docNgoaiLe`, `listInvitations`;
+  người lập ngoại lệ là người PM độc lập của bước 16, người ký độc lập là `gd1` như mọi gói của bước 16; gói B mời lại ba nhà cung cấp đầu của
+  gói 1 tỷ. Không nhãn INV (tiền lệ bước 16: nhãn ở tệp HTTP).
+- `tools/inv-matrix/src/so-khai-nhan.ts` — tệp HTTP khai cho K2, K3, K5.
+
+## 5. Đột biến
+Năm đột biến, chạy hai tệp mỗi lần với `--reporter=json`, đọc trạng thái của bước 17 từng luồng, khôi phục và so với bản sao. Bốn đột biến
+CSDL áp LÚC CHẠY ở đầu bước 17 (superuser: `pg_get_functiondef` → `replace` → `EXECUTE`; chuỗi gốc không có thì ném):
+
+| # | Đột biến | Bước 17 đỏ ở |
+|---|---|---|
+| M1 | `rfq_chot_canh_tranh`: `SINGLE_SOURCE` không khớp loại nào | S3, hai tệp — lần nộp sau ngoại lệ vẫn 422 K2 |
+| M2 | `rfq_tap_loai_tru` bỏ vế tác giả ngoại lệ còn sống | S3, hai tệp — lần mở đầu không bị K5 chặn (HTTP 200, gói không lỗi) |
+| M3 | `rfq_chot_xoay_vong`: `ROTATION` không cứu | S3, hai tệp — lần nộp sau ngoại lệ vẫn 422 K3 |
+| M4 | `ngoai_le_kiem` bỏ câu *tổ chức chưa bật* | MVP1, hai tệp — ngoại lệ lập được (HTTP 201) |
+| M5 | `dispatch.ts`: 422 của chốt bỏ `ma` | S3, tệp HTTP (tệp tầng gói không đi qua HTTP — xanh, đúng) |
+
+Năm sống: 0. **Lượt đầu của bốn đột biến CSDL không đo gì:** hai luồng chạy trên CÙNG một CSDL, luồng MVP1 chạy trước áp đột biến, và phép
+kiểm *"chuỗi gốc không có thì ném"* ném ở luồng S3 — bước 17 đỏ vì công cụ, không vì khẳng định. Đọc thông điệp lỗi thì thấy; lượt hai áp
+M1–M3 chỉ ở luồng S3 và nhận chuỗi đã đột biến là đã áp. Bảng trên là của lượt hai.
+
+## 6. Lượt đi thử T4 — cụm thật, Chromium, script ngoài kho
+Cụm `pnpm pilot:gia-lap cum` (Postgres `16-alpine`, `api`, `web`, worker, khoá local-dev, hộp thư dev), tổ chức mới của `pnpm gieo:demo --s3`
+trên mã của vòng này; `playwright-core` 1.56, Chromium 1194; đăng nhập bằng link qua `POST /auth/link` và hộp thư dev. Đi ĐÚNG năm bước mà
+phần in ra kể, mỗi người một ngữ cảnh trình duyệt: **18/18**.
+- ⓪ 9 hàng xác minh, 9 hàng sổ `SUPPLIER_VERIFIED` (tổ chức gieo trước vòng này trên cùng cụm: 8 và 0); gói một nguồn ở DRAFT.
+- ① soan đọc gói: một lời mời, «Đã xác minh» có, «Đếm được» có, «Đếm được 1/3 nhóm … chưa đủ», khối ngoại lệ hiện; «Nộp duyệt» ⇒ câu K2 của
+  máy chủ rồi câu chỉ dẫn (*"… SINGLE_SOURCE là «Một nguồn duy nhất» …"*), một hàng `CONTROL_DENIED`, gói ở DRAFT.
+- ② soan2: loại chọn sẵn «Một nguồn duy nhất»; lập với «Công nghệ độc quyền» ⇒ bảng một dòng «còn hiệu lực».
+- ③ soan nộp lại ⇒ *"Đã nộp duyệt…"*; soan2 «Phê duyệt» ⇒ *"Đã ghi một phê duyệt."*
+- ④ soan «Mở gói» ⇒ câu K5 của máy chủ rồi *"Nhờ một người giữ quyền duyệt chưa làm việc nào kể trên với gói này ký, rồi mở lại."*; gói chờ
+  duyệt, 0 khoá.
+- ⑤ soan3 ở 375×812: `scrollWidth` = `clientWidth` = 375 với bảng lời mời và bảng ngoại lệ; «Phê duyệt».
+- ⑥ soan «Mở gói» ⇒ OPEN, link mời trong hộp thư dev đúng tới `motnguon.<đuôi>@vidu.vn`; sổ kể lại: `CONTROL_DENIED:K2@soan |
+  SOURCING_EXCEPTION_CREATED@soan2 | RFQ_SUBMITTED_FOR_APPROVAL@soan | RFQ_APPROVED@soan2 | CONTROL_DENIED:K5@soan | RFQ_APPROVED@soan3 |
+  RFQ_OPENED@soan`.
+- Phản hồi lỗi trên mọi trang: hai, đều được chờ — 422 nộp (K2), 422 mở (K5).
+- Lượt đi thử không tìm ra lỗi màn nào. Nó là một lần, không phải một cổng: script nằm ngoài kho.
+
+## 7. Giới hạn còn lại
+- Demo không đi K3 và `ROTATION` (chủ dự án chọn); kịch bản 41 đi.
+- Ba khoản đã nói ở §S1.273 giữ nguyên: thêm người liên hệ vào hồ sơ bất kỳ qua API (khoản 344 [MỞ]); chỉ dẫn K3 không nói nhà cung cấp nào là
+  mới; lần chặn ở trigger khi đua không mang `ma`.
+- K2b, K5b — kiểm lại lúc trao thầu — ở S3.5; KPI tỷ lệ ngoại lệ ở S3.9.
+
+## 8. Số đo
+Nhánh dựng lại từ `master` `014a5ee` (PR #250 đã merge), gộp thêm `f7103ea` (PR #245 — khoản 336: tài liệu và terraform, không chạm mã
+của vòng này; gộp tự động, không xung đột) ở `2a85105`; số đã cấp ở `19cfce7` (vòng 275). Trên cây gộp: `pnpm t0` xanh; `pnpm test` 151 tệp,
+2586 ca đạt, 1 bỏ qua, 0 đỏ (bộ đối chiếu sổ nợ chạy với số tạm, lời khai đếm không đổi — không ADR, không khoản mới). Trên `19cfce7`:
+`pnpm cap-so --kiem` sạch; `pnpm evidence`: vitest thoát mã 0, 243 tệp, 4803 khẳng định (4793 đạt, 10 bỏ qua, 0 đỏ), 82/82 bất biến (60/60
+nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*; `evidence/INV-matrix.md` đổi đúng ba con số — K2 29 → 31, K3 20 → 22, K5 13 → 15 (bước
+17 của tệp HTTP, hai luồng) —, không bất biến mới, mốc độ phủ giữ 82. Trong lượt ấy: hai kịch bản 41 34 + 87, `canh-tranh-toi-thieu` 36/36,
+`xoay-vong` 21/21, `man-kiem-soat` 15/15. Trước đó, trên mã chưa commit: cổng kiến trúc 46 tệp, 599 ca đạt (lượt đầu đỏ ở hai tệp `.int` vì
+Docker chưa chạy trong container — chạy lại sau khi bật Docker); hai kịch bản 41 xanh ngay lượt đầu (34/34, 87/87).
+Sau lượt đo, `master` thêm `b49d571` (PR #251, §S1.272 — S4.6a: migration `109_du_lieu_ngoai`, gói `du-lieu-nen`, route và màn
+`/du-lieu`, một lô dữ liệu ngoài trong `gieo:demo` và một thay đổi ở tệp HTTP của kịch bản 41) và được gộp vào nhánh: mã gộp tự động; hai
+xung đột tài liệu (`docs/STATE.md`, sổ này) gỡ tay — giữ cả hai cột mốc và cả hai biên bản —, `pnpm cap-so --dem` báo lời khai đếm đã khớp.
+Trên cây gộp `98c055d`: `pnpm t0` xanh; `pnpm test` 153 tệp, 2613 ca đạt, 1 bỏ qua; kịch bản 41 tầng gói 34/34; tệp HTTP **đỏ ở bước 17**:
+lần nộp K2 nhận 429 (*"qua nhieu yeu cau"*) thay vì 422. Đo bằng một dòng in tạm: bucket từ chối của phiên `mua` (luồng S3) đã 30/30 trong
+cửa sổ 15 phút (ADR-092) — bộ quét rò rỉ của kịch bản cố ý gọi mọi route bằng phiên ấy, và PR #251 thêm route vào bộ quét; trước lần gộp,
+ba lần từ chối của bước 17 còn vừa ngân sách. Sửa ở đồ gá, khuôn đồ gá ⒜ của khối khoản 275 cùng tệp: đầu bước 17 xoá bucket người gọi của
+cụm test (bảng toàn cục, cụm riêng của tệp) — không khẳng định nào đổi, không lần từ chối nào rời sổ. Sau đó tệp HTTP 87/87. Lượt
+`pnpm evidence` trên cây gộp: lượt CI của PR.
+
 # §S1.276 — S4.6b: LỊCH SỬ MUA NGOÀI HỆ THỐNG VÀ MỐC NGOÀI Ở `/mo-thau` — NHÃN NGOÀI TÍNH CÙNG BẢN LƯU, CỜ MỐC Ở BẢNG, SỐ VÀ ĐỘ LỆCH Ở *XEM DẢI* (L1, L15 vế đọc) — ADR-151
 
 ## 1. Vòng này là gì
@@ -25443,4 +25552,6 @@ L1 so `<`/`>=` chính xác trên mốc dựng lại từ micro giây; quy đổi
 - `db/migrations.int.test.ts` đầy đủ một lượt: 128/128 (43 phút); mọi tệp `db/` và `packages/db` khác xanh.
 - Sau các sửa của mục 8: unit toàn kho 2640/2640; `benchmark.int` 78/78, `du-lieu-ngoai.int` 15/15; kịch bản 41 qua HTTP 85/85.
 - M15 chạy SAU `migrations.int` (nó sửa tệp migration): đỏ. Hai mươi hai đột biến, cả hai mươi hai đỏ.
-- Số tạm (S1.276, ADR-151, `110`) giữ tới lúc mở PR: `pnpm cap-so` cấp số thật, rồi `pnpm evidence` sinh lại ma trận.
+- Số tạm giữ tới lúc mở PR; `pnpm cap-so` cấp số thật — vòng S1.276, ADR-151, migration `110` (hai số trần trong chú thích mã sửa tay).
+- `pnpm evidence` sau `cap-so`: vitest thoát mã 0, 4881 khẳng định, 83/83 bất biến (61/61 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence:
+  XANH"*; ma trận đổi đúng hai hàng L1, L15. Sau đó master nhận #252 (S1.275); `pnpm evidence` trên cây gộp: lượt CI của PR.
