@@ -445,6 +445,8 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   // [S1.241 / khoản 279] Mã từ chối trạng thái — `MaTuChoiTrangThai`, tập khoá của `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`).
   "CHINH_SACH_CHUA_KHAI_TRONG_SO",
   "CHINH_SACH_TAT_BAFO",
+  // [S1.279 / S4.7a / L8] Phiên bản ghim khai TCO sai hình dạng — trùng mã, thiếu `gia`, hệ số mã tiền khác 1.
+  "CHINH_SACH_TCO_SAI",
   "CHUA_CHAM_LAN_NAO",
   "DE_XUAT_DA_CO_CHU_KY",
   "KHONG_CO_AWARD_CON_SONG",

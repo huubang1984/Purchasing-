@@ -73,6 +73,11 @@ export interface ThanhPhanDaQuyDoi {
   readonly giaTri: string;
   /** `giaTri × heSo`, đã làm tròn nửa-ra-xa-0 về `SO_LE_TIEN`. `null` cho thành phần `DIEM`. */
   readonly tien: string | null;
+  /**
+   * [S1.279 / S4.7a] Chỉ ở mã quy đổi của TCO (`tco.ts`): cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ lệ — phép tính sinh ra
+   * `giaTri`. Hàm này không đặt nó; tầng gói gắn sau.
+   */
+  readonly nguon?: Readonly<Record<string, string>>;
 }
 
 export interface KetQuaChiPhi {

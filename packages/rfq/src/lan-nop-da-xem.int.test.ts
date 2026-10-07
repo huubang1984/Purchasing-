@@ -829,6 +829,9 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
   });
 
   it("[INV-D2] tổ chức chưa bật, trigger so lần nộp KHÔNG đặt cột về NULL ⇒ PM2 duyệt hai lần (không mốc, rồi mốc đúng) và gói cấp kép MỞ bằng một người", async () => {
+    // [S1.279 / S4.7a — CA LẬT] Từ `112_tco`, cạnh mở ở tổ chức chưa bật đếm NGƯỜI ký trên nội dung và số ngày giao hiện tại (lớp
+    // L16, `rfq_packages_tco_khi_mo`): hai hàng của cùng PM2 là MỘT người, nên đột biến này một mình KHÔNG còn mở được gói. Khoảng
+    // trống của vế này chỉ mở lại khi lớp ấy cũng tắt — ca đo đúng điều đó; lời từ chối của lớp L16 được đo trước.
     const a = await taoToChuc();
     const rfqId = await goiNhap(a, GOI_CAP_KEP);
     await nop(a, rfqId);
@@ -837,7 +840,13 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
       await duyetVoi(a, rfqId, await phienKhac(a, a.pm2), 1);
     });
     expect(await soChuKy(rfqId)).toBe(2);
-    expect(await loi(mo(a, rfqId))).toBeNull();
+    expect((await loi(mo(a, rfqId)))?.message).toBe("RFQ nay can 2 NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co 1 (L16)");
+    await db.pool.query("ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_tco_khi_mo");
+    try {
+      expect(await loi(mo(a, rfqId))).toBeNull();
+    } finally {
+      await db.pool.query("ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_tco_khi_mo");
+    }
     expect(await trangThaiGoi(rfqId)).toBe("OPEN");
   });
 
@@ -1104,8 +1113,10 @@ describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp
       const { rows } = await db.pool.query<{ ten: string }>(
         "SELECT tgname AS ten FROM pg_trigger WHERE tgrelid = 'public.rfq_approvals'::regclass AND NOT tgisinternal ORDER BY tgname",
       );
-      expect(rows.map((r) => r.ten), "đúng ba trigger chuẩn, theo đúng thứ tự tên").toEqual([
+      // [S1.279 / S4.7a — CA LẬT] ~~ba~~ BỐN: `rfq_approvals_dat_bam_giao_hang` (`112_tco`) đặt băm số ngày giao — không từ chối gì.
+      expect(rows.map((r) => r.ten), "đúng bốn trigger chuẩn, theo đúng thứ tự tên").toEqual([
         "rfq_approvals_dat_bam_danh_sach",
+        "rfq_approvals_dat_bam_giao_hang",
         "rfq_approvals_kiem_nguoi_duyet",
         "rfq_approvals_so_lan_nop",
       ]);
