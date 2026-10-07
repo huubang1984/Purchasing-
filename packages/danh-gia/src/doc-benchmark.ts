@@ -28,6 +28,9 @@
 //     một ảnh chụp. Lượt đọc đúng tại câu ấy; một cạnh commit sau câu ấy có thể đứng TRƯỚC hàng sổ của lượt đọc — cùng điều bảng so sánh
 //     đã chấp nhận (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi `COMPARISON_VIEWED`). ADR-143, đoạn bổ sung S1.274.
 //
+// [S1.276 / S4.6b] LỊCH SỬ NGOÀI VÀ MỐC NGOÀI (ADR-151; chủ dự án chốt 2026-10-06): bản lưu mang thêm nhãn theo dải lịch sử mua ngoài
+// hệ thống (tính cùng lần, `kemNgoai`), bảng đọc kèm cờ *"có mốc ngoài"* (nguồn, ngày hiệu lực — không con số); *Xem dải* tính số của dải
+// ngoài, con số mốc ngoài và độ lệch của từng báo giá. Nhãn ngoài không vào lượt chấm hay bộ bằng chứng (L15). Cùng cổng `bid.view`.
 // Cổng nằm THẲNG trong thân hàm (khoản 33; `cong-quyen-route.test.ts`). Kết quả của `docBenchmark` không mang con số nào có đơn vị
 // tiền — nhãn, chiều, lý do, số đếm — nhưng nhãn là thông tin về giá, nên cổng là `bid.view` như bảng so sánh và lịch sử giá.
 // SỔ: mỗi lần đọc THÀNH CÔNG một hàng (`BENCHMARK_READ`, `BENCHMARK_BAND_READ`) trên CHÍNH `client`, sau mọi câu đọc (khuôn
@@ -38,13 +41,17 @@ import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import {
+  docCoMocNgoai,
   docNhomBenchmark,
   ghiBanLuuBenchmark,
   tinhBenchmarkGoi,
   tinhDaiDong,
   type ChieuLech,
+  type CoMocNgoai,
+  type MocNgoaiDong,
   type NhanBenchmark,
   type NhomBenchmark,
+  type SauMocNgoai,
 } from "@trustprocure/du-lieu-nen";
 import { docBaoGia } from "./luot-danh-gia.js";
 
@@ -53,6 +60,26 @@ export const TRANG_THAI_BENCHMARK_HIEN = ["UNSEALED", "EVALUATING", "BAFO_UNSEAL
 
 /** Vòng chào lại đang mở hay đã đóng mà chưa mở niêm phong: không nhãn nào (L6, chủ dự án chốt 2026-10-01). */
 export const TRANG_THAI_VONG_CHAO_LAI = ["BAFO_OPEN", "BAFO_CLOSED"] as const;
+
+/**
+ * [S1.276 / S4.6b] Nhãn của một (báo giá, dòng) đo được theo dải LỊCH SỬ MUA NGOÀI HỆ THỐNG, đọc từ bản lưu — tách khỏi nhãn nội bộ
+ * (L15). Không con số nào có đơn vị tiền; cửa sổ là NGÀY (giờ Việt Nam) của ngày mua.
+ */
+export interface DongNgoaiHien {
+  readonly bidVersionId: string;
+  readonly lineNo: number;
+  readonly canonicalItemId: string;
+  readonly tienTe: string;
+  readonly cuaSoTu: string;
+  readonly denNgay: string;
+  readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC">;
+  readonly chieu: ChieuLech | null;
+  readonly soDong: number;
+  readonly soGoi: number;
+  readonly soNcc: number;
+  readonly soLoaiTienTe: number;
+  readonly soLoaiKhongQuyDoi: number;
+}
 
 /** `BAN_LUU`: đọc bản đã ghi. `TINH_MOI`: lần đọc này tính và ghi bản lưu. */
 export type NguonBenchmark = "BAN_LUU" | "TINH_MOI";
@@ -101,6 +128,13 @@ export type BenchmarkCuaGoi =
       /** Lúc tính bản lưu — giá của chính các dòng đọc tại đây. */
       readonly tinhLuc: Date;
       readonly dong: readonly DongBenchmarkHien[];
+      /**
+       * [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài, một mỗi dòng đo được. `null`: bản lưu tính TRƯỚC khi có lịch sử ngoài (`110`) —
+       * có dòng đo được mà không nhãn ngoài nào; *Xem dải* vẫn tính dải ngoài.
+       */
+      readonly dongNgoai: readonly DongNgoaiHien[] | null;
+      /** [S1.276 / S4.6b] Cờ *"có mốc ngoài"* của các (hàng chuẩn, tiền tệ) đo được — nguồn và ngày hiệu lực, không con số. */
+      readonly mocNgoai: readonly CoMocNgoai[];
     };
 
 export interface DocBenchmarkInput {
@@ -226,6 +260,62 @@ async function docDongBanLuu(
   return rows;
 }
 
+interface HangLuuNgoai {
+  readonly bid_version_id: string;
+  readonly line_no: number;
+  readonly canonical_item_id: string;
+  readonly tien_te: string;
+  readonly cua_so_tu: string;
+  readonly den_ngay: string;
+  readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC">;
+  readonly chieu: ChieuLech | null;
+  readonly so_dong: number;
+  readonly so_goi: number;
+  readonly so_ncc: number;
+  readonly so_loai_tien_te: number;
+  readonly so_loai_khong_quy_doi: number;
+}
+
+/** [S1.276 / S4.6b] Nhãn ngoài đã lưu của một bản lưu (hay một dòng của nó). Bảng không cột tiền — không chạm hai bảng ngoài. */
+async function docDongNgoaiBanLuu(
+  client: pg.PoolClient,
+  orgId: string,
+  snapshotId: string,
+  lineNo?: number,
+): Promise<readonly HangLuuNgoai[]> {
+  const { rows } = await client.query<HangLuuNgoai>(
+    `SELECT e.bid_version_id, e.line_no, e.canonical_item_id, e.tien_te, pg_catalog.to_char(e.cua_so_tu, 'YYYY-MM-DD') AS cua_so_tu,
+            pg_catalog.to_char(e.den_ngay, 'YYYY-MM-DD') AS den_ngay, e.nhan, e.chieu, e.so_dong, e.so_goi, e.so_ncc, e.so_loai_tien_te,
+            e.so_loai_khong_quy_doi
+       FROM public.price_benchmark_snapshot_external_lines e
+      WHERE e.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND e.snapshot_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND ($3::pg_catalog.int4 IS NULL OR e.line_no OPERATOR(pg_catalog.=) $3::pg_catalog.int4)
+      ORDER BY e.line_no, e.bid_version_id`,
+    [orgId, snapshotId, lineNo ?? null],
+  );
+  return rows;
+}
+
+const dongNgoaiHien = (r: HangLuuNgoai): DongNgoaiHien => ({
+  bidVersionId: r.bid_version_id,
+  lineNo: r.line_no,
+  canonicalItemId: r.canonical_item_id,
+  tienTe: r.tien_te,
+  cuaSoTu: r.cua_so_tu,
+  denNgay: r.den_ngay,
+  nhan: r.nhan,
+  chieu: r.chieu,
+  soDong: r.so_dong,
+  soGoi: r.so_goi,
+  soNcc: r.so_ncc,
+  soLoaiTienTe: r.so_loai_tien_te,
+  soLoaiKhongQuyDoi: r.so_loai_khong_quy_doi,
+});
+
+/** Dòng đo được của bản lưu — có hàng chuẩn và tiền tệ (`…_do_duoc_du_bo` của `104`). */
+const doDuoc = (r: HangLuu): boolean => r.nhan !== "KHONG_DO_DUOC" && r.canonical_item_id !== null && r.tien_te !== null;
+
 const dongHien = (r: HangLuu): DongBenchmarkHien => ({
   bidVersionId: r.bid_version_id,
   lineNo: r.line_no,
@@ -345,14 +435,30 @@ interface BoiCanhHien extends BoiCanh {
 async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, bc: BoiCanhHien): Promise<BenchmarkCuaGoi> {
   let dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
   let nguon: NguonBenchmark = "BAN_LUU";
+  let mocNgoaiDaTinh: readonly CoMocNgoai[] | undefined;
   if (dau === undefined) {
     if (bc.moHonGiaoDich) return { trangThai: "THU_LAI", rfqStatus: bc.status };
     const baoGia = await docBaoGia(client, orgId, rfqId);
-    const kq = await tinhBenchmarkGoi(client, orgId, { rfqId, bidVersionIds: baoGia.map((b) => b.bid_version_id), nhom: bc.nhom });
+    // [S1.276 / S4.6b] `kemNgoai`: nhãn theo dải lịch sử ngoài tính cùng lần — giá của chính các dòng đã có trong tay (ADR-151).
+    const kq = await tinhBenchmarkGoi(client, orgId, {
+      rfqId,
+      bidVersionIds: baoGia.map((b) => b.bid_version_id),
+      nhom: bc.nhom,
+      kemNgoai: true,
+    });
+    // [rà soát §S1.276] Cờ mốc ngoài đọc TRƯỚC khoá hàng gói: lần đọc hai bảng ngoài có thể chờ một lô đang ghi (khoá tư vấn dùng chung
+    // của `gia-ngoai.ts`), và cửa sổ `FOR SHARE` của S1.274 phải giữ ngắn. Cùng cặp (hàng chuẩn, tiền tệ), cùng mốc với bản sắp ghi.
+    mocNgoaiDaTinh = await docCoMocNgoai(client, orgId, {
+      cap: kq.dong.filter((d) => d.nhan !== "KHONG_DO_DUOC").map((d) => ({ canonicalItemId: d.canonicalItemId as string, tienTe: d.tienTe as string })),
+      mocMoGia: kq.mocMoGia,
+      cuaSoThang: bc.nhom.cuaSoThang,
+    });
     const doi = await kiemLaiDuoiKhoa(client, orgId, rfqId, bc.unsealRequestId);
     if (doi !== undefined) return doi;
     const id = await ghiBanLuuBenchmark(client, orgId, { unsealRequestId: bc.unsealRequestId, policyId: bc.policyId, ketQua: kq });
     if (id !== null) nguon = "TINH_MOI";
+    // Giao dịch khác đã ghi bản lưu: cờ đọc lại theo các dòng của bản ấy, ở dưới.
+    else mocNgoaiDaTinh = undefined;
     dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
     if (dau === undefined) throw new Error("bản lưu benchmark vừa ghi (hay do giao dịch khác ghi) không đọc lại được");
   } else {
@@ -360,6 +466,16 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
     if (doi !== undefined) return doi;
   }
   const dong = await docDongBanLuu(client, orgId, dau.id);
+  // [S1.276 / S4.6b] Nhãn ngoài đã lưu; cờ mốc ngoài đọc tại mốc mở giá đã lưu (không đơn giá) — chủ dự án chốt 2026-10-06.
+  const doDuocDs = dong.filter(doDuoc);
+  const ngoai = await docDongNgoaiBanLuu(client, orgId, dau.id);
+  const mocNgoai =
+    mocNgoaiDaTinh ??
+    (await docCoMocNgoai(client, orgId, {
+      cap: doDuocDs.map((r) => ({ canonicalItemId: r.canonical_item_id as string, tienTe: r.tien_te as string })),
+      mocMoGia: BigInt(dau.moc_micro),
+      cuaSoThang: bc.nhom.cuaSoThang,
+    }));
   return {
     trangThai: "CO",
     nguon,
@@ -372,6 +488,8 @@ async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, b
     mocMoGia: dau.moc_mo_gia,
     tinhLuc: dau.ghi_luc,
     dong: dong.map(dongHien),
+    dongNgoai: doDuocDs.length > 0 && ngoai.length === 0 ? null : ngoai.map(dongNgoaiHien),
+    mocNgoai,
   };
 }
 
@@ -416,6 +534,8 @@ export async function docBenchmark(
       nguon: ketQua.trangThai === "CO" ? ketQua.nguon : null,
       snapshotId: ketQua.trangThai === "CO" ? ketQua.snapshotId : null,
       soDong: ketQua.trangThai === "CO" ? ketQua.dong.length : 0,
+      soDongNgoai: ketQua.trangThai === "CO" ? (ketQua.dongNgoai?.length ?? null) : 0,
+      soMocNgoai: ketQua.trangThai === "CO" ? ketQua.mocNgoai.length : 0,
       viewedBySessionId: input.actorSessionId,
     },
   });
@@ -453,6 +573,34 @@ export interface DaiHien {
   readonly khopBanLuu: boolean;
 }
 
+/**
+ * [S1.276 / S4.6b] Dải lịch sử ngoài của dòng: một (hàng chuẩn, tiền tệ). Số là CHUỖI thập phân theo đơn vị gốc; `null` khi dưới sàn.
+ * Cửa sổ là NGÀY mua (giờ Việt Nam).
+ */
+export interface DaiNgoaiHien {
+  readonly canonicalItemId: string;
+  readonly tienTe: string;
+  readonly cuaSoTu: string;
+  readonly denNgay: string;
+  readonly duSan: boolean;
+  readonly q1: string | null;
+  readonly trungVi: string | null;
+  readonly q3: string | null;
+  readonly soDong: number;
+  readonly soGoi: number;
+  readonly soNcc: number;
+  readonly soLoaiTienTe: number;
+  readonly soLoaiKhongQuyDoi: number;
+  /** Lời khai `nguon` của các hàng đã vào dải. */
+  readonly nguon: readonly string[];
+  readonly sauMoc: SauMocNgoai;
+  /**
+   * Nhãn ngoài tính lại trùng nhãn ngoài đã lưu cho mọi báo giá của dòng ở tiền tệ này. `null`: bản lưu tính trước khi có lịch sử ngoài
+   * (không nhãn ngoài nào để so). `false` là dữ liệu lệch — màn nói ra.
+   */
+  readonly khopBanLuu: boolean | null;
+}
+
 export type DaiCuaDong =
   | { readonly trangThai: "KHONG_HIEN"; readonly rfqStatus: string }
   | { readonly trangThai: "VONG_CHAO_LAI_DANG_MO"; readonly rfqStatus: string }
@@ -477,7 +625,13 @@ export type DaiCuaDong =
         readonly trangThai: string;
         readonly donGiaQuyDoi: string | null;
         readonly tienTe: string | null;
+        /** [S1.276 / S4.6b] Độ lệch so với mốc ngoài của tiền tệ ấy, phần trăm một chữ số lẻ; `null` khi không có mốc. */
+        readonly lechMoc: string | null;
       }[];
+      /** [S1.276 / S4.6b] Dải lịch sử ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng. */
+      readonly daiNgoai: readonly DaiNgoaiHien[];
+      /** [S1.276 / S4.6b] Mốc ngoài, một mỗi (hàng chuẩn, tiền tệ) của dòng — chỉ độ lệch, không nhãn (ADR-096 ⑷). */
+      readonly mocNgoai: readonly MocNgoaiDong[];
     };
 
 const ngayTuMicro = (micro: bigint): Date => new Date(Number(micro / 1000n));
@@ -511,16 +665,23 @@ export async function docDaiBenchmark(
     if (uid === null || dau === undefined) {
       ketQua = { trangThai: "CHUA_CO_BAN_LUU" };
     } else {
-      const dong = (await docDongBanLuu(client, orgId, dau.id, input.lineNo)).filter(
-        (r) => r.nhan !== "KHONG_DO_DUOC" && r.canonical_item_id !== null && r.tien_te !== null,
-      );
+      const dong = (await docDongBanLuu(client, orgId, dau.id, input.lineNo)).filter(doDuoc);
+      const ngoaiLuu = await docDongNgoaiBanLuu(client, orgId, dau.id, input.lineNo);
       if (dong.length === 0) {
         ketQua = { trangThai: "KHONG_CO_DAI", lineNo: input.lineNo };
       } else {
         const mocMoGia = BigInt(dau.moc_micro);
         const mocDoc = BigInt(dau.ghi_micro);
         const dai: DaiHien[] = [];
-        const giaCuaGoi: { bidVersionId: string; trangThai: string; donGiaQuyDoi: string | null; tienTe: string | null }[] = [];
+        const giaCuaGoi: {
+          bidVersionId: string;
+          trangThai: string;
+          donGiaQuyDoi: string | null;
+          tienTe: string | null;
+          lechMoc: string | null;
+        }[] = [];
+        const daiNgoai: DaiNgoaiHien[] = [];
+        const mocNgoai: MocNgoaiDong[] = [];
         let donViGoc: string | null = null;
         for (const hang of [...new Set(dong.map((r) => r.canonical_item_id as string))].sort()) {
           const cuaHang = dong.filter((r) => r.canonical_item_id === hang);
@@ -570,9 +731,55 @@ export async function docDaiBenchmark(
               khopBanLuu: khop,
             });
           }
+          // [S1.276 / S4.6b] Dải ngoài: so nhãn ngoài tính lại (giá của chính dòng tại `ghi_luc`, dải tại mốc) với nhãn ngoài đã lưu.
+          for (const d of kq.daiNgoai) {
+            const luu = ngoaiLuu.filter((r) => r.canonical_item_id === hang && r.tien_te === d.tienTe);
+            const khop =
+              luu.length === 0
+                ? null
+                : luu.every((r) => {
+                    const x = kq.giaCuaX.find((g) => g.bidVersionId === r.bid_version_id && g.lineNo === r.line_no);
+                    return (
+                      r.cua_so_tu === d.cuaSoTu &&
+                      r.den_ngay === d.denNgay &&
+                      r.so_dong === d.soDong &&
+                      r.so_goi === d.soGoi &&
+                      r.so_ncc === d.soNcc &&
+                      r.so_loai_tien_te === d.soLoaiTienTe &&
+                      r.so_loai_khong_quy_doi === d.soLoaiKhongQuyDoi &&
+                      x?.nhanNgoai === r.nhan &&
+                      x.chieuNgoai === r.chieu
+                    );
+                  });
+            daiNgoai.push({
+              canonicalItemId: hang,
+              tienTe: d.tienTe,
+              cuaSoTu: d.cuaSoTu,
+              denNgay: d.denNgay,
+              duSan: d.duSan,
+              q1: d.mocSo?.q1 ?? null,
+              trungVi: d.mocSo?.trungVi ?? null,
+              q3: d.mocSo?.q3 ?? null,
+              soDong: d.soDong,
+              soGoi: d.soGoi,
+              soNcc: d.soNcc,
+              soLoaiTienTe: d.soLoaiTienTe,
+              soLoaiKhongQuyDoi: d.soLoaiKhongQuyDoi,
+              nguon: d.nguon,
+              sauMoc: d.sauMoc,
+              khopBanLuu: khop,
+            });
+          }
+          mocNgoai.push(...kq.mocNgoai);
           for (const g of kq.giaCuaX) {
             if (g.lineNo !== input.lineNo) continue;
-            giaCuaGoi.push({ bidVersionId: g.bidVersionId, trangThai: g.trangThai, donGiaQuyDoi: g.donGiaQuyDoi, tienTe: g.tienTe });
+            giaCuaGoi.push({
+              bidVersionId: g.bidVersionId,
+              trangThai: g.trangThai,
+              donGiaQuyDoi: g.donGiaQuyDoi,
+              tienTe: g.tienTe,
+              lechMoc: g.lechMoc,
+            });
           }
         }
         // Số của dải và giá quy đổi của gói chỉ trả khi, ~~dưới khoá hàng gói,~~ [S1.274 / khoản 342] ở một câu hỏi lại SAU phép tính, gói
@@ -587,6 +794,8 @@ export async function docDaiBenchmark(
           donViGoc,
           dai,
           giaCuaGoi,
+          daiNgoai,
+          mocNgoai,
         };
       }
     }
@@ -604,6 +813,8 @@ export async function docDaiBenchmark(
       trangThai: ketQua.trangThai,
       snapshotId: ketQua.trangThai === "CO" ? ketQua.snapshotId : null,
       soDai: ketQua.trangThai === "CO" ? ketQua.dai.length : 0,
+      soDaiNgoai: ketQua.trangThai === "CO" ? ketQua.daiNgoai.length : 0,
+      soMocNgoai: ketQua.trangThai === "CO" ? ketQua.mocNgoai.filter((m) => m.moc !== null).length : 0,
       viewedBySessionId: input.actorSessionId,
     },
   });

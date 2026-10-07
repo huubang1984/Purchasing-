@@ -4189,6 +4189,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
         ]);
@@ -8844,6 +8846,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
       ]);
@@ -9179,6 +9183,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
         "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
         "111_lien_he_chi_nguoi_dung_ho_so.sql",
       ]);
