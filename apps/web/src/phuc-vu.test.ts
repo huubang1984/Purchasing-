@@ -1435,6 +1435,28 @@ describe("bề mặt tệp", () => {
           "1 trong dải · 1 không đo được · phủ 1/2 dòng",
         ]);
       });
+
+      // [S1.9101 / khoản 334] Đo trên Chromium ở 375×812 (§S1.9101): bảng xếp hạng rộng 870 px, bảng so sánh lố 10 px, cả trang 903 px —
+      // dòng thành phần `nowrap` và bảng không xếp khối. Kho không có trình duyệt trong bộ test, nên ca này giữ BA thứ phép đo ấy dựa vào:
+      // hai bảng mang lớp `xep` (luật màn hẹp đọc nó), mỗi ô mang nhãn cột, và dòng thành phần được xuống dòng dưới 480 px.
+      it("[S1.9101 / khoản 334] bảng so sánh và bảng xếp hạng xếp thành khối dưới 480px: lớp `xep`, nhãn cột ở mỗi ô, thành phần xuống dòng", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-bang");
+        await p.bam("nut-xep-hang");
+        const nhan = (id: string) => p.el(id).querySelector("tbody").con[0]?.con.map((td) => td.dataset["nhan"] ?? "");
+        expect(nhan("bang")).toEqual(["Nhà cung cấp", "Tổng", "Tiền tệ", "Lần nộp", "Vòng"]);
+        expect(nhan("bang-hang")).toEqual(["Hạng", "Nhà cung cấp", "Chi phí hiệu dụng", "Thành phần", "Benchmark", ""]);
+        const doc = (tep: string) => readFileSync(new URL(`../trang/${tep}`, import.meta.url), "utf8").replace(/\r\n/gu, "\n");
+        expect(doc("mo-thau.html")).toContain('<table class="xep" id="bang">');
+        expect(doc("mo-thau.html")).toContain('<table class="xep" id="bang-hang">');
+        const css = doc("chung.css");
+        // Mọi khối `@media (max-width: 480px)` gộp lại — luật màn hẹp nằm rải ở nhiều khối, mỗi khối một vòng.
+        const hep = css.split("@media (max-width: 480px) {").slice(1).map((k) => k.slice(0, k.indexOf("\n}"))).join("\n");
+        expect(hep).toMatch(/table\.xep thead \{ display: none; \}/u);
+        expect(hep).toMatch(/table\.xep td\[data-nhan\]::before \{ content: attr\(data-nhan\)/u);
+        expect(hep, "dòng thành phần `nowrap` (S1.106) kéo cột Thành phần tới 416 px trên khung 375").toMatch(/ul\.tp li \{ white-space: normal;/u);
+        expect(hep).toMatch(/#bang-hang td\.cot-benchmark \{ max-width: none; \}/u);
+      });
     });
 
     // [S1.254 / khoản 320, 321, 323] Bước 5 và 7 của `/mo-thau` — đo ở diễn tập §11 trên Chromium: bảng xếp hạng không in id

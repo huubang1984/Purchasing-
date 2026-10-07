@@ -25390,3 +25390,77 @@ cửa sổ 15 phút (ADR-092) — bộ quét rò rỉ của kịch bản cố ý
 ba lần từ chối của bước 17 còn vừa ngân sách. Sửa ở đồ gá, khuôn đồ gá ⒜ của khối khoản 275 cùng tệp: đầu bước 17 xoá bucket người gọi của
 cụm test (bảng toàn cục, cụm riêng của tệp) — không khẳng định nào đổi, không lần từ chối nào rời sổ. Sau đó tệp HTTP 87/87. Lượt
 `pnpm evidence` trên cây gộp: lượt CI của PR.
+
+# §S1.9101 — KHOẢN 334 ĐÓNG: `/mo-thau` KHÔNG CÒN CUỘN NGANG Ở 375 PX — BẢNG SO SÁNH VÀ BẢNG XẾP HẠNG XẾP THÀNH KHỐI DƯỚI 480 PX
+
+**Rổ và mảnh (ADR-043):** khoản 334 (chưa xếp rổ) đóng. Không migration, không route, không ADR; ba tệp trang (`chung.css`,
+`mo-thau.html`, `mo-thau.js`), một ca test (`apps/web/src/phuc-vu.test.ts`).
+
+## 1. Vòng này là gì
+Khoản 334 đo ra ở lượt đi thử 375×812 của S4.5c1 (§S1.260 mục 8 ý 3): bảng xếp hạng `#bang-hang` rộng 712 px (819 px với cột
+*Benchmark*), cả trang 852 px, bảng so sánh `#bang` lố 7 px. Hướng đề xuất của khoản: dưới 480 px cho thành phần xuống dòng và xếp bảng
+xếp hạng thành khối như `hang-gia`, đo trên Chromium.
+
+## 2. Cách đo
+Không dựng cụm `pilot:gia-lap`: thứ được đo là bố cục của trang, không phải dữ liệu của API — §S1.260 mục 8 ý 2 cũng đã chặn API bằng
+`page.route`. Máy chủ web THẬT của `apps/web` (`taoWebServer`, `apiOrigin: null`, cùng CSP `style-src 'self'`), Playwright 1.56 +
+Chromium ở khung 375×812 (và 320, 414, 481, 1280 px). Mọi `/api/*` chặn bằng `page.route`: bảng so sánh, benchmark (sáu hàng, đủ các
+nhãn) và bảng xếp hạng — ba nhà cung cấp tên thật của bộ giả lập XD (`[GL] Công ty TNHH Vật liệu Xây dựng Hoà Bình Xanh`, …), tổng
+`832503360.00`…`861775500.00`, mỗi hàng xếp hạng hai thành phần (`gia · 832503360.00 × 1.0000 = 832503360.00 (TIEN)` và
+`thoi_gian_giao · 14.00 × 250000.0000 = 3500000.00 (NGAY)`). Trang mở bước 4 và 5, bấm *Đọc bảng so sánh*, *Đọc bảng xếp hạng*, rồi
+*Đọc benchmark*; đo `document.documentElement.scrollWidth`, bề rộng từng bảng và từng ô của hàng xếp hạng đầu, trước và sau khi đọc
+benchmark. Số ở đây lớn hơn §S1.260 vì dữ liệu dựng sẵn có hai thành phần mỗi hàng, không một.
+
+## 3. Đo trước (mã của `origin/master`)
+| Khung | Trang | `#bang-hang` | Các cột của `#bang-hang` (px) | `#bang` (mép phải) | `#bang-benchmark` |
+|---|---|---|---|---|---|
+| 320 | 903 | 870 | 58 · 66 · 133 · 416 · 107 · 90 | 352 (385) | 254 |
+| 375 | **903** | **870** | 58 · 66 · 133 · **416** · 107 · 90 | 352 (**385** — lố 10 px) | 309 |
+| 414 | 903 | 870 | như trên | 352 (385) | 348 |
+| 481 | 903 | 870 | như trên | 415 | 415–424 |
+| 1280 | 1280 | 870 | như trên | 646 | 646 |
+
+Cột *Thành phần* 416 px vì dòng thành phần `white-space: nowrap` (S1.106). Trước và sau *Đọc benchmark* bề rộng như nhau: ô *Benchmark*
+đã bị trần `max-width: 9rem`.
+
+## 4. Sửa
+- `mo-thau.html`: `#bang` và `#bang-hang` mang lớp `xep` — khuôn khối của S1.273 (bảng lời mời, ngoại lệ, hồ sơ xác minh), chính nó là
+  khuôn `hang-gia` của `/nop-thau` (S1.254): dưới 480 px `thead` ẩn, mỗi hàng một khối, mỗi ô in nhãn cột bằng `td[data-nhan]::before`,
+  ô rỗng ẩn. Không dùng lớp `hang-gia`: `/nop-thau` có một `#bang-hang` khác cùng id, và ca của khoản 322 khẳng định `/mo-thau` không
+  mang lớp ấy.
+- `mo-thau.js`: mọi ô của hai bảng mang `data-nhan` (*Nhà cung cấp*, *Tổng*, *Tiền tệ*, *Lần nộp*, *Vòng*; *Hạng*, *Nhà cung cấp*,
+  *Chi phí hiệu dụng*, *Thành phần*, *Benchmark*); ô nút *Chọn* không nhãn.
+- `chung.css`, dưới 480 px: `ul.tp li { white-space: normal; overflow-wrap: anywhere; }` — số vẫn nguyên văn (J2), chỉ ngắt khi hết chỗ;
+  `#bang-hang td.cot-benchmark { max-width: none; }` vì ô nay rộng hết khối. Từ 481 px trở lên không luật nào đổi.
+
+## 5. Đo sau
+| Khung | Trang | `#bang-hang` | `#bang` (mép phải) | `#bang-benchmark` |
+|---|---|---|---|---|
+| 320 | **320** | 254 | 254 (287) | 254 |
+| 375 | **375** | **309** | **309** (342) | 309 |
+| 414 | **414** | 348 | 348 (381) | 348 |
+| 481 | 903 | 870 | 415 | 415–424 |
+| 1280 | 1280 | 870 | 646 | 646 |
+
+Ở 375 px mọi bảng vừa lòng khung (309 px), trước và sau *Đọc benchmark*; ảnh chụp toàn trang: mỗi báo giá một khối, dòng thành phần
+xuống dòng trong khối, nút *Chọn* rộng hết khối như nút *Xem dải* của bảng benchmark. 481 px và 1280 px đo y như trước — bố cục màn
+rộng không đổi. Console: chỉ một lần 401 của `/api/me` lúc nạp trang (đồ gá không đăng nhập), không lỗi CSP.
+
+## 6. Chốt chặn hồi quy
+Kho không có trình duyệt trong bộ test (Playwright không là phụ thuộc của kho; cài thêm cần mạng và đổi lockfile), nên một ca đo
+`scrollWidth` thật không chạy được ở CI. Ca mới của `phuc-vu.test` (khối *mo-thau: benchmark theo dòng*) giữ ba thứ phép đo ở mục 5
+dựa vào: ô của hai bảng mang đúng nhãn cột (dựng trang bằng `mo-thau.js` thật trên DOM giả của tệp), hai bảng mang lớp `xep` trong
+`mo-thau.html`, và các khối `@media (max-width: 480px)` của `chung.css` có luật khối của `table.xep`, `ul.tp li { white-space: normal;`
+và bỏ trần của ô *Benchmark*. Đo: trên ba tệp trang của `origin/master` ⇒ đỏ (`expected [ '', '', '', '', '' ]` — không nhãn); chỉ
+`chung.css` cũ, trang mới ⇒ đỏ ở khẳng định `ul.tp li`; mã mới ⇒ xanh.
+
+## 7. Giới hạn còn lại (nói ra, không sửa ở vòng này)
+- **Khung 481–~900 px vẫn cuộn ngang** (481 px: trang 903 px, đo y như trước): luật khối chỉ dưới 480 px, như mọi bảng khác của
+  `chung.css`, và dòng thành phần vẫn `nowrap` ở khung rộng. Ở 1280 px trang không cuộn nhưng `#bang-hang` (870 px) tràn khỏi thẻ
+  của bước 5 (646 px). Khoản 334 chỉ nói màn điện thoại; đây là ứng viên cho một khoản mới nếu chủ dự án muốn.
+- Phép đo dùng dữ liệu dựng sẵn qua `page.route`, không dữ liệu của cụm `pilot:gia-lap`; khác biệt duy nhất với §S1.260 là độ dài
+  dòng chữ, và luật khối không phụ thuộc độ dài ấy.
+
+## 8. Cổng
+`pnpm t0` xanh; `npx vitest run --exclude "**/*.int.test.ts" --maxWorkers=4`: 153 tệp, 2614 ca đạt, 1 bỏ qua, 0 đỏ. Không test tích
+hợp nào chạm ba tệp trang. Lượt đầu đỏ đúng một ca, `so-no-tu-doi-chieu` P9: `Handoff.md` còn khai *53 còn mở* ở hai chỗ (§10, §13) — sửa thành *52*; sau đó xanh.
