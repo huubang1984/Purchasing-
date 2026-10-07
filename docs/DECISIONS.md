@@ -11947,12 +11947,12 @@ khác dạng.
 
 ---
 
-## ADR-9201 — S3.4a: K9 — khai báo xung đột lợi ích là lời khai chỉ-ghi-thêm ghim băm danh sách mời; `CO_XUNG_DOT` vĩnh viễn cho gói; cổng ở bảy chỗ; chữ ký của người có xung đột không đếm; S3.4 chia hai PR
+## ADR-155 — S3.4a: K9 — khai báo xung đột lợi ích là lời khai chỉ-ghi-thêm ghim băm danh sách mời; `CO_XUNG_DOT` vĩnh viễn cho gói; cổng ở bảy chỗ; chữ ký của người có xung đột không đếm; S3.4 chia hai PR
 
 **Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai luôn hạng mục S3.4"*; vòng chia hai
-phần theo khuôn S3.6b (⑻), các quyết định hình dạng dưới đây theo đề xuất và chờ chủ dự án xác nhận lại ở lượt soi · **[S1.9101]** ·
+phần theo khuôn S3.6b (⑻), các quyết định hình dạng dưới đây theo đề xuất và chờ chủ dự án xác nhận lại ở lượt soi · **[S1.281]** ·
 **Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, ADR-082 ⒄, ADR-084 ⑴ ⑷, ADR-108, ADR-114, ADR-145, ADR-147 ⑺ · **Spec:** S3 §4.5,
-§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.281
 
 ### Bối cảnh
 

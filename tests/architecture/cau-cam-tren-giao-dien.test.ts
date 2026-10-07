@@ -63,7 +63,7 @@ const LUAT: readonly Luat[] = [
   { hang: "Hai người ký thì không ai trao thầu cho người quen được", bat: /không ai[^.!?;]{0,40}trao thầu cho người quen/iu },
   { hang: "Chống được thông đồng giữa người mua và nhà cung cấp", bat: /chống(?:\s+được)?\s+(?:việc\s+)?thông đồng/iu },
   { hang: "Chuẩn hoá dữ liệu chống thao túng giá", bat: /chống(?:\s+được)?\s+(?:việc\s+)?thao túng/iu },
-  // [S1.9101 / S3.4a] K9 tạo ra TRÁCH NHIỆM, không phải phát hiện (spec S3 §8.7): màn không nói *kiểm soát* hay *ngăn* xung đột.
+  // [S1.281 / S3.4a] K9 tạo ra TRÁCH NHIỆM, không phải phát hiện (spec S3 §8.7): màn không nói *kiểm soát* hay *ngăn* xung đột.
   { hang: "Kiểm soát xung đột lợi ích", bat: /(?:kiểm soát|ngăn(?:\s+chặn)?|phát hiện)(?:\s+được)?[^.!?;]{0,20}xung đột lợi ích/iu },
 ];
 

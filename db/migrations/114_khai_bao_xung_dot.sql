@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 9501_khai_bao_xung_dot — [S1.9101 / S3.4a của spec S3] K9: KHAI BÁO XUNG ĐỘT LỢI ÍCH, CỔNG Ở BẢY CHỖ, CHỮ KÝ CỦA NGƯỜI CÓ
+-- 114_khai_bao_xung_dot — [S1.281 / S3.4a của spec S3] K9: KHAI BÁO XUNG ĐỘT LỢI ÍCH, CỔNG Ở BẢY CHỖ, CHỮ KÝ CỦA NGƯỜI CÓ
 -- XUNG ĐỘT KHÔNG ĐẾM
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.5, §5 K9, §5.1 K9, §8.7, §9 (S3.4). ADR-082 ⒄,
--- ADR-084 ⑷, ADR-108, ADR-114, ADR-147 ⑺, ADR-9201. Chủ dự án: *"triển khai luôn hạng mục S3.4"* (2026-10-07); vòng này chia hai
+-- ADR-084 ⑷, ADR-108, ADR-114, ADR-147 ⑺, ADR-155. Chủ dự án: *"triển khai luôn hạng mục S3.4"* (2026-10-07); vòng này chia hai
 -- phần như S3.6b: **S3.4a** — lớp CSDL, tầng gói, route, K9 ở bảy cổng (migration này); **S3.4b** — màn, `gieo:demo --s3`, kịch
 -- bản 41, lượt đi thử T4.
 --
@@ -47,7 +47,7 @@
 -- (1) MÃ QUYỀN
 -- ============================================================================================
 INSERT INTO permissions (code, description) VALUES
-  ('coi.declare', 'Khai bao xung dot loi ich tren mot goi thau — viec cua nguoi sap ky, cham, de xuat, duyet hay xac minh (K9, ADR-9201)');
+  ('coi.declare', 'Khai bao xung dot loi ich tren mot goi thau — viec cua nguoi sap ky, cham, de xuat, duyet hay xac minh (K9, ADR-155)');
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('BUYER', 'coi.declare'),

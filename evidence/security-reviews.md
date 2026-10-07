@@ -25632,17 +25632,17 @@ hợp nào chạm ba tệp trang. Lượt đầu đỏ đúng một ca, `so-no-t
 
 ---
 
-# §S1.9101 — S3.4a: K9 — KHAI BÁO XUNG ĐỘT LỢI ÍCH: BẢNG CHỈ-GHI-THÊM GHIM BĂM DANH SÁCH, `CO_XUNG_DOT` VĨNH VIỄN, CỔNG Ở BẢY CHỖ, CHỮ KÝ CỦA NGƯỜI CÓ XUNG ĐỘT KHÔNG ĐẾM — ADR-9201
+# §S1.281 — S3.4a: K9 — KHAI BÁO XUNG ĐỘT LỢI ÍCH: BẢNG CHỈ-GHI-THÊM GHIM BĂM DANH SÁCH, `CO_XUNG_DOT` VĨNH VIỄN, CỔNG Ở BẢY CHỖ, CHỮ KÝ CỦA NGƯỜI CÓ XUNG ĐỘT KHÔNG ĐẾM — ADR-155
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và tổ chức chưa bật
 chạy nguyên MVP1 (đo ở ⑻ của §6). Một thay đổi chạm MỌI tổ chức: bảy trigger cổng gắn vào bảy bảng sẵn có, nhưng mỗi cái hỏi *đã bật*
-trước (hàm vị từ trả NULL) — cụm test hiện có là đối chứng. Migration `9501`, ADR-9201, mã quyền `coi.declare`. Không khoản nợ mới.
+trước (hàm vị từ trả NULL) — cụm test hiện có là đối chứng. Migration `114`, ADR-155, mã quyền `coi.declare`. Không khoản nợ mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-07: *"triển khai luôn hạng mục S3.4"*. S3.4 là hạng mục thứ tư của spec S3 §9 (xung đột lợi ích — `coi_declarations`,
 cổng ở bốn chỗ, K9, dòng PRODUCT §5), cộng ba cổng lượt soi hình dạng thêm (ADR-082 ⒄). Vòng này chia hai PR theo khuôn S3.6b1/S3.6b2:
 **S3.4a** — lớp CSDL, tầng gói, route, K9 vào sổ đăng ký, và kịch bản 41 hai bản (vòng này — §7); **S3.4b** — màn khai báo,
-`gieo:demo --s3`, lượt đi thử T4. Việc chia là quyết định của vòng, ghi ở ADR-9201 ⑻ và chờ chủ dự án xác nhận lại.
+`gieo:demo --s3`, lượt đi thử T4. Việc chia là quyết định của vòng, ghi ở ADR-155 ⑻ và chờ chủ dự án xác nhận lại.
 
 ## 2. Đo trước (đọc mã trên `ca94227`)
 - Không một dòng mã nào của K9: không `coi_declarations`, không `CO_XUNG_DOT`/`KHONG_XUNG_DOT` ở `db/`, `packages/`, `apps/`, `tools/`;
@@ -25674,7 +25674,7 @@ cổng ở bốn chỗ, K9, dòng PRODUCT §5), cộng ba cổng lượt soi hì
   cổng ghi nhận sẽ ra ngoài là 23514 trần, không hàng sổ. Sửa trong vòng: bắt theo `maChotTuLoi` như sáu chỗ còn lại.
 
 ## 4. Thay đổi
-- `db/migrations/9501_khai_bao_xung_dot.sql`: mã quyền `coi.declare` (sáu vai); bảng `coi_declarations` (chỉ-ghi-thêm, RLS + policy khách
+- `db/migrations/114_khai_bao_xung_dot.sql`: mã quyền `coi.declare` (sáu vai); bảng `coi_declarations` (chỉ-ghi-thêm, RLS + policy khách
   đóng hẳn, GRANT INSERT theo cột — `danh_sach_bam` ngoài GRANT, trigger đặt); `coi_khoa_goi_nguoi` (seed 9); `coi_kiem_khai_bao`;
   hai hàm vị từ `coi_chot_hanh_dong`, `coi_chot_xac_minh`; bảy trigger `…_kiem_xung_dot`; `rfq_chu_ky_khop_bam` (bốn vế của `107`),
   `rfq_chu_ky_con_hieu_luc` định nghĩa lại (khớp băm trừ `CO_XUNG_DOT`); `rfq_chot_chu_ky_xung_dot` + trigger cạnh mở gói.
@@ -25692,7 +25692,7 @@ cổng ở bốn chỗ, K9, dòng PRODUCT §5), cộng ba cổng lượt soi hì
 - Sổ đăng ký: `migrations.int` (năm hàm, tám trigger, ba danh sách migration), `danh-sach-ham-canh` (tám hàm), `migration-shape`,
   `rls-coverage`, `check-an-ninh` (hai CHECK hình dạng miễn), `hardening-suy-tu` (bảng chỉ-ghi-thêm + nhân chứng khai báo),
   `cong-quyen-route` (hai hàm), `barrel-exports`, `so-khai-nhan` (K9), `MOC_GHIM` 83 → 84, `docs/TEST-PLAN.md` hàng K9, PRODUCT §5
-  hàng *"Kiểm soát xung đột lợi ích"*, spec §9/§4.5/§5.1, ADR-9201, hai lời khai số bất biến (P6, P8), `cap-so --dem`.
+  hàng *"Kiểm soát xung đột lợi ích"*, spec §9/§4.5/§5.1, ADR-155, hai lời khai số bất biến (P6, P8), `cap-so --dem`.
 
 ## 5. Phép đo — `apps/api/src/xung-dot-loi-ich.int.test.ts`, trên Postgres 16, qua HTTP và dưới `app_api`
 12 ca, hai `describe`, mỗi ca một tổ chức mới (công tắc ADR-080 một chiều; tín hiệu chia nhỏ đọc cả tổ chức). Bậc 0 ĐÒI khai, bậc 1 (từ
@@ -25792,7 +25792,7 @@ CSDL và 5 đột biến TS đều chết (§6); `pnpm evidence` lượt đầu:
 được 84/84 nhưng cổng không in XANH ([[evidence-xanh-khong-bang-vitest-0]]); `pnpm t0` đỏ hai lỗi lint ở tệp test K9 sau lần sửa cuối
 (import thừa, `expect.any`), gỡ ở lượt sau. Trên `834a770` (sau §7, một lượt sửa test và tài liệu, không dòng mã sản xuất nào): `pnpm t0`
 xanh (553 mô-đun, không vi phạm); `pnpm test` 151 tệp (2 bỏ qua), 2609 ca đạt, 14 bỏ qua, 0 đỏ — bộ đối chiếu sổ nợ chạy với số tạm,
-`pnpm cap-so --dem` viết lại lời khai đếm ADR sau khi gỡ bản ADR-9201 chép đôi; `pnpm cap-so --kiem` chỉ báo số tạm (cấp ở lượt gộp);
+`pnpm cap-so --dem` viết lại lời khai đếm ADR sau khi gỡ bản ADR-155 chép đôi; `pnpm cap-so --kiem` chỉ báo số tạm (cấp ở lượt gộp);
 `pnpm evidence`: vitest thoát mã 0, 248 tệp, 4870 khẳng định (4847 đạt, 23 bỏ qua, 0 đỏ), 84/84 bất biến (62/62 nghiệp vụ + 22/22 hàng
 rào), *"Cổng evidence: XANH"*, 3821 s; `evidence/INV-matrix.md` thêm hàng K9 (12 ca), mốc độ phủ 83 → 84. Trong lượt ấy: hai kịch bản 41
 34/34 + 87/87, `canh-tranh-toi-thieu` 36/36, `xoay-vong` 21/21, `man-kiem-soat` 15/15, tệp K9 12/12.

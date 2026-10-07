@@ -911,7 +911,7 @@ describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 
     );
     // Sàn một chữ ký của `071` thấy chữ ký cũ và cho qua; K4b không thấy nó trên danh sách hiện tại.
     expect((await loi(mo(t, thuong)))?.message).toBe("RFQ nay can 1 chu ky TREN DANH SACH MOI HIEN TAI, moi co 0 (K4b)");
-    // [S1.9101 / S3.4a / K9] Gói có từ trước lần bật không bậc ghim — K9 coi như ĐÒI khai (fail-closed, cùng K5): người ký lại khai
+    // [S1.281 / S3.4a / K9] Gói có từ trước lần bật không bậc ghim — K9 coi như ĐÒI khai (fail-closed, cùng K5): người ký lại khai
     // *không xung đột* trước, bằng chính câu chèn của `khaiBaoXungDot` (băm danh sách do trigger đặt).
     await withTenant(apiPool, t.org, (c) =>
       c.query(

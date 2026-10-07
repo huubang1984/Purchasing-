@@ -58,7 +58,7 @@ const HAM_DOI_TRANG_THAI = [
   // cùng mã với lần đề xuất; hàm hỏi lại cùng mã.
   "rutDeXuatTraoThau",
   "taoLuotDanhGia",
-  // [S1.9101 / S3.4a] Khai báo xung đột lợi ích (`@trustprocure/kiem-soat`): ghi một hàng chỉ-ghi-thêm mà K9 đọc ở bảy cổng — route
+  // [S1.281 / S3.4a] Khai báo xung đột lợi ích (`@trustprocure/kiem-soat`): ghi một hàng chỉ-ghi-thêm mà K9 đọc ở bảy cổng — route
   // đòi `coi.declare`, hàm hỏi lại cùng mã.
   "khaiBaoXungDot",
   "addSupplierContact",
@@ -287,7 +287,7 @@ const HAM_DUONG_KHACH = [
 const HAM_DOC_CO_QUYEN = [
   "buildComparisonTable",
   "countReceivedBids",
-  // [S1.9101 / S3.4a] Khai báo xung đột của CHÍNH người gọi — vẫn chịu cổng `coi.declare` (cùng mã với lần khai): người không có
+  // [S1.281 / S3.4a] Khai báo xung đột của CHÍNH người gọi — vẫn chịu cổng `coi.declare` (cùng mã với lần khai): người không có
   // việc khai thì cũng không có gì để đọc, và lời gọi đứng THẲNG trong thân `docKhaiBaoXungDot`.
   "docKhaiBaoXungDot",
   // [S1.106 / S2.4] Đọc một bảng xếp hạng là một lần TIẾT LỘ GIÁ, nên nó chịu đúng cổng

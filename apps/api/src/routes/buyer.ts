@@ -466,7 +466,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/coi-declarations",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.4a · K9] Khai báo xung đột lợi ích của CHÍNH người đang xem trên một gói, băm danh sách mời hiện tại, bậc có đòi
+    // [S1.281 / S3.4a · K9] Khai báo xung đột lợi ích của CHÍNH người đang xem trên một gói, băm danh sách mời hiện tại, bậc có đòi
     // khai không, và chốt K9 đang nói gì về họ — cùng hàm vị từ bảy cổng hỏi, để màn nói trước thay vì để một cú bấm sai vào sổ.
     // Cổng `coi.declare` đứng trong `docKhaiBaoXungDot`. KHÔNG cho agent: lời khai của một con người trước khi quyết (`cong-cu.ts`).
     agent: false,
@@ -1248,7 +1248,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/rfqs/:rfqId/coi-declarations",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.4a · K9] Khai báo xung đột lợi ích trên một gói — `KHONG_XUNG_DOT` với danh sách mời hiện tại, hay `CO_XUNG_DOT`
+    // [S1.281 / S3.4a · K9] Khai báo xung đột lợi ích trên một gói — `KHONG_XUNG_DOT` với danh sách mời hiện tại, hay `CO_XUNG_DOT`
     // với một nhà cung cấp có lời mời. Chỉ ghi thêm; một `CO_XUNG_DOT` là vĩnh viễn cho gói — lần khai lại *không xung đột* sau đó
     // vào sổ `CONTROL_DENIED`. Bảy cổng K9 đọc bảng này ở trigger của chúng.
     permission: PERMISSIONS.COI_DECLARE,

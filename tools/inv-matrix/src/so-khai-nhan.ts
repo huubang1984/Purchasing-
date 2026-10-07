@@ -559,7 +559,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.273 / S3.3e1] `man-kiem-soat` đo lần xác minh ràng băm hồ sơ đã thấy qua HTTP (băm cũ ⇒ 422, không hàng nào ở lại) và màn hồ
   // sơ thấy người liên hệ lạ cùng người thêm nó (lượt soi CAO-2).
   K8a: ["packages/supplier/src/xac-minh.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
-  // K9 — [S1.9101 / S3.4a] khai báo xung đột lợi ích. `xung-dot-loi-ich` đo trên Postgres thật, qua HTTP và dưới `app_api`: đối chứng
+  // K9 — [S1.281 / S3.4a] khai báo xung đột lợi ích. `xung-dot-loi-ich` đo trên Postgres thật, qua HTTP và dưới `app_api`: đối chứng
   // dương ở bảy cổng (khai rồi ký, chấm, đề xuất, duyệt, huỷ, xác minh, ghi nhận đi qua), mỗi cổng một ca chưa khai / đã khai có xung
   // đột kèm hàng `CONTROL_DENIED`, băm danh sách đổi thì khai báo lỗi thời (không hàng sổ), `CO_XUNG_DOT` vĩnh viễn, chữ ký của
   // người có xung đột không đếm ở cạnh mở gói và ở hàng duyệt trao thầu, tổ chức chưa bật chạy như MVP1, và đột biến từng vế.

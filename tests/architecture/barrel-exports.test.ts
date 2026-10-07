@@ -1162,7 +1162,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
 // Không symbol nào tính tín hiệu — phép tính là MỘT hàm SQL (`tin_hieu_chia_nho`); một bản tính thứ hai đi vòng qua cửa là hai
 // tầng cho hai câu trả lời về cùng một gói.
-// [S1.9101 / S3.4a] Hai hàm của khai báo xung đột lợi ích (K9): khai và đọc khai báo của CHÍNH người gọi — hàm vị từ của chốt là
+// [S1.281 / S3.4a] Hai hàm của khai báo xung đột lợi ích (K9): khai và đọc khai báo của CHÍNH người gọi — hàm vị từ của chốt là
 // MỘT hàm SQL (`coi_chot_hanh_dong`), gói chỉ hỏi nó.
 const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "docKhaiBaoXungDot", "ghiNhanTinHieu", "ghiTinHieuKhiNop", "khaiBaoXungDot", "lietKeTinHieu"];
 

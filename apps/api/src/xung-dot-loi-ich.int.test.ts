@@ -1,8 +1,8 @@
 // ==============================================================================================
-// [S1.9101 / S3.4a · spec S3 §4.5, §5.1 K9, §8.7 · K9 · K12] KHAI BÁO XUNG ĐỘT LỢI ÍCH — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP VÀ
+// [S1.281 / S3.4a · spec S3 §4.5, §5.1 K9, §8.7 · K9 · K12] KHAI BÁO XUNG ĐỘT LỢI ÍCH — PHÉP ĐO TRÊN POSTGRES 16, QUA HTTP VÀ
 // DƯỚI `app_api`
 //
-// Migration `9501_khai_bao_xung_dot`, gói `@trustprocure/kiem-soat` (`khaiBaoXungDot`, `docKhaiBaoXungDot`), bảy trigger cổng và
+// Migration `114_khai_bao_xung_dot`, gói `@trustprocure/kiem-soat` (`khaiBaoXungDot`, `docKhaiBaoXungDot`), bảy trigger cổng và
 // một lần hỏi trước ở `openRfq`. Hợp đồng đo ở đây:
 //   ⑴ đối chứng dương: ở bậc đòi khai, người chưa khai KHÔNG ký duyệt gói được — `422` mang mã, MỘT hàng `CONTROL_DENIED
 //      {K9_CHUA_KHAI_XUNG_DOT}` của chính người ấy —; khai *không xung đột* rồi ký thì đi qua; route đọc trả đúng khai báo, băm hiện
@@ -426,7 +426,7 @@ async function goiDaMoThau(t: ToChuc): Promise<GoiDaMoThau> {
 }
 
 // ==============================================================================================
-describe("[S1.9101 / S3.4a / K9] khai báo và chữ ký mở gói — route, băm danh sách, CO_XUNG_DOT vĩnh viễn", { timeout: 180000 }, () => {
+describe("[S1.281 / S3.4a / K9] khai báo và chữ ký mở gói — route, băm danh sách, CO_XUNG_DOT vĩnh viễn", { timeout: 180000 }, () => {
   it("[INV-K9] đối chứng dương: chưa khai ⇒ 422 mang mã + MỘT hàng CONTROL_DENIED của chính người ký; khai KHONG_XUNG_DOT ⇒ ký được; route đọc trả khai báo, băm hiện tại, bậc đòi khai, chốt", async () => {
     const t = await taoToChuc();
     const g = await goiNhap(t);
@@ -627,7 +627,7 @@ describe("[S1.9101 / S3.4a / K9] khai báo và chữ ký mở gói — route, b�
 });
 
 // ==============================================================================================
-describe("[S1.9101 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nhận tín hiệu", { timeout: 300000 }, () => {
+describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nhận tín hiệu", { timeout: 300000 }, () => {
   it("[INV-K9] lượt chấm, đề xuất, chữ ký duyệt, huỷ trao thầu: mỗi cổng chặn người chưa khai kèm hàng sổ, khai rồi qua; hàng APPROVED đòi một chữ ký của người không có xung đột", async () => {
     const t = await taoToChuc();
     const g = await goiDaMoThau(t);

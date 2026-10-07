@@ -33,7 +33,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   bid_receipts_canonical_text_check: "DO_DAI",
   bid_receipts_signature_check: "DO_DAI",
   caller_rate_limits_hits_check: "SO",
-  // [S1.9101 / S3.4a] Ghi chú tuỳ chọn của khai báo xung đột: độ dài và đã cắt — hai ràng buộc hình dạng; hai ràng buộc K9
+  // [S1.281 / S3.4a] Ghi chú tuỳ chọn của khai báo xung đột: độ dài và đã cắt — hai ràng buộc hình dạng; hai ràng buộc K9
   // (`trang_thai`, `hinh_dang`) ở `CHECK_AN_NINH_KHAI`.
   coi_declarations_ghi_chu_check: "DO_DAI",
   coi_declarations_ghi_chu_da_cat: "DINH_DANG",

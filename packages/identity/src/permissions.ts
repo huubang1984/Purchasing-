@@ -136,7 +136,7 @@ export const PERMISSIONS = {
    */
   SUPPLIER_QUALIFY: "supplier.qualify",
   /**
-   * [S1.9101 / S3.4a / ADR-9201 · spec S3 §4.5] Khai báo xung đột lợi ích trên một gói thầu (K9). Cấp cho mọi vai giữ một mã mà K9
+   * [S1.281 / S3.4a / ADR-155 · spec S3 §4.5] Khai báo xung đột lợi ích trên một gói thầu (K9). Cấp cho mọi vai giữ một mã mà K9
    * chặn — `rfq.approve`, `evaluation.perform`, `award.recommend`, `po.approve`, `supplier.qualify` —, tức mọi vai trừ
    * `DATA_STEWARD`: khai báo là việc của người sắp quyết, không phải một quyền tách người (ADR-084 ⑴). Chốt K9 so NGƯỜI khai với
    * người hành động ở trigger; mã này chỉ là cổng của route.

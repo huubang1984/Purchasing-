@@ -4,14 +4,14 @@ import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuCho
 import { KiemSoatError } from "./tin-hieu.js";
 
 // =============================================================================================
-// [S1.9101 / S3.4a / K9] KHAI BÁO XUNG ĐỘT LỢI ÍCH — spec S3 §4.5, §5.1 K9, §8.7; ADR-082 ⒄, ADR-9201
+// [S1.281 / S3.4a / K9] KHAI BÁO XUNG ĐỘT LỢI ÍCH — spec S3 §4.5, §5.1 K9, §8.7; ADR-082 ⒄, ADR-155
 //
 // Một khai báo là một lời khai có chủ thể (dẫn xuất từ phiên), thời điểm, phiên và BĂM DANH SÁCH MỜI lúc khai (`rfq_bam_danh_sach`
 // — cùng băm người duyệt ký, K4b). `KHONG_XUNG_DOT` chỉ có hiệu lực khi băm ấy bằng băm hiện tại; `CO_XUNG_DOT` trỏ một nhà cung cấp
 // có lời mời của gói và là VĨNH VIỄN cho gói ấy. Thứ K9 tạo ra là TRÁCH NHIỆM, không phải phát hiện: người nói dối vẫn đi qua, nhưng
 // để lại một lời khai sai có tên (§8.7 — dòng PRODUCT §5).
 //
-// Gói này làm hai việc quanh bảng `coi_declarations` (`9501_khai_bao_xung_dot`):
+// Gói này làm hai việc quanh bảng `coi_declarations` (`114_khai_bao_xung_dot`):
 //   ⑴ khai — người giữ `coi.declare` (mọi vai sắp quyết); luật ghi ở trigger `coi_kiem_khai_bao`: tổ chức đã bật, băm do trigger
 //      đặt, nhà cung cấp phải có lời mời, không gỡ được một `CO_XUNG_DOT` — nhánh ấy mang tên ràng buộc, hàm bắt chính lỗi và ghi
 //      `CONTROL_DENIED` ở giao dịch độc lập (ADR-114);

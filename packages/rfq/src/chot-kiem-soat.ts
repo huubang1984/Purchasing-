@@ -88,7 +88,7 @@ export const CAU_CHOT_XOAY_VONG_MO =
   "AND r.status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL'";
 
 /**
- * [S1.9101 / S3.4a / K9] Câu hỏi chốt *chữ ký của người có xung đột không đếm* ở cạnh mở gói (`9501_khai_bao_xung_dot`): `$1` tổ
+ * [S1.281 / S3.4a / K9] Câu hỏi chốt *chữ ký của người có xung đột không đếm* ở cạnh mở gói (`114_khai_bao_xung_dot`): `$1` tổ
  * chức, `$2` gói. Hàm vị từ tự cho qua khi gói không ở PENDING_APPROVAL, khi tổ chức chưa bật, khi đủ chữ ký còn hiệu lực (đã loại
  * người có `CO_XUNG_DOT`), hay khi thiếu chữ ký vì lý do khác — lời ấy là của K4b ở trigger, không phải lần lách chốt (ADR-060).
  */

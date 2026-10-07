@@ -3045,8 +3045,8 @@ $ham$;
          ('public', 'audit_events', 'audit_events_prev_hash_check', '003_audit_events', 'CHECK ((octet_length(prev_hash) = 32))'),
          ('public', 'audit_events', 'audit_events_seq_check', '003_audit_events', 'CHECK ((seq > 0))'),
          ('public', 'caller_rate_limits', 'caller_rate_limits_bucket_hash_check', '042_bucket_nguoi_goi_toan_cuc', 'CHECK ((octet_length(bucket_hash) = 32))'),
-         ('public', 'coi_declarations', 'coi_declarations_hinh_dang', '9501_khai_bao_xung_dot', 'CHECK ((((trang_thai = ''CO_XUNG_DOT''::text) AND (supplier_id IS NOT NULL)) OR ((trang_thai = ''KHONG_XUNG_DOT''::text) AND (supplier_id IS NULL))))'),
-         ('public', 'coi_declarations', 'coi_declarations_trang_thai_check', '9501_khai_bao_xung_dot', 'CHECK ((trang_thai = ANY (ARRAY[''KHONG_XUNG_DOT''::text, ''CO_XUNG_DOT''::text])))'),
+         ('public', 'coi_declarations', 'coi_declarations_hinh_dang', '114_khai_bao_xung_dot', 'CHECK ((((trang_thai = ''CO_XUNG_DOT''::text) AND (supplier_id IS NOT NULL)) OR ((trang_thai = ''KHONG_XUNG_DOT''::text) AND (supplier_id IS NULL))))'),
+         ('public', 'coi_declarations', 'coi_declarations_trang_thai_check', '114_khai_bao_xung_dot', 'CHECK ((trang_thai = ANY (ARRAY[''KHONG_XUNG_DOT''::text, ''CO_XUNG_DOT''::text])))'),
          ('public', 'guest_sessions', 'guest_sessions_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
          ('public', 'guest_sessions', 'guest_sessions_token_hash_check', '010_invitations', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'invitation_otp_challenges', 'invitation_otp_challenges_code_hash_check', '010_invitations', 'CHECK ((octet_length(code_hash) = 32))'),
@@ -3792,7 +3792,7 @@ $ham$;
          ('public', 'bid_receipts', '018_vendor_bids'),
          ('public', 'canonical_item_versions', '083_hang_chuan'),
          ('public', 'canonical_items', '083_hang_chuan'),
-         ('public', 'coi_declarations', '9501_khai_bao_xung_dot'),
+         ('public', 'coi_declarations', '114_khai_bao_xung_dot'),
          ('public', 'external_price_references', '109_du_lieu_ngoai'),
          ('public', 'external_purchase_history', '109_du_lieu_ngoai'),
          ('public', 'governance_signal_acks', '088_tin_hieu_chia_nho'),
@@ -10276,10 +10276,10 @@ $ham$$q$,
                   'hàm public.rfq_chot_canh_tranh(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chot_canh_tranh(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.269 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. [S1.9101 / S3.4a / K9] Than tu 9501: khop bam TRU nguoi co CO_XUNG_DOT (ADR-082 (17), ADR-147 (7)). Mot than bo ve loai tru thi chu ky cua nguoi da khai CO xung dot van dem o ca hai chot.
+    -- [S1.269 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. [S1.281 / S3.4a / K9] Than tu 114: khop bam TRU nguoi co CO_XUNG_DOT (ADR-082 (17), ADR-147 (7)). Mot than bo ve loai tru thi chu ky cua nguoi da khai CO xung dot van dem o ca hai chot.
     ARRAY[
-      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -10837,10 +10837,10 @@ $ham$;
                   'hàm public.rfq_kiem_xoay_vong_khi_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_xoay_vong_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Khoa tu van (goi, nguoi) — seed 9 — khai bao va moi cong K9 cung lay. Mot than rong thi CO_XUNG_DOT chen duoc vao giua lan hoi va cau ghi cua mot chu ky.
+    -- [S1.281 / S3.4a / K9] Khoa tu van (goi, nguoi) — seed 9 — khai bao va moi cong K9 cung lay. Mot than rong thi CO_XUNG_DOT chen duoc vao giua lan hoi va cau ghi cua mot chu ky.
     ARRAY[
-      $q$định nghĩa hàm coi_khoa_goi_nguoi(uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm coi_khoa_goi_nguoi(uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.coi_khoa_goi_nguoi(p_rfq uuid, p_nguoi uuid) RETURNS void
   LANGUAGE sql
   VOLATILE
@@ -10866,10 +10866,10 @@ $ham$$q$,
                   'hàm public.coi_khoa_goi_nguoi(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm coi_khoa_goi_nguoi(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Luat ghi khai bao: to chuc da bat, bam danh sach do trigger dat, CO_XUNG_DOT phai tro nha cung cap co loi moi, KHONG_XUNG_DOT sau CO_XUNG_DOT bi tu choi co ten. Mot than `RETURN NEW` de go duoc mot CO_XUNG_DOT.
+    -- [S1.281 / S3.4a / K9] Luat ghi khai bao: to chuc da bat, bam danh sach do trigger dat, CO_XUNG_DOT phai tro nha cung cap co loi moi, KHONG_XUNG_DOT sau CO_XUNG_DOT bi tu choi co ten. Mot than `RETURN NEW` de go duoc mot CO_XUNG_DOT.
     ARRAY[
-      $q$hàm + trigger coi_kiem_khai_bao (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_khai_bao (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -10951,10 +10951,10 @@ $ham$;
                   'hàm public.coi_kiem_khai_bao() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_khai_bao() và bảng public.coi_declarations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Ham vi tu cua K9 tren (goi, nguoi) — sau cong hoi no. Mot than `RETURN NULL` tat K9 o ca sau cong.
+    -- [S1.281 / S3.4a / K9] Ham vi tu cua K9 tren (goi, nguoi) — sau cong hoi no. Mot than `RETURN NULL` tat K9 o ca sau cong.
     ARRAY[
-      $q$định nghĩa hàm coi_chot_hanh_dong(uuid, uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm coi_chot_hanh_dong(uuid, uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.coi_chot_hanh_dong(p_org uuid, p_rfq uuid, p_nguoi uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11004,10 +11004,10 @@ $ham$$q$,
                   'hàm public.coi_chot_hanh_dong(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm coi_chot_hanh_dong(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Ham vi tu cua K9 o xac minh nha cung cap — theo (nha cung cap, nguoi), doc moi goi.
+    -- [S1.281 / S3.4a / K9] Ham vi tu cua K9 o xac minh nha cung cap — theo (nha cung cap, nguoi), doc moi goi.
     ARRAY[
-      $q$định nghĩa hàm coi_chot_xac_minh(uuid, uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm coi_chot_xac_minh(uuid, uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.coi_chot_xac_minh(p_org uuid, p_ncc uuid, p_nguoi uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11042,10 +11042,10 @@ $ham$$q$,
                   'hàm public.coi_chot_xac_minh(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm coi_chot_xac_minh(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong chu ky mo goi. Than `RETURN NEW` cho nguoi chua khai hay da khai CO xung dot ky duyet goi.
+    -- [S1.281 / S3.4a / K9] Cong chu ky mo goi. Than `RETURN NEW` cho nguoi chua khai hay da khai CO xung dot ky duyet goi.
     ARRAY[
-      $q$hàm + trigger coi_kiem_chu_ky_mo_goi (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_chu_ky_mo_goi (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11111,10 +11111,10 @@ $ham$;
                   'hàm public.coi_kiem_chu_ky_mo_goi() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_chu_ky_mo_goi() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong luot cham.
+    -- [S1.281 / S3.4a / K9] Cong luot cham.
     ARRAY[
-      $q$hàm + trigger coi_kiem_luot_cham (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_luot_cham (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11180,10 +11180,10 @@ $ham$;
                   'hàm public.coi_kiem_luot_cham() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_luot_cham() và bảng public.rfq_evaluations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong de xuat va huy trao thau; hang APPROVED doi mot chu ky duyet cua nguoi khong co CO_XUNG_DOT.
+    -- [S1.281 / S3.4a / K9] Cong de xuat va huy trao thau; hang APPROVED doi mot chu ky duyet cua nguoi khong co CO_XUNG_DOT.
     ARRAY[
-      $q$hàm + trigger coi_kiem_trao_thau (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_trao_thau (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11270,10 +11270,10 @@ $ham$;
                   'hàm public.coi_kiem_trao_thau() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_trao_thau() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong chu ky duyet trao thau.
+    -- [S1.281 / S3.4a / K9] Cong chu ky duyet trao thau.
     ARRAY[
-      $q$hàm + trigger coi_kiem_duyet_trao_thau (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_duyet_trao_thau (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11345,10 +11345,10 @@ $ham$;
                   'hàm public.coi_kiem_duyet_trao_thau() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_duyet_trao_thau() và bảng public.rfq_award_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong xac minh nha cung cap: nguoi da khai CO xung dot voi nha cung cap ay khong xac minh hay thu hoi xac minh no.
+    -- [S1.281 / S3.4a / K9] Cong xac minh nha cung cap: nguoi da khai CO xung dot voi nha cung cap ay khong xac minh hay thu hoi xac minh no.
     ARRAY[
-      $q$hàm + trigger coi_kiem_xac_minh (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_xac_minh (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11413,10 +11413,10 @@ $ham$;
                   'hàm public.coi_kiem_xac_minh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Cong ghi nhan tin hieu.
+    -- [S1.281 / S3.4a / K9] Cong ghi nhan tin hieu.
     ARRAY[
-      $q$hàm + trigger coi_kiem_ghi_nhan (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger coi_kiem_ghi_nhan (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11488,10 +11488,10 @@ $ham$;
                   'hàm public.coi_kiem_ghi_nhan() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_ghi_nhan() và bảng public.governance_signal_acks (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Bon ve *con hieu luc* cua 107 duoi ten moi — rfq_chu_ky_con_hieu_luc doc no roi loai nguoi co CO_XUNG_DOT.
+    -- [S1.281 / S3.4a / K9] Bon ve *con hieu luc* cua 107 duoi ten moi — rfq_chu_ky_con_hieu_luc doc no roi loai nguoi co CO_XUNG_DOT.
     ARRAY[
-      $q$định nghĩa hàm rfq_chu_ky_khop_bam(uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm rfq_chu_ky_khop_bam(uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chu_ky_khop_bam(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -11527,10 +11527,10 @@ $ham$$q$,
                   'hàm public.rfq_chu_ky_khop_bam(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chu_ky_khop_bam(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Ham vi tu o canh mo goi: loi co ten CHI KHI K9 lam thieu chu ky. Mot than `RETURN NULL` de K4b noi thay — khong hang so.
+    -- [S1.281 / S3.4a / K9] Ham vi tu o canh mo goi: loi co ten CHI KHI K9 lam thieu chu ky. Mot than `RETURN NULL` de K4b noi thay — khong hang so.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_chu_ky_xung_dot(uuid, uuid) (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_chu_ky_xung_dot(uuid, uuid) (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_chu_ky_xung_dot(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11575,10 +11575,10 @@ $ham$$q$,
                   'hàm public.rfq_chot_chu_ky_xung_dot(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_chot_chu_ky_xung_dot(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4a / K9] Canh PENDING_APPROVAL->OPEN, ten xep TRUOC K4b. Than `RETURN NEW` de goi mo bang chu ky cua nguoi da khai CO xung dot (K4b van chan — nhung khong ten, khong hang so).
+    -- [S1.281 / S3.4a / K9] Canh PENDING_APPROVAL->OPEN, ten xep TRUOC K4b. Than `RETURN NEW` de goi mo bang chu ky cua nguoi da khai CO xung dot (K4b van chan — nhung khong ten, khong hang so).
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_xung_dot_khi_mo (9501_khai_bao_xung_dot)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_khai_bao_xung_dot.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_xung_dot_khi_mo (114_khai_bao_xung_dot)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '114_khai_bao_xung_dot.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

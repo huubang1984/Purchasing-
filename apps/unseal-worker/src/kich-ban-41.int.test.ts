@@ -268,7 +268,7 @@ let soMst = 0;
  * với email và số điện thoại suy từ id hồ sơ như luồng MVP1 — khác nhau giữa các nhà cung cấp, nên K2 đếm đủ đích.
  */
 /**
- * [S1.9101 / S3.4a / K9] Luồng S3: người sắp ký hay ghi nhận khai *không xung đột* trên gói — K9 đòi lời khai với đúng danh sách mời
+ * [S1.281 / S3.4a / K9] Luồng S3: người sắp ký hay ghi nhận khai *không xung đột* trên gói — K9 đòi lời khai với đúng danh sách mời
  * hiện tại (bậc mặc định `khai_xung_dot: true`), và danh sách của luồng S3 đứng yên từ DRAFT. Giao dịch riêng, trước lần ký: hàng sổ
  * `COI_DECLARED` không chen vào giao dịch của chữ ký. Luồng MVP1 không gọi — tổ chức chưa bật, K9 không sống.
  */
@@ -429,7 +429,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       );
       expect(token, "luồng S3: không token nào trước lần mở gói").toHaveLength(0);
     }
-    // [S1.9101 / S3.4a / K9] Luồng S3: hai giám đốc khai *không xung đột* trước khi ký.
+    // [S1.281 / S3.4a / K9] Luồng S3: hai giám đốc khai *không xung đột* trước khi ký.
     if (batS3) {
       for (const phien of [sGd1, sGd2]) await khaiKhongXungDot(trangThai.rfqId, phien);
     }

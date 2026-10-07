@@ -722,7 +722,7 @@ export async function openRfq(
     },
     auditPool,
   );
-  // [S1.9101 / S3.4a / K9] Chữ ký của người đã khai CÓ xung đột không đếm — hỏi TRƯỚC K5 và K10a, cùng thứ tự trigger ở cạnh (tên
+  // [S1.281 / S3.4a / K9] Chữ ký của người đã khai CÓ xung đột không đếm — hỏi TRƯỚC K5 và K10a, cùng thứ tự trigger ở cạnh (tên
   // `…_kiem_chu_ky_xung_dot_khi_mo` xếp trước `…_kiem_danh_sach_khi_mo` của K4b): lời có tên chỉ khi K9 làm thiếu chữ ký; thiếu vì lý
   // do khác thì K4b nói ở câu UPDATE, không hàng sổ.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CHU_KY_XUNG_DOT_MO, [orgId, input.rfqId]);

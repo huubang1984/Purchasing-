@@ -264,7 +264,7 @@ export async function ghiNhanTinHieu(
     if (code === "23514" && constraint === "k10_ghi_nhan_sai_trang_thai") {
       throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
     }
-    // [S1.9101 / S3.4a / K9] Ghi nhận tín hiệu là một cổng K9 (ADR-082 ⒄): trigger `governance_signal_acks_kiem_xung_dot` (`9501`)
+    // [S1.281 / S3.4a / K9] Ghi nhận tín hiệu là một cổng K9 (ADR-082 ⒄): trigger `governance_signal_acks_kiem_xung_dot` (`114`)
     // từ chối có tên — một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối của chốt (ADR-114).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);

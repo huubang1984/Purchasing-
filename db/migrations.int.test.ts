@@ -2096,13 +2096,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // của chốt — một thân `RETURN NULL` tắt K3 ở tầng gói lẫn hai cạnh.
     { ham: "rfq_ncc_moi_xoay_vong", chuKy: "uuid, uuid, integer", migration: "108_xoay_vong.sql" },
     { ham: "rfq_chot_xoay_vong", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
-    // [S1.9101 / S3.4a] Năm hàm của K9: khoá (gói, người) — một thân rỗng thì CO_XUNG_DOT chen được vào giữa lần hỏi và câu ghi —, hai
+    // [S1.281 / S3.4a] Năm hàm của K9: khoá (gói, người) — một thân rỗng thì CO_XUNG_DOT chen được vào giữa lần hỏi và câu ghi —, hai
     // hàm vị từ — một thân `RETURN NULL` tắt K9 ở mọi cổng —, bốn vế *khớp băm* tách từ `107`, và vị từ cạnh mở gói — một thân
     // `RETURN NULL` để K4b nói thay mà không hàng sổ.
-    { ham: "coi_khoa_goi_nguoi", chuKy: "uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
-    { ham: "coi_chot_hanh_dong", chuKy: "uuid, uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
-    { ham: "coi_chot_xac_minh", chuKy: "uuid, uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
-    { ham: "rfq_chot_chu_ky_xung_dot", chuKy: "uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
+    { ham: "coi_khoa_goi_nguoi", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
+    { ham: "coi_chot_hanh_dong", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
+    { ham: "coi_chot_xac_minh", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
+    { ham: "rfq_chot_chu_ky_xung_dot", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
   ];
 
   it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ [S1.269] mười lăm hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2 và K5: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2141,11 +2141,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
-    // [S1.9101 / S3.4a] Thân `9501`: khớp băm TRỪ người có `CO_XUNG_DOT` — một thân bỏ vế loại trừ thì chữ ký của người đã khai có xung
+    // [S1.281 / S3.4a] Thân `114`: khớp băm TRỪ người có `CO_XUNG_DOT` — một thân bỏ vế loại trừ thì chữ ký của người đã khai có xung
     // đột vẫn đếm ở K4b lẫn K5.
-    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
-    // [S1.9101 / S3.4a] Bốn vế *khớp băm* của `107` dưới tên mới — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người có `CO_XUNG_DOT`.
-    { ham: "rfq_chu_ky_khop_bam", chuKy: "uuid, uuid", migration: "9501_khai_bao_xung_dot.sql" },
+    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
+    // [S1.281 / S3.4a] Bốn vế *khớp băm* của `107` dưới tên mới — `rfq_chu_ky_con_hieu_luc` đọc nó rồi loại người có `CO_XUNG_DOT`.
+    { ham: "rfq_chu_ky_khop_bam", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];
@@ -2274,7 +2274,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_nop",
         // [S1.265 / S3.3b] Tác giả ngoại lệ cạnh tranh là dẫn xuất từ phiên.
         "rfq_sourcing_exceptions_kiem_danh_tinh",
-        // [S1.9101 / S3.4a] Người khai xung đột lợi ích là dẫn xuất từ phiên — K9 so cột ấy với người hành động.
+        // [S1.281 / S3.4a] Người khai xung đột lợi ích là dẫn xuất từ phiên — K9 so cột ấy với người hành động.
         "coi_declarations_kiem_danh_tinh",
         "rfq_tra_ve_kiem_danh_tinh",
         "supplier_contacts_kiem_danh_tinh",
@@ -2376,9 +2376,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
     { ham: "ngoai_le_kiem", migration: "105_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
-    // [S1.9101 / S3.4a / K9] Luật ghi khai báo xung đột — tổ chức đã bật, băm do trigger đặt, nhà cung cấp có lời mời, không gỡ được
+    // [S1.281 / S3.4a / K9] Luật ghi khai báo xung đột — tổ chức đã bật, băm do trigger đặt, nhà cung cấp có lời mời, không gỡ được
     // CO_XUNG_DOT. Một thân `RETURN NEW` để băm NULL (NOT NULL chặn) hay gỡ được một CO_XUNG_DOT.
-    { ham: "coi_kiem_khai_bao", migration: "9501_khai_bao_xung_dot.sql", trigger: ["coi_declarations_kiem_khai_bao"] },
+    { ham: "coi_kiem_khai_bao", migration: "114_khai_bao_xung_dot.sql", trigger: ["coi_declarations_kiem_khai_bao"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },
     // [S1.166 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
     // `rfq_kiem_ngan_sach_khi_nop` thì cạnh nộp duyệt chỉ còn tầng gói canh — một câu UPDATE viết tay tắt được S3.
@@ -2520,15 +2520,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // cho các gói nộp song song cùng một bộ nhà cung cấp đều mở, và cho câu mở thô đặt `opened_at` tuỳ ý (khoản 319).
     { ham: "rfq_kiem_xoay_vong_khi_nop", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_nop"] },
     { ham: "rfq_kiem_xoay_vong_khi_mo", migration: "108_xoay_vong.sql", trigger: ["rfq_packages_kiem_xoay_vong_khi_mo"] },
-    // [S1.9101 / S3.4a / K9] Bảy cổng của khai báo xung đột lợi ích. Một thân `RETURN NEW` ở mỗi cái cho người chưa khai hay đã khai CÓ
+    // [S1.281 / S3.4a / K9] Bảy cổng của khai báo xung đột lợi ích. Một thân `RETURN NEW` ở mỗi cái cho người chưa khai hay đã khai CÓ
     // xung đột đi qua cổng ấy; ở cái cuối cho gói mở bằng chữ ký của người đã khai có xung đột (K4b vẫn chặn, nhưng không tên, không sổ).
-    { ham: "coi_kiem_chu_ky_mo_goi", migration: "9501_khai_bao_xung_dot.sql", trigger: ["rfq_approvals_kiem_xung_dot"] },
-    { ham: "coi_kiem_luot_cham", migration: "9501_khai_bao_xung_dot.sql", trigger: ["rfq_evaluations_kiem_xung_dot"] },
-    { ham: "coi_kiem_trao_thau", migration: "9501_khai_bao_xung_dot.sql", trigger: ["rfq_awards_kiem_xung_dot"] },
-    { ham: "coi_kiem_duyet_trao_thau", migration: "9501_khai_bao_xung_dot.sql", trigger: ["rfq_award_approvals_kiem_xung_dot"] },
-    { ham: "coi_kiem_xac_minh", migration: "9501_khai_bao_xung_dot.sql", trigger: ["supplier_verifications_kiem_xung_dot"] },
-    { ham: "coi_kiem_ghi_nhan", migration: "9501_khai_bao_xung_dot.sql", trigger: ["governance_signal_acks_kiem_xung_dot"] },
-    { ham: "rfq_kiem_chu_ky_xung_dot_khi_mo", migration: "9501_khai_bao_xung_dot.sql", trigger: ["rfq_packages_kiem_chu_ky_xung_dot_khi_mo"] },
+    { ham: "coi_kiem_chu_ky_mo_goi", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_approvals_kiem_xung_dot"] },
+    { ham: "coi_kiem_luot_cham", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_evaluations_kiem_xung_dot"] },
+    { ham: "coi_kiem_trao_thau", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_awards_kiem_xung_dot"] },
+    { ham: "coi_kiem_duyet_trao_thau", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_award_approvals_kiem_xung_dot"] },
+    { ham: "coi_kiem_xac_minh", migration: "114_khai_bao_xung_dot.sql", trigger: ["supplier_verifications_kiem_xung_dot"] },
+    { ham: "coi_kiem_ghi_nhan", migration: "114_khai_bao_xung_dot.sql", trigger: ["governance_signal_acks_kiem_xung_dot"] },
+    { ham: "rfq_kiem_chu_ky_xung_dot_khi_mo", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_packages_kiem_chu_ky_xung_dot_khi_mo"] },
     // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ (L2, L3 vế hành vi, L13, §2.5 ⒁). Một thân `RETURN NEW` sớm cho gợi ý trên gói
     // còn soạn và chuẩn hoá hồi tố không `item.manage`; cho `TU_DONG` không bí danh, `NGUOI_DUYET` của chính người tạo gói, và ánh
     // xạ không lý do trên gói đã có bản rõ.
@@ -4213,8 +4213,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
-        "9501_khai_bao_xung_dot.sql",
+        // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
+        "114_khai_bao_xung_dot.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8870,8 +8870,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
-        "9501_khai_bao_xung_dot.sql",
+        // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
+        "114_khai_bao_xung_dot.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9207,8 +9207,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
-        "9501_khai_bao_xung_dot.sql",
+        // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
+        "114_khai_bao_xung_dot.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

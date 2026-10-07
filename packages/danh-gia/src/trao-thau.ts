@@ -540,8 +540,8 @@ export async function duyetTraoThau(
       ],
     ));
   } catch (loi) {
-    // [S1.9101 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
-    // `rfq_awards_kiem_xung_dot` (`9501`) đặt tên `k9_chu_ky_co_xung_dot`. Tới được khi người ký vừa khai `CO_XUNG_DOT` SAU chữ
+    // [S1.281 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
+    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`. Tới được khi người ký vừa khai `CO_XUNG_DOT` SAU chữ
     // ký của mình, trước câu này: một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối có tên (ADR-114).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
@@ -673,7 +673,7 @@ export async function huyTraoThau(
       ],
     ));
   } catch (loi) {
-    // [S1.9101 / S3.4a / K9] Huỷ trao thầu là một cổng K9 (ADR-082 ⒄): trigger `rfq_awards_kiem_xung_dot` (`9501`) hỏi
+    // [S1.281 / S3.4a / K9] Huỷ trao thầu là một cổng K9 (ADR-082 ⒄): trigger `rfq_awards_kiem_xung_dot` (`114`) hỏi
     // `coi_chot_hanh_dong` cho người huỷ và từ chối có tên — một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối (ADR-114).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);

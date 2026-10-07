@@ -51,7 +51,7 @@
 // cửa sổ của người chọn danh sách, không ngoại lệ `ROTATION`; ở cạnh nộp duyệt VÀ cạnh mở gói. Khuôn K1: hàm vị từ `rfq_chot_xoay_vong`
 // (`108_xoay_vong`), tầng gói hỏi trước câu ghi, trigger hỏi lại. Chủ dự án chốt 2026-10-05: một mã, vào sổ ở cả hai cạnh.
 //
-// [S1.9101 / S3.4a / ADR-9201] Sáu dòng K9 — khai báo xung đột lợi ích (`9501_khai_bao_xung_dot`). Khuôn ADR-108/114: bảy trigger
+// [S1.281 / S3.4a / ADR-155] Sáu dòng K9 — khai báo xung đột lợi ích (`114_khai_bao_xung_dot`). Khuôn ADR-108/114: bảy trigger
 // cổng (chữ ký mở gói, lượt chấm, đề xuất và huỷ trao thầu, chữ ký duyệt trao thầu, xác minh nhà cung cấp, ghi nhận tín hiệu) lấy
 // khoá (gói, người) rồi hỏi hàm vị từ `coi_chot_hanh_dong` / `coi_chot_xac_minh` và từ chối với TÊN RÀNG BUỘC = mã viết thường; tầng
 // gói bắt chính lỗi ấy. Cạnh mở gói đi khuôn K1: `openRfq` hỏi `rfq_chot_chu_ky_xung_dot` trước lần đúc khoá, trigger hỏi lại — cùng
@@ -333,7 +333,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.180)",
     thongDiep: "Phiên đã dùng để đề xuất trao thầu không được dùng để duyệt đề xuất ấy (J3).",
   },
-  // [S1.9101 / S3.4a / ADR-9201] Sáu dòng K9 — bảy trigger cổng của `9501_khai_bao_xung_dot` đặt tên ràng buộc bằng chính mã viết
+  // [S1.281 / S3.4a / ADR-155] Sáu dòng K9 — bảy trigger cổng của `114_khai_bao_xung_dot` đặt tên ràng buộc bằng chính mã viết
   // thường; tầng gói bắt theo `CHOT_THEO_RANG_BUOC`. Cổng mở gói còn hỏi trước (`rfq_chot_chu_ky_xung_dot`, khuôn K1).
   K9_CHUA_KHAI_XUNG_DOT: {
     chot: "K9",
@@ -438,7 +438,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
-  // [S1.9101 / S3.4a] Sáu tên K9 — bảy trigger cổng và trigger khai báo của `9501_khai_bao_xung_dot` đặt tên bằng chính mã viết thường.
+  // [S1.281 / S3.4a] Sáu tên K9 — bảy trigger cổng và trigger khai báo của `114_khai_bao_xung_dot` đặt tên bằng chính mã viết thường.
   k9_chu_ky_co_xung_dot: "K9_CHU_KY_CO_XUNG_DOT",
   k9_chua_khai_xung_dot: "K9_CHUA_KHAI_XUNG_DOT",
   k9_co_xung_dot: "K9_CO_XUNG_DOT",

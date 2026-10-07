@@ -147,7 +147,7 @@ function base32Decode(s: string): Buffer {
 }
 
 /**
- * [S1.9101 / S3.4a / K9] Luồng S3: người sắp ký, chấm, đề xuất hay duyệt trao thầu, ghi nhận tín hiệu khai *không xung đột* trên gói
+ * [S1.281 / S3.4a / K9] Luồng S3: người sắp ký, chấm, đề xuất hay duyệt trao thầu, ghi nhận tín hiệu khai *không xung đột* trên gói
  * qua chính route của màn — K9 đòi lời khai với đúng danh sách mời hiện tại (bậc mặc định `khai_xung_dot: true`), và danh sách của
  * luồng S3 đứng yên từ DRAFT nên một lời khai sống trọn kịch bản. Luồng MVP1 không gọi — tổ chức chưa bật, K9 không sống.
  */
@@ -703,7 +703,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       [trangThai.rfqId],
     );
     expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
-    // [S1.9101 / S3.4a / K9] Luồng S3: hai người ký khai *không xung đột* trước — lời khai sống tới lần đề xuất trao thầu của `pm2`.
+    // [S1.281 / S3.4a / K9] Luồng S3: hai người ký khai *không xung đột* trước — lời khai sống tới lần đề xuất trao thầu của `pm2`.
     if (batS3) {
       for (const ai of [trangThai.pm2, trangThai.pm3]) await khaiKhongXungDot(trangThai.rfqId, ai.cookie);
     }
@@ -1018,7 +1018,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
             },
           };
         // [S1.198 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
-        // [S1.9101 / S3.4a / K9] Luồng S3: `pm2` khai *không xung đột* trên gói hy sinh B ngay trước khi ký — thân là một lời hứa, như
+        // [S1.281 / S3.4a / K9] Luồng S3: `pm2` khai *không xung đột* trên gói hy sinh B ngay trước khi ký — thân là một lời hứa, như
         // ca xác minh; lời khai ấy đi qua chính route khai báo (201).
         case "POST /rfqs/:rfqId/approve":
           return {
@@ -1030,7 +1030,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // luồng, nên lời gọi qua cổng `rfq.approve`, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên của `KiemSoatError`.
         case "POST /rfqs/:rfqId/signals/acknowledge":
           return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan de quet" }, cookie: trangThai.pm2.cookie };
-        // [S1.9101 / S3.4a / K9] Khai báo xung đột trên gói hy sinh B bằng `pm3` (không ký gói ấy): luồng S3 đi trọn tới 201; luồng
+        // [S1.281 / S3.4a / K9] Khai báo xung đột trên gói hy sinh B bằng `pm3` (không ký gói ấy): luồng S3 đi trọn tới 201; luồng
         // MVP1 dừng ở lời từ chối *tổ chức chưa bật* của trigger `coi_kiem_khai_bao` — 422 nghiệp vụ có tên, không 422 hình dạng.
         case "POST /rfqs/:rfqId/coi-declarations":
           return { path: r.path.replace(":rfqId", hyB), body: { trangThai: "KHONG_XUNG_DOT" }, cookie: trangThai.pm3.cookie };
@@ -1475,7 +1475,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // của `rfq_evaluation_lines` mà ADR-054 không khai. Bảng xếp hạng đọc qua `GET /ranking` dưới
     // `m` (PROCUREMENT_MANAGER, giữ `bid.view`).
     trangThai.cham = await dangNhap("cham-khong-xem@vidu.vn", "BUYER");
-    // [S1.9101 / S3.4a / K9] Luồng S3: người bấm chấm khai *không xung đột* trước lượt chấm — lời khai sống tới lượt chấm lại (12g).
+    // [S1.281 / S3.4a / K9] Luồng S3: người bấm chấm khai *không xung đột* trước lượt chấm — lời khai sống tới lượt chấm lại (12g).
     if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.cham.cookie);
     const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, trangThai.cham.cookie, {});
     expect(r.status, r.text).toBe(201);
@@ -2085,7 +2085,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const chan = await goi("POST", duong, trangThai.pm2.cookie);
     expect(chan.status, chan.text).toBe(403);
 
-    // [S1.9101 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
+    // [S1.281 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
     if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
