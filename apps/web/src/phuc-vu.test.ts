@@ -1436,10 +1436,10 @@ describe("bề mặt tệp", () => {
         ]);
       });
 
-      // [S1.9101 / khoản 334] Đo trên Chromium ở 375×812 (§S1.9101): bảng xếp hạng rộng 870 px, bảng so sánh lố 10 px, cả trang 903 px —
+      // [S1.277 / khoản 334] Đo trên Chromium ở 375×812 (§S1.277): bảng xếp hạng rộng 870 px, bảng so sánh lố 10 px, cả trang 903 px —
       // dòng thành phần `nowrap` và bảng không xếp khối. Kho không có trình duyệt trong bộ test, nên ca này giữ BA thứ phép đo ấy dựa vào:
       // hai bảng mang lớp `xep` (luật màn hẹp đọc nó), mỗi ô mang nhãn cột, và dòng thành phần được xuống dòng dưới 480 px.
-      it("[S1.9101 / khoản 334] bảng so sánh và bảng xếp hạng xếp thành khối dưới 480px: lớp `xep`, nhãn cột ở mỗi ô, thành phần xuống dòng", async () => {
+      it("[S1.277 / khoản 334] bảng so sánh và bảng xếp hạng xếp thành khối dưới 480px: lớp `xep`, nhãn cột ở mỗi ô, thành phần xuống dòng", async () => {
         const p = await dung(BM_CO);
         await p.bam("nut-bang");
         await p.bam("nut-xep-hang");

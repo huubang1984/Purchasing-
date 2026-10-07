@@ -471,7 +471,7 @@ async function docBangSoSanh() {
     // bảng LỊCH SỬ, và người mua cần thấy ai hạ bao nhiêu. Không có cột vòng, hai dòng ấy trông
     // như một lỗi; `isLatestForBid` là thứ nói dòng nào đang có hiệu lực.
     if (h.isLatestForBid === false) tr.classList.add("mo");
-    // [S1.9101 / khoản 334] `data-nhan`: dưới 480 px bảng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`).
+    // [S1.277 / khoản 334] `data-nhan`: dưới 480 px bảng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`).
     const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
     tr.append(
       coNhan(td(h.supplierLegalName), "Nhà cung cấp"), coNhan(td(tien(h.totalAmount), "so"), "Tổng"),
@@ -697,7 +697,7 @@ async function veXepHang() {
     const tr = document.createElement("tr");
     if (h.rank === 1) tr.className = "thap";
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
-    // [S1.9101 / khoản 334] `data-nhan`: dưới 480 px bảng xếp hạng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình
+    // [S1.277 / khoản 334] `data-nhan`: dưới 480 px bảng xếp hạng (lớp `xep`) xếp thành khối, mỗi ô mang nhãn cột của mình
     // (`chung.css`) — đo trên Chromium ở 375×812: bảng bảy trăm px, cả trang cuộn ngang.
     const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
     tr.append(

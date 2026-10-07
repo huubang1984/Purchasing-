@@ -176,7 +176,7 @@ tr.lech td { background: var(--vang-nen); }
 #bang-hang td.cot-benchmark { max-width: 9rem; font-size: 0.82rem; }
 
 /* [S1.273 / S3.3e1] Bảng lời mời, bảng ngoại lệ (/tao-thau) và bảng hồ sơ xác minh (/nha-cung-cap) trên màn hẹp — khuôn `hang-gia`:
-   mỗi dòng một khối, mỗi ô mang nhãn cột (`data-nhan`). Bảng lời mời có bảy cột ở tổ chức đã bật. [S1.9101 / khoản 334] Bảng so sánh
+   mỗi dòng một khối, mỗi ô mang nhãn cột (`data-nhan`). Bảng lời mời có bảy cột ở tổ chức đã bật. [S1.277 / khoản 334] Bảng so sánh
    `#bang` và bảng xếp hạng `#bang-hang` của /mo-thau cũng mang lớp này. */
 @media (max-width: 480px) {
   table.xep thead { display: none; }
@@ -191,7 +191,7 @@ tr.lech td { background: var(--vang-nen); }
    spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */
 ul.tp { margin: 0; padding: 0; list-style: none; }
 ul.tp li { font-size: 0.82rem; color: var(--chu-mo); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* [S1.9101 / khoản 334] Bảng so sánh và bảng xếp hạng của /mo-thau trên màn hẹp — lớp `xep` ở trên: mỗi báo giá một khối, mỗi ô mang
+/* [S1.277 / khoản 334] Bảng so sánh và bảng xếp hạng của /mo-thau trên màn hẹp — lớp `xep` ở trên: mỗi báo giá một khối, mỗi ô mang
    nhãn cột. Đo trên Chromium ở 375×812 trước khi sửa: bảng xếp hạng rộng 870 px (cột *Thành phần* 416 px vì dòng thành phần `nowrap`
    của S1.106), bảng so sánh lố 10 px, cả trang 903 px. Dưới 480 px dòng thành phần được xuống dòng — số để nguyên văn, chỉ ngắt ở chỗ
    hết chỗ; ô *Benchmark* bỏ giới hạn `9rem` vì nay nó rộng hết khối. */

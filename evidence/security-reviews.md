@@ -25391,7 +25391,7 @@ ba lần từ chối của bước 17 còn vừa ngân sách. Sửa ở đồ g�
 cụm test (bảng toàn cục, cụm riêng của tệp) — không khẳng định nào đổi, không lần từ chối nào rời sổ. Sau đó tệp HTTP 87/87. Lượt
 `pnpm evidence` trên cây gộp: lượt CI của PR.
 
-# §S1.9101 — KHOẢN 334 ĐÓNG: `/mo-thau` KHÔNG CÒN CUỘN NGANG Ở 375 PX — BẢNG SO SÁNH VÀ BẢNG XẾP HẠNG XẾP THÀNH KHỐI DƯỚI 480 PX
+# §S1.277 — KHOẢN 334 ĐÓNG: `/mo-thau` KHÔNG CÒN CUỘN NGANG Ở 375 PX — BẢNG SO SÁNH VÀ BẢNG XẾP HẠNG XẾP THÀNH KHỐI DƯỚI 480 PX
 
 **Rổ và mảnh (ADR-043):** khoản 334 (chưa xếp rổ) đóng. Không migration, không route, không ADR; ba tệp trang (`chung.css`,
 `mo-thau.html`, `mo-thau.js`), một ca test (`apps/web/src/phuc-vu.test.ts`).
