@@ -1,7 +1,7 @@
 // ==============================================================================================
-// [S1.9101 / S4.7a / L8] TCO — TẬP MÃ CÓ NGUỒN, LUẬT KIỂM PHIÊN BẢN LÚC CHẤM, VÀ HAI CÔNG THỨC QUY ĐỔI. HÀM THUẦN.
+// [S1.279 / S4.7a / L8] TCO — TẬP MÃ CÓ NGUỒN, LUẬT KIỂM PHIÊN BẢN LÚC CHẤM, VÀ HAI CÔNG THỨC QUY ĐỔI. HÀM THUẦN.
 //
-// Spec S4 §4.8, §2.4 ⑻, §2.5 ⒃; ADR-9201. Mỗi mã `TIEN` có ĐÚNG MỘT nguồn đọc được — một ô nhà cung cấp khai trong phong bì (qua
+// Spec S4 §4.8, §2.4 ⑻, §2.5 ⒃; ADR-153. Mỗi mã `TIEN` có ĐÚNG MỘT nguồn đọc được — một ô nhà cung cấp khai trong phong bì (qua
 // bộ đọc SQL, `luot-danh-gia.ts`), hay một quy đổi từ ô khai theo tham số của phiên bản chính sách ghim:
 //
 //   `gia`                 ← `totalAmount`                                                     (như hôm nay)
@@ -39,7 +39,7 @@ export const MA_KHONG_NGUON: Readonly<Record<string, string>> = {
 };
 
 /**
- * [rà soát §S1.9101 — CAO-3] Trần của mọi số tiền: `numeric(18, 2)` (`022`, `057`) giữ tối đa 16 chữ số phần nguyên. Ô khai qua
+ * [rà soát §S1.279 — CAO-3] Trần của mọi số tiền: `numeric(18, 2)` (`022`, `057`) giữ tối đa 16 chữ số phần nguyên. Ô khai qua
  * `bid_so_tien` đã dưới trần, nhưng một mã quy đổi (chi phí trễ tới 365 lần giá) hay TỔNG các mã thì không — và một hàng vượt trần làm
  * câu ghi của lượt chấm nổ 22003 ở MỌI lần thử: một nhà cung cấp khoá được cả gói. Vượt trần ⇒ báo giá ấy không có hạng, gọi tên.
  */
@@ -92,7 +92,7 @@ export interface LoiChinhSachTco {
  * Kiểm một phiên bản ghim có chấm được không (L8). Trả `null` khi được; ngược lại, lỗi ĐẦU TIÊN theo thứ tự của chính sách.
  *
  * Thứ tự kiểm: từng thành phần (đơn vị, mã có nguồn, trùng mã, hệ số), rồi có `gia` không, rồi tham số quy đổi. `soNgayGiao` là
- * của gói; cạnh mở đã đòi nó khi phiên bản ghim có `chi_phi_tre` (`9501` (5)), nên vế ấy ở đây chỉ là lớp thứ hai.
+ * của gói; cạnh mở đã đòi nó khi phiên bản ghim có `chi_phi_tre` (`112` (5)), nên vế ấy ở đây chỉ là lớp thứ hai.
  */
 export function kiemChinhSachTco(
   thanhPhan: readonly ThanhPhanChinhSach[],
@@ -108,7 +108,7 @@ export function kiemChinhSachTco(
         cau: `thành phần "${c.ma}" là điểm phi giá (DIEM), mà chưa có màn chấm điểm nào cho nó`,
       };
     }
-    // `Object.hasOwn`, không tra thẳng: `MA_KHONG_NGUON["constructor"]` là hàm của nguyên mẫu (rà soát §S1.9101 — THẤP-6).
+    // `Object.hasOwn`, không tra thẳng: `MA_KHONG_NGUON["constructor"]` là hàm của nguyên mẫu (rà soát §S1.279 — THẤP-6).
     const khongNguon = Object.hasOwn(MA_KHONG_NGUON, c.ma) ? MA_KHONG_NGUON[c.ma] : undefined;
     if (khongNguon !== undefined) {
       return { lyDo: "THANH_PHAN_CHUA_CO_NGUON", ma: c.ma, cau: `thành phần "${c.ma}" không chấm được: ${khongNguon}` };

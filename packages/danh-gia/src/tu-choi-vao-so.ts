@@ -77,7 +77,7 @@ export interface DongVaoSo {
  * Mỗi mã, một quyết định, một lý do. `Record` đầy đủ nên quên một mã là một lỗi BIÊN DỊCH.
  *
  * ~~Bảy~~ **[S1.231 / khoản 232] CHÍN** mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không
- * đúng thứ tự*. ~~Năm~~ **[S1.9101 / S4.7a] SÁU** mã `false` đều nói: *cấu hình chưa sẵn sàng*.
+ * đúng thứ tự*. ~~Năm~~ **[S1.279 / S4.7a] SÁU** mã `false` đều nói: *cấu hình chưa sẵn sàng*.
  */
 export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   // ---- ~~BẢY~~ [S1.231] CHÍN mã CHUỖI — vào sổ
@@ -119,18 +119,18 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
     lyDo: "một người bấm ĐÓNG VÒNG BAFO khi không có vòng nào mở",
   },
 
-  // ---- ~~NĂM~~ [S1.9101] SÁU mã CẤU HÌNH — KHÔNG vào sổ
+  // ---- ~~NĂM~~ [S1.279] SÁU mã CẤU HÌNH — KHÔNG vào sổ
   CHINH_SACH_CHUA_KHAI_TRONG_SO: {
     vaoSo: false,
     lyDo: "~~tổ chức chưa khai trọng số đánh giá — một sự cố VẬN HÀNH, sửa bằng cách tạo phiên bản chính sách mới~~ [S1.253 / S4.5a / L14] phiên bản chính sách GHIM của gói (hiệu lực lúc gói mở) chưa khai trọng số, hay gói mở khi tổ chức chưa có phiên bản nào — một sự cố CẤU HÌNH có trước lần chấm; phiên bản mới chỉ sửa được cho gói MỞ SAU nó. Kiểm toán viên không hỏi tới nó, và nó lặp lại đúng bằng số lần người dùng thử. Lần cố chấm dưới một phiên bản KHÁC phiên bản ghim là chốt `L14_PHIEN_BAN_KHONG_GHIM` (`CONTROL_DENIED`), không phải mã này",
   },
   THANH_PHAN_CHUA_CO_NGUON: {
     vaoSo: false,
-    lyDo: "chính sách khai một thành phần mà vòng này chưa có nguồn dữ liệu — một giới hạn ĐÃ BIẾT của sản phẩm, không một hành vi của người dùng. [S1.9101 / S4.7a / L8] Từ S4.7 nó gọi tên đúng mã: điểm phi giá, `chat_luong`, `thue`, một mã lạ, hay một mã quy đổi mà phiên bản không khai tham số",
+    lyDo: "chính sách khai một thành phần mà vòng này chưa có nguồn dữ liệu — một giới hạn ĐÃ BIẾT của sản phẩm, không một hành vi của người dùng. [S1.279 / S4.7a / L8] Từ S4.7 nó gọi tên đúng mã: điểm phi giá, `chat_luong`, `thue`, một mã lạ, hay một mã quy đổi mà phiên bản không khai tham số",
   },
   CHINH_SACH_TCO_SAI: {
     vaoSo: false,
-    lyDo: "[S1.9101 / S4.7a / L8] phiên bản ghim khai thành phần TCO sai hình dạng — trùng mã, thiếu `gia`, hay hệ số của một mã tiền khác 1 (spec S4 §2.5 ⒃). Cùng hạng `THANH_PHAN_CHUA_CO_NGUON`: một sự cố CẤU HÌNH có trước lần chấm, sửa bằng phiên bản mới cho gói mở sau nó",
+    lyDo: "[S1.279 / S4.7a / L8] phiên bản ghim khai thành phần TCO sai hình dạng — trùng mã, thiếu `gia`, hay hệ số của một mã tiền khác 1 (spec S4 §2.5 ⒃). Cùng hạng `THANH_PHAN_CHUA_CO_NGUON`: một sự cố CẤU HÌNH có trước lần chấm, sửa bằng phiên bản mới cho gói mở sau nó",
   },
   CHINH_SACH_TAT_BAFO: {
     vaoSo: false,

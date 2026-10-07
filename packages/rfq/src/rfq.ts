@@ -400,13 +400,13 @@ export async function datNhomHangChoGoi(
   return doiRfq(hang);
 }
 
-/** [S1.9101 / S4.7a] Miền của số ngày giao yêu cầu — khớp `CHECK` `rfq_packages_so_ngay_giao_mien` (`9501`). */
+/** [S1.279 / S4.7a] Miền của số ngày giao yêu cầu — khớp `CHECK` `rfq_packages_so_ngay_giao_mien` (`112`). */
 export const SO_NGAY_GIAO_TOI_DA = 3650;
 
 /**
- * [S1.9101 / S4.7a / L16] Đặt, đổi hay xoá (`null`) số ngày giao yêu cầu của một gói ĐANG SOẠN — cơ sở của chi phí trễ giao
- * (`chi_phi_tre`, spec S4 §4.8). Lớp chặn cuối là trigger `rfq_packages_so_ngay_giao` (`9501_tco`): cột chỉ đổi ở DRAFT. Vế
- * `AND status = 'DRAFT'` là khuôn [H-3] của `datNhomHangChoGoi`. Con số nằm trong chữ ký phê duyệt (băm riêng của `9501` (3)): gói trả
+ * [S1.279 / S4.7a / L16] Đặt, đổi hay xoá (`null`) số ngày giao yêu cầu của một gói ĐANG SOẠN — cơ sở của chi phí trễ giao
+ * (`chi_phi_tre`, spec S4 §4.8). Lớp chặn cuối là trigger `rfq_packages_so_ngay_giao` (`112_tco`): cột chỉ đổi ở DRAFT. Vế
+ * `AND status = 'DRAFT'` là khuôn [H-3] của `datNhomHangChoGoi`. Con số nằm trong chữ ký phê duyệt (băm riêng của `112` (3)): gói trả
  * về DRAFT rồi đổi số ngày giao thì chữ ký cũ không mở được nó nữa.
  */
 export async function datSoNgayGiao(
@@ -777,10 +777,10 @@ export async function openRfq(
   // [S1.270 / S3.3d / K3] Xoay vòng ở cạnh mở — cửa sổ chỉ đếm gói ĐÃ MỞ, nên các gói nộp song song cùng một bộ nhà cung cấp đều
   // qua lúc nộp; sau K10a, cùng thứ tự trigger (`…_kiem_xoay_vong_khi_mo` cuối cạnh).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_XOAY_VONG_MO, [orgId, input.rfqId]);
-  // [S1.9101 / S4.7a / L16] Phiên bản sắp ghim tính chi phí trễ mà gói chưa khai số ngày giao ⇒ từ chối CẤU HÌNH có tên, TRƯỚC lần đúc
+  // [S1.279 / S4.7a / L16] Phiên bản sắp ghim tính chi phí trễ mà gói chưa khai số ngày giao ⇒ từ chối CẤU HÌNH có tên, TRƯỚC lần đúc
   // khoá (khoản 31). Dưới khoá chính sách vừa lấy, nên phiên bản hiệu lực không đổi giữa câu này và trigger `rfq_packages_tco_khi_mo`
   // — trigger hỏi lại cùng câu trên phiên bản đã ghim. Không vào sổ (L12: từ chối vì cấu hình chưa sẵn sàng).
-  // `LATERAL`: hàm chọn phiên bản chạy MỘT lần (rà soát §S1.9101 — THẤP-9), không một lần mỗi hàng chính sách của tổ chức.
+  // `LATERAL`: hàm chọn phiên bản chạy MỘT lần (rà soát §S1.279 — THẤP-9), không một lần mỗi hàng chính sách của tổ chức.
   const { rows: tco } = await client.query<{ thieu: boolean; da_bat: boolean }>(
     `SELECT (p.so_ngay_giao IS NULL
              AND pg_catalog.jsonb_path_exists(o.eval_components, '$[*] ? (@.ma == "chi_phi_tre")')) AS thieu,
@@ -793,7 +793,7 @@ export async function openRfq(
     [orgId, input.rfqId],
   );
   if (tco[0]?.thieu === true) {
-    // [rà soát §S1.9101 — TRUNG-5] Tổ chức chưa bật S3 không có cạnh về DRAFT (`077`): lời từ chối không được chỉ một lối không có.
+    // [rà soát §S1.279 — TRUNG-5] Tổ chức chưa bật S3 không có cạnh về DRAFT (`077`): lời từ chối không được chỉ một lối không có.
     throw new RfqError(
       "Phiên bản chính sách đang hiệu lực tính chi phí trễ giao, mà gói thầu chưa khai số ngày giao yêu cầu (L16) — " +
         (tco[0].da_bat

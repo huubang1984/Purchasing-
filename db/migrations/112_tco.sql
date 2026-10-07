@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 9501_tco — [S1.9101 / S4.7a của spec S4] TCO: NHÓM KHOÁ `tco` CỦA CHÍNH SÁCH, SỐ NGÀY GIAO YÊU CẦU CỦA GÓI (CHỈ SỬA Ở DRAFT,
+-- 112_tco — [S1.279 / S4.7a của spec S4] TCO: NHÓM KHOÁ `tco` CỦA CHÍNH SÁCH, SỐ NGÀY GIAO YÊU CẦU CỦA GÓI (CHỈ SỬA Ở DRAFT,
 -- NẰM TRONG CHỮ KÝ PHÊ DUYỆT), TẬP MÃ THÀNH PHẦN GHIM Ở CẠNH VÀO OPEN, BỘ ĐỌC Ô KHAI SỐ NGÀY (L8, L16)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` §2.4 ⑸⑻, §2.5 ⒃㉑, §4.1, §4.8, §5.1 L8, §9 S4.7.
--- ADR-9201. Chủ dự án chốt 2026-10-07: S4.7 tách ba phần, vế cam kết lưu cùng award (S4.7c) đi sau S3.5; chi phí trễ là TỶ LỆ của
+-- ADR-153. Chủ dự án chốt 2026-10-07: S4.7 tách ba phần, vế cam kết lưu cùng award (S4.7c) đi sau S3.5; chi phí trễ là TỶ LỆ của
 -- giá trị báo giá mỗi ngày (`ty_le_tre_ngay`, không phải số tiền cố định — không phụ thuộc đơn vị tiền); phiên bản ghim tính chi phí
 -- trễ mà gói chưa khai số ngày giao thì CHẶN Ở CẠNH MỞ; số ngày giao vào chữ ký phê duyệt ở MỌI tổ chức bằng một băm riêng và một
 -- trigger riêng — không định nghĩa lại `rfq_bam_noi_dung` (CAO ⑥ của §S1.139) hay `rfq_kiem_chuyen_trang_thai`.
@@ -114,11 +114,11 @@ ALTER TABLE rfq_approvals ENABLE ALWAYS TRIGGER rfq_approvals_dat_bam_giao_hang;
 
 -- KHÔNG đổi hai `UNIQUE` chữ ký của `087` (2b). Số ngày giao chỉ đổi ở DRAFT, và mỗi lần nộp lại tăng `lan_nop` — nên hai hàng cùng
 -- người, cùng nội dung, cùng `lan_nop_da_xem` luôn cùng số ngày giao, và người đã ký ký lại được ở lần nộp mới như hôm nay.
--- [rà soát §S1.9101 — CAO-1, rồi đột biến D9] Bản đầu dựng lại hai ràng buộc với băm số ngày giao — chép bộ cột của `086` nên đánh rơi
+-- [rà soát §S1.279 — CAO-1, rồi đột biến D9] Bản đầu dựng lại hai ràng buộc với băm số ngày giao — chép bộ cột của `086` nên đánh rơi
 -- `lan_nop_da_xem` (người duyệt đã trả gói về không ký lại được); bản sửa thêm lại cột ấy, và đột biến bỏ băm số ngày giao khỏi
 -- ràng buộc thì SỐNG: cột ấy thừa ở đó. Không đổi là bản đúng.
 
--- [rà soát §S1.9101 — CAO-2] Chữ ký CÒN HIỆU LỰC (`107` (5)) — vị từ MỘT HÀNG mà K4b đếm và K5 đọc — cộng vế số ngày giao. Phép đếm
+-- [rà soát §S1.279 — CAO-2] Chữ ký CÒN HIỆU LỰC (`107` (5)) — vị từ MỘT HÀNG mà K4b đếm và K5 đọc — cộng vế số ngày giao. Phép đếm
 -- riêng của bản đầu ghép vế hiệu lực theo NGƯỜI với vế số ngày giao theo HÀNG: một người có một hàng còn hiệu lực trên số ngày cũ và
 -- một hàng đã bị chính họ rút trên số ngày hiện tại được đếm như một chữ ký hợp lệ; và K5 đếm chữ ký độc lập trên số ngày cũ. Ở tổ
 -- chức đã bật, đây là phép kiểm duy nhất trên số ngày giao — K4b nói lời từ chối. Thân `107` cộng đúng một dòng.

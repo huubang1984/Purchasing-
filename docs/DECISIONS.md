@@ -11945,16 +11945,16 @@ khác dạng.
 - Quy đổi tiền tệ; tiền tệ khác `VND`/`USD`.
 - Nhập bằng tệp; khử trùng lô.
 
-## ADR-9201 — S4.7a: TCO ở CSDL và lượt chấm — năm mã có nguồn, kiểm phiên bản lúc chấm, chi phí trễ là tỷ lệ giá trị mỗi ngày, số ngày giao của gói chỉ đổi ở DRAFT và nằm trong chữ ký, tập mã chụp lúc mở; L8, L16
+## ADR-153 — S4.7a: TCO ở CSDL và lượt chấm — năm mã có nguồn, kiểm phiên bản lúc chấm, chi phí trễ là tỷ lệ giá trị mỗi ngày, số ngày giao của gói chỉ đổi ở DRAFT và nằm trong chữ ký, tập mã chụp lúc mở; L8, L16
 
 **Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu ngày 2026-10-07, cả bốn theo đề xuất, sau phép đo:
 ⑴ S4.7 tách BA phần — S4.7a CSDL và lượt chấm, S4.7b route và màn, S4.7c cam kết lưu cùng award, đi sau S3.5; ⑵ chi phí trễ giao là
 TỶ LỆ của giá trị báo giá mỗi ngày (`ty_le_tre_ngay`), không một số tiền cố định; ⑶ phiên bản ghim tính chi phí trễ mà gói không khai số
 ngày giao thì CHẶN Ở CẠNH MỞ; ⑷ số ngày giao vào chữ ký phê duyệt ở MỌI tổ chức, bằng một băm riêng và một trigger riêng — không định
-nghĩa lại `rfq_bam_noi_dung` hay `rfq_kiem_chuyen_trang_thai` · **[S1.9101]** · **Migration:** `9501_tco` · **Liên quan:** ADR-053 ⑶
+nghĩa lại `rfq_bam_noi_dung` hay `rfq_kiem_chuyen_trang_thai` · **[S1.279]** · **Migration:** `112_tco` · **Liên quan:** ADR-053 ⑶
 (vế hẹp *"chỉ `gia`"* — nay nới), ADR-097 ⑸ ⑻ ⒃ ⒇ ㉑ (ghim lúc mở, lời khai thành cam kết, kiểm lúc chấm, hàng L tách bằng số mới, khách
 đọc tập mã ghim), ADR-141 (phiên bản ghim lúc mở), ADR-060 (từ chối cấu hình không vào sổ), ADR-050 ⑴ (làm tròn nửa-ra-xa-0, từng thành
-phần rồi cộng) · **Spec:** S4 §2.4 ⑸ ⑻, §2.5 ⒃ ㉑, §4.1, §4.8, §5.1 L8, §9 S4.7 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+phần rồi cộng) · **Spec:** S4 §2.4 ⑸ ⑻, §2.5 ⒃ ㉑, §4.1, §4.8, §5.1 L8, §9 S4.7 · **Biên bản:** `evidence/security-reviews.md` §S1.279
 
 ### Bối cảnh — phép đo trước khi viết
 
@@ -12017,7 +12017,7 @@ chức: đã bật thì chỉ lối trả về DRAFT; chưa bật thì nói th�
 ⑻ **Hàng L tách bằng số mới** (ADR-097 ⒇): **L8** — TCO có nguồn; **L16** — thước TCO của gói cố định trước khi giá lộ, vế TCO và form của
 L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
 
-⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
+⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.279 mục 8):
 - **CAO-1** — bản đầu dựng lại hai `UNIQUE` chữ ký với băm số ngày giao, chép bộ cột của `086` thay vì `087`, nên đánh rơi
   `lan_nop_da_xem`: người duyệt đã trả gói về không ký lại được trên chính nội dung ấy. Bản sửa thêm lại cột ấy, và đột biến bỏ băm số
   ngày giao khỏi ràng buộc SỐNG (D9) — cột ấy thừa ở đó. Sửa cuối: không đụng hai `UNIQUE` của `087`.
@@ -12048,7 +12048,7 @@ L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
 - Ca lật, kê tên: đối chứng dương của ca đầu khối L14 ở `luot-danh-gia.int` (phiên bản hệ số `2.0000` nay bị từ chối khi chấm — cần
   gạt đổi sang `van_chuyen` trên `freight`); giàn cảnh `bo-xuat.int` (hệ số `1.2345` nay bị từ chối — hệ số 1; luật làm tròn của bộ kiểm
   trên hệ số khác 1 vẫn đo ở `kiem.test.ts`). Mọi ca khác xanh nguyên văn.
-- Một lượt chấm cũ ghi trước `9501` dưới hệ số khác 1 ở lại làm sự thật kiểm toán; bộ bằng chứng vẫn tính lại được nó.
+- Một lượt chấm cũ ghi trước `112` dưới hệ số khác 1 ở lại làm sự thật kiểm toán; bộ bằng chứng vẫn tính lại được nó.
 - `GET /policy/versions` mang thêm `tco` (S4.7b hiện nó).
 
 ### Điều ADR này KHÔNG nói

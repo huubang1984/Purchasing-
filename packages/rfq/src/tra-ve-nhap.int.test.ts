@@ -584,17 +584,17 @@ describe("S3.2b1 — K6: cột `duc_khi_goi_da_mo` ghi đúng điều K6 hỏi, 
 });
 
 // =============================================================================================
-// (4) [S1.9101 / S4.7a / L16 / ADR-9201] SỐ NGÀY GIAO YÊU CẦU — CHỈ ĐỔI Ở DRAFT, NẰM TRONG CHỮ KÝ; CẠNH MỞ ĐÒI NÓ KHI PHIÊN BẢN TÍNH
+// (4) [S1.279 / S4.7a / L16 / ADR-153] SỐ NGÀY GIAO YÊU CẦU — CHỈ ĐỔI Ở DRAFT, NẰM TRONG CHỮ KÝ; CẠNH MỞ ĐÒI NÓ KHI PHIÊN BẢN TÍNH
 // CHI PHÍ TRỄ
 //
 // Tệp này vì đường duy nhất đổi số ngày giao SAU khi đã ký là cạnh trả về DRAFT của tổ chức đã bật (MVP1 không có đường về): ký ở 30
-// ngày, trả về, đổi thành 7, nộp lại — `title` và hạng mục y nguyên nên `approved_content_hash` không đổi, và trước `9501` chữ ký cũ
+// ngày, trả về, đổi thành 7, nộp lại — `title` và hạng mục y nguyên nên `approved_content_hash` không đổi, và trước `112` chữ ký cũ
 // mở được gói. Chủ dự án chốt 2026-10-07: băm riêng ở MỌI tổ chức, trigger riêng, không định nghĩa lại `rfq_bam_noi_dung`.
 // =============================================================================================
 const datNgay = (t: ToChuc, rfqId: string, n: number | null, ai: Nguoi = t.pm): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => datSoNgayGiao(c, t.org, { rfqId, soNgayGiao: n, actorSessionId: ai.s }));
 const LOI_NGAY_GIAO = (can: number, co: number): string => `RFQ nay can ${String(can)} NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co ${String(co)} (L16)`;
-/** [rà soát §S1.9101 — CAO-2] Ở tổ chức đã bật, số ngày giao nằm trong chính chữ ký còn hiệu lực — K4b nói lời từ chối. */
+/** [rà soát §S1.279 — CAO-2] Ở tổ chức đã bật, số ngày giao nằm trong chính chữ ký còn hiệu lực — K4b nói lời từ chối. */
 const LOI_HIEU_LUC = (can: number, co: number): string =>
   `RFQ nay can ${String(can)} chu ky CON HIEU LUC — ky tren lan nop da xem, nguoi ky chua tra goi ve tu lan ay —, moi co ${String(co)} (K4b)`;
 
@@ -735,7 +735,7 @@ describe("S4.7a — L16: số ngày giao yêu cầu chỉ đổi ở DRAFT và n
     expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_HIEU_LUC(1, 0));
   });
 
-  it("[INV-L16] [rà soát §S1.9101 — CAO-2] hiệu lực và số ngày giao xét trên CÙNG một hàng: chữ ký đã bị chính người ký rút trên 10 ngày không sống lại nhờ một chữ ký còn hiệu lực trên 20 ngày", async () => {
+  it("[INV-L16] [rà soát §S1.279 — CAO-2] hiệu lực và số ngày giao xét trên CÙNG một hàng: chữ ký đã bị chính người ký rút trên 10 ngày không sống lại nhờ một chữ ký còn hiệu lực trên 20 ngày", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await datNgay(t, rfqId, 10);
@@ -807,7 +807,7 @@ describe("S4.7a — L16: phiên bản ghim tính chi phí trễ thì gói phải
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
     await duyet(t, rfqId, t.pm2);
-    // Tổ chức chưa bật: không có cạnh về DRAFT, nên lời từ chối không chỉ lối ấy (rà soát §S1.9101 — TRUNG-5).
+    // Tổ chức chưa bật: không có cạnh về DRAFT, nên lời từ chối không chỉ lối ấy (rà soát §S1.279 — TRUNG-5).
     expect((await loi(mo(t, rfqId)))?.message).toBe(
       "Phiên bản chính sách đang hiệu lực tính chi phí trễ giao, mà gói thầu chưa khai số ngày giao yêu cầu (L16) — " +
         "số ngày giao chỉ khai được khi soạn, và gói đã nộp duyệt không trả về soạn thảo được ở tổ chức chưa bật kiểm soát S3: " +

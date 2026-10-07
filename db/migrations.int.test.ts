@@ -2134,8 +2134,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
-    // [S1.9101 / S4.7a / L16] `9501_tco` định nghĩa lại — cộng vế số ngày giao; con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "9501_tco.sql" },
+    // [S1.279 / S4.7a / L16] `112_tco` định nghĩa lại — cộng vế số ngày giao; con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "112_tco.sql" },
     // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];
@@ -2429,12 +2429,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // `RETURN NEW` ở hàm đầu để mọi gói mới không phiên bản ghim; ở hàm sau mở lại đường chấm dưới phiên bản khai SAU khi thấy giá.
     { ham: "rfq_ghim_chinh_sach_khi_mo", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_packages_ghim_chinh_sach_khi_mo"] },
     { ham: "rfq_evaluations_kiem_phien_ban_ghim", migration: "102_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_evaluations_kiem_phien_ban_ghim"] },
-    // [S1.9101 / S4.7a / L16] Số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký, và tập mã TCO chụp lúc mở. Thân `RETURN NEW` ở hàm đầu
+    // [S1.279 / S4.7a / L16] Số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký, và tập mã TCO chụp lúc mở. Thân `RETURN NEW` ở hàm đầu
     // cho đổi số ngày giao sau khi duyệt; ở hàm hai để chữ ký mang băm hằng; ở hàm ba bỏ ảnh chụp, lời đòi số ngày giao, và phép
     // đếm người ký trên số ngày giao hiện tại.
-    { ham: "rfq_kiem_so_ngay_giao", migration: "9501_tco.sql", trigger: ["rfq_packages_so_ngay_giao"] },
-    { ham: "rfq_approvals_dat_bam_giao_hang", migration: "9501_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
-    { ham: "rfq_tco_khi_mo", migration: "9501_tco.sql", trigger: ["rfq_packages_tco_khi_mo"] },
+    { ham: "rfq_kiem_so_ngay_giao", migration: "112_tco.sql", trigger: ["rfq_packages_so_ngay_giao"] },
+    { ham: "rfq_approvals_dat_bam_giao_hang", migration: "112_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
+    { ham: "rfq_tco_khi_mo", migration: "112_tco.sql", trigger: ["rfq_packages_tco_khi_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
@@ -4195,8 +4195,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
-        "9501_tco.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8852,8 +8852,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
-        "9501_tco.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9189,8 +9189,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
-        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
-        "9501_tco.sql",
+        // [S1.279 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-153).
+        "112_tco.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

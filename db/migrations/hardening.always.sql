@@ -10216,10 +10216,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_chot_canh_tranh(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.269 / S3.3c2 / K4b K5] Nguoi ky co chu ky CON HIEU LUC — phep dem thu ba cua K4b va tap K5 doc. Mot than bo ve tra ve thi chu ky cua nguoi da tra goi ve van dem o ca hai chot.
-    -- [S1.9101 / S4.7a / L16] Than `9501_tco` cong ve so ngay giao: mot than bo no thi chu ky tren so ngay giao cu mo duoc goi da tra ve va doi, va K5 dem chu ky doc lap tren so ngay cu.
+    -- [S1.279 / S4.7a / L16] Than `112_tco` cong ve so ngay giao: mot than bo no thi chu ky tren so ngay giao cu mo duoc goi da tra ve va doi, va K5 dem chu ky doc lap tren so ngay cu.
     ARRAY[
-      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$định nghĩa hàm rfq_chu_ky_con_hieu_luc(uuid, uuid) (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -13459,10 +13459,10 @@ $ham$;
                   'hàm public.du_lieu_ngoai_kiem_ghi() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.du_lieu_ngoai_kiem_ghi() và các bảng public.external_price_references, public.external_purchase_history (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L8] Bo doc o so ngay cua phong bi. Mot than nhan so am, so le hay qua mien la mot so ngay khong ai khai di vao chi phi quy doi.
+    -- [S1.279 / S4.7a / L8] Bo doc o so ngay cua phong bi. Mot than nhan so am, so le hay qua mien la mot so ngay khong ai khai di vao chi phi quy doi.
     ARRAY[
-      $q$định nghĩa hàm bid_so_ngay(text) (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$định nghĩa hàm bid_so_ngay(text) (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.bid_so_ngay(p_van text) RETURNS integer
   LANGUAGE plpgsql IMMUTABLE STRICT
   SET search_path = pg_catalog, public
@@ -13497,10 +13497,10 @@ $ham$$q$,
                   'hàm public.bid_so_ngay(text) không tồn tại')$q$,
       $q$quyền sở hữu hàm bid_so_ngay(text) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L16] Bam so ngay giao cua goi. Mot than tra hang so lam chu ky cu mo duoc goi da doi so ngay giao.
+    -- [S1.279 / S4.7a / L16] Bam so ngay giao cua goi. Mot than tra hang so lam chu ky cu mo duoc goi da doi so ngay giao.
     ARRAY[
-      $q$định nghĩa hàm rfq_bam_giao_hang(uuid) (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_giao_hang(uuid) (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bam_giao_hang(p_rfq uuid) RETURNS bytea
   LANGUAGE sql
   STABLE
@@ -13529,10 +13529,10 @@ $ham$$q$,
                   'hàm public.rfq_bam_giao_hang(uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_bam_giao_hang(uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L16] So ngay giao chi doi o DRAFT. Than `RETURN NEW` cho doi so ngay giao sau khi duyet.
+    -- [S1.279 / S4.7a / L16] So ngay giao chi doi o DRAFT. Than `RETURN NEW` cho doi so ngay giao sau khi duyet.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_so_ngay_giao (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$hàm + trigger rfq_kiem_so_ngay_giao (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$DO $fn287$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13593,10 +13593,10 @@ $ham$;
                   'hàm public.rfq_kiem_so_ngay_giao() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_so_ngay_giao() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L16] Chu ky mang bam so ngay giao no ky. Than `RETURN NEW` de cot rong lam moi chu ky moi khong mo duoc goi; than dat hang so mo lai chu ky cu tren so ngay giao da doi.
+    -- [S1.279 / S4.7a / L16] Chu ky mang bam so ngay giao no ky. Than `RETURN NEW` de cot rong lam moi chu ky moi khong mo duoc goi; than dat hang so mo lai chu ky cu tren so ngay giao da doi.
     ARRAY[
-      $q$hàm + trigger rfq_approvals_dat_bam_giao_hang (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$hàm + trigger rfq_approvals_dat_bam_giao_hang (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$DO $fn288$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13654,10 +13654,10 @@ $ham$;
                   'hàm public.rfq_approvals_dat_bam_giao_hang() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_giao_hang() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va (to chuc chua bat S3) dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
+    -- [S1.279 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va (to chuc chua bat S3) dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
     ARRAY[
-      $q$hàm + trigger rfq_tco_khi_mo (9501_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco.sql')$q$,
+      $q$hàm + trigger rfq_tco_khi_mo (112_tco)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
       $q$DO $fn289$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

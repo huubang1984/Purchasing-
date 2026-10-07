@@ -540,7 +540,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "tools/bo-xuat-danh-gia/src/doc-lap/benchmark-lai.test.ts",
     "tools/bo-xuat-danh-gia/src/kiem-du-lieu-nen.test.ts",
   ],
-  // L8 — [S1.9101 / S4.7a] TCO có nguồn. `tco` đo lõi thuần (luật kiểm phiên bản, hai công thức quy đổi chính xác, ô thiếu gọi tên);
+  // L8 — [S1.279 / S4.7a] TCO có nguồn. `tco` đo lõi thuần (luật kiểm phiên bản, hai công thức quy đổi chính xác, ô thiếu gọi tên);
   // `luot-danh-gia` đo lượt chấm trên Postgres thật — năm mã, bộ đọc SQL, hạng TCO khác hạng giá, ô ngoài miền, từ chối cấu hình không
   // vào sổ, luồng MVP1 không đổi, `ma_thieu` chỉ ở hàng không số; `tra-ve-nhap` đo `CHECK` của nhóm khoá `tco` qua tầng gói.
   L8: [
@@ -548,7 +548,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/tco.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
-  // L16 — [S1.9101 / S4.7a] thước TCO cố định trước khi giá lộ — vế TCO và form nhà cung cấp của L14 (số mới theo ADR-097 ⒇).
+  // L16 — [S1.279 / S4.7a] thước TCO cố định trước khi giá lộ — vế TCO và form nhà cung cấp của L14 (số mới theo ADR-097 ⒇).
   // `luot-danh-gia` đo tập mã chụp lúc mở và lượt chấm dùng chính tập ấy (phiên bản khai sau, quyền cột, ảnh chụp lệch, đột biến);
   // `tra-ve-nhap` đo số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký (đường trả về của tổ chức đã bật, gói cấp kép đếm người, hai đột
   // biến), và cạnh mở đòi số ngày giao khi phiên bản tính chi phí trễ.

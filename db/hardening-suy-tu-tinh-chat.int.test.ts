@@ -1838,7 +1838,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "rfq_packages",
   );
-  // [S1.9101 / S4.7a / L16 / `9501_tco`] Gói `rfqVe` vừa về DRAFT khai số ngày giao yêu cầu — nhân chứng UPDATE của
+  // [S1.279 / S4.7a / L16 / `112_tco`] Gói `rfqVe` vừa về DRAFT khai số ngày giao yêu cầu — nhân chứng UPDATE của
   // `rfq_kiem_so_ngay_giao`. Băm số ngày giao đổi theo; gói nộp lại phía dưới và không mở, nên không chữ ký nào phải đếm lại.
   doiSoHang(
     await so.chung(

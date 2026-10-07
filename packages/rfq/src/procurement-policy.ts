@@ -88,7 +88,7 @@ export interface CreateProcurementPolicyInput {
    */
   readonly benchmark?: Readonly<Record<string, string>> | null;
   /**
-   * [S1.9101 / S4.7a] Nhóm khoá `tco` (spec S4 §4.1, §4.8; ADR-9201): `chi_phi_von_nam`, `ngay_thanh_toan_chuan`, `ty_le_tre_ngay`,
+   * [S1.279 / S4.7a] Nhóm khoá `tco` (spec S4 §4.1, §4.8; ADR-153): `chi_phi_von_nam`, `ngay_thanh_toan_chuan`, `ty_le_tre_ngay`,
    * mọi giá trị là CHUỖI, mỗi khoá tuỳ chọn. `undefined` hay `null` ⇒ phiên bản không khai tham số quy đổi — mã `chi_phi_thanh_toan`
    * và `chi_phi_tre` của nó không có nguồn, và lượt chấm từ chối bằng câu gọi tên. Tầng này chỉ kiểm hình dạng NGOÀI; tập khoá, biên
    * và cặp hai khoá đầu là của `CHECK` `org_procurement_policies_tco_hinh_dang`.
@@ -188,7 +188,7 @@ function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chi
 }
 
 /**
- * [S1.256 / S4.5b] Hình dạng NGOÀI của một nhóm khoá chuỗi — object, mọi giá trị là chuỗi. [S1.9101 / S4.7a] Dùng chung cho
+ * [S1.256 / S4.5b] Hình dạng NGOÀI của một nhóm khoá chuỗi — object, mọi giá trị là chuỗi. [S1.279 / S4.7a] Dùng chung cho
  * `benchmark` và `tco`.
  */
 function nhomChuoiJson(tho: unknown, ten: string): string | null {
@@ -260,7 +260,7 @@ export async function createProcurementPolicy(
       soBac: input.tiers?.length ?? 0,
       // [S1.256 / S4.5b] Có cấu hình benchmark hay không — ngưỡng nằm ở chính hàng chính sách, bất biến, xuất được.
       coBenchmark: benchmark !== null,
-      // [S1.9101 / S4.7a] Cùng lý do: có khai tham số quy đổi TCO hay không; tỷ lệ nằm ở chính hàng chính sách.
+      // [S1.279 / S4.7a] Cùng lý do: có khai tham số quy đổi TCO hay không; tỷ lệ nằm ở chính hàng chính sách.
       coTco: tco !== null,
     },
   });
@@ -337,7 +337,7 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly thamDinhHieuLucThang: number | null;
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
   readonly benchmark: Readonly<Record<string, string>> | null;
-  /** [S1.9101 / S4.7a] Nhóm khoá `tco`, đúng như CSDL cất; `null`: chưa khai. */
+  /** [S1.279 / S4.7a] Nhóm khoá `tco`, đúng như CSDL cất; `null`: chưa khai. */
   readonly tco: Readonly<Record<string, string>> | null;
   /**
    * [S1.258 / khoản 329] Trọng số chấm và BAFO top-N, đúng như CSDL cất; cả hai `null` khi phiên bản không khai (`056` đòi chúng đi

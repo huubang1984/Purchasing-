@@ -1280,7 +1280,7 @@ describe("phủ RLS", () => {
       // [S1.7] Cột chế độ nghiêm của A6. Nó vào tập INSERT chứ KHÔNG vào tập UPDATE: bảng này
       // chỉ ghi thêm, và đổi chính sách nghĩa là thêm một phiên bản — xem 014 và 020.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "strict_blind_mode", quyen: "INSERT" },
-      // [S1.9101 / S4.7a] Nhóm khoá `tco` — cùng lý do `benchmark`: INSERT, không UPDATE.
+      // [S1.279 / S4.7a] Nhóm khoá `tco` — cùng lý do `benchmark`: INSERT, không UPDATE.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "tco", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "tham_dinh_hieu_luc_thang", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "tiers", quyen: "INSERT" },
@@ -1468,7 +1468,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "components", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "effective_cost", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "evaluation_id", quyen: "INSERT" },
-      // [S1.9101 / S4.7a] Mã thiếu ô khai của hàng không số — ghi cùng hàng, một lần (bảng không có UPDATE).
+      // [S1.279 / S4.7a] Mã thiếu ô khai của hàng không số — ghi cùng hàng, một lần (bảng không có UPDATE).
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "ma_thieu", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "rank", quyen: "INSERT" },
@@ -1596,7 +1596,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "UPDATE" },
-      // [S1.9101 / S4.7a] Số ngày giao yêu cầu: đặt lúc tạo hay đổi ở DRAFT — trigger `rfq_packages_so_ngay_giao` giữ vế *chỉ ở
+      // [S1.279 / S4.7a] Số ngày giao yêu cầu: đặt lúc tạo hay đổi ở DRAFT — trigger `rfq_packages_so_ngay_giao` giữ vế *chỉ ở
       // DRAFT*. `tco_ma_ghim` NGOÀI mọi GRANT ghi: chỉ trigger cạnh vào OPEN đặt nó.
       { grantee: "app_api", bang: "rfq_packages", cot: "so_ngay_giao", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "so_ngay_giao", quyen: "UPDATE" },

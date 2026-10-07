@@ -25556,7 +25556,7 @@ L1 so `<`/`>=` chính xác trên mốc dựng lại từ micro giây; quy đổi
 - `pnpm evidence` sau `cap-so`: vitest thoát mã 0, 4881 khẳng định, 83/83 bất biến (61/61 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence:
   XANH"*; ma trận đổi đúng hai hàng L1, L15. Sau đó master nhận #252 (S1.275); `pnpm evidence` trên cây gộp: lượt CI của PR.
 
-# §S1.9101 — S4.7a: TCO Ở CSDL VÀ LƯỢT CHẤM — NĂM MÃ CÓ NGUỒN, KIỂM PHIÊN BẢN LÚC CHẤM, Ô THIẾU GỌI TÊN; SỐ NGÀY GIAO CHỈ ĐỔI Ở DRAFT VÀ NẰM TRONG CHỮ KÝ; TẬP MÃ CHỤP LÚC MỞ (L8, L16) — ADR-9201
+# §S1.279 — S4.7a: TCO Ở CSDL VÀ LƯỢT CHẤM — NĂM MÃ CÓ NGUỒN, KIỂM PHIÊN BẢN LÚC CHẤM, Ô THIẾU GỌI TÊN; SỐ NGÀY GIAO CHỈ ĐỔI Ở DRAFT VÀ NẰM TRONG CHỮ KÝ; TẬP MÃ CHỤP LÚC MỞ (L8, L16) — ADR-153
 
 ## 1. Vòng này là gì
 
@@ -25585,7 +25585,7 @@ Bốn câu, cả bốn theo đề xuất:
 
 ## 4. Thay đổi
 
-- **`9501_tco`**:
+- **`112_tco`**:
   - nhóm khoá `org_procurement_policies.tco` — `CHECK` `…_tco_hinh_dang` (ba khoá chuỗi, cặp hai khoá thanh toán, biên GIẢ ĐỊNH bằng
     `.double()`, object rỗng bị từ chối), `INSERT` theo cột;
   - `rfq_packages.so_ngay_giao` [1, 3650] — trigger `rfq_packages_so_ngay_giao` (chỉ đổi ở DRAFT, tên `so_ngay_giao_chi_doi_o_draft`);
@@ -25595,15 +25595,15 @@ Bốn câu, cả bốn theo đề xuất:
   - `rfq_packages.tco_ma_ghim` (ngoài mọi `GRANT` ghi) — trigger `rfq_packages_tco_khi_mo` ở cạnh vào OPEN: chụp tập mã của phiên bản ghim,
     từ chối `tco_thieu_so_ngay_giao`, và ở tổ chức chưa bật đếm NGƯỜI ký trên nội dung cộng số ngày giao;
   - bộ đọc `bid_so_ngay`; cột `rfq_evaluation_lines.ma_thieu` với `CHECK` `…_ma_thieu_hinh_dang`.
-- **Ghim** năm khối mới ở `hardening.always.sql`, khối `rfq_chu_ky_con_hieu_luc` dời sang `9501`; `TRIGGER_DUOC_PHEP` thêm ba trigger.
+- **Ghim** năm khối mới ở `hardening.always.sql`, khối `rfq_chu_ky_con_hieu_luc` dời sang `112`; `TRIGGER_DUOC_PHEP` thêm ba trigger.
 - **`packages/danh-gia`**: lõi thuần `tco.ts`; `luot-danh-gia.ts` đọc năm ô qua bộ đọc SQL (`round(bid_so_tien(…), 2)`, `bid_so_ngay`), kiểm
   phiên bản bằng `kiemChinhSachTco`, so tập mã ghim, ghi `ma_thieu`; mã từ chối mới `CHINH_SACH_TCO_SAI` (cấu hình, không vào sổ).
 - **`packages/rfq`**: `datSoNgayGiao` (vào sổ `RFQ_DELIVERY_DAYS_SET`; chưa ra barrel — route ở S4.7b); `openRfq` hỏi trước lần đúc khoá;
   `createProcurementPolicy` / `lietKePhienBanChinhSach` mang `tco`.
-- **Sổ**: `danh-sach-ham-canh`, `migrations.int` (ba hàm trigger, hàm hiệu lực dời sang `9501`, ba danh sách migration), `rls-coverage`
+- **Sổ**: `danh-sach-ham-canh`, `migrations.int` (ba hàm trigger, hàm hiệu lực dời sang `112`, ba danh sách migration), `rls-coverage`
   (bốn quyền cột), `check-an-ninh` (ba `CHECK` miễn), nhân chứng ở `hardening-suy-tu`, `bac-chinh-sach` (lớp `THEO_ID`),
   `doc-chinh-sach-mot-ham` (`rfq.ts`), sổ khai nhãn (L8, L16), mốc sổ 83 → 85.
-- **Tài liệu**: ADR-9201; TEST-PLAN L8, L16 và dòng tổng (trôi ba nhịp, sửa); spec §4.1, §4.8, §9 (S4.7a/b/c); STATE (mục vòng, khoản 219
+- **Tài liệu**: ADR-153; TEST-PLAN L8, L16 và dòng tổng (trôi ba nhịp, sửa); spec §4.1, §4.8, §9 (S4.7a/b/c); STATE (mục vòng, khoản 219
   vế `TIEN` đóng); PRODUCT; Handoff (số migration, ADR, bất biến).
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
@@ -25681,7 +25681,7 @@ Một lượt soi đối kháng độc lập trên diff, đo bằng đọc mã v
 4. Lớp đếm người của tổ chức chưa bật không tới được bằng đường sản phẩm (không cạnh về DRAFT) — đo bằng đường ghi thứ hai.
 5. Phép tính lại ngoại tuyến của bộ bằng chứng (J2) vẫn là phép CỘNG trên `giaTri`; phép quy đổi không tính lại ngoại tuyến (S4.7c).
 6. Lời khai TCO chưa là cam kết, chưa đối chiếu với hoá đơn/GRN (S4.7c, S5).
-7. `ma_thieu` của hàng không số ghi TRƯỚC `9501` là `NULL` (không suy ngược).
+7. `ma_thieu` của hàng không số ghi TRƯỚC `112` là `NULL` (không suy ngược).
 
 ## 10. Đo cuối
 

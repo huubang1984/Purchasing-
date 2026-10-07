@@ -1,4 +1,4 @@
-// [S1.9101 / S4.7a / L8] Lõi TCO: luật kiểm phiên bản lúc chấm, hai công thức quy đổi (chính xác, làm tròn một lần), và ô thiếu gọi
+// [S1.279 / S4.7a / L8] Lõi TCO: luật kiểm phiên bản lúc chấm, hai công thức quy đổi (chính xác, làm tròn một lần), và ô thiếu gọi
 // tên. Hàm thuần — mọi ca chạy không CSDL.
 import { describe, expect, it } from "vitest";
 import { tinhChiPhiHieuDung, type ThanhPhanChinhSach } from "./chi-phi-hieu-dung.js";
@@ -131,7 +131,7 @@ describe("[INV-L8] dauVaoTco — mỗi mã một nguồn; ô thiếu gọi tên,
     expect(dauVaoTco([tien("gia")], THAM_SO_TRONG, null, { ...O_DU, tongTien: null })).toEqual({ maThieu: ["gia"] });
   });
 
-  it("[rà soát §S1.9101 — CAO-3] mã quy đổi vượt trần `numeric(18, 2)` ⇒ mã ấy thiếu, không một con số không ghi được", () => {
+  it("[rà soát §S1.279 — CAO-3] mã quy đổi vượt trần `numeric(18, 2)` ⇒ mã ấy thiếu, không một con số không ghi được", () => {
     const tre = [tien("gia"), tien("chi_phi_tre")];
     // 3650 ngày × 10 %/ngày × gần 10^16 ⇒ gấp 365 lần trần.
     expect(
@@ -148,7 +148,7 @@ describe("[INV-L8] dauVaoTco — mỗi mã một nguồn; ô thiếu gọi tên,
 });
 
 describe("[INV-L8] mã trùng tên một thuộc tính của nguyên mẫu đối tượng", () => {
-  it("`constructor`, `toString` ⇒ từ chối gọi tên như mọi mã lạ, không câu lẫn thân hàm (rà soát §S1.9101 — THẤP-6)", () => {
+  it("`constructor`, `toString` ⇒ từ chối gọi tên như mọi mã lạ, không câu lẫn thân hàm (rà soát §S1.279 — THẤP-6)", () => {
     for (const ma of ["constructor", "toString", "__proto__"]) {
       const loi = kiemChinhSachTco([tien("gia"), tien(ma)], THAM_SO_TRONG, null);
       expect(loi?.lyDo, ma).toBe("THANH_PHAN_CHUA_CO_NGUON");

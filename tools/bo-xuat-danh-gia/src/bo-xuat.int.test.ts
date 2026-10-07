@@ -44,7 +44,7 @@ const MIGRATIONS_DIR = join(GOC, "db", "migrations");
 const DANG_KY = pathToFileURL(join(GOC, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href;
 const KICH_BAN = join(GOC, "tools", "bo-xuat-danh-gia", "src", "index.ts");
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
-// [S1.9101 / S4.7a / L8 — CA LẬT] ~~`he_so` "1.2345"~~ — L8 đòi hệ số của mọi mã `TIEN` bằng "1" lúc chấm (spec S4 §2.5 ⒃: tiền là
+// [S1.279 / S4.7a / L8 — CA LẬT] ~~`he_so` "1.2345"~~ — L8 đòi hệ số của mọi mã `TIEN` bằng "1" lúc chấm (spec S4 §2.5 ⒃: tiền là
 // tiền), nên một phiên bản "1.2345" nay bị lượt chấm từ chối (`CHINH_SACH_TCO_SAI`) và giàn cảnh này không dựng được nữa. Luật làm
 // tròn của bộ kiểm trên hệ số khác 1 — thứ lượt chấm CŨ có thể đã ghi — vẫn đo ở `kiem.test.ts` (bundle tổng hợp, "1.2345").
 const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
@@ -264,7 +264,7 @@ beforeAll(async () => {
   const csId = await taoChinhSach(TP_GIA);
   rfqId = await taoRfqMo(csId);
   // Ba báo giá. ~~Số tiền chọn để phép làm tròn CÓ VIỆC: `he_so = 1.2345`, nên `10.00 × 1.2345 = 12.345000` rơi đúng nửa xu.~~
-  // [S1.9101 / S4.7a] Hệ số 1: phép tính lại của bộ kiểm là một phép cộng (xem đầu tệp).
+  // [S1.279 / S4.7a] Hệ số 1: phép tính lại của bộ kiểm là một phép cộng (xem đầu tệp).
   const ban: [string, unknown][] = [];
   const ids: string[] = [];
   for (const [i, tien] of ["10.00", "20.00", "30.00"].entries()) {
@@ -356,7 +356,7 @@ describe("`pnpm bang-chung xuat` — bộ xuất mang đủ đầu vào để t�
     expect(new Set(bo.traoThau.map((t) => t.evaluationId)).size).toBe(1);
     const hang = bo.luotCham[0]?.hang.find((h) => h.bidVersionId === bo.traoThau[0]?.bidVersionId);
     expect(hang?.rank).toBe(1);
-    // ~~`10.00 × 1.2345 = 12.345000` → nửa-ra-xa-0 cho `12.35`.~~ [S1.9101] Hệ số 1 — xem đầu tệp.
+    // ~~`10.00 × 1.2345 = 12.345000` → nửa-ra-xa-0 cho `12.35`.~~ [S1.279] Hệ số 1 — xem đầu tệp.
     expect(hang?.effectiveCost).toBe("10.00");
   });
 

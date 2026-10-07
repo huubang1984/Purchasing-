@@ -18,7 +18,7 @@
 // lấy `0` cho thành phần không có nguồn. Một `0` ở đây là một con số đi vào bảng xếp hạng mà
 // không ai giải thích được, đúng thứ ràng buộc ⑷ của `PRODUCT` §8⑸ cấm.
 //
-// [S1.9101 / S4.7a / L8 / ADR-9201] Vế hẹp NỚI thành tập mã có nguồn của TCO (`tco.ts`): `gia`, `van_chuyen`, `nhap_khau` đọc từ ô
+// [S1.279 / S4.7a / L8 / ADR-153] Vế hẹp NỚI thành tập mã có nguồn của TCO (`tco.ts`): `gia`, `van_chuyen`, `nhap_khau` đọc từ ô
 // khai của phong bì qua bộ đọc SQL (`bid_so_tien`), `chi_phi_thanh_toan` và `chi_phi_tre` quy đổi từ ô số ngày (`bid_so_ngay`) theo
 // tham số của phiên bản ghim. Luật kiểm phiên bản (mã có nguồn, `he_so` của mã tiền bằng 1, đủ tham số) chạy LÚC CHẤM, câu gọi tên.
 // Một báo giá thiếu ô của mã chính sách bật thì KHÔNG CÓ HẠNG, và hàng của nó gọi tên mã thiếu (`ma_thieu`) — không lấy `0`.
@@ -54,7 +54,7 @@ import {
 } from "./tco.js";
 
 /**
- * ~~Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này~~ — `bid_so_tien(payload->>'totalAmount')`. [S1.9101 / S4.7a] Không còn duy
+ * ~~Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này~~ — `bid_so_tien(payload->>'totalAmount')`. [S1.279 / S4.7a] Không còn duy
  * nhất: tập mã có nguồn ở `tco.ts`.
  */
 export const MA_THANH_PHAN_GIA = MA_GIA;
@@ -109,7 +109,7 @@ export interface HangXepHang {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanDaQuyDoi[];
-  /** [S1.9101 / S4.7a] Hàng không có số: các mã không có giá trị đọc được, theo thứ tự chính sách. `null` ở hàng có số. */
+  /** [S1.279 / S4.7a] Hàng không có số: các mã không có giá trị đọc được, theo thứ tự chính sách. `null` ở hàng có số. */
   readonly maThieu: readonly string[] | null;
 }
 
@@ -138,7 +138,7 @@ export interface HangBaoGia {
   readonly bid_version_id: string;
   readonly tien: string | null;
   readonly currency: string | null;
-  /** [S1.9101 / S4.7a] Bốn ô khai TCO, qua bộ đọc SQL — `null` khi vắng hay ngoài miền. */
+  /** [S1.279 / S4.7a] Bốn ô khai TCO, qua bộ đọc SQL — `null` khi vắng hay ngoài miền. */
   readonly phi_van_chuyen: string | null;
   readonly chi_phi_nhap_khau: string | null;
   readonly so_ngay_thanh_toan: number | null;
@@ -170,7 +170,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark` của CÙNG phiên bản ghim — vế benchmark của L14. `null`: chưa cấu hình. */
   readonly benchmark: NhomBenchmark | null;
-  /** [S1.9101 / S4.7a] Nhóm khoá `tco` của CÙNG phiên bản ghim, và số ngày giao yêu cầu của gói. */
+  /** [S1.279 / S4.7a] Nhóm khoá `tco` của CÙNG phiên bản ghim, và số ngày giao yêu cầu của gói. */
   readonly tco: ThamSoTco;
   readonly soNgayGiao: number | null;
 }> {
@@ -212,7 +212,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   }
   const tp = cs.eval_components.map((t) => ({ ma: t.ma, donVi: t.don_vi, heSo: t.he_so })) as readonly ThanhPhanChinhSach[];
   // ~~Vế HẸP của vòng này, nói ra ở khối đầu tệp: đúng một thành phần, mã `gia`, đơn vị `TIEN`.~~
-  // [S1.9101 / S4.7a / L8] Luật kiểm của TCO — mã có nguồn, hệ số mã tiền bằng 1, đủ tham số — gọi tên mã hỏng.
+  // [S1.279 / S4.7a / L8] Luật kiểm của TCO — mã có nguồn, hệ số mã tiền bằng 1, đủ tham số — gọi tên mã hỏng.
   const tco = docNhomTco(hang.tco);
   const loi = kiemChinhSachTco(tp, tco, hang.so_ngay_giao);
   if (loi !== null) {
@@ -222,7 +222,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
         "Phiên bản tạo sau lúc mở không áp cho gói này (L14).",
     );
   }
-  // [S1.9101 / S4.7a / L16] Tập mã nhà cung cấp thấy lúc nộp là cột CHỤP ở cạnh vào OPEN (`9501` (5)), từ CÙNG phiên bản ghim; lượt
+  // [S1.279 / S4.7a / L16] Tập mã nhà cung cấp thấy lúc nộp là cột CHỤP ở cạnh vào OPEN (`112` (5)), từ CÙNG phiên bản ghim; lượt
   // chấm dùng chính tập ấy. Hai thứ cùng sinh từ một hàng bất biến, nên lệch nhau chỉ khi trigger chụp không chạy (một đường ghi
   // thứ hai, một trigger bị tắt) — khi ấy không chấm: một bảng xếp hạng trên ô nhà cung cấp không được hỏi là sai từ gốc.
   const maChinhSach = tp.map((t) => t.ma);
@@ -270,7 +270,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
  * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
  * `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba bộ đọc mang đúng một vế ấy.
  *
- * [S1.9101 / S4.7a — rà soát §S1.9101 TRUNG-4] Ba ô tiền đọc qua `round(bid_so_tien(…), 2)`: `bid_so_tien` giữ THANG của chuỗi nhà
+ * [S1.279 / S4.7a — rà soát §S1.279 TRUNG-4] Ba ô tiền đọc qua `round(bid_so_tien(…), 2)`: `bid_so_tien` giữ THANG của chuỗi nhà
  * cung cấp gõ — `"100.000"` qua được (`n = round(n, 2)`) và ra chữ `"100.000"`, mà hàm thuần chỉ nhận tối đa hai chữ số lẻ, nên một
  * ô như thế làm CẢ lượt chấm bị từ chối bằng một câu cấu hình sai. `round(n, 2)` không đổi giá trị (hàm đã đòi `n = round(n, 2)`),
  * chỉ đổi thang về hai. Lỗ ấy có từ S2 ở `totalAmount`; vòng này nới nó ra ba ô, nên đóng nó ở cả ba.
@@ -432,7 +432,7 @@ export async function taoLuotDanhGia(
   if (currency === "") throw new Error("đơn vị tiền rỗng sau khi đã lọc — bất khả");
 
   const tinh = baoGia.map((b) => {
-    // [S1.9101 / S4.7a / L8] Mỗi mã một nguồn: ô khai qua bộ đọc SQL, hay quy đổi từ ô khai theo tham số của phiên bản ghim. Thiếu ô
+    // [S1.279 / S4.7a / L8] Mỗi mã một nguồn: ô khai qua bộ đọc SQL, hay quy đổi từ ô khai theo tham số của phiên bản ghim. Thiếu ô
     // của một mã chính sách bật ⇒ hàng không số, gọi tên mã thiếu (`ma_thieu`) — kể cả `gia` khi `totalAmount` không đọc được.
     const dv = dauVaoTco(cs.thanhPhan, cs.tco, cs.soNgayGiao, {
       tongTien: b.tien,
@@ -455,7 +455,7 @@ export async function taoLuotDanhGia(
     }
     // Mã quy đổi mang theo phép tính của nó (cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ lệ) — spec §8.6: tham số hiện NGAY CẠNH
     // con số nó sinh ra. `057` chỉ đòi `ma` và `tien`; khoá thêm không đổi J1 hay J2.
-    // [rà soát §S1.9101 — CAO-3] Từng thành phần dưới trần mà TỔNG vượt `numeric(18, 2)` ⇒ không hạng, gọi tên — không để câu ghi nổ.
+    // [rà soát §S1.279 — CAO-3] Từng thành phần dưới trần mà TỔNG vượt `numeric(18, 2)` ⇒ không hạng, gọi tên — không để câu ghi nổ.
     if (vuotMienTien(kq.effectiveCost)) {
       return {
         bidVersionId: b.bid_version_id,
@@ -471,7 +471,7 @@ export async function taoLuotDanhGia(
     return { bidVersionId: b.bid_version_id, gia: kq.effectiveCost, components, maThieu: null };
   });
 
-  // [S1.9101 / S4.7a] Có báo giá đọc được giá mà KHÔNG báo giá nào đủ ô khai thì không có gì để xếp hạng — cùng câu với trên. Ở chính
+  // [S1.279 / S4.7a] Có báo giá đọc được giá mà KHÔNG báo giá nào đủ ô khai thì không có gì để xếp hạng — cùng câu với trên. Ở chính
   // sách chỉ `gia`, hai điều kiện là một (đủ ô ⇔ đọc được giá), nên luồng MVP1 không đổi.
   if (tinh.every((t) => t.gia === null)) {
     throw new DanhGiaTuChoiError(

@@ -99,7 +99,7 @@ async function taoChinhSach(evalComponents: string | null, topN = 0, tco: string
     "SELECT coalesce(max(version), 0) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
     [orgA],
   );
-  // [S1.9101 / S4.7a] `tco` — nhóm khoá tham số quy đổi; mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
+  // [S1.279 / S4.7a] `tco` — nhóm khoá tham số quy đổi; mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
       "eval_components, bafo_top_n, created_by, created_by_session_id, tco) " +
@@ -126,7 +126,7 @@ async function taoRfqMo(policyId: string, soNgayGiao: number | null = null): Pro
 
 /** [S1.253 / S4.5a] Nửa đầu của `taoRfqMo`: gói ở `PENDING_APPROVAL`, đủ một chữ ký — mọi khoá tư vấn chính sách của cạnh nộp đã nhả. */
 async function taoRfqChoMo(policyId: string, soNgayGiao: number | null = null): Promise<string> {
-  // [S1.9101 / S4.7a] `so_ngay_giao` khai lúc dựng gói (ở DRAFT) — mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
+  // [S1.279 / S4.7a] `so_ngay_giao` khai lúc dựng gói (ở DRAFT) — mặc định `NULL` giữ nguyên mọi chỗ gọi đã có.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
       "created_by, created_by_session_id, so_ngay_giao) VALUES ($1, 'Mua thep tam', $2, false, $3, $4, $5) RETURNING id",
@@ -383,7 +383,7 @@ async function goiDaMo(
   evalComponents: string | null = TP_GIA,
   topN = 0,
   donGia: string | null = null,
-  /** [S1.9101 / S4.7a] Trường thêm vào MỌI phong bì — ô khai TCO (`freight`, `paymentDays`…). */
+  /** [S1.279 / S4.7a] Trường thêm vào MỌI phong bì — ô khai TCO (`freight`, `paymentDays`…). */
   them: Readonly<Record<string, unknown>> = {},
 ): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
   const csId = await taoChinhSach(evalComponents, topN);
@@ -3675,7 +3675,7 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
 //
 // Hệ số `2.0000` cho mã `gia` là một CẦN GẠT ĐO, không một cấu hình hợp lệ về sản phẩm (L8 ở S4.7 sẽ đòi `he_so` của mã `TIEN`
 // bằng "1"): nó làm phiên bản nào đã áp đọc được ngay trên con số — gấp đôi hay không.
-// [S1.9101 / S4.7a / L8 — CA LẬT] L8 nay đòi đúng điều ấy lúc chấm, nên phiên bản hệ số 2 bị từ chối (`CHINH_SACH_TCO_SAI`) nếu nó
+// [S1.279 / S4.7a / L8 — CA LẬT] L8 nay đòi đúng điều ấy lúc chấm, nên phiên bản hệ số 2 bị từ chối (`CHINH_SACH_TCO_SAI`) nếu nó
 // được CHẤM. Ở mọi ca dưới nó chỉ TỒN TẠI — chính sự có mặt của nó là thứ đo — trừ ĐỐI CHỨNG DƯƠNG của ca đầu: ca ấy nay dùng cần
 // gạt của TCO — phiên bản cộng `van_chuyen` trên phong bì khai `freight` bằng giá —, cùng con số gấp đôi.
 // ================================================================================================
@@ -3744,7 +3744,7 @@ describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sác
     expect(await chinhSachCuaLuot(rfqId)).toEqual([csId]);
 
     // ĐỐI CHỨNG DƯƠNG — gói mở SAU một phiên bản hệ số 2 thì chấm dưới phiên bản ấy. Không có vế này, ca trên xanh cả khi hệ số
-    // `2.0000` không bao giờ được áp ở đâu. [S1.9101 / S4.7a — ca lật, xem đầu khối] Cần gạt nay là `van_chuyen` trên `freight`.
+    // `2.0000` không bao giờ được áp ở đâu. [S1.279 / S4.7a — ca lật, xem đầu khối] Cần gạt nay là `van_chuyen` trên `freight`.
     const sau = await goiDaMo([["100.00", "VND"]], TP_GIA_VAN_CHUYEN, 0, null, { freight: "100.00" });
     const kqSau = await withTenant(apiPool, orgA, (c) =>
       taoLuotDanhGia(c, orgA, { rfqId: sau.rfqId, actorSessionId: sYc }, apiPool),
@@ -4007,7 +4007,7 @@ describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sác
 });
 
 // ================================================================================================
-// [S1.9101 / S4.7a / L8, L16 / ADR-9201] TCO — MỖI MÃ MỘT NGUỒN, KIỂM LÚC CHẤM, Ô THIẾU GỌI TÊN; TẬP MÃ CHỤP LÚC MỞ
+// [S1.279 / S4.7a / L8, L16 / ADR-153] TCO — MỖI MÃ MỘT NGUỒN, KIỂM LÚC CHẤM, Ô THIẾU GỌI TÊN; TẬP MÃ CHỤP LÚC MỞ
 //
 // Spec S4 §4.8, §2.4 ⑻, §2.5 ⒃㉑. Năm mã có nguồn: `gia` (`totalAmount`), `van_chuyen` (`freight`), `nhap_khau` (`importCost`) qua
 // `bid_so_tien`; `chi_phi_thanh_toan` (`paymentDays`) và `chi_phi_tre` (`leadTimeDays`, số ngày giao của GÓI) quy đổi theo nhóm khoá
@@ -4053,7 +4053,7 @@ async function hangLuot(evaluationId: string): Promise<Map<string, { cost: strin
   return new Map(rows.map((r) => [r.bid_version_id, { cost: r.cost, rank: r.rank, maThieu: r.ma_thieu, components: r.components }]));
 }
 
-describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, kiểm lúc chấm, ô thiếu gọi tên", { timeout: 300000 }, () => {
+describe("[S1.279 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, kiểm lúc chấm, ô thiếu gọi tên", { timeout: 300000 }, () => {
   it("[INV-L8] năm mã: ô khai qua bộ đọc SQL, hai mã quy đổi theo tham số ghim; hạng theo TCO khác hạng theo giá; báo giá thiếu ô không có hạng và gọi tên mã thiếu", async () => {
     const { rfqId, banRo } = await goiTcoDaMo(TP_TCO_DU, THAM_SO_TCO, 14, [
       // A — rẻ nhất theo giá; trả SỚM hơn kỳ chuẩn 30 ngày, giao TRỄ 6 ngày. `paymentDays` là số JSON, `leadTimeDays` là chuỗi.
@@ -4155,7 +4155,7 @@ describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
     }
   });
 
-  it("[INV-L8] [rà soát §S1.9101 — CAO-3] một báo giá vượt trần `numeric(18, 2)` — mã quy đổi hay TỔNG — không khoá được lượt chấm: nó không có hạng, gọi tên; báo giá khác xếp hạng bình thường", async () => {
+  it("[INV-L8] [rà soát §S1.279 — CAO-3] một báo giá vượt trần `numeric(18, 2)` — mã quy đổi hay TỔNG — không khoá được lượt chấm: nó không có hạng, gọi tên; báo giá khác xếp hạng bình thường", async () => {
     const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
     const tran = "9999999999999999.99";
     const { rfqId, banRo } = await goiTcoDaMo(tp, '{"ty_le_tre_ngay":"0.1"}', 1, [
@@ -4172,7 +4172,7 @@ describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
     ]);
   });
 
-  it("[rà soát §S1.9101 — TRUNG-4] ô tiền viết thừa số 0 (`100.000`, `5.000`) đọc theo GIÁ TRỊ — không làm cả lượt chấm bị từ chối như một lỗi cấu hình", async () => {
+  it("[rà soát §S1.279 — TRUNG-4] ô tiền viết thừa số 0 (`100.000`, `5.000`) đọc theo GIÁ TRỊ — không làm cả lượt chấm bị từ chối như một lỗi cấu hình", async () => {
     // Ba chữ số lẻ ở CẢ hai ô: `"5.0"` thì hàm thuần đã nhận được (một chữ số lẻ) và không phân biệt được có `round` hay không — đột
     // biến T14 sống trên bản đầu của ca này.
     const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
@@ -4216,7 +4216,7 @@ describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
   });
 });
 
-describe("[S1.9101 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên bản ghim; lượt chấm dùng chính tập ấy", { timeout: 300000 }, () => {
+describe("[S1.279 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên bản ghim; lượt chấm dùng chính tập ấy", { timeout: 300000 }, () => {
   const TP_GIA_VC = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
 
   async function tapMaGhim(rfqId: string): Promise<string[] | null> {
