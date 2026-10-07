@@ -64,6 +64,29 @@ export {
   type GhiAnhXaInput,
   type KetQuaLuotChuanHoa,
 } from "./anh-xa.js";
+// [S1.272 / S4.6a] Mốc giá ngoài và lịch sử mua ngoài hệ thống — đường ghi (nhập tay, dán CSV, rút) và danh sách KHÔNG cột giá
+// dưới cổng `item.manage` (ADR-096; ADR-149). Bộ đọc giá dưới `bid.view` là của S4.6b.
+export {
+  type DongNgoaiDaDoc,
+  type KetQuaDocCsv,
+  type LoaiDuLieuNgoai,
+  type LoiDongNgoai,
+  type MaLoiDong,
+} from "./csv-ngoai.js";
+export {
+  docLoDuLieuNgoai,
+  khaiMocNgoai,
+  lietKeLoDuLieuNgoai,
+  nhapDuLieuNgoai,
+  rutDuLieuNgoai,
+  type CachNhapNgoai,
+  type HangDuLieuNgoai,
+  type KetQuaNhapNgoai,
+  type KhaiMocNgoaiInput,
+  type LoDuLieuNgoai,
+  type NhapDuLieuNgoaiInput,
+  type RutDuLieuNgoaiInput,
+} from "./du-lieu-ngoai.js";
 // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — cổng `bid.view`, mỗi lần đọc một hàng sổ (L6 vế lịch sử).
 export {
   TRANG_THAI_QUAN_SAT,
@@ -90,22 +113,30 @@ export {
   type QuanSatBenchmark,
 } from "./benchmark.js";
 // [S1.260 / S4.5c1] Bản lưu của bảng so sánh (một bản mỗi lần mở thầu) và dải của một dòng khi bấm *Xem dải* (ADR-143).
+// [S1.276 / S4.6b] Nhãn theo dải lịch sử ngoài trong bản lưu, cờ mốc ngoài của bảng, dải ngoài và mốc ngoài của *Xem dải* (ADR-151).
+// Bộ đọc SQL của hai bảng ngoài (`gia-ngoai.ts`) và lõi thuần (`dai-ngoai.ts`) không ra cửa: người dùng của chúng là các hàm dưới.
 export {
+  docCoMocNgoai,
   docQuanSatTaiMoc,
   ghiBanLuuBenchmark,
   ghiBenchmarkLuotCham,
   tinhBenchmarkGoi,
   tinhDaiDong,
   type BenchmarkGoi,
+  type CoMocNgoai,
   type DaiCuaGoi,
   type DaiDong,
+  type DaiNgoaiDong,
   type DocQuanSatTaiMocInput,
   type DongBenchmark,
+  type DongNgoai,
   type GhiBanLuuInput,
   type HangQuanSatTaiMoc,
   type GhiBenchmarkInput,
   type GiaQuyDoiCuaX,
   type KetQuaDaiDong,
+  type MocNgoaiDong,
   type TinhBenchmarkGoiInput,
   type TinhDaiDongInput,
 } from "./benchmark-goi.js";
+export type { SauMocNgoai } from "./dai-ngoai.js";

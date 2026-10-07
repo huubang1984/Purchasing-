@@ -2275,6 +2275,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_kiem_danh_tinh",
         "item_aliases_kiem_danh_tinh",
         "item_uom_conversions_kiem_danh_tinh",
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — cùng khuôn.
+        "external_price_references_kiem_danh_tinh",
+        "external_purchase_history_kiem_danh_tinh",
         "unseal_requests_kiem_danh_tinh",
         "unseal_requests_kiem_nguoi_dieu_phoi",
         "unseal_requests_kiem_nhan_chung",
@@ -2299,7 +2302,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_item_goi_y_chan_truncate", "rfq_item_goi_y_chi_ghi_them", "rfq_item_mappings_chan_truncate", "rfq_item_mappings_chi_ghi_them", "rfq_sourcing_exceptions_chan_truncate", "rfq_sourcing_exceptions_chi_ghi_them", "rfq_tra_ve_chan_truncate", "rfq_tra_ve_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "external_price_references_chan_truncate", "external_price_references_chi_ghi_them", "external_purchase_history_chan_truncate", "external_purchase_history_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_item_goi_y_chan_truncate", "rfq_item_goi_y_chi_ghi_them", "rfq_item_mappings_chan_truncate", "rfq_item_mappings_chi_ghi_them", "rfq_sourcing_exceptions_chan_truncate", "rfq_sourcing_exceptions_chi_ghi_them", "rfq_tra_ve_chan_truncate", "rfq_tra_ve_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -2436,6 +2439,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_dat_thu_tu",
         "item_aliases_dat_thu_tu",
         "item_uom_conversions_dat_thu_tu",
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — cùng hàm khuôn, thân không đổi.
+        "external_price_references_dat_thu_tu",
+        "external_purchase_history_dat_thu_tu",
         // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — cùng hàm khuôn, thân không đổi.
         "rfq_item_goi_y_dat_thu_tu",
         "rfq_item_mappings_dat_thu_tu",
@@ -2454,8 +2460,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_kiem_quyen_ghi",
         "item_aliases_kiem_quyen_ghi",
         "item_uom_conversions_kiem_quyen_ghi",
+        // [S1.272 / S4.6a] Hai bảng giá ngoài — người ghi phải giữ `item.manage`.
+        "external_price_references_kiem_quyen_ghi",
+        "external_purchase_history_kiem_quyen_ghi",
         "uom_aliases_kiem_quyen_ghi",
       ],
+    },
+    // [S1.272 / S4.6a / L4 · L15] Luật ghi của hai bảng giá ngoài. Một thân `RETURN NEW` sớm cho đơn vị không quy đổi được sang đơn
+    // vị gốc vào bảng (phép đọc của S4.6b sẽ lặng lẽ bỏ hàng ấy), và cho hàng rút trỏ về một hàng rút.
+    {
+      ham: "du_lieu_ngoai_kiem_ghi",
+      migration: "109_du_lieu_ngoai.sql",
+      trigger: ["external_price_references_kiem_ngoai", "external_purchase_history_kiem_ngoai"],
     },
     // [S1.201 / S3.6a] Bốn hàm trigger của nhóm hàng. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: vai tạo gói
     // tự dựng nhóm hàng, lần đổi trạng thái không thứ tự và không người, nhóm hàng của gói đổi sau DRAFT hay gán nhóm đã ngừng
@@ -4169,6 +4185,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
+        "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8821,6 +8840,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
+        "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9153,6 +9175,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "107_canh_tranh_toi_thieu.sql",
         // [S1.270 / S3.3d / K3] Xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói; vị từ *đếm được* tách thành một hàm (ADR-148).
         "108_xoay_vong.sql",
+        "109_du_lieu_ngoai.sql",
+        // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
+        "110_ban_luu_benchmark_ngoai.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

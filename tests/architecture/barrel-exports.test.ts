@@ -1147,6 +1147,16 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docQuanSatTaiMoc",
   "nhanMotDong",
   "truThang",
+  // [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: ba hàm GHI (nhập tay, nhập lô dán, rút) và hai hàm đọc CÓ CỔNG
+  // `item.manage` không cột giá. Bộ đọc văn bản dán (`docCsvNgoai`) không ra cửa: chỗ gọi duy nhất là `nhapDuLieuNgoai`.
+  "khaiMocNgoai",
+  "nhapDuLieuNgoai",
+  "rutDuLieuNgoai",
+  "lietKeLoDuLieuNgoai",
+  "docLoDuLieuNgoai",
+  // [S1.276 / S4.6b] Cờ mốc ngoài của bảng benchmark (không đơn giá) — không cổng, chỗ gọi duy nhất là `docBenchmark` (có cổng
+  // `bid.view`), ghim ở `bang-ngoai-liet-ke.test.ts`. Nhãn ngoài đi qua `tinhBenchmarkGoi`/`ghiBanLuuBenchmark`, số qua `tinhDaiDong`.
+  "docCoMocNgoai",
 ];
 
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.

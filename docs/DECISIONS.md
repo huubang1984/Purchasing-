@@ -5716,6 +5716,8 @@ vai ghi được cùng đúng một cổng đọc.*
 |---|---|---|
 | `rfq_unsealed_bids` (019) | `app_unseal`, sau cổng bốn vế và đủ chữ ký phê duyệt | `bid.view` ở `buildComparisonTable` |
 | `rfq_evaluation_lines` (057) | `app_api` qua `taoLuotDanhGia`, `GRANT INSERT` theo **CỘT** | `bid.view` ở `docBangXepHang` |
+| **[S1.272 / ADR-149]** `external_price_references` (`109`) — giá KHÔNG phải báo giá (ADR-095 ⑸) | `app_api` qua người giữ `item.manage` (`nhapDuLieuNgoai`, `khaiMocNgoai`), `GRANT INSERT` theo **CỘT**, trigger `du_lieu_nen_kiem_quyen_ghi` | `bid.view` — ~~bộ đọc giá là của S4.6b; ở S4.6a **không câu nào đọc `don_gia`**~~ **[S1.276 / ADR-151]** ở `docBenchmark`/`docDaiBenchmark`, qua bộ đọc `packages/du-lieu-nen/src/gia-ngoai.ts` — tệp DUY NHẤT đọc `don_gia` (`tests/architecture/bang-ngoai-liet-ke.test.ts`) |
+| **[S1.272 / ADR-149]** `external_purchase_history` (`109`) — giá KHÔNG phải báo giá | như dòng trên | như dòng trên |
 
 **Vì sao ⑵ KHÔNG phải một lần nới lỏng tự phục vụ.** Lớp bảo vệ của bảng thứ hai không thua bảng thứ
 nhất: ENABLE + FORCE RLS, policy `_tenant_isolation` cộng `_khach`, `GRANT` theo cột (`id` và
@@ -5749,6 +5751,13 @@ KHÁC đã lộ trước mốc mở giá (lớp dữ liệu nền) — định d
 xuất. Mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, giá) với lịch sử giá của chính tổ chức (ADR-144 ⑸). Vai ghi: không vai CSDL nào — bundle là artefact dựng lúc xuất. Cổng đọc: `audit.read` + `bid.view` ở `xuatBoBangChung`
 (`GET /rfqs/:rfqId/evidence-bundle`, một hàng sổ `EVIDENCE_BUNDLE_EXPORTED`); công cụ vận hành `pnpm bang-chung xuat` giữ
 `DATABASE_URL`, tức đã đứng ngoài mọi cổng ứng dụng (spec S4 §2.5 ㉑).
+
+**[S1.272 / S4.6a / ADR-149] Hai dòng *"giá không phải báo giá"* của ADR-095 ⑸ nay có bảng.** Bước 14 của kịch bản 41 đo chúng bằng
+hai kim riêng (ADR-095 ⑹): một mốc giá ngoài và một dòng lịch sử ngoài nhập qua HTTP ở bước 1 — trước mọi lượt chấm, benchmark, BAFO
+và lần xuất bộ bằng chứng — và mỗi kim chỉ đứng ở đúng bảng của nó (không ở sổ kiểm toán, không ở bảng kia). Lời khai của dòng thứ
+nhất (giá dạng rõ chỉ ở `rfq_evaluation_lines`, `rfq_unsealed_bids`) không đổi: kim ấy là một TỔNG của báo giá. Cột *cổng ĐỌC* của
+hai dòng mới khai `bid.view` theo ADR-096 ⑵; người GHI (`DATA_STEWARD`) không đọc lại được giá mình nhập — màn `/du-lieu` hiện hàng
+không cột giá, dưới cổng `item.manage` trong hàm.
 
 ---
 
@@ -11642,6 +11651,112 @@ Câu hỏi của tầng gói lọc trạng thái theo cạnh (`DRAFT` ở nộp,
 
 - K2b, K5b — kiểm lại ở bậc cao hơn lúc trao (S3.5); màn và lượt đi thử T4 (S3.3e); khoản 319 ở tổ chức chưa bật.
 
+---
+
+## ADR-149 — S4.6a: hai bảng giá không phải báo giá — người quản lý dữ liệu mù giá nhập tay hay dán CSV (tất-cả-hoặc-không, đơn vị phải quy đổi được lúc ghi), rút theo mã hàng, đọc lại KHÔNG cột giá; S4.6 chia hai PR
+
+**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-06, cả bốn theo đề xuất, sau phép đo
+(và hai điểm nữa sau rà soát đối kháng, cùng ngày, theo đề xuất — `15.500` mơ hồ, ngày mua không sau hôm nay; xem ⑷):
+⑴ màn `/du-lieu` hiện hàng đã nhập KHÔNG cột giá — giữ nguyên ADR-096 ⑵ (cổng đọc giá `bid.view`); người quản lý dữ liệu sửa bằng rút
+rồi nhập lại; ⑵ dải lịch sử ngoài lấy *(ngày mua, nhà cung cấp đã làm sạch)* làm "gói", cửa sổ theo ngày mua, sàn và ngưỡng của phiên
+bản chính sách đã ghim; ⑶ mốc ngoài hiện ở dòng của gói X là mốc có `ngay_hieu_luc` MỚI NHẤT ≤ mốc mở giá, trong cửa sổ của chính
+sách, cùng tiền tệ, `ghi_luc` < mốc (L1); ⑷ hai PR — **S4.6a** (vòng này): bảng, nhập tay + dán CSV ở `/du-lieu`, ADR-054, bước 14,
+L1/L15 vế GHI; **S4.6b**: hiện ở `/mo-thau` (mốc ngoài chỉ độ lệch, dải thứ ba nhãn riêng), L15 vế ĐỌC, kịch bản 41. ⑵ và ⑶ là
+luật của S4.6b, ghi ở đây để vòng sau không chọn lại · **[S1.272]** · **Migration:** `109_du_lieu_ngoai` · **Liên quan:** ADR-096
+(ai nhập, ai đọc, nhãn), ADR-095 ⑸⑹ (hai dòng ADR-054, kim riêng ở bước 14), ADR-054 (hai dòng mới), ADR-097 ⑺ (vai mù giá),
+ADR-136 (lõi quy đổi `quy_doi_da_giai`), ADR-145 (khuôn rút theo mã hàng của `105`) · **Spec:** S4 §3.5, §4.6, §4.7, §5.1 L1 · L3 ·
+L15, §9 S4.6 · **Biên bản:** `evidence/security-reviews.md` §S1.272
+
+### Bối cảnh — phép đo trước khi viết
+
+1. **Người nhập không đọc được thứ mình nhập.** `DATA_STEWARD` chỉ giữ `item.manage`; trigger `033`/`083` cấm vai ấy — và người giữ
+   nó — giữ cùng `bid.view`. ADR-096 ⑵ đặt cổng đọc của hai bảng ở `bid.view`. Hệ quả: một màn liệt kê hàng đã nhập KÈM giá là một
+   lần nới ADR-096 ⑵ — câu hỏi ⑴ cho chủ dự án.
+2. **Khuôn có sẵn.** Bảng nền L1 (`079`: thứ tự `seq`, `ghi_luc = clock_timestamp()`, tác giả dẫn xuất từ phiên, chỉ-ghi-thêm cả
+   `TRUNCATE`), cổng ghi `item.manage` ở CSDL (`083`), lõi quy đổi theo mã (`096`), rút bằng hàng rút trỏ `rut_cua` (`105`).
+3. **Trần thân 64 KiB** của `router.ts` (đếm byte, chặn TRONG lúc đọc). Một dòng mốc ngoài điển hình 60–130 byte ⇒ ~500 dòng mỗi
+   lô; chữ có dấu ăn 2–3 byte mỗi ký tự.
+4. **Danh mục đơn vị** dùng mã chữ thường (`kg`, `t`, `m`, `m2`, `cai`…); chuỗi người dùng gõ đi qua `chuoi_sach` rồi bí danh đơn
+   vị của tổ chức (`don_vi_tai`) — đúng luật `maDanhMuc` của màn quy đổi riêng.
+
+### Quyết định
+
+⑴ **Hai bảng, khuôn L1** (`109`): `external_price_references` (hàng chuẩn, đơn giá, đơn vị, tiền tệ, `ngay_hieu_luc`, `nguon`) và
+`external_purchase_history` (thêm `ngay_mua` thay ngày hiệu lực, `nha_cung_cap_text`). Cả hai mang `lo_nhap_id`; `id`, `seq`,
+`ghi_luc` ngoài `GRANT`; ENABLE + FORCE RLS, `_tenant_isolation` + `_khach` RESTRICTIVE (L6: không phiên khách nào đọc). `CHECK`
+có tên: đơn giá dương hữu hạn, đơn vị đã làm sạch, tiền tệ `VND`/`USD`, nguồn 1–500 ký tự, nhà cung cấp 1–300, hình dạng hàng dữ
+liệu / hàng rút.
+
+⑵ **Luật ghi ở CSDL** (`du_lieu_ngoai_kiem_ghi`, ghim ở hardening): đơn vị phải quy đổi được sang đơn vị gốc của hàng chuẩn theo
+lõi `quy_doi_da_giai` tại `clock_timestamp()` — không thì từ chối có tên `du_lieu_ngoai_don_vi_khong_quy_doi_duoc`; hàng rút không
+được trỏ về một hàng rút. Tầng gói hỏi CÙNG lõi trước, cho cả lô trong một câu, để trả lỗi THEO DÒNG; trigger hỏi lại — tầng có
+thẩm quyền.
+
+⑶ **Rút theo mã hàng** (khuôn `105`), không theo khoá tự nhiên: hai mốc cùng hàng chuẩn là hai lời khai độc lập. Rút một hàng, hay
+mọi hàng còn hiệu lực của một lô; mỗi lần rút một hàng sổ. `UNIQUE (org_id, rut_cua)` giữ mỗi hàng một lần rút khi hai lần rút đua.
+
+⑷ **Nhập.** Nhập tay ở bước 4 (trang hàng chuẩn) là một lô một dòng; dán CSV ở bước 7 là một lô tới **1000 dòng**, thân JSON
+`{ vanBan }` dưới trần 64 KiB giữ nguyên (ADR-096 ⑸). Dòng tiêu đề bắt buộc, thứ tự cột tự do, có dấu hay không; phân cách tab, `;`
+hay `,`; số dùng dấu chấm thập phân, không phân cách nghìn (cả `1,234.5` lẫn `1.234,5` bị từ chối — đoán sai một trong hai là lệch
+nghìn lần); ngày `YYYY-MM-DD` hay `DD/MM/YYYY` có thật. **[sau rà soát — chủ dự án chốt 2026-10-06]** Đơn giá dạng `15.500` — một
+đến ba chữ số, MỘT dấu chấm, ĐÚNG ba chữ số sau — bị từ chối là MƠ HỒ (`DON_GIA_MO_HO`) ở cả hai tiền tệ và cả nhập tay: bảng tính
+tiếng Việt hiện 15500 thành chuỗi ấy, và luật dấu chấm thập phân đọc nó thành 15,5. `15.5`, `15.50`, `0.500`, `2.3450` vẫn nhận; giá
+USD có đúng ba số lẻ viết thêm một số 0. Ngày mua của lịch sử ngoài không được sau HÔM NAY theo giờ Việt Nam (UTC+7) —
+`NGAY_MUA_SAU_HOM_NAY` ở bộ đọc, `du_lieu_ngoai_ngay_mua_sau_hom_nay` ở trigger; ngày hiệu lực của mốc ngoài không chặn (bảng giá có
+thể hiệu lực từ tháng sau). Dòng tiêu đề mà không ô nào là tên cột (dán thiếu tiêu đề) ⇒ một lỗi `KHONG_CO_TIEU_DE`; tên cột lạ chỉ
+được nhắc lại khi nó chỉ gồm chữ thường không dấu và gạch dưới, không thì lỗi nêu vị trí (`#7`); chữ ngay sau ngoặc kép đóng là
+`NGOAC_KEP_HO`. Lô **tất-cả-hoặc-không**: một dòng sai ⇒ 422 mang MỌI lỗi theo số dòng vật
+lý, không dòng nào được ghi. Không câu lỗi nào lặp lại giá trị của ô. Một lô một hàng sổ, payload không giá (`loai`, `cachNhap`,
+`soDong`, `soHangChuan`).
+
+⑸ **Đọc lại không cột giá**, dưới cổng `item.manage` TRONG hàm (`lietKeLoDuLieuNgoai`, `docLoDuLieuNgoai` — rổ `HAM_DOC_CO_QUYEN`):
+lô (loại, khoảng ngày, số dòng còn hiệu lực / tổng, số hàng chuẩn, người nhập, lúc), hàng của lô (mã hàng, đơn vị, tiền tệ, ngày,
+nhà cung cấp, nguồn, đã rút). Danh sách cắt ở 200 lô mới nhất và nói ra (`conNua`). Người giữ `bid.view` mà không giữ `item.manage`
+bị từ chối — danh sách là màn của người nhập. Nhập tay trả `hangId` của hàng vừa ghi: đường sửa duy nhất của người mù giá là rút
+đúng hàng ấy. Ba route đọc `agent: false` (spec §3.5).
+
+⑹ **L15 vế ghi.** Không câu SQL nào ĐỌC `don_gia` của hai bảng ở vòng này — kể cả không viết tên cột: `*` ngoài `count(*)`, hàm
+đóng gói hàng (`to_jsonb`, `row_to_json`…), bí danh bảng đứng một mình hay ép kiểu, `RETURNING don_gia` đều bị nêu —, không migration
+nào (kể cả `109` và tệp ghim) có `FROM`/`JOIN` hai bảng, và không migration nào ngoài hai tệp ấy nhắc tên chúng: không view, hàm hay
+phép đếm SQL (cổng (e) của S4b) đọc được lịch sử ngoài mà không qua lớp đã liệt kê (`tests/architecture/bang-ngoai-liet-ke.test.ts`).
+Lớp ấy là lớp CHỮ: một câu SQL dựng động (`format('%I')`, như hai hàm trigger dùng chung) vượt qua nó — nói ra, không chặn. Bộ đọc giá
+dưới `bid.view` vào danh sách ấy ở S4.6b bằng một dòng có lý do. **[S1.276 / ADR-151]** Đã vào: `gia-ngoai.ts`, đúng hai câu đọc giá.
+
+### Đo bằng gì
+
+- T1 `packages/du-lieu-nen/src/csv-ngoai.test.ts` — bộ đọc văn bản dán, mỗi luật một ca, không câu lỗi nào lặp lại ô.
+- T2 `packages/du-lieu-nen/src/du-lieu-ngoai.int.test.ts` — đường gói, lỗi theo dòng, luật ở CSDL bằng câu SQL THÔ dưới `app_api`,
+  chỉ-ghi-thêm, L3, xuyên tổ chức, đọc không giá, `conNua`.
+- T2 `apps/api/src/du-lieu-ngoai.int.test.ts` — mười route qua HTTP; người giữ `bid.view` nhận 403 ở cả mười; không thân trả về
+  nào mang đơn giá.
+- T3 bước 1 + bước 14 của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` — hai kim riêng (ADR-095 ⑹), mỗi kim chỉ ở đúng
+  bảng của nó sau chấm, benchmark, BAFO và xuất bộ bằng chứng; bộ quét rò rỉ trước mở thầu đi qua bảy route ghi.
+- `apps/web/src/phuc-vu.test.ts`, `apps/web/src/du-lieu.test.ts` — bước 7 và khối nhập tay của `/du-lieu`.
+
+### Cái giá và giới hạn nói ra
+
+- **Người nhập không kiểm được con số mình gõ.** Một đơn giá gõ sai chỉ lộ ra khi người giữ `bid.view` đọc nó (S4.6b). Đây là cái
+  giá chủ dự án chọn ở ⑴ để vai mù giá giữ nguyên nghĩa.
+- **Không khử trùng.** Dán cùng một lô hai lần là hai lô, hai lần dữ liệu; luật ⑶ của chủ dự án (mốc MỚI NHẤT) làm mốc trùng vô hại ở
+  S4.6b, dải lịch sử ngoài thì không — hai dòng trùng là hai quan sát của cùng "gói" (ngày mua, nhà cung cấp) và vào trung vị của gói
+  ấy hai lần. Người nhập thấy lô trùng ở bước 7 (cùng khoảng ngày, cùng số dòng) và rút được.
+- **Quy đổi được lúc ghi không có nghĩa quy đổi được lúc đọc.** Một quy đổi riêng rút sau lần ghi làm hàng thành không đo được ở gói
+  mở sau lần rút ấy; S4.6b đọc lõi tại mốc của gói.
+- **`nguon` là lời khai,** không phải phép kiểm máy (ADR-096 ⑶).
+- **Luật `15.500` chỉ ở tầng gói.** CSDL nhận `numeric`, không thấy chuỗi người gõ; một câu INSERT thô dưới `app_api` vượt qua nó —
+  cùng ranh giới với mọi luật hình dạng của chuỗi nhập. Ngày `03/04/2026` luôn là 3 tháng 4 (luật `DD/MM/YYYY` đã chốt): một bảng tính
+  theo kiểu Mỹ dán vào sai ngày mà không lỗi khi ngày ≤ 12.
+- **Trần 1000 dòng và 64 KiB** — màn nói trước khi thân vượt trần (đếm byte); lô lớn hơn chia nhiều lần dán.
+
+### Điều ADR này KHÔNG nói
+
+- Phép đọc giá, độ lệch của mốc ngoài, dải lịch sử ngoài và nhãn ở `/mo-thau` — S4.6b, theo ⑵ ⑶ của chủ dự án ở trên. **[S1.276]**
+  ADR-151.
+- Nhập bằng tệp (multipart) — ADR-096 ⑸ giữ dán văn bản.
+- Tiền tệ khác `VND`/`USD`, và quy đổi tiền tệ.
+
+---
+
 ## ADR-150 — S3.3e1: màn kiểm soát — cờ hiển thị thay lối tự nạp (khoản 340), mã ở lời từ chối của chốt, danh sách mang lần nộp, xác minh ràng băm hồ sơ đã thấy, ô chọn nhà cung cấp có sẵn
 
 **Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-06: *"Tiếp S3.3e1"*; trước khi soi, bốn câu theo đề
@@ -11724,3 +11839,108 @@ lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng ch�
 
 `gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
 người liên hệ (khoản nợ mới).
+
+---
+
+## ADR-151 — S4.6b: lịch sử mua ngoài hệ thống và mốc ngoài ở `/mo-thau` — nhãn ngoài tính cùng bản lưu và lưu không số tiền, cờ mốc ngoài ở bảng, số và độ lệch ở *Xem dải*, L1 tại mốc mở giá, L15 vế đọc
+
+**Ngày:** 2026-10-06 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt hai câu ngày 2026-10-06, cả hai theo đề xuất, sau phép đo:
+⑴ nhãn của mỗi báo giá theo dải lịch sử mua ngoài hệ thống TÍNH cùng lần tính bản lưu nội bộ (ADR-143) và LƯU — nhãn, chiều, số đếm,
+không số tiền — ở một bảng con; bảng benchmark theo dòng có cột riêng *"Lịch sử ngoài"*; cột Benchmark của bảng xếp hạng giữ NỘI BỘ;
+⑵ mốc ngoài: bảng chỉ hiện CỜ *"có mốc ngoài (nguồn, ngày hiệu lực)"*, con số theo đơn vị gốc và độ lệch phần trăm của từng báo giá ở
+*Xem dải*. Sáu mặc định kỹ thuật nói ra cùng lúc và không bị phản đối (⑶–⑻ dưới) · **[S1.276]** · **Migration:**
+`110_ban_luu_benchmark_ngoai` · **Liên quan:** ADR-096 ⑵ ⑷ (người đọc `bid.view`; mốc chỉ độ lệch, lịch sử ngoài dải riêng), ADR-149
+⑵ ⑶ ⑹ (gói của dải ngoài, luật chọn mốc, L15 vế ghi), ADR-143 (bản lưu một lần mỗi lần mở thầu), ADR-142 (lõi benchmark), ADR-136
+(lõi quy đổi `quy_doi_da_giai`), ADR-054 (hai dòng của hai bảng ngoài) · **Spec:** S4 §2.4 ⑽, §4.6, §4.7, §5.1 L1 · L15, §9 S4.6b ·
+**Biên bản:** `evidence/security-reviews.md` §S1.276
+
+### Bối cảnh — phép đo trước khi viết
+
+1. **Bản lưu không mang giá của chính gói.** ADR-143 lưu nhãn, không số; nhãn theo một dải cần đơn giá QUY ĐỔI của báo giá, tức đúng
+   lần đọc as-of `quan_sat_gia` mà bản lưu sinh ra để tránh (18–19 s một gói 20 dòng ở 5.000 gói, §S1.256). Đơn giá ấy có sẵn ở đúng
+   hai lúc: lần đọc ĐẦU (lúc tính bản lưu) và lúc bấm *Xem dải* một dòng.
+2. **Đọc hai bảng ngoài rẻ:** chỉ mục `(org_id, canonical_item_id)` của `109`, hàng rút tra qua `UNIQUE (org_id, rut_cua)`.
+3. **Lớp L15 của S4.6a** (`bang-ngoai-liet-ke.test.ts`) cấm mọi câu đọc `don_gia` và mọi migration ngoài `109` và tệp ghim nhắc tên hai
+   bảng — bộ đọc giá dưới `bid.view` phải vào bằng một dòng có lý do, và bảng mới không được trỏ khoá ngoại về hai bảng ấy.
+4. **Không một lượt chấm nào gọi đường bản lưu** — lượt chấm gọi `tinhBenchmarkGoi` riêng, ghi `103`; bộ bằng chứng đọc `103`.
+
+### Quyết định
+
+⑴ **Nhãn ngoài trong bản lưu** (`110`): `price_benchmark_snapshot_external_lines` — một hàng mỗi (báo giá, dòng) ĐO ĐƯỢC của bản lưu:
+nhãn (`BINH_THUONG` · `LECH_VUA` · `LECH_CAO` · `CHUA_DU_LICH_SU`), chiều, cửa sổ ngày, số dòng / gói / nhà cung cấp, số loại vì tiền tệ
+và vì đơn vị. Không cột tiền. Khoá ngoại cùng giao dịch tới bản lưu (khuôn `…_cung_ban_luu_fk` của `104`) và khoá ngoại sáu cột tới
+DÒNG ĐO ĐƯỢC của bản lưu (cùng hàng chuẩn, cùng tiền tệ — dòng `KHONG_DO_DUOC` có tiền tệ NULL nên không trỏ được). Chỉ-ghi-thêm bằng
+quyền, RLS + `_khach`. `tinhBenchmarkGoi` nhận `kemNgoai`: chỉ `docBenchmark` bật, lượt chấm không — nhãn ngoài không vào `103`, bộ bằng
+chứng, Risk Score hay cổng (e). Bản lưu tính TRƯỚC khi có tệp này có dòng đo được mà không hàng ngoài nào ⇒ `dongNgoai: null`, màn nói
+*"bản benchmark này tính trước khi có lịch sử ngoài — xem ở «Xem dải»"*.
+
+⑵ **Mốc ngoài:** bảng benchmark đọc CỜ ở mỗi lần đọc (`docCoMocNgoai` — một câu KHÔNG đọc đơn giá; tất định vì đọc tại mốc đã lưu);
+*Xem dải* đọc con số (theo đơn vị gốc, tại mốc mở giá) và trả độ lệch `(giá − mốc) / mốc · 100` của từng báo giá, một chữ số lẻ, làm
+tròn nửa-ra-xa-0, tính chính xác trên số thập phân. Mốc KHÔNG sinh nhãn (ADR-096 ⑷).
+
+⑶ **L1 tại mốc mở giá của gói** — mặc định nói ra. Dải ngoài và mốc ngoài của X chỉ đọc hàng ghi TRƯỚC mốc mở giá của X và chưa bị rút
+TRƯỚC mốc ấy. Hàng ghi sau mốc chỉ được ĐẾM (`sauMoc.GHI`, mốc: `ghiSauMoc`); lần rút sau mốc KHÔNG gỡ hàng khỏi dải hay mốc của gói đã
+mở — được đếm (`sauMoc.RUT`) và nói ra (*"mốc này đã bị rút SAU mốc mở giá — vẫn là mốc của gói này"*). Hệ quả: đơn giá gõ sai lộ ra ở
+`/mo-thau` (giới hạn ADR-149) nhưng chỉ sửa được cho các gói mở SAU lần rút.
+
+⑷ **Quy đổi tại mốc** — mặc định. Đơn giá ngoài quy về đơn vị gốc bằng `quy_doi_da_giai` TẠI MỐC, khoá đơn vị đúng như trigger ghi
+`du_lieu_ngoai_kiem_ghi` hỏi; không quy đổi được (vd. quy đổi riêng rút trước mốc) ⇒ loại, đếm. Khác tiền tệ với báo giá ⇒ loại, đếm.
+
+⑸ **Cửa sổ theo NGÀY Việt Nam** — mặc định. `[ngày(mốc) − cua_so_thang tháng, ngày(mốc)]`, cả hai đầu tính vào, ngày theo UTC+7 — cùng
+lịch với luật *"ngày mua không sau hôm nay"*. Ngày mua cho dải; ngày hiệu lực cho mốc (mới nhất trong cửa sổ, cùng tiền tệ, quy đổi
+được; trùng ngày thì hàng nhập sau). Gói của dải là `(ngày mua, chuoi_sach(nhà cung cấp))` (ADR-149 ⑵); sàn và ngưỡng của phiên bản ghim.
+
+⑹ **Chữ riêng ghi rõ nguồn** — mặc định. Mọi nhãn ngoài nói *"lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập"*; *"thấp bất
+thường"* vẫn chỉ dẫn tới yêu cầu làm rõ (§2.4 ⑾). Nhãn ngoài lệch cao tô riêng ô của nó, không tô cả hàng như nhãn nội bộ.
+
+⑺ **Lõi một phương pháp.** Dải ngoài dùng chung `mocSoTheoGoi` (tách ra từ `tinhDai`) và `ganNhan` của dải nội bộ — không bản luật thứ
+hai. Lõi thuần ở `dai-ngoai.ts`; bộ đọc SQL ở `gia-ngoai.ts` — TỆP DUY NHẤT được đọc `don_gia` của hai bảng (đúng hai câu; câu đọc cờ
+mốc không đọc giá), không cổng trong tệp, chỉ `benchmark-goi.ts` gọi, mà các hàm ấy chỉ `doc-benchmark.ts` (cổng `bid.view`, hàng sổ)
+gọi — `bang-ngoai-liet-ke.test.ts` ghim theo ký hiệu.
+
+⑻ **Hàng sổ.** `BENCHMARK_READ` thêm `soDongNgoai` (null với bản lưu cũ), `soMocNgoai`; `BENCHMARK_BAND_READ` thêm `soDaiNgoai`,
+`soMocNgoai`. Không giá.
+
+⑼ **[sau rà soát đối kháng] Đọc chặn được, và chờ lô đang ghi.** Bộ đọc chỉ lấy hàng trong cửa sổ ngày (tương đương chính xác — lõi bỏ
+hàng ngoài cửa sổ trước mọi phép đếm) và quy đổi MỘT lần cho mỗi (hàng chuẩn, đơn vị) — đo: 50 000 dòng lịch sử một hàng chuẩn ⇒ 14,4 s
+(sát `statement_timeout` 15 s) thành 0,26 s khi dòng trải 2 000 ngày, 1,2 s khi cả 50 000 dòng trong cửa sổ. Trước khi đọc, bộ đọc lấy
+khoá tư vấn DÙNG CHUNG trên hai bảng của tổ chức — cùng khoá mà `du_lieu_nen_dat_thu_tu` (`079`) lấy ĐỘC QUYỀN trước khi đặt `ghi_luc`:
+`ghi_luc` là lúc INSERT chứ không phải lúc commit, nên một lô dài vắt qua mốc mở giá mang `ghi_luc` < mốc mà chưa thấy được; chờ khoá thì
+bản lưu và *Xem dải* thấy cùng một tập. Lần đọc bảng chờ tối đa một lô đang ghi (trần `lock_timeout` 15 s); cờ mốc của lần đọc đầu đọc
+TRƯỚC khoá hàng gói, để cửa sổ `FOR SHARE` của S1.274 giữ ngắn. Ngày ra bằng `to_char` — không phụ thuộc `DateStyle`; lõi NÉM trên ngày
+khác dạng.
+
+### Đo bằng gì
+
+- T1 `packages/du-lieu-nen/src/dai-ngoai.test.ts` — ngày Việt Nam, cửa sổ, gói, sàn, L1 ghi/rút trước-sau mốc, loại tiền tệ và quy
+  đổi, chọn mốc (ngày, `seq` so số, quy đổi được, tiền tệ), độ lệch và làm tròn.
+- T1 `tests/architecture/bang-ngoai-liet-ke.test.ts` — `don_gia` chỉ đọc ở `gia-ngoai.ts`, đúng hai câu; câu đọc cờ không đọc giá; chỗ
+  gọi ghim theo ký hiệu; lượt chấm không bật `kemNgoai`; không migration nào đọc hay nhắc hai bảng ngoài ngoài `109` và tệp ghim.
+- T2 `packages/danh-gia/src/benchmark.int.test.ts` ⑽ — dữ liệu thiết kế (gói cùng nhà cung cấp đã làm sạch, quy đổi tấn, quy đổi riêng
+  rút trước mốc, rút trước và sau mốc, ghi sau mốc, mốc tương lai, mốc USD): nhãn ngoài đúng thiết kế, bản lưu đọc lại, Xem dải đúng số,
+  độ lệch, cờ, hàng sổ; bản lưu cũ; lệch bản lưu; bảy ràng buộc CSDL có tên; chỉ-ghi-thêm, khách, xuyên tổ chức.
+- T3 kịch bản 41 — dữ liệu ngoài của bước 1 (ngày tương đối) đi qua đường đọc: nhãn ngoài và cờ trên bản lưu không mang kim, Xem dải
+  THẤY mốc ngoài theo kg; hai kim không ở tệp nào của bộ bằng chứng; bước 14 không đổi (bảng con không mang kim).
+- `apps/web/src/benchmark.test.ts`, `apps/web/src/phuc-vu.test.ts` — chữ, cột, cờ, tô ô, bản lưu cũ, Xem dải.
+
+### Cái giá và giới hạn nói ra
+
+- **Sửa gõ sai muộn một gói.** ⑶: một mốc hay một dòng lịch sử sai lộ ra ở gói đầu tiên đọc nó và ở lại trong dải của mọi gói đã mở
+  trước lần rút. Cái giá của L1 — đổi lại, không ai chỉnh được thước SAU khi đã thấy giá.
+- **Bản lưu trước S4.6b không có nhãn ngoài** — không tính bù; *Xem dải* vẫn tính dải ngoài.
+- **Cờ mốc đọc lại ở mỗi lần đọc bảng** (không lưu): tất định tại mốc đã lưu, nhưng một hàng mốc bị sửa ngoài luật chỉ-ghi-thêm đổi cờ mà
+  không có phép so nào bắt — khác nhãn ngoài, có `khopBanLuu` ở *Xem dải*.
+- **Không khử trùng** (ADR-149): dán một lô hai lần là hai quan sát cùng gói ở dải ngoài.
+- **`nguon` và nhà cung cấp là lời khai** — hiện nguyên văn (`textContent`), ba nguồn đầu.
+- **Lớp L15 vẫn là lớp chữ** (ADR-149 ⑹) — nay không phân biệt hoa thường.
+- **Migration khoá bảng lúc dựng chỉ mục.** `ADD CONSTRAINT … UNIQUE` trên `price_benchmark_snapshot_lines` lấy khoá độc quyền trong lúc
+  dựng chỉ mục — mọi lần đọc benchmark chờ tới hết lúc ấy khi deploy. Bảng nhỏ ở giai đoạn thí điểm; `CREATE INDEX CONCURRENTLY` không
+  chạy được trong giao dịch của `migrate()`.
+- **Người nhập chờ người đọc.** Khoá dùng chung giữ tới hết giao dịch đọc: một lô đang dán chờ các lần đọc benchmark đang mở — với lần
+  đọc ĐẦU, tới hết phép tính bản lưu.
+
+### Điều ADR này KHÔNG nói
+
+- Nhãn ngoài trong lượt chấm, bộ bằng chứng hay Risk Score — không có, và đổi điều ấy là một ADR mới (L15).
+- Quy đổi tiền tệ; tiền tệ khác `VND`/`USD`.
+- Nhập bằng tệp; khử trùng lô.

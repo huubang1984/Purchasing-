@@ -202,6 +202,18 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "báo giá của gói: con số tiền gom từ nhiều gói, cùng hạng với `/items/:itemId/price-history`. Spec S4 §3.5 khai `agent: false`; " +
     "cổng `bid.view` và hàng sổ `BENCHMARK_BAND_READ` nằm trong `docDaiBenchmark`. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.260 / S4.5c1]",
+  "/external-data/batches":
+    "LÔ MỐC GIÁ NGOÀI VÀ LỊCH SỬ MUA NGOÀI HỆ THỐNG — loại, số dòng, số hàng chuẩn, khoảng ngày, người nhập, lúc nhập. Không đơn giá, " +
+    "nhưng là danh sách những gì người quản lý dữ liệu đã đưa vào thước đo của benchmark: đọc nó là việc của chính người ấy (cổng " +
+    "`item.manage` trong `lietKeLoDuLieuNgoai`). Spec S4 §3.5 khai mọi route mốc ngoài là `agent: false`; route khai `agent: false` và " +
+    "dòng này khai vì sao. [S1.272 / S4.6a]",
+  "/external-references/batches/:batchId":
+    "CÁC HÀNG CỦA MỘT LÔ MỐC GIÁ NGOÀI — hàng chuẩn, đơn vị, tiền tệ, ngày hiệu lực, nguồn, đã rút chưa. Không đơn giá. Cổng " +
+    "`item.manage` trong `docLoDuLieuNgoai`; spec S4 §3.5 khai `agent: false`. [S1.272 / S4.6a]",
+  "/external-purchase-history/batches/:batchId":
+    "CÁC HÀNG CỦA MỘT LÔ LỊCH SỬ MUA NGOÀI HỆ THỐNG — hàng chuẩn, đơn vị, tiền tệ, ngày mua, tên nhà cung cấp, nguồn, đã rút chưa. " +
+    "Không đơn giá, nhưng tên nhà cung cấp và ngày mua của tổ chức là thông tin mua hàng nội bộ. Cổng `item.manage` trong " +
+    "`docLoDuLieuNgoai`; spec S4 §3.5 khai `agent: false`. [S1.272 / S4.6a]",
   "/auth/login-links":
     "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
     "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +

@@ -113,6 +113,11 @@ const HAM_DOI_TRANG_THAI = [
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
+  // [S1.272 / S4.6a] Mốc ngoài và lịch sử ngoài hệ thống: nhập tay, nhập lô dán, rút — route đòi `item.manage`, trigger
+  // `du_lieu_nen_kiem_quyen_ghi` đứng dưới ở CSDL.
+  "khaiMocNgoai",
+  "nhapDuLieuNgoai",
+  "rutDuLieuNgoai",
   // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
@@ -152,6 +157,9 @@ const HAM_CHI_DOC = [
   // [S1.262 / S4.5c2] `docQuanSatTaiMoc` — một lần đọc `quan_sat_gia` cho một hàng chuẩn tại một mốc; hai chỗ gọi: `tinhDaiDong` và
   // lớp dữ liệu nền của bộ bằng chứng (`dungBoBangChung`, cùng tư thế không cổng của nó). `ban-ro-liet-ke.test.ts` ghim tập chỗ gọi.
   "docQuanSatTaiMoc",
+  // [S1.276 / S4.6b] `docCoMocNgoai` — cờ mốc ngoài của bảng benchmark (nguồn, ngày hiệu lực; KHÔNG đơn giá), đọc tại mốc mở giá đã
+  // lưu. Chỗ gọi duy nhất là `docBenchmark` (`bid.view`, hàng sổ) — `bang-ngoai-liet-ke.test.ts` ghim tập chỗ gọi.
+  "docCoMocNgoai",
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
   // `app_unseal`, và KHÔNG có người dùng nào để hỏi quyền. Cùng lý do đã ghi cho `listSuppliers`.
   "auditStoredCiphertexts",
@@ -301,6 +309,10 @@ const HAM_DOC_CO_QUYEN = [
   "docBenchmark",
   // [S1.260 / S4.5c1] *Xem dải* một dòng: số của dải và giá quy đổi — cổng `bid.view` THẲNG trong thân, hàng sổ `BENCHMARK_BAND_READ`.
   "docDaiBenchmark",
+  // [S1.272 / S4.6a] Lô và hàng của mốc ngoài, lịch sử ngoài hệ thống — KHÔNG cột giá; cổng `item.manage` THẲNG trong thân (người
+  // quản lý dữ liệu mù giá đọc lại thứ mình nhập; chủ dự án chốt 2026-10-06).
+  "lietKeLoDuLieuNgoai",
+  "docLoDuLieuNgoai",
 ] as const;
 
 /**

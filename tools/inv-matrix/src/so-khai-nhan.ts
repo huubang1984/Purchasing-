@@ -411,13 +411,26 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // không ký danh sách có/không ngoại lệ, gói cấp kép, chưa đủ chữ ký — mỗi vế của hai hàm vị từ một đột biến.
   // [S1.273 / S3.3e1] `man-kiem-soat` đo hợp đồng mà màn đọc: lời từ chối K2/K5 mang mã của bảng qua HTTP, và số NHÓM đếm được của
   // danh sách lời mời bằng đúng hàm K2 dùng (hai nhà cung cấp chung MST gốc ⇒ một nhóm; tổ chức chưa bật ⇒ không khối ấy).
-  K2: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
-  K5: ["apps/api/src/canh-tranh-toi-thieu.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
+  // [S1.275 / S3.3e2] `kich-ban-41-http` bước 17 đo câu chuyện đầu-cuối qua đúng các route màn `/tao-thau` gọi: gói một lời mời bị K2
+  // chặn rồi `SINGLE_SOURCE` cứu, chữ ký của người lập ngoại lệ bị K5 chặn ở lần mở rồi người độc lập ký — sổ kể đúng thứ tự, lời từ
+  // chối mang mã; luồng MVP1 không chốt nào và không lập được ngoại lệ.
+  K2: [
+    "apps/api/src/canh-tranh-toi-thieu.int.test.ts",
+    "apps/api/src/man-kiem-soat.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+  ],
+  K5: [
+    "apps/api/src/canh-tranh-toi-thieu.int.test.ts",
+    "apps/api/src/man-kiem-soat.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+  ],
   // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
   // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
   // người chọn (người tạo, người thu hồi), khoá nhóm, *đếm được*, ROTATION, N = 0, nộp song song bị bắt lúc mở, hai lần mở đồng thời,
   // `opened_at` (khoản 319), READ COMMITTED, lớp chặn cuối — mỗi vế của hàm cửa sổ và hàm vị từ một đột biến.
-  K3: ["apps/api/src/xoay-vong.int.test.ts"],
+  // [S1.275 / S3.3e2] `kich-ban-41-http` bước 17: gói mời lại ba nhà cung cấp đếm được đã có trong các gói gần đây của người mua bị K3
+  // chặn lúc nộp, `ROTATION` cứu, rồi mở — qua HTTP, sổ kể đúng thứ tự.
+  K3: ["apps/api/src/xoay-vong.int.test.ts", "apps/unseal-worker/src/kich-ban-41-http.int.test.ts"],
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",
@@ -456,16 +469,28 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.197 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
   // ghi CSDL (L3); `ma-tran-quyen` khoá ba bản của danh sách loại trừ và cặp vai xung đột (L3, T1).
   // [S1.204 / S4.3a] `anh-xa` đo khuôn nền của hai bảng mới (L1), luật `TU_DONG` (L2), vế hành vi của L3 và L13.
+  // [S1.272 / S4.6a] `du-lieu-ngoai` (gói) đo khuôn nền của hai bảng giá ngoài bằng câu SQL thô dưới `app_api` — chỉ-ghi-thêm, hàng
+  // rút, cột ngoài GRANT, tác giả từ phiên; `du-lieu-ngoai` (apps/api) đo trọn đường ghi và rút qua HTTP, mỗi lần rút là hàng mới.
   L1: [
+    "apps/api/src/du-lieu-ngoai.int.test.ts",
+    // [S1.276 / S4.6b] vế ĐỌC của hai bảng ngoài: dải và mốc của gói X chỉ đọc hàng ghi trước mốc mở giá, chưa rút trước mốc; ghi và
+    // rút sau mốc chỉ được đếm — `dai-ngoai` đo ở lõi thuần, `benchmark.int` ⑽ trên dữ liệu thiết kế (kể cả gói Y mở sau thấy hàng mà
+    // X không thấy).
+    "packages/danh-gia/src/benchmark.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
+    "packages/du-lieu-nen/src/dai-ngoai.test.ts",
     "packages/du-lieu-nen/src/don-vi.int.test.ts",
+    "packages/du-lieu-nen/src/du-lieu-ngoai.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
   ],
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
   // [S1.234 / S4.3b] `anh-xa` (apps/api) đo cùng lớp cho ba route ghi ánh xạ: người tạo gói gọi ⇒ 403, không hàng ánh xạ nào.
+  // [S1.272 / S4.6a] `du-lieu-ngoai` (apps/api) đo cùng lớp cho bảy route ghi và ba route đọc dữ liệu ngoài: người giữ `bid.view`
+  // gọi cả mười ⇒ 403, mười hàng PERMISSION_DENIED, không hàng dữ liệu nào.
   L3: [
     "apps/api/src/anh-xa.int.test.ts",
+    "apps/api/src/du-lieu-ngoai.int.test.ts",
     "apps/api/src/du-lieu.int.test.ts",
     "apps/api/src/ngoai-le-canh-tranh.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
@@ -514,6 +539,20 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/lop-du-lieu-nen.test.ts",
     "tools/bo-xuat-danh-gia/src/doc-lap/benchmark-lai.test.ts",
     "tools/bo-xuat-danh-gia/src/kiem-du-lieu-nen.test.ts",
+  ],
+  // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
+  // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở
+  // tầng gói và tầng CSDL, đọc lại không giá; `bang-ngoai-liet-ke` là ranh giới tĩnh — mọi câu SQL chạm hai bảng có tên, `don_gia`
+  // chỉ ở câu INSERT, không migration nào khác nhắc tên chúng (cổng (e) không đọc được lịch sử ngoài). Vế ĐỌC ở S4.6b.
+  // [S1.276 / S4.6b] vế ĐỌC: `dai-ngoai` đo lõi thuần của dải thứ ba (cùng phương pháp, gói là ngày mua × nhà cung cấp) và của mốc
+  // ngoài (chỉ độ lệch); `benchmark.int` ⑽ đo nhãn ngoài trong bản lưu tách khỏi nhãn nội bộ, cờ mốc không con số, *Xem dải*, và bảng con
+  // ở CSDL; `bang-ngoai-liet-ke` nay ghim `don_gia` chỉ ở bộ đọc `gia-ngoai.ts` và chỗ gọi của nó — lượt chấm không bật nhãn ngoài.
+  L15: [
+    "packages/danh-gia/src/benchmark.int.test.ts",
+    "packages/du-lieu-nen/src/csv-ngoai.test.ts",
+    "packages/du-lieu-nen/src/dai-ngoai.test.ts",
+    "packages/du-lieu-nen/src/du-lieu-ngoai.int.test.ts",
+    "tests/architecture/bang-ngoai-liet-ke.test.ts",
   ],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.

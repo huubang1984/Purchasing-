@@ -83,6 +83,13 @@ const MOI_GIA: readonly string[] = [...NHA_CUNG_CAP.map((n) => n.gia), GIA_SUA_L
  */
 const SO_LUONG_DONG = 100;
 const donGiaCua = (tong: string): string => (Number(tong) / SO_LUONG_DONG).toFixed(2);
+/**
+ * [S1.272 / S4.6a] Hai KIM của dữ liệu ngoài (ADR-095 ⑹): đơn giá của một mốc giá ngoài và của một dòng lịch sử mua ngoài hệ thống,
+ * nhập ở bước 1 — TRƯỚC mọi lượt chấm, benchmark và xuất bộ bằng chứng — và quét ở bước 14. Hai con số không trùng giá nào của kịch
+ * bản, và khác nhau, nên mỗi kim chỉ được phép đứng ở ĐÚNG bảng của nó.
+ */
+const KIM_MOC_NGOAI = "73519.83";
+const KIM_LICH_SU_NGOAI = "64287.19";
 const banRo = (tong: string, ten: string): string =>
   JSON.stringify({ totalAmount: tong, currency: "VND", nhaCungCap: ten, lines: [{ lineNo: 1, unitPrice: donGiaCua(tong), amount: tong }] });
 /** Hàng chuẩn của dòng ấy (bước 1): gốc `kg`, tấm 1 500 × 6 000 × 12 mm thép 7 850 kg/m³ = 847,8 kg. */
@@ -619,6 +626,25 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(bd.status, bd.text).toBe(201);
     const qd = await goi("POST", `/items/${trangThai.hangChuanId}/conversions`, dl, { tuDonVi: "tam", sangDonVi: "kg", heSo: HANG_CHUAN_CHINH.heSoTam });
     expect(qd.status, qd.text).toBe(201);
+    // [S1.272 / S4.6a] Người quản lý dữ liệu dán một mốc giá ngoài và một dòng lịch sử mua ngoài hệ thống cho hàng chuẩn này — cả
+    // kịch bản sau đó (chấm, benchmark, BAFO, xuất bộ bằng chứng) chạy trong một thế giới CÓ dữ liệu ngoài; bước 14 quét hai kim.
+    // [S1.276 / S4.6b] Ngày TƯƠNG ĐỐI theo lịch Việt Nam: S4.6b đọc hai bảng trong cửa sổ 12 tháng của phiên bản ghim, nên một ngày
+    // viết cứng là quả bom hẹn giờ — rơi khỏi cửa sổ thì dải và mốc ngoài lặng lẽ rỗng mà kịch bản vẫn xanh ở mọi phép đo cũ.
+    const ngayLui = async (n: number): Promise<string> =>
+      (
+        await db.pool.query<{ d: string }>(
+          "SELECT ((timezone('UTC', clock_timestamp()) + interval '7 hours')::date - $1::int)::text AS d",
+          [n],
+        )
+      ).rows[0]!.d;
+    const mn = await goi("POST", "/external-references/import", dl, {
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_MOC_NGOAI},kg,VND,${await ngayLui(30)},Bang gia nha may\n`,
+    });
+    expect(mn.status, mn.text).toBe(201);
+    const ls = await goi("POST", "/external-purchase-history/import", dl, {
+      vanBan: `ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\n${HANG_CHUAN_CHINH.ma},${KIM_LICH_SU_NGOAI},kg,VND,${await ngayLui(60)},Cong ty Thep Ngoai,So mua 2025\n`,
+    });
+    expect(ls.status, ls.text).toBe(201);
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
     expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(true);
@@ -865,13 +891,19 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // [S1.199 / S4.2b] Người quản lý dữ liệu HY SINH: tám route ghi dữ liệu nền đòi `item.manage`, và chỉ `DATA_STEWARD` giữ
     // mã ấy — gọi bằng `m` thì dừng ở 403 của cổng, tức route không đi tới nghiệp vụ.
     const quanLyHy = await dangNhap("quan-ly-hy@vidu.vn", "DATA_STEWARD");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string; nhomId: string; itemId: string; lanNopB: number } = {
+    const hy: {
+      unsealId: string; mfaResetId: string; policyId: string; nhomId: string; itemId: string; lanNopB: number;
+      mocTay: string; loMoc: string; loLichSu: string;
+    } = {
       unsealId: UUID0,
       mfaResetId: UUID0,
       policyId: UUID0,
       nhomId: UUID0,
       itemId: UUID0,
       lanNopB: 0,
+      mocTay: UUID0,
+      loMoc: UUID0,
+      loLichSu: UUID0,
     };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
@@ -1095,6 +1127,44 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
         case "POST /uom/aliases/withdraw":
           return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
+        // [S1.272 / S4.6a] Bảy route ghi dữ liệu ngoài, trên hàng chuẩn hy sinh. Thứ tự của bảng route: nhập tay → dán mốc → dán lịch
+        // sử → rút lô mốc → rút lô lịch sử → rút hàng mốc → rút hàng lịch sử. Sáu route đi tới 201; route cuối rút một id không có
+        // (không route nào trả id hàng của một lô dán) ⇒ 422 có tên `KHONG_CO_HANG_DU_LIEU`, tức vẫn qua bộ đọc thân.
+        case "POST /items/:itemId/external-references":
+          return {
+            path: r.path.replace(":itemId", hy.itemId),
+            body: { donGia: "12.5", donVi: "kg", tienTe: "VND", ngayHieuLuc: "2026-01-15", nguon: "Bang gia quet" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.mocTay = (ph.body as { moc: { hangId: string } }).moc.hangId;
+            },
+          };
+        case "POST /external-references/import":
+          return {
+            path: r.path,
+            body: { vanBan: "ma_hang,don_gia,don_vi,tien_te,ngay_hieu_luc,nguon\nQUET-HY-SINH,13.5,kg,VND,2026-01-16,Bang gia quet\n" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.loMoc = (ph.body as { lo: { loNhapId: string } }).lo.loNhapId;
+            },
+          };
+        case "POST /external-purchase-history/import":
+          return {
+            path: r.path,
+            body: { vanBan: "ma_hang,don_gia,don_vi,tien_te,ngay_mua,nha_cung_cap,nguon\nQUET-HY-SINH,14.5,kg,VND,2025-11-20,Cong ty quet,So quet\n" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.loLichSu = (ph.body as { lo: { loNhapId: string } }).lo.loNhapId;
+            },
+          };
+        case "POST /external-references/batches/:batchId/withdraw":
+          return { path: r.path.replace(":batchId", hy.loMoc), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-purchase-history/batches/:batchId/withdraw":
+          return { path: r.path.replace(":batchId", hy.loLichSu), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-references/:rowId/withdraw":
+          return { path: r.path.replace(":rowId", hy.mocTay), body: {}, cookie: quanLyHy.cookie };
+        case "POST /external-purchase-history/:rowId/withdraw":
+          return { path: r.path.replace(":rowId", UUID0), body: {}, cookie: quanLyHy.cookie };
         // [S1.234 / S4.3b] Ba route ghi ánh xạ, trên gói HY SINH A (đã nộp, đã đóng) và hàng chuẩn hy sinh ở trên — người quản lý
         // dữ liệu hy sinh không chạm gói nào nên nằm ngoài tập loại trừ. Lý do khai sẵn: nếu gói A đã có bản rõ, L13 đòi nó.
         case "POST /rfqs/:rfqId/normalize":
@@ -1326,6 +1396,27 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect((dai.body as { dai: { trangThai: string } }).dai.trangThai).toBe("CO");
     const cuoi = trangThai.loiMoi.map((lm) => lm.gia).sort();
     expect([...quetDonGiaQuyDoi(dai.text)].sort(), "bộ quét phải THẤY đơn giá quy đổi ở Xem dải ngay khi gói UNSEALED").toEqual(cuoi);
+    // [S1.276 / S4.6b — L15 vế ĐỌC] Dữ liệu ngoài của bước 1 đi qua đường đọc `bid.view`: bản lưu mang nhãn ngoài (một dòng lịch sử
+    // ⇒ dưới sàn) và cờ mốc ngoài KHÔNG con số; Xem dải THẤY mốc ngoài theo kg (đối chứng dương của bộ đọc giá) và dải ngoài một dòng
+    // không con số; mỗi báo giá có độ lệch so với mốc.
+    const bn = (bm.body as { benchmark: { dongNgoai: { nhan: string; soDong: number }[] | null; mocNgoai: { nguon: string }[] } }).benchmark;
+    expect(bn.dongNgoai?.length, "mỗi (báo giá, dòng) đo được một nhãn ngoài").toBe(b.dong.filter((d) => d.nhan !== "KHONG_DO_DUOC").length);
+    for (const d of bn.dongNgoai ?? []) expect([d.nhan, d.soDong]).toEqual(["CHUA_DU_LICH_SU", 1]);
+    expect(bn.mocNgoai.map((m) => m.nguon)).toEqual(["Bang gia nha may"]);
+    expect(bm.text, "bản lưu và cờ mốc không mang kim ngoài").not.toContain(KIM_MOC_NGOAI);
+    expect(bm.text).not.toContain(KIM_LICH_SU_NGOAI);
+    const dn = (
+      dai.body as {
+        dai: {
+          daiNgoai: { soDong: number; duSan: boolean; trungVi: string | null }[];
+          mocNgoai: { moc: { donGiaQuyDoi: string } | null }[];
+          giaCuaGoi: { donGiaQuyDoi: string | null; lechMoc: string | null }[];
+        };
+      }
+    ).dai;
+    expect(dn.daiNgoai.map((x) => [x.soDong, x.duSan, x.trungVi])).toEqual([[1, false, null]]);
+    expect(Number(dn.mocNgoai[0]?.moc?.donGiaQuyDoi), "bộ đọc giá dưới `bid.view` THẤY mốc ngoài").toBe(Number(KIM_MOC_NGOAI));
+    expect(dn.giaCuaGoi.filter((g) => g.donGiaQuyDoi !== null).every((g) => g.lechMoc !== null)).toBe(true);
     expect(await soHangBenchmark(), "mỗi lần đọc một hàng sổ").toBe(truoc + 2);
     const { rows: tai } = await db.pool.query<{ payload: unknown }>(
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('BENCHMARK_READ', 'BENCHMARK_BAND_READ') AND resource_id = $2",
@@ -2049,6 +2140,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Ghi đúng như trình duyệt ghi: văn bản → byte UTF-8, không phân tích lại.
       for (const [ten, noiDung] of Object.entries(eb.tep)) await writeFile(join(quaHttp, ten), Buffer.from(noiDung, "utf8"));
 
+      // [S1.276 / S4.6b — L15] Nhãn ngoài không vào lượt chấm, nên không vào bộ bằng chứng; hai kim ngoài không ở tệp nào của bộ.
+      for (const [ten, noiDung] of Object.entries(eb.tep)) {
+        expect(noiDung, `${ten} mang kim mốc ngoài`).not.toContain(KIM_MOC_NGOAI);
+        expect(noiDung, `${ten} mang kim lịch sử ngoài`).not.toContain(KIM_LICH_SU_NGOAI);
+      }
       const kiem = chayCli(null, "kiem", "--bo", quaHttp);
       expect(kiem.ma, `${kiem.ra}\n${kiem.loi}`).toBe(0);
       expect(kiem.ra).toContain("ok=true");
@@ -2143,6 +2239,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     ).rows[0]!.v;
     expect(quyDoi.startsWith("10969.568")).toBe(true);
     expect((await quetGiaMoiQuanHe(db.pool, quyDoi)).dinh, "đơn giá quy đổi không được lưu ở đâu").toEqual([]);
+    // [S1.272 / S4.6a — ADR-095 ⑸⑹, ADR-054] Hai bảng giá KHÔNG phải báo giá: mỗi kim của bước 1 chỉ ở đúng bảng của nó — không ở
+    // sổ kiểm toán (payload lần nhập không mang giá), không ở bảng chấm, benchmark hay bản lưu, không ở bảng kia.
+    expect((await quetGiaMoiQuanHe(db.pool, KIM_MOC_NGOAI)).dinh, "mốc giá ngoài chỉ ở bảng của nó").toEqual(["external_price_references"]);
+    expect((await quetGiaMoiQuanHe(db.pool, KIM_LICH_SU_NGOAI)).dinh, "lịch sử ngoài chỉ ở bảng của nó").toEqual(["external_purchase_history"]);
     // Đối chứng dương trên CỤM CỦA KỊCH BẢN: một materialized view dựng LÚC CHẠY, ngoài migration — đúng chỗ hở mục (C) của
     // hardening không thấy — chép đơn giá ra; cùng bộ quét phải kể nó.
     await db.pool.query("CREATE MATERIALIZED VIEW public.zz_doi_chung_don_gia AS SELECT payload -> 'lines' AS dong FROM public.rfq_unsealed_bids");
@@ -2371,6 +2471,172 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       hanhDong.indexOf("GOVERNANCE_SIGNAL_ACKNOWLEDGED"),
     );
     expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
+  });
+
+  it("[INV-K2] [INV-K5] [INV-K3] bước 17 — [S3.3e2] ngoại lệ cạnh tranh qua HTTP: gói MỘT nhà cung cấp bị K2 chặn lúc nộp, `SINGLE_SOURCE` cứu, chữ ký của người lập ngoại lệ bị K5 chặn lúc mở, người độc lập ký thì mở; gói mời lại nhà cung cấp cũ bị K3 chặn, `ROTATION` cứu — luồng MVP1: không chốt nào, ngoại lệ không lập được", async () => {
+    // Hai gói ở bậc từ 100 triệu (§4.1: ba nhà cung cấp, ký danh sách, xoay vòng 5), một nhóm hàng RIÊNG — tổng 450 triệu, không cận
+    // nào của K10a. Mỗi chốt đã có ca riêng ở `apps/api` (`canh-tranh-toi-thieu`, `xoay-vong`, `ngoai-le-canh-tranh`); bước này nối
+    // chúng thành câu chuyện của màn `/tao-thau`, qua đúng các route màn gọi, và sổ kể lại theo thứ tự. Người lập ngoại lệ là `pm2` —
+    // giữ `rfq.invite`, không tạo, không mời —, nên vào tập loại trừ của K5; `pm3` dựng mọi hồ sơ nhà cung cấp nên cũng ở đó. Người
+    // ký độc lập là `pm4`, người dùng MỚI của bước này: thêm từ đầu luồng thì đổi số người ghi nhận được tín hiệu ở bước 16.
+    const m = trangThai.mua.cookie;
+    const taoGoi = async (tieuDe: string, giaTri: string, nhomHang: string | null): Promise<string> => {
+      const r = await goi("POST", "/rfqs", m, {
+        title: tieuDe,
+        deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+        ...(nhomHang === null ? {} : { categoryId: nhomHang }),
+      });
+      expect(r.status, r.text).toBe(201);
+      const id = (r.body as { rfq: { id: string } }).rfq.id;
+      expect((await goi("POST", `/rfqs/${id}/items`, m, { lineNo: 1, description: "Van dieu ap DN100 PN16", quantity: "4.0000", unit: "cai" })).status).toBe(201);
+      const ns = await goi("PUT", `/rfqs/${id}/budget`, m, { estimatedValue: giaTri, currency: "VND" });
+      expect(ns.status, ns.text).toBe(200);
+      return id;
+    };
+    const NGOAI_LE_A = { loai: "SINGLE_SOURCE", maLyDo: "PROPRIETARY_TECHNOLOGY", giaiTrinh: "Chi mot hang giu ban quyen van dieu ap loai nay tai Viet Nam" };
+    const hangChot = async (goiXet: readonly string[]): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = ANY($2::uuid[]) ORDER BY seq",
+          [orgA, goiXet],
+        )
+      ).rows.map((r) => r.ma);
+    /** Câu chuyện của một gói trong sổ: chốt chặn, ngoại lệ, nộp, ký, mở — kèm người làm. */
+    const tenNguoi = new Map([
+      [trangThai.mua.id, "mua"],
+      [trangThai.pm2.id, "pm2"],
+    ]);
+    const cauChuyen = async (rfqId: string): Promise<string[]> => {
+      const QUAN_TAM = new Set(["CONTROL_DENIED", "SOURCING_EXCEPTION_CREATED", "RFQ_SUBMITTED_FOR_APPROVAL", "RFQ_APPROVED", "RFQ_OPENED"]);
+      const { rows } = await db.pool.query<{ action: string; ma: string | null; nguoi: string | null }>(
+        "SELECT action, payload->>'ma' AS ma, actor_id::text AS nguoi FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+        [orgA, rfqId],
+      );
+      return rows
+        .filter((r) => QUAN_TAM.has(r.action))
+        .map((r) => `${r.ma === null ? r.action : `${r.action}:${r.ma}`}@${tenNguoi.get(r.nguoi ?? "") ?? "khac"}`);
+    };
+
+    // Đồ gá (khuôn đồ gá ⒜ của khối khoản 275 cuối tệp): bộ quét rò rỉ cố ý gọi mọi route bằng phiên `mua`, và mỗi lần từ chối tiêu
+    // một suất của ngân sách 30 lần từ chối mỗi phiên mỗi cửa sổ 15 phút (ADR-092). Đo trên cây gộp với PR #251 (thêm route vào bộ
+    // quét): phiên `mua` của luồng S3 tới đây đã 30/30, và lần từ chối CÓ CHỦ ĐÍCH đầu tiên của bước này (K2) nhận 429 thay vì 422.
+    // Một người mua thật không quét mọi route. Xoá bucket người gọi của cụm test — bảng toàn cục, cụm của riêng tệp này — trả bước về
+    // một cửa sổ mới; không lần từ chối nào bị bỏ khỏi sổ, và ba lần của bước vẫn đi qua đúng bucket ấy.
+    await db.pool.query("DELETE FROM caller_rate_limits");
+
+    if (!batS3) {
+      // Luồng MVP1: K2/K3/K5 không sống ở tổ chức chưa bật — gói không lời mời nộp, ký và mở như bước 16; lập ngoại lệ dừng ở lời
+      // từ chối *tổ chức chưa bật* của trigger (422 nghiệp vụ, không hàng ngoại lệ, không vào sổ chốt).
+      const a = await taoGoi("Van dieu ap mot nguon", "200000000.00", null);
+      const lap = await goi("POST", `/rfqs/${a}/exceptions`, trangThai.pm2.cookie, NGOAI_LE_A);
+      expect(lap.status, "luồng MVP1: tổ chức chưa bật không lập được ngoại lệ").toBe(422);
+      expect((await goi("POST", `/rfqs/${a}/submit`, m)).status).toBe(200);
+      expect((await goi("POST", `/rfqs/${a}/approve`, trangThai.pm2.cookie)).status).toBe(200);
+      const mo = await goi("POST", `/rfqs/${a}/open`, m);
+      expect(mo.status, mo.text).toBe(200);
+      const { rows } = await db.pool.query("SELECT 1 FROM rfq_sourcing_exceptions WHERE rfq_id = $1", [a]);
+      expect(rows, "luồng MVP1: không một hàng ngoại lệ nào").toHaveLength(0);
+      expect(await hangChot([a]), "luồng MVP1: không một lần từ chối nào vào sổ").toEqual([]);
+      return;
+    }
+
+    const nhom = await goi("POST", "/categories", trangThai.taiChinh.cookie, { ma: "van", ten: "Van cong nghiep" });
+    expect(nhom.status, nhom.text).toBe(201);
+    const nhomHang = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+
+    // ── Gói A: MỘT nhà cung cấp đếm được, MỚI với mọi gói của người mua (MST, email, điện thoại xa mọi người trước) ──
+    const a = await taoGoi("Van dieu ap mot nguon", "200000000.00", nhomHang);
+    const nccMoi = await dungNccQuaHttp(
+      trangThai.pm3,
+      { ten: "Van cong nghiep Mot Nguon", mst: "0377001700", lienHe: "Kinh doanh mot nguon", email: "motnguon@ncc.vn", phone: "0937700170" },
+      true,
+    );
+    const lmA = await goi("POST", `/rfqs/${a}/invitations`, m, nccMoi);
+    expect(lmA.status, lmA.text).toBe(201);
+    const idLoiMoiA = (lmA.body as { invitation: { id: string } }).invitation.id;
+
+    // ⑴ K2: một nhóm đếm được, bậc đòi ba — 422 mang mã, màn đọc được cùng hai con số ở danh sách lời mời.
+    const chanK2 = await goi("POST", `/rfqs/${a}/submit`, m);
+    expect(chanK2.status).toBe(422);
+    expect(chanK2.body).toEqual({ error: CHOT_VAO_SO.K2_THIEU_CANH_TRANH.thongDiep, ma: "K2_THIEU_CANH_TRANH" });
+    const dsA = await goi("GET", `/rfqs/${a}/invitations`, m);
+    expect(dsA.status, dsA.text).toBe(200);
+    expect((dsA.body as { canhTranh: unknown }).canhTranh).toEqual({ soNhomDemDuoc: 1, toiThieu: 3 });
+
+    // ⑵ pm2 lập `SINGLE_SOURCE` (một lời mời còn sống ⇒ đúng loại ấy); danh sách ngoại lệ mang lần nộp của CHÍNH gói.
+    const lapA = await goi("POST", `/rfqs/${a}/exceptions`, trangThai.pm2.cookie, NGOAI_LE_A);
+    expect(lapA.status, lapA.text).toBe(201);
+    const nlA = await goi("GET", `/rfqs/${a}/exceptions`, m);
+    expect(nlA.status, nlA.text).toBe(200);
+    const goiA = await goi("GET", `/rfqs/${a}`, m);
+    expect(nlA.body).toMatchObject({
+      lanNop: (goiA.body as { rfq: { lanNop: number } }).rfq.lanNop,
+      trangThai: "DRAFT",
+      exceptions: [{ loai: "SINGLE_SOURCE", maLyDo: "PROPRIETARY_TECHNOLOGY", lapBoi: trangThai.pm2.id, rut: null }],
+    });
+
+    // ⑶ Lần nộp qua; pm2 ký trên lần nộp ấy.
+    const nopA = await goi("POST", `/rfqs/${a}/submit`, m);
+    expect(nopA.status, nopA.text).toBe(200);
+    const mocA = { lanNop: (nopA.body as { rfq: { lanNop: number } }).rfq.lanNop };
+    expect((await goi("POST", `/rfqs/${a}/approve`, trangThai.pm2.cookie, mocA)).status).toBe(200);
+
+    // ⑷ K5: đủ số chữ ký (gói dưới ngưỡng kép — một), nhưng người ký duy nhất là người lập ngoại lệ — một ngoại lệ không bao giờ tự
+    // duyệt (spec §4.4). Gói đứng yên, không khoá nào được đúc, không link nào đi.
+    const guiTruoc = dv.loiMoiDaGui.length;
+    const chanK5 = await goi("POST", `/rfqs/${a}/open`, m);
+    expect(chanK5.status).toBe(422);
+    expect(chanK5.body).toEqual({ error: CHOT_VAO_SO.K5_THIEU_CHU_KY_DOC_LAP.thongDiep, ma: "K5_THIEU_CHU_KY_DOC_LAP" });
+    const { rows: khoaA } = await db.pool.query("SELECT 1 FROM rfq_key_material WHERE rfq_id = $1", [a]);
+    expect(khoaA, "không khoá nào được đúc cho gói bị chặn").toHaveLength(0);
+    expect(dv.loiMoiDaGui, "không link nào đi khi gói bị chặn").toHaveLength(guiTruoc);
+
+    // ⑸ Người ký độc lập: pm4 — không tạo, không mời, không dựng hồ sơ, không lập ngoại lệ. Gói mở; link đi tới đúng một lời mời.
+    const pm4 = await dangNhap("pm4@vidu.vn", "PROCUREMENT_MANAGER");
+    tenNguoi.set(pm4.id, "pm4");
+    expect((await goi("POST", `/rfqs/${a}/approve`, pm4.cookie, mocA)).status).toBe(200);
+    const moA = await goi("POST", `/rfqs/${a}/open`, m);
+    expect(moA.status, moA.text).toBe(200);
+    expect((moA.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
+    expect(dv.loiMoiDaGui.slice(guiTruoc).map((l) => l.invitationId)).toEqual([idLoiMoiA]);
+    expect(await cauChuyen(a)).toEqual([
+      "CONTROL_DENIED:K2_THIEU_CANH_TRANH@mua",
+      "SOURCING_EXCEPTION_CREATED@pm2",
+      "RFQ_SUBMITTED_FOR_APPROVAL@mua",
+      "RFQ_APPROVED@pm2",
+      "CONTROL_DENIED:K5_THIEU_CHU_KY_DOC_LAP@mua",
+      "RFQ_APPROVED@pm4",
+      "RFQ_OPENED@mua",
+    ]);
+
+    // ── Gói B: ba nhà cung cấp phụ đầu — đếm được, nhưng đã có trong các gói gần đây của người mua (bước 16, và gói A vừa mở) ──
+    const b = await taoGoi("Van dieu ap thay the", "250000000.00", nhomHang);
+    for (const n of trangThai.nccPhu.slice(0, 3)) {
+      const lm = await goi("POST", `/rfqs/${b}/invitations`, m, n);
+      expect(lm.status, lm.text).toBe(201);
+    }
+    const chanK3 = await goi("POST", `/rfqs/${b}/submit`, m);
+    expect(chanK3.status).toBe(422);
+    expect(chanK3.body).toEqual({ error: CHOT_VAO_SO.K3_KHONG_XOAY_VONG.thongDiep, ma: "K3_KHONG_XOAY_VONG" });
+    const lapB = await goi("POST", `/rfqs/${b}/exceptions`, trangThai.pm2.cookie, {
+      loai: "ROTATION",
+      maLyDo: "EXISTING_CONTRACT",
+      giaiTrinh: "Ba nha cung cap dang giu hop dong khung bao tri van den het quy",
+    });
+    expect(lapB.status, lapB.text).toBe(201);
+    const nopB = await goi("POST", `/rfqs/${b}/submit`, m);
+    expect(nopB.status, nopB.text).toBe(200);
+    expect((await goi("POST", `/rfqs/${b}/approve`, pm4.cookie, { lanNop: (nopB.body as { rfq: { lanNop: number } }).rfq.lanNop })).status).toBe(200);
+    const moB = await goi("POST", `/rfqs/${b}/open`, m);
+    expect(moB.status, moB.text).toBe(200);
+    expect(await cauChuyen(b)).toEqual([
+      "CONTROL_DENIED:K3_KHONG_XOAY_VONG@mua",
+      "SOURCING_EXCEPTION_CREATED@pm2",
+      "RFQ_SUBMITTED_FOR_APPROVAL@mua",
+      "RFQ_APPROVED@pm4",
+      "RFQ_OPENED@mua",
+    ]);
+    expect(await hangChot([a, b])).toEqual(["K2_THIEU_CANH_TRANH", "K5_THIEU_CHU_KY_DOC_LAP", "K3_KHONG_XOAY_VONG"]);
   });
 });
 

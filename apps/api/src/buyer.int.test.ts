@@ -178,12 +178,15 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
     // ~~Đếm `3`~~ ~~[S1.201 / S3.6a] `4` — thêm `POST /categories` (tạo mới)~~ [S1.199 / S4.2b] Nêu TÊN thay vì đếm: ba route
     // tạo mới cũ, `POST /categories` (tạo mới, S3.6a), `POST /items` (tạo mới) và hai route bí danh đơn vị — thứ chúng ghi là một
-    // CHUỖI của tổ chức, không phải một tài nguyên có UUID trên đường dẫn.
+    // CHUỖI của tổ chức, không phải một tài nguyên có UUID trên đường dẫn. [S1.272 / S4.6a] Hai route dán lô dữ liệu ngoài TẠO một
+    // lô mới — mã lô do máy chủ sinh, không có trên đường dẫn.
     expect(
       routeGhi.filter((r) => !("resourceId" in r && r.resourceId !== undefined)).map((r) => `${r.method} ${r.path}`).sort(),
       "route ghi KHÔNG có toạ độ",
     ).toEqual([
       "POST /categories",
+      "POST /external-purchase-history/import",
+      "POST /external-references/import",
       "POST /items",
       "POST /policy",
       "POST /rfqs",

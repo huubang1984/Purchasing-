@@ -562,6 +562,10 @@ describe("hình dạng file migration", () => {
       // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
       "canonical_item_versions",
       "canonical_items",
+      // [S1.272 / S4.6a / `109_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn nền L1, khoá ngoại hợp thành tới
+      // `canonical_items`, khoá ngoại tự trỏ của hàng rút, policy khách đóng hẳn.
+      "external_price_references",
+      "external_purchase_history",
       // [S1.203 / S3.6b1 / migration tín hiệu] Tín hiệu chia nhỏ và lần ghi nhận — chỉ-ghi-thêm, khoá ngoại hợp thành
       // `(org_id, rfq_id)` và `(org_id, signal_id)`, policy khách ĐÓNG HẲN.
       "governance_signal_acks",
@@ -586,6 +590,9 @@ describe("hình dạng file migration", () => {
       // chấm (cùng giao dịch), policy khách ĐÓNG HẲN.
       "price_benchmark_inputs",
       "price_benchmark_results",
+      // [S1.276 / S4.6b / `110_ban_luu_benchmark_ngoai`] Nhãn theo dải lịch sử ngoài trong bản lưu — chỉ-ghi-thêm bằng quyền, khoá
+      // ngoại hợp thành tới bản lưu (cùng giao dịch) và tới dòng đo được của nó, policy khách ĐÓNG HẲN.
+      "price_benchmark_snapshot_external_lines",
       // [S1.260 / S4.5c1 / `104_ban_luu_benchmark`] Bản lưu benchmark của bảng so sánh — chỉ-ghi-thêm bằng quyền, một bản mỗi lần mở
       // thầu, khoá ngoại hợp thành tới phiên bản ghim và cùng giao dịch, policy khách ĐÓNG HẲN.
       "price_benchmark_snapshot_lines",
