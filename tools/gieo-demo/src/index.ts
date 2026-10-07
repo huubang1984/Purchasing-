@@ -74,6 +74,7 @@ import { docHoSoXacMinh, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
+import { SO_NOP, chamGoiTraoThau, gieoGoiTraoThauDenDieuPhoi } from "./goi-trao-thau.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -694,6 +695,11 @@ async function chinh(): Promise<void> {
           taoNhomHang(c, org, { ma: "DA-MO", ten: "Vat tu cac goi da mo", actorSessionId: nguoi("taichinh1.").sessionId }, pool),
         )).id
       : null;
+    const baDong = [
+      { mo: HANG_MUC[0]!.mo, dvt: HANG_MUC[0]!.dvt, donGiaGoc: 12_500_000 },
+      { mo: HANG_MUC[1]!.mo, dvt: HANG_MUC[1]!.dvt, donGiaGoc: 265_000 },
+      { mo: HANG_MUC[2]!.mo, dvt: HANG_MUC[2]!.dvt, donGiaGoc: 48_000 },
+    ];
     const daMo = await gieoBaGoiDaDieuPhoi({
       pool,
       org,
@@ -708,18 +714,42 @@ async function chinh(): Promise<void> {
       duyet2: nguoi("duyet2."),
       duLieu: nguoi("dulieu."),
       nhaCungCap: nhaCungCapGoiChinh.slice(0, 3),
-      dong: [
-        { mo: HANG_MUC[0]!.mo, dvt: HANG_MUC[0]!.dvt, donGiaGoc: 12_500_000 },
-        { mo: HANG_MUC[1]!.mo, dvt: HANG_MUC[1]!.dvt, donGiaGoc: 265_000 },
-        { mo: HANG_MUC[2]!.mo, dvt: HANG_MUC[2]!.dvt, donGiaGoc: 48_000 },
-      ],
+      dong: baDong,
       anhXaTay: { lineNo: 3, hangChuanId: buLong },
     });
-    await chayWorkerToiKhiMo(pool, org, daMo.map((g) => g.rfqId), {
+    // [S1.9101 / S3.5b] `--s3`: gói TRAO THẦU — một tỷ, bậc 2, năm mời, bốn nộp (`goi-trao-thau.ts`) — đi cùng lượt worker với ba gói
+    // trên, rồi MỘT lượt chấm, dừng ở EVALUATING: người demo đi tay K2b → ngoại lệ hậu kiểm → đề xuất → hai chữ ký (K7) → K5b ở `/mo-thau`.
+    // Nhóm hàng RIÊNG (`TRAO-THAU`) để không gói anh em nào cho K10a; soan3 làm mọi việc của người soạn vì soan và soan2 đã là người
+    // chọn của các gói khác (K3 tính cửa sổ theo người chọn) và soan2 là người chấm rồi đề xuất.
+    const traoThau = S3
+      ? await (async () => {
+          const nhom = (await withTenant(pool, org, (c) =>
+            taoNhomHang(c, org, { ma: "TRAO-THAU", ten: "Vat tu goi trao thau", actorSessionId: nguoi("taichinh1.").sessionId }, pool),
+          )).id;
+          return await gieoGoiTraoThauDenDieuPhoi({
+            pool,
+            org,
+            duoi,
+            vong,
+            boKy,
+            nhomHang: nhom,
+            soan3: nguoi("soan3."),
+            soan: nguoi("soan."),
+            soan2: nguoi("soan2."),
+            duyet1: nguoi("duyet1."),
+            duyet2: nguoi("duyet2."),
+            nhaCungCap: nhaCungCapGoiChinh.slice(0, 5),
+            dong: baDong,
+          });
+        })()
+      : null;
+    await chayWorkerToiKhiMo(pool, org, [...daMo.map((g) => g.rfqId), ...(traoThau === null ? [] : [traoThau.rfqId])], {
       databaseUrl: urlWorker,
       masterKeys: bat("TRUSTPROCURE_MASTER_KEYS"),
       masterKeyActive: bat("TRUSTPROCURE_MASTER_KEY_ACTIVE"),
     });
+    // Lượt chấm chỉ có sau khi worker mở xong; soan2 chấm (`evaluation.perform`) — rồi chính soan2 lập ngoại lệ và đề xuất trên màn.
+    if (traoThau !== null) await chamGoiTraoThau(pool, org, traoThau.rfqId, nguoi("soan2."));
 
     const tokenNguoiMua: { readonly email: string; readonly token: string }[] = [];
     for (const nm of nguoiMua) {
@@ -795,6 +825,22 @@ async function chinh(): Promise<void> {
       ra.push("  ⑸ soan3 «Phê duyệt», soan «Mở gói» — link mời đi tới nhà cung cấp (hộp thư dev).");
       ra.push("  Mỗi lần đổi người: đăng nhập bằng link của người ấy ở trên, rồi mở /tao-thau.");
       ra.push(`  ${"gói một nguồn".padEnd(24)} ${motNguon}`);
+    }
+    if (traoThau !== null) {
+      ra.push("");
+      ra.push("TRAO THẦU THEO BẬC (K7 + K2b + K5b, S3.5) — gói một tỷ, nhóm hàng TRAO-THAU, bậc 2: năm nhà cung cấp, HAI chữ ký của FINANCE/DIRECTOR.");
+      ra.push(`  soan3 tạo, mời năm, nộp, mở, điều phối mở thầu; ${String(SO_NOP)} nhà cung cấp nộp (giá quanh 0,93 tỷ); worker đã mở; soan2 đã chấm — gói ở EVALUATING.`);
+      ra.push("  Ở /mo-thau: dán mã gói vào bước 2, «Đọc»; bước 5 «Đọc bảng xếp hạng», «Chọn» ở hạng 1, gõ lý do; bước 7:");
+      ra.push("  ⑴ soan2 «Đề xuất trao thầu» — bị chặn (K2b): bốn nhóm có báo giá hợp lệ, bậc đòi năm; màn trỏ khối «Ngoại lệ hậu kiểm»;");
+      ra.push("  ⑵ soan2 «Xem ngoại lệ», lập «Cạnh tranh thực tế thấp» kèm mã lý do và giải trình; ⑶ soan2 đề xuất — qua; bảng nói «có 0 / cần 2»;");
+      ra.push("  ⑷ duyet1 «Phê duyệt» hai lần (lần đầu chỉ hiện đề xuất) — đã ký, «có 1 / cần 2», đề xuất vẫn PROPOSED;");
+      ra.push("  ⑸ duyet2 «Phê duyệt» — APPROVED. Thử sai: taichinh1 ký ⇒ từ chối có tên (K7, người khai phiên bản chính sách); taichinh2 (đã xác minh");
+      ra.push("  nhà cung cấp thắng) ký được nhưng không đếm là độc lập — gói có ngoại lệ nên một trong hai chữ ký phải của người ngoài tập (K5b).");
+      ra.push("  Mỗi lần đổi người: đăng nhập bằng link của người ấy ở trên (hai người tài chính dùng link /mo-thau dưới đây), rồi mở /mo-thau.");
+      for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
+        ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
+      }
+      ra.push(`  ${"gói trao thầu".padEnd(24)} ${traoThau.rfqId}`);
     }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);

@@ -339,6 +339,12 @@ export function loiLyDoGhiNhan(lyDo: string): string | null {
 /** Ba loại ngoại lệ của danh sách mời (`LOAI_NGOAI_LE`). */
 export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
 export type LoaiNgoaiLe = (typeof LOAI_NGOAI_LE)[number];
+/**
+ * [S1.9101 / S3.5b] Loại ngoại lệ HẬU KIỂM (`LOAI_NGOAI_LE_HAU_KIEM` của gói): không vào ô chọn của `/tao-thau` — nó lập ở bước 7 của
+ * `/mo-thau`, khi gói ở EVALUATING và trước đề xuất trao thầu (ADR-154 ⑸).
+ */
+export const LOAI_NGOAI_LE_HAU_KIEM = ["LOW_ACTUAL_COMPETITION"] as const;
+export type LoaiNgoaiLeHauKiem = (typeof LOAI_NGOAI_LE_HAU_KIEM)[number];
 
 /** Tập đóng của mã lý do (`MA_LY_DO_NGOAI_LE`). */
 export const MA_LY_DO_NGOAI_LE = [
@@ -356,10 +362,12 @@ export const SAN_GIAI_TRINH_OTHER_BYTE = 100;
 /** Trần giải trình, byte UTF-8 (`TRAN_GIAI_TRINH_BYTE`). */
 export const TRAN_GIAI_TRINH_BYTE = 2000;
 
-const NHAN_LOAI: Readonly<Record<LoaiNgoaiLe, string>> = {
+const NHAN_LOAI: Readonly<Record<LoaiNgoaiLe | LoaiNgoaiLeHauKiem, string>> = {
   SINGLE_SOURCE: "Một nguồn duy nhất",
   LIMITED_COMPETITION: "Cạnh tranh hạn chế",
   ROTATION: "Miễn xoay vòng",
+  // [S1.9101 / S3.5b] Loại hậu kiểm có nhãn: bảng ngoại lệ của cả hai trang đọc cùng một hàm.
+  LOW_ACTUAL_COMPETITION: "Cạnh tranh thực tế thấp (hậu kiểm)",
 };
 
 const NHAN_MA_LY_DO: Readonly<Record<(typeof MA_LY_DO_NGOAI_LE)[number], string>> = {
@@ -375,7 +383,7 @@ const NHAN_MA_LY_DO: Readonly<Record<(typeof MA_LY_DO_NGOAI_LE)[number], string>
 /** Loại ngoại lệ nói bằng lời; mã lạ trả nguyên văn. */
 export function nhanLoaiNgoaiLe(loai: unknown): string {
   if (typeof loai !== "string" || loai === "") return "—";
-  return Object.hasOwn(NHAN_LOAI, loai) ? NHAN_LOAI[loai as LoaiNgoaiLe] : loai;
+  return Object.hasOwn(NHAN_LOAI, loai) ? NHAN_LOAI[loai as keyof typeof NHAN_LOAI] : loai;
 }
 
 /** Mã lý do nói bằng lời; mã lạ trả nguyên văn. */
@@ -428,6 +436,25 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
         "«Miễn xoay vòng» (ROTATION) ở khối «Ngoại lệ cạnh tranh»." + nho;
     case "K5_THIEU_CHU_KY_DOC_LAP":
       return "Nhờ một người giữ quyền duyệt chưa làm việc nào kể trên với gói này ký, rồi mở lại.";
+    // [S1.9101 / S3.5b] Tám mã của trao thầu theo bậc (K7, K2b, K5b — ADR-154) đi ra ở bước 7 của `/mo-thau`: câu máy chủ nói luật,
+    // câu này nói chỗ làm trên màn và người phải đổi.
+    case "K2B_THIEU_CANH_TRANH_THUC":
+      return "Trên màn: khối «Ngoại lệ hậu kiểm» ở bước 7 — lập «Cạnh tranh thực tế thấp» (LOW_ACTUAL_COMPETITION) khi gói còn ở lượt " +
+        "chấm, trước lần đề xuất; người lập không còn là người ký độc lập của gói." + nho;
+    case "K2B_NGOAI_LE_SAI_TRANG_THAI":
+      return "Rút đề xuất đang có (hay huỷ trao thầu) để gói về lượt chấm, rồi lập hay rút ở khối «Ngoại lệ hậu kiểm».";
+    case "K5B_THIEU_CHU_KY_DOC_LAP":
+      return "Chữ ký đã có vẫn còn. Nhờ thêm một người giữ vai của bậc mà chưa dính tới gói này ký — chưa lập ngoại lệ, chưa khai bản " +
+        "chính sách, chưa điều phối lần mở, chưa xác minh bên thắng.";
+    case "K7_SAI_VAI":
+      return "Đổi ở bước 1 sang người đang giữ một vai mà bậc của gói cho ký (ma trận ở /chinh-sach).";
+    case "K7_TAC_GIA_CHINH_SACH":
+      return "Đổi ở bước 1 sang người khác: tác giả của bản chính sách gói ghim không ký được.";
+    case "K7_DAU_THAU_CHINH_THUC":
+      return "Không trao được trên hệ thống; huỷ gói nếu cần làm lại.";
+    case "K7_KHONG_BAC_GHIM":
+    case "K7_LECH_TIEN_TE":
+      return "Huỷ gói và lập lại với ngân sách ghim bậc, cùng tiền tệ với chính sách.";
     default:
       return null;
   }

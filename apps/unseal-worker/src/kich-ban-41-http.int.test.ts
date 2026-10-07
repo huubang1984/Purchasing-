@@ -1993,6 +1993,33 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   // mà kịch bản đã dựng — và đúng ba vai khác nhau, nên J3 có việc thật để làm.
   // ============================================================================================
 
+  // [S1.9101 / S3.5b / K2b] Ngoại lệ HẬU KIỂM qua ĐƯỜNG CỦA MÀN: hai route ngoại lệ của `/tao-thau` (S3.3b) nay cũng là đường của khối
+  // «Ngoại lệ hậu kiểm» ở bước 7 `/mo-thau`. Tới vòng này loại `LOW_ACTUAL_COMPETITION` ở EVALUATING chỉ đo ở tầng gói
+  // (`trao-thau-theo-bac.int`); đây là lần đầu nó đi qua HTTP — và ở ĐÚNG lúc màn gọi nó: sau lượt chấm, trước đề xuất.
+  it("[INV-K2b] bước 12g2 — NGOẠI LỆ HẬU KIỂM qua HTTP ở EVALUATING: người giữ quyền mời lập 201 và rút 200; giám đốc không giữ `rfq.invite` ⇒ 403; luồng MVP1 ⇒ 422 không hàng sổ", async () => {
+    const duong = `/rfqs/${trangThai.rfqId}/exceptions`;
+    const than = { loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "bon nha cung cap nop bao gia hop le, bac doi nam" };
+    expect(await trangThaiRfq(), "tiền đề: gói đang ở lượt chấm").toBe("EVALUATING");
+    const chanQuyen = await goi("POST", duong, trangThai.gd1.cookie, than);
+    expect(chanQuyen.status, chanQuyen.text).toBe(403);
+    const lap = await goi("POST", duong, trangThai.pm2.cookie, than);
+    if (!batS3) {
+      // Tổ chức chưa bật S3: cấu hình, không phải người đi tắt — 422 và KHÔNG hàng CONTROL_DENIED (S3.3b ⑺).
+      expect(lap.status, lap.text).toBe(422);
+      return;
+    }
+    expect(lap.status, lap.text).toBe(201);
+    const e = (lap.body as { exception: { id: string; loai: string; rut: unknown } }).exception;
+    expect([e.loai, e.rut]).toEqual(["LOW_ACTUAL_COMPETITION", null]);
+    const docDs = await goi("GET", duong, trangThai.pm2.cookie);
+    expect(docDs.status, docDs.text).toBe(200);
+    expect((docDs.body as { exceptions: { id: string; loai: string }[] }).exceptions.map((x) => x.loai)).toContain("LOW_ACTUAL_COMPETITION");
+    // Rút kèm lý do — gói vẫn EVALUATING; năm nhóm đã nộp nên bước 12h không cần ngoại lệ nào.
+    const rut = await goi("POST", `${duong}/${e.id}/withdraw`, trangThai.pm2.cookie, { reason: "nguoi thu nam da nop; khong can ngoai le" });
+    expect(rut.status, rut.text).toBe(200);
+    expect(await trangThaiRfq()).toBe("EVALUATING");
+  });
+
   it("[INV-J3] bước 12h — ĐỀ XUẤT trao thầu qua HTTP: người TẠO gói thầu bị J3 chặn, người KHÁC đi qua", async () => {
     // `trangThai.mua` vừa là `created_by` của RFQ vừa là người ĐIỀU PHỐI cả hai lượt mở thầu, nên
     // J3 chặn họ trên HAI vế cùng lúc; trigger kiểm `created_by` trước nên thông điệp nói vế ấy.
@@ -2039,6 +2066,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
     // `AWARDED` nghĩa là *ĐANG CÓ một award còn sống* (ADR-057), nên nó đặt ngay ở hàng PROPOSED.
     expect(await trangThaiRfq()).toBe("AWARDED");
+
+    // [S1.9101 / S3.5b / K2b] Có đề xuất rồi thì ngoại lệ hậu kiểm KHÔNG lập được nữa — câu của chốt mang mã, và màn `/mo-thau` đọc mã
+    // ấy thành câu chỉ dẫn («rút đề xuất đang có…»); đúng một hàng `CONTROL_DENIED` dưới người gọi.
+    if (batS3) {
+      const muon = await goi("POST", `/rfqs/${trangThai.rfqId}/exceptions`, trangThai.pm2.cookie, {
+        loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "lap sau khi da de xuat",
+      });
+      expect(muon.status, muon.text).toBe(422);
+      expect((muon.body as { ma?: string }).ma).toBe("K2B_NGOAI_LE_SAI_TRANG_THAI");
+      const { rows: soK2b } = await db.pool.query(
+        "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'K2B_NGOAI_LE_SAI_TRANG_THAI'",
+        [trangThai.rfqId],
+      );
+      expect(soK2b).toHaveLength(1);
+    }
 
     // Và lượt chấm mà award dựa trên là lượt SAU BAFO — vế mà `deXuatTraoThau` canh MỘT MÌNH
     // (khoản 231). Bước 12g vừa tạo lượt ấy, nên đây là thế giới có HAI lượt chấm.

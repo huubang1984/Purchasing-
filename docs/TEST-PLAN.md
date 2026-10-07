@@ -261,6 +261,9 @@ Chạy trên Postgres thật qua Testcontainers, không dùng bản giả lập:
 - Kịch bản nhà cung cấp khách: nhận link → OTP → nộp → nhận biên nhận
 - Kịch bản phê duyệt kép cho RFQ vượt ngưỡng
 - Chạy trên trình duyệt thật để xác nhận WebCrypto hoạt động (rủi ro §8.2 của spec)
+- **[S1.9101 / S3.5b]** Trao thầu theo bậc trên `/mo-thau`: K2b chặn đề xuất → ngoại lệ hậu kiểm → đề xuất qua → K7 từ chối người khai chính sách → hai chữ ký
+  (*có 1 / cần 2* rồi APPROVED), ký lại bị từ chối có tên, 375 px không cuộn ngang — lượt đi thử MỘT LẦN trên cụm `pilot:gia-lap` + `gieo:demo --s3`,
+  script ngoài kho, biên bản §S1.9101 (25/25); không phải cổng
 
 ### T5 — Bộ test đối kháng
 

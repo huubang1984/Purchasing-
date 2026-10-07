@@ -12171,7 +12171,10 @@ demo (cờ TRUE) không trao được. Tín hiệu `ESTIMATE_UNDERSTATED` và K1
 
 ⑼ **S3.5 chia hai PR:** S3.5a (vòng này) — `113`, tầng gói, thân route (hình dạng trả về), kịch bản 41 luồng S3 hai chữ ký, khối đo khoản
 242 ⑴, lời sau khi bấm *Phê duyệt* ở `/mo-thau` đọc trạng thái máy chủ trả; S3.5b — màn (cần N, có M; khối lập ngoại lệ hậu kiểm ở
-EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
+EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4. **[S1.9101]** S3.5b XONG (§S1.9101): bảng bước 7 nói *có M / cần N*, khối
+«Ngoại lệ hậu kiểm» cho người giữ `rfq.invite` qua chính hai route của `/tao-thau`, tám câu chỉ dẫn theo mã K7/K2b/K5b; `gieo:demo --s3`
+gieo một gói một tỷ bậc 2 (năm mời, bốn nộp) tới EVALUATING; kịch bản 41 HTTP bước 12g2 đi qua route ngoại lệ ở EVALUATING; lượt đi thử T4
+25/25. Không ADR mới, không migration.
 
 ### Cái giá, nói thẳng
 
@@ -12186,7 +12189,9 @@ EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
 - **`K7_DAU_THAU_CHINH_THUC` bị bỏ thì lớp hai NÉM không tên:** đo bằng đột biến — bậc đấu thầu chính thức không khai `so_ncc_toi_thieu`
   nên `award_chot_hau_kiem` NÉM `check_violation` thường, không hàng sổ. Đúng cái giá của ADR-082 ⑽.
 - **Trigger chữ ký hỏi bậc mỗi lần ký** — vài câu đọc thêm trên một hành động hiếm.
-- **Lời ở `/mo-thau` chỉ mới đúng trạng thái**; màn chưa hiện *cần N* ở bảng khi chưa đọc lại — S3.5b.
+- ~~**Lời ở `/mo-thau` chỉ mới đúng trạng thái**; màn chưa hiện *cần N* ở bảng khi chưa đọc lại — S3.5b.~~ **[S1.9101]** Bảng nói *có M / cần
+  N* kèm mốc giờ; lời sau *Đề xuất* đọc lại rồi mới nói số cần (S3.5b). Còn lại: người ký (FINANCE/DIRECTOR) không đọc được danh sách
+  ngoại lệ — khối chỉ hiện cho người giữ `rfq.invite`; họ biết vì sao K5b đòi qua câu từ chối có tên.
 
 ### Phương án đã loại
 
@@ -12201,5 +12206,5 @@ EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
 
 ### Điều ADR này KHÔNG nói
 
-Màn, `gieo:demo`, T4 (S3.5b); K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); K9 ở chữ ký trao thầu (S3.4); bộ bằng
+~~Màn, `gieo:demo`, T4 (S3.5b)~~ **[S1.9101]** S3.5b xong; K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); K9 ở chữ ký trao thầu (S3.4); bộ bằng
 chứng mang số tiền trao và bậc (S3.9).

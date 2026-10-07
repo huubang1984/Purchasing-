@@ -155,7 +155,8 @@ async function docMot(client: pg.PoolClient, orgId: string, rfqId: string, id: s
 }
 
 /**
- * Lập một ngoại lệ cạnh tranh cho gói ở DRAFT. Mã `OTHER` đòi giải trình ít nhất 100 byte sau khi cắt khoảng trắng.
+ * Lập một ngoại lệ cạnh tranh: ba loại của danh sách mời ở DRAFT, loại hậu kiểm (`LOAI_NGOAI_LE_HAU_KIEM`) ở EVALUATING trước đề xuất
+ * trao thầu — trạng thái ràng ở trigger (`113` (11)). Mã `OTHER` đòi giải trình ít nhất 100 byte sau khi cắt khoảng trắng.
  */
 export async function lapNgoaiLe(
   client: pg.PoolClient,
@@ -199,7 +200,7 @@ export async function lapNgoaiLe(
   return docMot(client, orgId, input.rfqId, id);
 }
 
-/** Rút một ngoại lệ còn sống của gói ở DRAFT — lý do bắt buộc. */
+/** Rút một ngoại lệ còn sống — lý do bắt buộc; ở DRAFT cho ba loại danh sách mời, ở EVALUATING trước đề xuất cho loại hậu kiểm. */
 export async function rutNgoaiLe(
   client: pg.PoolClient,
   orgId: string,
