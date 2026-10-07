@@ -5,7 +5,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
+import { addRfqItem, approveRfq, createRfq, datSoNgayGiao, openRfq, returnRfqToDraft, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
@@ -580,5 +580,314 @@ describe("S3.2b1 — K6: cột `duc_khi_goi_da_mo` ghi đúng điều K6 hỏi, 
     expect(khiTat).toBe(false);
     expect(await trangThaiTrigger("rfq_invitation_tokens_ghi_goi_da_mo")).toBe("A");
     expect((await token(t, a)).duc_khi_goi_da_mo).toBe(true);
+  });
+});
+
+// =============================================================================================
+// (4) [S1.279 / S4.7a / L16 / ADR-153] SỐ NGÀY GIAO YÊU CẦU — CHỈ ĐỔI Ở DRAFT, NẰM TRONG CHỮ KÝ; CẠNH MỞ ĐÒI NÓ KHI PHIÊN BẢN TÍNH
+// CHI PHÍ TRỄ
+//
+// Tệp này vì đường duy nhất đổi số ngày giao SAU khi đã ký là cạnh trả về DRAFT của tổ chức đã bật (MVP1 không có đường về): ký ở 30
+// ngày, trả về, đổi thành 7, nộp lại — `title` và hạng mục y nguyên nên `approved_content_hash` không đổi, và trước `112` chữ ký cũ
+// mở được gói. Chủ dự án chốt 2026-10-07: băm riêng ở MỌI tổ chức, trigger riêng, không định nghĩa lại `rfq_bam_noi_dung`.
+// =============================================================================================
+const datNgay = (t: ToChuc, rfqId: string, n: number | null, ai: Nguoi = t.pm): Promise<unknown> =>
+  withTenant(apiPool, t.org, (c) => datSoNgayGiao(c, t.org, { rfqId, soNgayGiao: n, actorSessionId: ai.s }));
+const LOI_NGAY_GIAO = (can: number, co: number): string => `RFQ nay can ${String(can)} NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co ${String(co)} (L16)`;
+/** [rà soát §S1.279 — CAO-2] Ở tổ chức đã bật, số ngày giao nằm trong chính chữ ký còn hiệu lực — K4b nói lời từ chối. */
+const LOI_HIEU_LUC = (can: number, co: number): string =>
+  `RFQ nay can ${String(can)} chu ky CON HIEU LUC — ky tren lan nop da xem, nguoi ky chua tra goi ve tu lan ay —, moi co ${String(co)} (K4b)`;
+
+/** Phiên bản kế tiếp của tổ chức chưa bật, do `pm` khai qua tầng gói: trọng số TCO và nhóm khoá `tco`. */
+async function phienBanTco(t: ToChuc, version: number, evalComponents: readonly Record<string, string>[], tco: Record<string, string> | null): Promise<void> {
+  await withTenant(apiPool, t.org, (c) =>
+    createProcurementPolicy(c, t.org, {
+      version,
+      dualApprovalThreshold: "100000000.00",
+      currency: "VND",
+      evalComponents: evalComponents as never,
+      bafoTopN: 0,
+      tco,
+      actorSessionId: t.pm.s,
+    }),
+  );
+}
+const TP_TRE = [
+  { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
+  { ma: "chi_phi_tre", don_vi: "TIEN", he_so: "1.0000" },
+];
+
+describe("S4.7a — L16: số ngày giao yêu cầu chỉ đổi ở DRAFT và nằm trong chữ ký phê duyệt", () => {
+  it("[INV-L16] đặt, đổi, xoá ở DRAFT — mỗi lần một hàng sổ; ngoài miền ⇒ từ chối có tên; đã nộp duyệt ⇒ tầng gói từ chối trạng thái, câu thô bị trigger chặn", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await datNgay(t, rfqId, 14);
+    await datNgay(t, rfqId, null);
+    await datNgay(t, rfqId, 21);
+    expect((await soCua("RFQ_DELIVERY_DAYS_SET", rfqId)).map((h) => [h.actor, h.payload])).toEqual([
+      [t.pm.u, { soNgayGiao: 30 }],
+      [t.pm.u, { soNgayGiao: 14 }],
+      [t.pm.u, { soNgayGiao: null }],
+      [t.pm.u, { soNgayGiao: 21 }],
+    ]);
+    for (const sai of [0, 3651, 1.5]) {
+      expect((await loi(datNgay(t, rfqId, sai)))?.message).toBe("số ngày giao yêu cầu phải là số nguyên từ 1 đến 3650");
+    }
+    await expect(
+      withTenant(apiPool, t.org, (c) => c.query("UPDATE public.rfq_packages SET so_ngay_giao = 0 WHERE id = $1", [rfqId])),
+    ).rejects.toMatchObject({ code: "23514", constraint: "rfq_packages_so_ngay_giao_mien" });
+
+    await nop(t, rfqId);
+    expect((await loi(datNgay(t, rfqId, 7)))?.message).toBe(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo",
+    );
+    await expect(
+      withTenant(apiPool, t.org, (c) => c.query("UPDATE public.rfq_packages SET so_ngay_giao = 7 WHERE id = $1", [rfqId])),
+    ).rejects.toMatchObject({ code: "23514", constraint: "so_ngay_giao_chi_doi_o_draft" });
+    expect((await db.pool.query<{ n: number }>("SELECT so_ngay_giao AS n FROM rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n).toBe(21);
+  });
+
+  it("[INV-L16] ĐỘT BIẾN: tắt `rfq_packages_so_ngay_giao` thì câu thô đổi được số ngày giao của gói đã nộp duyệt", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await nop(t, rfqId);
+    const doi = await trongDotBien(t.org, ["ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_so_ngay_giao"], async (c) =>
+      (await c.query<{ n: number }>("UPDATE public.rfq_packages SET so_ngay_giao = 7 WHERE id = $1 RETURNING so_ngay_giao AS n", [rfqId])).rows[0]
+        ?.n,
+    );
+    expect(doi).toBe(7);
+    expect(await trangThaiTrigger("rfq_packages_so_ngay_giao")).toBe("A");
+  });
+
+  it("[INV-L16] ký ở 30 ngày → trả về → đổi thành 7 → nộp lại: chữ ký cũ KHÔNG mở được gói; người ấy ký lại được (hàng mới), rồi mở — hai hàng chữ ký ở lại", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm);
+    await datNgay(t, rfqId, 7);
+    await nop(t, rfqId);
+    expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_HIEU_LUC(1, 0));
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    await duyet(t, rfqId, t.pm2);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM rfq_approvals WHERE rfq_id = $1", [rfqId]);
+    expect(rows[0]!.n, "không chữ ký nào bị xoá").toBe("2");
+  });
+
+  it("[INV-L16] đối chứng: trả về rồi nộp lại mà KHÔNG đổi số ngày giao — chữ ký cũ vẫn mở được gói", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm);
+    await nop(t, rfqId);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-L16] gói cấp kép: một người ký lại trên số ngày giao mới không đủ — đếm NGƯỜI có chữ ký còn hiệu lực, không đếm hàng (D2 đếm hai hàng của cùng người); người thứ hai ký lại thì mở", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t, GOI_CAP_KEP);
+    await datNgay(t, rfqId, 30);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await duyet(t, rfqId, t.pm3);
+    await traVe(t, rfqId, t.pm);
+    await datNgay(t, rfqId, 7);
+    await nop(t, rfqId);
+    expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_HIEU_LUC(2, 0));
+    await duyet(t, rfqId, t.pm2);
+    expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_HIEU_LUC(2, 1));
+    await duyet(t, rfqId, t.pm3);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-L16] ĐỘT BIẾN: bỏ vế số ngày giao khỏi `rfq_chu_ky_con_hieu_luc` thì chữ ký trên 30 ngày mở được gói đã đổi thành 7 — đúng lỗ vế ấy đóng", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm);
+    await datNgay(t, rfqId, 7);
+    await nop(t, rfqId);
+    const goc = (await db.pool.query<{ src: string }>("SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.rfq_chu_ky_con_hieu_luc(uuid, uuid)'::regprocedure"))
+      .rows[0]!.src;
+    const ve = "\n     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq)";
+    expect(goc, "tiền đề: thân hàm mang đúng vế số ngày giao").toContain(ve);
+    const khiBo = await trongDotBien(
+      t.org,
+      [
+        "CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid LANGUAGE sql STABLE " +
+          `SET search_path = pg_catalog, public AS $f$${goc.replace(ve, "")}$f$`,
+      ],
+      (c) => loi(openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool)),
+    );
+    expect(khiBo, "bỏ vế: chữ ký cũ mở được gói").toBeNull();
+    expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_HIEU_LUC(1, 0));
+  });
+
+  it("[INV-L16] [rà soát §S1.279 — CAO-2] hiệu lực và số ngày giao xét trên CÙNG một hàng: chữ ký đã bị chính người ký rút trên 10 ngày không sống lại nhờ một chữ ký còn hiệu lực trên 20 ngày", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 10);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm2);
+    await datNgay(t, rfqId, 20);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm);
+    await datNgay(t, rfqId, 10);
+    await nop(t, rfqId);
+    expect((await loi(mo(t, rfqId)))?.message, "chữ ký trên 10 ngày đã bị rút; chữ ký còn hiệu lực ở trên 20 ngày").toBe(LOI_HIEU_LUC(1, 0));
+    await duyet(t, rfqId, t.pm2);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-L16] tổ chức CHƯA bật: lớp đếm người ký trên số ngày giao ở cạnh mở — số ngày giao đổi sau khi ký (đường ghi thứ hai, trigger DRAFT tắt) thì gói không mở; ĐỐI CHỨNG: không đổi thì mở", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    const khiDoi = await trongDotBien(
+      t.org,
+      [
+        "ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_so_ngay_giao",
+        `UPDATE public.rfq_packages SET so_ngay_giao = 7 WHERE id = '${rfqId}'`,
+      ],
+      (c) => loi(openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool)),
+    );
+    expect(khiDoi?.message).toBe(LOI_NGAY_GIAO(1, 0));
+    expect(await trangThaiTrigger("rfq_packages_so_ngay_giao")).toBe("A");
+    expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-L16] ĐỘT BIẾN: băm số ngày giao bỏ đọc gói (`rfq_bam_giao_hang` trả hằng) thì chữ ký trên 30 ngày mở được gói đã đổi thành 7", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await datNgay(t, rfqId, 30);
+    await moi(t, rfqId, await nhaCungCap(t));
+    await nop(t, rfqId);
+    const khiHang = await trongDotBien(
+      t.org,
+      [
+        "CREATE OR REPLACE FUNCTION public.rfq_bam_giao_hang(p_rfq uuid) RETURNS bytea LANGUAGE sql STABLE " +
+          "SET search_path = pg_catalog, public AS $f$SELECT pg_catalog.sha256(pg_catalog.convert_to('GIAO_HANG|', 'UTF8'))$f$",
+      ],
+      async (c) => {
+        const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n;
+        await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, ...(lan === undefined ? {} : { lanNopDaXem: lan }) }, apiPool);
+        await returnRfqToDraft(c, t.org, { rfqId, reason: LY_DO, actorSessionId: t.pm.s }, apiPool);
+        await datSoNgayGiao(c, t.org, { rfqId, soNgayGiao: 7, actorSessionId: t.pm.s });
+        await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
+        return loi(openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
+      },
+    );
+    expect(khiHang, "băm hằng: chữ ký trên 30 ngày mở được gói 7 ngày").toBeNull();
+    // Đột biến đã ROLLBACK — cùng chuỗi trên băm thật bị từ chối (ca «ký ở 30 ngày → … → đổi thành 7» ở trên).
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+  });
+});
+
+describe("S4.7a — L16: phiên bản ghim tính chi phí trễ thì gói phải khai số ngày giao trước khi mở", () => {
+  it("[INV-L16] tầng gói từ chối CẤU HÌNH có tên trước lần đúc khoá, không vào sổ; câu thô bị trigger chặn với tên ràng buộc; ĐỐI CHỨNG: gói khai số ngày giao thì mở và chụp tập mã", async () => {
+    const t = await taoToChuc();
+    await phienBanTco(t, 2, TP_TRE, { ty_le_tre_ngay: "0.001" });
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    // Tổ chức chưa bật: không có cạnh về DRAFT, nên lời từ chối không chỉ lối ấy (rà soát §S1.279 — TRUNG-5).
+    expect((await loi(mo(t, rfqId)))?.message).toBe(
+      "Phiên bản chính sách đang hiệu lực tính chi phí trễ giao, mà gói thầu chưa khai số ngày giao yêu cầu (L16) — " +
+        "số ngày giao chỉ khai được khi soạn, và gói đã nộp duyệt không trả về soạn thảo được ở tổ chức chưa bật kiểm soát S3: " +
+        "gói này chỉ còn lối huỷ; khai số ngày giao cho gói soạn mới.",
+    );
+    const { rows: khoa } = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM rfq_key_material WHERE rfq_id = $1", [rfqId]);
+    expect(khoa[0]!.n, "từ chối TRƯỚC lần đúc khoá (khoản 31)").toBe("0");
+    expect(await soCua("CONTROL_DENIED", rfqId), "từ chối cấu hình không vào sổ (L12)").toEqual([]);
+    await expect(
+      withTenant(apiPool, t.org, async (c) => {
+        await c.query(
+          "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) " +
+            "VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+          [t.org, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), t.pm.u, t.pm.s],
+        );
+        await c.query(
+          "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+          [rfqId, t.pm.u, t.pm.s],
+        );
+      }),
+    ).rejects.toMatchObject({ code: "23514", constraint: "tco_thieu_so_ngay_giao" });
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+
+    const coNgay = await goiNhap(t);
+    await datNgay(t, coNgay, 14);
+    await nop(t, coNgay);
+    await duyet(t, coNgay, t.pm2);
+    expect(await loi(mo(t, coNgay))).toBeNull();
+    const { rows } = await db.pool.query<{ m: string[] }>("SELECT tco_ma_ghim AS m FROM rfq_packages WHERE id = $1", [coNgay]);
+    expect(rows[0]!.m).toEqual(["gia", "chi_phi_tre"]);
+  });
+});
+
+describe("S4.7a — nhóm khoá `tco` của phiên bản chính sách: hình dạng và biên ở CSDL", () => {
+  it("[INV-L8] chỉ ba khoá, mọi giá trị là chuỗi, hai khoá thanh toán đi cùng nhau, ba biên; object rỗng bị từ chối — mỗi ca qua `createProcurementPolicy`", async () => {
+    const t = await taoToChuc();
+    let v = 2;
+    const tao = async (tco: Record<string, string> | null): Promise<LoiBat | null> => {
+      const kq = await loi(
+        withTenant(apiPool, t.org, (c) =>
+          createProcurementPolicy(c, t.org, { version: v, dualApprovalThreshold: "100000000.00", currency: "VND", tco, actorSessionId: t.pm.s }),
+        ),
+      );
+      if (kq === null) v += 1;
+      return kq;
+    };
+    const hopLe: readonly Record<string, string>[] = [
+      { ty_le_tre_ngay: "0.001" },
+      { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" },
+      { chi_phi_von_nam: "1", ngay_thanh_toan_chuan: "0", ty_le_tre_ngay: "0.1" },
+      { chi_phi_von_nam: "0.0001", ngay_thanh_toan_chuan: "365", ty_le_tre_ngay: "0.000001" },
+    ];
+    for (const hop of hopLe) {
+      expect(await tao(hop), JSON.stringify(hop)).toBeNull();
+    }
+    const khongHop: readonly Record<string, string>[] = [
+      {},
+      { bao_hanh: "0.1" },
+      { chi_phi_von_nam: "0.12" },
+      { ngay_thanh_toan_chuan: "60" },
+      { chi_phi_von_nam: "0", ngay_thanh_toan_chuan: "60" },
+      { chi_phi_von_nam: "1.5", ngay_thanh_toan_chuan: "60" },
+      { chi_phi_von_nam: "0.12345", ngay_thanh_toan_chuan: "60" },
+      { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "366" },
+      { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "060" },
+      { ty_le_tre_ngay: "0" },
+      { ty_le_tre_ngay: "0.2" },
+      { ty_le_tre_ngay: "0.0000001" },
+      { ty_le_tre_ngay: "1e-3" },
+    ];
+    for (const sai of khongHop) {
+      const kq = await tao(sai);
+      expect(kq?.code, JSON.stringify(sai)).toBe("23514");
+      expect(kq?.message, JSON.stringify(sai)).toContain("org_procurement_policies_tco_hinh_dang");
+    }
+    // Hình dạng NGOÀI ở tầng gói: một giá trị không phải chuỗi không tới được CSDL.
+    expect((await tao({ ty_le_tre_ngay: 0.001 } as never))?.message).toBe("mọi giá trị của tco phải là chuỗi");
+    // Không `UPDATE`: đổi tham số là một phiên bản mới.
+    await expect(
+      withTenant(apiPool, t.org, (c) => c.query("UPDATE org_procurement_policies SET tco = '{\"ty_le_tre_ngay\":\"0.002\"}' WHERE org_id = $1", [t.org])),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 });

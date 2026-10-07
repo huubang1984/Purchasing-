@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { resolveSessionActor } from "@trustprocure/identity";
+import { maChotTuLoi, resolveSessionActor, tuChoiTheoChotTaiNguyen } from "@trustprocure/identity";
 
 // =============================================================================================
 // SỔ NHÀ CUNG CẤP MỨC LEVEL 0/1 (S1.1)
@@ -365,6 +365,11 @@ export async function addSupplierContact(
   client: pg.PoolClient,
   orgId: string,
   input: AddSupplierContactInput,
+  /**
+   * [S1.278 / khoản 344] Pool ĐỘC LẬP của sổ — lần thêm người liên hệ vào hồ sơ người khác dựng (K8a) để lại `CONTROL_DENIED` ở
+   * giao dịch riêng rồi ném `ChotKiemSoatError` (422), khuôn `xacMinhNhaCungCap`.
+   */
+  auditPool: pg.Pool,
 ): Promise<SupplierContactRecord> {
   await assertTenantBound(client, orgId, "addSupplierContact");
   batBuocUuid(input.supplierId, "supplierId");
@@ -405,12 +410,23 @@ export async function addSupplierContact(
     throw new SupplierError("phone sai định dạng — chờ 8–15 chữ số, có thể có '+' ở đầu");
   }
 
-  const { rows } = await client.query<HangContact>(
-    `INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone,
-                                    created_by, created_by_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_CONTACT}`,
-    [orgId, input.supplierId, fullName, email, phone, actor.id, actor.sessionId],
-  );
+  // [S1.278 / khoản 344] Trigger `ncc_kiem_them_lien_he` (`111`) là lớp có thẩm quyền: chỉ người dựng hồ sơ thêm được người liên
+  // hệ. Nhánh ấy mang tên ràng buộc ⇒ `CONTROL_DENIED` ở giao dịch độc lập rồi ném lời từ chối có tên; lỗi khác đi thẳng.
+  let rows: HangContact[];
+  try {
+    ({ rows } = await client.query<HangContact>(
+      `INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone,
+                                      created_by, created_by_session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_CONTACT}`,
+      [orgId, input.supplierId, fullName, email, phone, actor.id, actor.sessionId],
+    ));
+  } catch (loi) {
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) {
+      await tuChoiTheoChotTaiNguyen(auditPool, orgId, actor, { resourceType: "SUPPLIER", resourceId: input.supplierId }, ma, loi);
+    }
+    throw loi;
+  }
 
   const hang = rows[0];
   if (hang === undefined) {

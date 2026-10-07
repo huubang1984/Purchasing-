@@ -280,7 +280,7 @@ async function dungNccDemDuoc(c: pg.PoolClient, ten: string): Promise<{ supplier
     email: `${s.id.slice(0, 8)}@vidu.vn`,
     phone: `09${s.id.replace(/\D/g, "").slice(0, 8).padEnd(8, "0")}`,
     actorSessionId: sNhapNcc,
-  });
+  }, apiPool);
   const bamDaXem = (await docHoSoXacMinh(c, orgA)).find((h) => h.supplierId === s.id)?.bamHoSo ?? "";
   const xm = await xacMinhNhaCungCap(c, orgA, { supplierId: s.id, actorSessionId: sTc2, bamDaXem }, apiPool);
   expect(xm.conHieuLuc, `luồng S3: xác minh của ${ten} còn hiệu lực`).toBe(true);
@@ -299,7 +299,7 @@ async function dungNccCuaNguoiMua(c: pg.PoolClient, ten: string): Promise<{ supp
     email: `${s.id.slice(0, 8)}@vidu.vn`,
     phone: `09${s.id.replace(/\D/g, "").slice(0, 8).padEnd(8, "0")}`,
     actorSessionId: sMua,
-  });
+  }, apiPool);
   return { supplierId: s.id, contactId: lh.id };
 }
 

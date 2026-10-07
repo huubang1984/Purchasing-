@@ -25630,6 +25630,197 @@ và bỏ trần của ô *Benchmark*. Đo: trên ba tệp trang của `origin/ma
 `pnpm t0` xanh; `npx vitest run --exclude "**/*.int.test.ts" --maxWorkers=4`: 153 tệp, 2614 ca đạt, 1 bỏ qua, 0 đỏ. Không test tích
 hợp nào chạm ba tệp trang. Lượt đầu đỏ đúng một ca, `so-no-tu-doi-chieu` P9: `Handoff.md` còn khai *53 còn mở* ở hai chỗ (§10, §13) — sửa thành *52*; sau đó xanh.
 
+---
+
+# §S1.278 — KHOẢN 344 ĐÓNG: CHỈ NGƯỜI DỰNG HỒ SƠ NHÀ CUNG CẤP THÊM ĐƯỢC NGƯỜI LIÊN HỆ VÀO NÓ (K8a, ADR-152)
+
+**Rổ và mảnh (ADR-043):** khoản 344 (chưa xếp rổ, đề xuất B) đóng. Chạm mảnh *mời nhà cung cấp* của `docs/PRODUCT.md` §11: người lạ trên
+hồ sơ thật là đích nhận link mời. Một migration (`111_lien_he_chi_nguoi_dung_ho_so`), một mã chốt, một ADR.
+
+## 1. Quyết định của chủ dự án
+Ngày 2026-10-07, trong ba hướng — *người dựng hồ sơ* (khuyên dùng), *người dựng + vai xác minh*, *người liên hệ chờ duyệt* — chủ dự án chọn
+người dựng hồ sơ. Luật áp ở mọi tổ chức (vế người lạ nhận link không cần S3).
+
+## 2. Đo trước trên mã cũ
+Bỏ tạm `111` khỏi thư mục migration, chạy năm ca mới của `packages/supplier/src/suppliers.int.test.ts`: bốn đỏ — người thứ hai cùng tổ
+chức thêm được người liên hệ vào hồ sơ người khác dựng (hàng mới, không sổ); câu INSERT thô dưới `app_api` và dưới superuser đi qua; hồ
+sơ không người dựng nhận người liên hệ; đột biến thân rỗng không đổi gì vì không có thân —; ca đối chứng (người dựng thêm được) xanh.
+
+## 3. Sửa
+- `111`: hàm `ncc_kiem_them_lien_he()` + trigger `supplier_contacts_kiem_nguoi_them` BEFORE INSERT, `ENABLE ALWAYS`, tên xếp sau
+  `supplier_contacts_kiem_danh_tinh` nên `created_by` đã là người của phiên. Người gọi khác `suppliers.created_by`, hay hồ sơ không người dựng
+  ⇒ 23514 tên ràng buộc `k8a_lien_he_ho_so_nguoi_khac`. Không thấy hồ sơ ⇒ để khoá ngoại hợp thành của `008` từ chối (ca cô lập tổ chức cũ
+  của `suppliers.int` vẫn đòi đúng lỗi khoá ngoại).
+- Hardening: mục ghim thân + trigger (khuôn `ngoai_le_kiem`), `TRIGGER_DUOC_PHEP` của `supplier_contacts` thêm tên mới; `HAM_KHONG_PHAI_CANH`.
+- `CHOT_VAO_SO`: `K8A_LIEN_HE_HO_SO_NGUOI_KHAC` (chốt K8a, vào sổ), `CHOT_THEO_RANG_BUOC`, `DANH_MUC_VE_CONG`.
+- `addSupplierContact(client, orgId, input, auditPool)`: bắt lỗi theo tên ràng buộc ⇒ `CONTROL_DENIED` ở giao dịch độc lập rồi ném
+  `ChotKiemSoatError`; route `POST /suppliers/:supplierId/contacts` truyền `ctx.auditPool`, trả 422 mang mã.
+
+## 4. Đo sau
+- `suppliers.int` 40/40: năm ca mới xanh, gồm đột biến thân `RETURN NEW` ⇒ lần thêm của người thứ hai đi lọt, `migrate()` dựng lại thân
+  chuẩn từ hardening và lần thêm lại bị chặn kèm hàng `CONTROL_DENIED`.
+- `rfq.int` (tên ràng buộc ở thân trigger khớp `CHOT_THEO_RANG_BUOC` cả hai chiều — nay tám hàm).
+- `man-kiem-soat.int` A5: PM2 thêm người liên hệ vào hồ sơ người khác dựng ⇒ 422 `K8A_LIEN_HE_HO_SO_NGUOI_KHAC`, băm và xác minh giữ
+  nguyên; hàng người liên hệ lạ dựng như dữ liệu có trước `111` vẫn làm cờ «hồ sơ đổi» bật và màn nói người thêm.
+- Bốn đồ gá dựng cảnh *người liên hệ do người khác thêm* (`canh-tranh-toi-thieu.int` K2 vế (i), `xac-minh.int` K8a người tạo một người liên
+  hệ, `anh-xa.int` tập loại trừ L3, `man-kiem-soat.int` ca băm cũ — nay PM2 dựng hồ sơ) dựng nó bằng superuser với trigger tạm tắt: các vế
+  ấy vẫn phải đọc đúng hàng cũ.
+- Toàn bộ test tích hợp trên cụm cục bộ: trước sửa đồ gá 9 ca đỏ ở 6 tệp (đúng các đường trên và ba danh sách migration của
+  `migrations.int`), sau sửa xanh.
+
+## 5. Giới hạn nói ra
+Người dựng vắng mặt thì hồ sơ không thêm được người liên hệ nữa (ADR-152 Hệ quả). Người liên hệ do người khác thêm trước `111` vẫn ở
+nguyên — không đường gỡ.
+
+# §S1.279 — S4.7a: TCO Ở CSDL VÀ LƯỢT CHẤM — NĂM MÃ CÓ NGUỒN, KIỂM PHIÊN BẢN LÚC CHẤM, Ô THIẾU GỌI TÊN; SỐ NGÀY GIAO CHỈ ĐỔI Ở DRAFT VÀ NẰM TRONG CHỮ KÝ; TẬP MÃ CHỤP LÚC MỞ (L8, L16) — ADR-153
+
+## 1. Vòng này là gì
+
+Phần đầu trong ba phần của S4.7 (spec S4 §4.8, §9): nhóm khoá `tco` của chính sách, số ngày giao yêu cầu của gói, tập mã thành phần chụp
+lúc mở, bộ đọc ô khai, và lượt chấm tính TCO trên năm mã có nguồn. Không route, không màn (S4.7b); lời khai lưu cùng award là S4.7c, sau
+S3.5. Chủ dự án: *"Tiếp S4.7"*.
+
+## 2. Quyết định của chủ dự án (2026-10-07)
+
+Bốn câu, cả bốn theo đề xuất:
+1. S4.7 tách BA phần — S4.7a CSDL + chấm, S4.7b route + màn, S4.7c cam kết (sau S3.5).
+2. Chi phí trễ là TỶ LỆ giá trị báo giá mỗi ngày (`ty_le_tre_ngay`), không số tiền cố định — không phụ thuộc đơn vị tiền.
+3. Phiên bản ghim tính chi phí trễ mà gói chưa khai số ngày giao ⇒ chặn ở cạnh mở.
+4. Số ngày giao vào chữ ký phê duyệt ở MỌI tổ chức, băm riêng, trigger riêng — không định nghĩa lại `rfq_bam_noi_dung` hay
+   `rfq_kiem_chuyen_trang_thai`.
+
+## 3. Đo trước
+
+- Lượt chấm chỉ nhận đúng `gia`/`TIEN` (`THANH_PHAN_CHUA_CO_NGUON`); `tinhChiPhiHieuDung` đã tổng quát; không `CHECK` nào của `057` liệt kê
+  mã.
+- `freight`, `importCost`, `paymentDays`, `leadTimeDays`: 0 kết quả trong `apps/`, `packages/`, `db/`. Không nhóm khoá `tco`.
+- Chữ ký ký ở `PENDING_APPROVAL` (`076`), phiên bản ghim chọn ở cạnh vào `OPEN` (`102`) ⇒ tập mã không ký được; số ngày giao thì được.
+- Mọi tổ chức đếm chữ ký trên `approved_content_hash` ở cạnh mở (D2); đường duy nhất đổi số ngày giao sau khi ký là cạnh trả về DRAFT của
+  tổ chức đã bật (`077`).
+- S3.5, S3.4 chưa bắt đầu; `rfq_awards.reason` đã bắt buộc ở mọi lần đề xuất.
+
+## 4. Thay đổi
+
+- **`112_tco`**:
+  - nhóm khoá `org_procurement_policies.tco` — `CHECK` `…_tco_hinh_dang` (ba khoá chuỗi, cặp hai khoá thanh toán, biên GIẢ ĐỊNH bằng
+    `.double()`, object rỗng bị từ chối), `INSERT` theo cột;
+  - `rfq_packages.so_ngay_giao` [1, 3650] — trigger `rfq_packages_so_ngay_giao` (chỉ đổi ở DRAFT, tên `so_ngay_giao_chi_doi_o_draft`);
+  - `rfq_approvals.approved_delivery_hash` (mọi tổ chức; `DEFAULT` hằng điền hàng cũ rồi bỏ; trigger `rfq_approvals_dat_bam_giao_hang`,
+    hàm `rfq_bam_giao_hang`); hai `UNIQUE` của `087` giữ nguyên;
+  - `rfq_chu_ky_con_hieu_luc` định nghĩa lại — cộng vế số ngày giao (K4b đếm, K5 đọc);
+  - `rfq_packages.tco_ma_ghim` (ngoài mọi `GRANT` ghi) — trigger `rfq_packages_tco_khi_mo` ở cạnh vào OPEN: chụp tập mã của phiên bản ghim,
+    từ chối `tco_thieu_so_ngay_giao`, và ở tổ chức chưa bật đếm NGƯỜI ký trên nội dung cộng số ngày giao;
+  - bộ đọc `bid_so_ngay`; cột `rfq_evaluation_lines.ma_thieu` với `CHECK` `…_ma_thieu_hinh_dang`.
+- **Ghim** năm khối mới ở `hardening.always.sql`, khối `rfq_chu_ky_con_hieu_luc` dời sang `112`; `TRIGGER_DUOC_PHEP` thêm ba trigger.
+- **`packages/danh-gia`**: lõi thuần `tco.ts`; `luot-danh-gia.ts` đọc năm ô qua bộ đọc SQL (`round(bid_so_tien(…), 2)`, `bid_so_ngay`), kiểm
+  phiên bản bằng `kiemChinhSachTco`, so tập mã ghim, ghi `ma_thieu`; mã từ chối mới `CHINH_SACH_TCO_SAI` (cấu hình, không vào sổ).
+- **`packages/rfq`**: `datSoNgayGiao` (vào sổ `RFQ_DELIVERY_DAYS_SET`; chưa ra barrel — route ở S4.7b); `openRfq` hỏi trước lần đúc khoá;
+  `createProcurementPolicy` / `lietKePhienBanChinhSach` mang `tco`.
+- **Sổ**: `danh-sach-ham-canh`, `migrations.int` (ba hàm trigger, hàm hiệu lực dời sang `112`, ba danh sách migration), `rls-coverage`
+  (bốn quyền cột), `check-an-ninh` (ba `CHECK` miễn), nhân chứng ở `hardening-suy-tu`, `bac-chinh-sach` (lớp `THEO_ID`),
+  `doc-chinh-sach-mot-ham` (`rfq.ts`), sổ khai nhãn (L8, L16), mốc sổ 83 → 85.
+- **Tài liệu**: ADR-153; TEST-PLAN L8, L16 và dòng tổng (trôi ba nhịp, sửa); spec §4.1, §4.8, §9 (S4.7a/b/c); STATE (mục vòng, khoản 219
+  vế `TIEN` đóng); PRODUCT; Handoff (số migration, ADR, bất biến).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. Tập mã chụp vào CHÍNH hàng gói (`tco_ma_ghim`), không một bảng riêng như §2.5 ㉑: hàng gói đã có policy `_khach` hẹp, và tập mã là hàm
+   của một hàng bất biến. Số ngày giao là một cột với trigger riêng (khuôn `category_id` của `085`), không bảng riêng.
+2. Tập mã không vào chữ ký (chọn sau chữ ký) — nói ra ở ADR; chỉ số ngày giao vào.
+3. Mã từ chối: tái dùng `THANH_PHAN_CHUA_CO_NGUON` cho mọi mã không có nguồn (kể cả thiếu tham số), thêm đúng một mã `CHINH_SACH_TCO_SAI`
+   (trùng mã, thiếu `gia`, hệ số khác 1).
+4. Mã quy đổi mang `nguon` trong `components` — §8.6; `057` chỉ đòi `ma`, `tien`; bộ bằng chứng chép theo khoá đã biết nên chưa mang nó
+   (S4.7c).
+5. Biên GIẢ ĐỊNH: chi phí vốn (0, 1], kỳ chuẩn [0, 365], tỷ lệ trễ (0, 0.1], số ngày giao [1, 3650], ô số ngày [0, 3650].
+
+## 6. Đo
+
+- **Đơn vị** — `tco.test` 18 ca: bảng ca của luật kiểm phiên bản (năm mã, `chat_luong`, `thue`, mã lạ, `constructor`, hệ số khác 1, trùng
+  mã, thiếu `gia`, thiếu tham số); hai công thức (ca ĐÚNG nửa xu ra 0,01 — cắt cụt ra 0,00 —, sát hai bên nửa xu, sáu chữ số lẻ, trả muộn
+  không là khoản giảm trừ); ô thiếu gọi tên theo thứ tự chính sách; mã quy đổi vượt trần.
+- **`luot-danh-gia.int`** — khối L8 (tám ca) và L16 (bốn ca), trên Postgres thật dưới `app_api`:
+  - năm mã: báo giá rẻ nhất theo giá không hạng vì thiếu ô; hạng TCO đảo hạng giá (1 040 863,01 so với 1 010 000,00); `components` mang
+    phép tính của hai mã quy đổi;
+  - ô ngoài miền (phí âm, ba chữ số lẻ, số ngày âm, quá 3650) cùng hạng ô vắng; không báo giá nào đủ ô ⇒ `KHONG_CO_BAO_GIA_DOC_DUOC`;
+  - bốn từ chối cấu hình gọi tên mã và phiên bản, 0 hàng sổ, 0 lượt, RFQ đứng yên; luồng MVP1 không đổi; `ma_thieu` ở hàng có số bị
+    CSDL từ chối; tổng và mã quy đổi vượt trần ⇒ không hạng, gọi tên, báo giá khác vẫn xếp; `"100.000"`/`"5.000"` đọc theo giá trị;
+  - phiên bản bật `van_chuyen` khai sau lúc mở không chạm gói cũ (đối chứng dương: gói mở sau chụp tập mới); quyền cột; ảnh chụp lệch ⇒
+    không chấm; trigger chụp tắt ⇒ không chấm.
+- **`tra-ve-nhap.int`** — khối L16 (mười ca): DRAFT và miền, mỗi lần đặt một hàng sổ; trả về rồi đổi số ngày giao ⇒ chữ ký cũ không mở,
+  ký lại thì mở; không đổi ⇒ chữ ký cũ mở; gói cấp kép đếm người; chữ ký đã rút trên 10 ngày không sống lại nhờ chữ ký trên 20 ngày; lớp
+  đếm của tổ chức chưa bật (đường ghi thứ hai); cạnh mở thiếu số ngày giao ở tầng gói (trước lần đúc khoá, không sổ) và câu thô (tên ràng
+  buộc), đối chứng chụp tập mã; nhóm khoá `tco` — bốn hợp lệ, mười ba sai, hình dạng ngoài, không `UPDATE`.
+- **Sổ CSDL**: `rls-coverage`, `check-an-ninh`, `hardening-suy-tu-tinh-chat`, `trigger-la-mac-dinh-dong`, `migration-shape` — 155/155.
+- **Ca lật, kê tên kèm lý do** (mỗi ca mang chú thích `CA LẬT` tại chỗ):
+  - đối chứng dương ở khối L14 của `luot-danh-gia.int` và giàn cảnh `bo-xuat.int` — L8 đòi hệ số mã tiền bằng 1;
+  - `lan-nop-da-xem.int`: bảng trigger của `rfq_approvals` có bốn trigger; ca đột biến D2 *"trigger so lần nộp không đặt cột về NULL"*;
+  - `danh-sach-moi.int` (lượt `pnpm evidence` đầu, 2 đỏ): hai ca đột biến D2 của tổ chức chưa bật — băm danh sách đặt cho mọi tổ chức, và
+    `UNIQUE` mất `NULLS NOT DISTINCT`.
+
+  Bốn ca đột biến D2 cùng một lý do: hai hàng ký của CÙNG một người, mà lớp đếm NGƯỜI của `rfq_packages_tco_khi_mo` ở tổ chức chưa bật
+  chặn với lời `giao_hang_chua_ky`; nên mỗi đột biến một mình không còn mở được gói. Ca đo lời từ chối ấy trước, rồi tắt thêm lớp L16
+  (trong cùng giao dịch ROLLBACK, hay `DISABLE` rồi `ENABLE ALWAYS`) và đo khoảng trống của điểm chịu lực D2 mở lại như cũ.
+
+## 7. Đột biến
+
+Script áp từng đột biến vào migration và thân ghim (cùng chuỗi) hay vào mã TS, chạy tệp test đích, khôi phục. Mọi đột biến làm test đỏ:
+- **Lõi (7)**: bỏ kiểm hệ số; bỏ câu riêng của `chat_luong`/`thue`; cắt cụt thay làm tròn; ô thiếu thành `0`; bỏ `max(0, …)`; bỏ đòi
+  `gia`; bỏ đòi tham số chi phí trễ.
+- **CSDL (9)**: đếm hàng thay vì đếm người (D1); bỏ đòi số ngày giao ở cạnh mở (D2); bỏ cặp hai khoá thanh toán (D3); `ma_thieu` ở hàng
+  có số (D4); `bid_so_ngay` nhận số âm (D5); bỏ chụp tập mã (D6); số ngày giao đổi ngoài DRAFT (D7); bỏ biên tỷ lệ trễ (D8); bỏ vế số
+  ngày giao khỏi chữ ký còn hiệu lực (D10).
+- **Tầng gói (7)**: bỏ so tập mã ghim (T8); bỏ từ chối khi không báo giá nào đủ ô (T9); bỏ câu hỏi trước của `openRfq` (T10);
+  `datSoNgayGiao` bỏ vế DRAFT (T11); đọc ô khai sai cột (T12); bỏ chặn tổng vượt trần (T13); bỏ `round` thang hai (T14).
+- **Trong bộ test (4)**: tắt `rfq_packages_so_ngay_giao`; tắt `rfq_packages_tco_khi_mo` (gói không tập mã, không chấm); bỏ vế số ngày
+  giao khỏi `rfq_chu_ky_con_hieu_luc`; băm số ngày giao hằng.
+
+Hai đột biến SỐNG ở lượt đầu, và cả hai là phát hiện: **D9** — bỏ băm số ngày giao khỏi `UNIQUE` chữ ký — sống vì cột ấy THỪA ở đó
+(`lan_nop_da_xem` đã tách hàng ký lại; số ngày giao chỉ đổi ở DRAFT, mỗi lần nộp lại tăng `lan_nop`): sửa bằng không đụng `UNIQUE` của
+`087`. **T14** sống vì ca test dùng `"5.0"` — chuỗi mà hàm thuần nhận sẵn: đổi sang `"5.000"`, rồi T14 đỏ.
+
+## 8. Rà soát đối kháng
+
+Một lượt soi đối kháng độc lập trên diff, đo bằng đọc mã và một test nháp; chín phát hiện:
+- **CAO-1** — `UNIQUE` chữ ký dựng lại chép bộ cột của `086` thay vì `087`, đánh rơi `lan_nop_da_xem`: người duyệt đã trả gói về không ký
+  lại được trên chính nội dung ấy (`lan-nop-da-xem.int` 2 ca đỏ ở lượt `test:int` đầu). Sửa: không đụng `UNIQUE` (§7, D9).
+- **CAO-2** — phép đếm riêng xét hiệu lực theo NGƯỜI, số ngày giao theo HÀNG: (A) chữ ký đã bị chính người ký rút trên 10 ngày sống lại nhờ
+  chữ ký còn hiệu lực trên 20 ngày; (B) K5 đếm chữ ký độc lập trên số ngày cũ trong khi người bị loại ký số ngày mới. Sửa: vế số ngày giao
+  vào `rfq_chu_ky_con_hieu_luc` — một hàng, cùng vế *"chưa tự trả về"*; K4b và K5 cùng đọc. Ca (A) thành test.
+- **CAO-3** — tổng (hay chi phí trễ, tới 365 lần giá) vượt `numeric(18, 2)`: câu ghi nổ 22003 ở mọi lần thử, một nhà cung cấp khoá cả gói.
+  Sửa: không hạng, gọi tên (`TONG_VUOT_MIEN`); test.
+- **TRUNG-4** — `"100.000"` làm cả lượt chấm bị từ chối bằng câu cấu hình sai, hay `RangeError` 500 qua mã quy đổi; có từ S2 ở
+  `totalAmount`. Sửa: `round(bid_so_tien(…), 2)`; test.
+- **TRUNG-5** — tổ chức chưa bật: phiên bản mới bật chi phí trễ làm gói chờ duyệt kẹt, và lời từ chối chỉ lối về DRAFT không có. Sửa: lời
+  từ chối theo loại tổ chức; giới hạn nói ra (§9 ⑴).
+- **THẤP-6** `constructor` — `Object.hasOwn`, test. **THẤP-7** hệ số khác 1 trên gói đang chạy — giới hạn (§9 ⑵). **THẤP-8** ký số ngày giao
+  chưa thấy — giới hạn (§9 ⑶). **THẤP-9** hàm chọn phiên bản gọi nhiều lần — `LATERAL`.
+- Lượt soi xác nhận lành: quyền cột, điền hàng cũ, thứ tự trigger (và rằng nhánh hoãn của phép đếm không tới được khi D2 đứng trước),
+  phép tính `bigint`, `CHECK` jsonpath, `bid_so_ngay`, năm thân ghim khớp migration sau chuẩn hoá khoảng trắng.
+
+## 9. Giới hạn, nói ra
+
+1. Tổ chức chưa bật S3 khai phiên bản tính chi phí trễ khi có gói CHỜ DUYỆT chưa khai số ngày giao: gói ấy chỉ còn lối huỷ (lời từ chối nói
+   thật). Màn `/chinh-sach` của S4.7b cảnh báo trước.
+2. Phiên bản hệ số khác 1 đã ghim vào một gói đang chạy làm gói ấy không chấm được nữa; hôm nay không tổ chức thật nào.
+3. Người duyệt ký số ngày giao mà màn chưa hiện (S4.7b); hôm nay không route nào đặt được nó, cột luôn `NULL` ở đường sản phẩm.
+4. Lớp đếm người của tổ chức chưa bật không tới được bằng đường sản phẩm (không cạnh về DRAFT) — đo bằng đường ghi thứ hai.
+5. Phép tính lại ngoại tuyến của bộ bằng chứng (J2) vẫn là phép CỘNG trên `giaTri`; phép quy đổi không tính lại ngoại tuyến (S4.7c).
+6. Lời khai TCO chưa là cam kết, chưa đối chiếu với hoá đơn/GRN (S4.7c, S5).
+7. `ma_thieu` của hàng không số ghi TRƯỚC `112` là `NULL` (không suy ngược).
+
+## 10. Đo cuối
+
+- `pnpm evidence` lượt một (trên `69d8004`, sau `cap-so`): 4927 khẳng định, **3 đỏ**.
+  - Hai ca đột biến D2 của `danh-sach-moi.int` là ca lật (mục 6). Job T3 của PR đỏ đúng hai ca ấy.
+  - Ca thứ ba là `canh-tranh-toi-thieu.int` K2 (i), *"NGƯỜI THU HỒI là người chọn"*: `users_org_id_email_key` vỡ khi dựng người thứ tư mang
+    vai `PROCUREMENT_MANAGER`. Đuôi email ngẫu nhiên của fixture chỉ 3 byte, bốn PM cùng tiền tố trong một tổ chức. Đây là va chạm
+    ngẫu nhiên, không do vòng này: tệp và bảng `users` không đổi; chạy lại 36/36, CI xanh. Nới đuôi ở mười sáu tệp test là một việc riêng.
+- Master nhận #254 (S1.277, khoản 334) trong lúc chạy; gộp bằng merge commit — hai xung đột tài liệu (`STATE.md`, biên bản), giữ cả hai
+  mục. Trên cây gộp: T0 xanh, unit toàn kho 2660/2660, `cap-so --kiem` sạch.
+- `pnpm evidence` trên cây gộp (`dc13204`): vitest thoát mã 0, 4928 khẳng định, **85/85** bất biến (63/63 nghiệp vụ + 22/22 hàng rào),
+  *"Cổng evidence: XANH"*. Ma trận đổi dòng đếm (61 → 63, 83 → 85), hai hàng mới L8 (24 khẳng định) và L16 (14), lời hàng L14.
+
+---
 
 # §S1.280 — S3.5a: AWARD THEO BẬC — SỐ CHỮ KÝ CỦA BẬC CAO HƠN, CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`, VAI THEO BẬC, HẬU KIỂM SỐ BÁO GIÁ (K2b), CHỮ KÝ TRAO THẦU ĐỘC LẬP (K5b) — ADR-154
 

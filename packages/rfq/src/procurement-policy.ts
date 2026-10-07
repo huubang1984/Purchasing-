@@ -87,6 +87,13 @@ export interface CreateProcurementPolicyInput {
    * hình dạng NGOÀI (một object các chuỗi); tập khoá, biên và thứ tự ngưỡng là của `CHECK` `org_procurement_policies_benchmark_hinh_dang`.
    */
   readonly benchmark?: Readonly<Record<string, string>> | null;
+  /**
+   * [S1.279 / S4.7a] Nhóm khoá `tco` (spec S4 §4.1, §4.8; ADR-153): `chi_phi_von_nam`, `ngay_thanh_toan_chuan`, `ty_le_tre_ngay`,
+   * mọi giá trị là CHUỖI, mỗi khoá tuỳ chọn. `undefined` hay `null` ⇒ phiên bản không khai tham số quy đổi — mã `chi_phi_thanh_toan`
+   * và `chi_phi_tre` của nó không có nguồn, và lượt chấm từ chối bằng câu gọi tên. Tầng này chỉ kiểm hình dạng NGOÀI; tập khoá, biên
+   * và cặp hai khoá đầu là của `CHECK` `org_procurement_policies_tco_hinh_dang`.
+   */
+  readonly tco?: Readonly<Record<string, string>> | null;
   readonly actorSessionId: string;
 }
 
@@ -180,13 +187,15 @@ function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chi
   return { bac: JSON.stringify(mang), chiaNho, thamDinh };
 }
 
-/** [S1.256 / S4.5b] Hình dạng NGOÀI của nhóm khoá `benchmark` — object, mọi giá trị là chuỗi. */
-function benchmarkJson(input: CreateProcurementPolicyInput): string | null {
-  const tho: unknown = input.benchmark ?? null;
-  if (tho === null) return null;
-  if (typeof tho !== "object" || Array.isArray(tho)) throw new RfqError("benchmark phải là một object");
+/**
+ * [S1.256 / S4.5b] Hình dạng NGOÀI của một nhóm khoá chuỗi — object, mọi giá trị là chuỗi. [S1.279 / S4.7a] Dùng chung cho
+ * `benchmark` và `tco`.
+ */
+function nhomChuoiJson(tho: unknown, ten: string): string | null {
+  if (tho === null || tho === undefined) return null;
+  if (typeof tho !== "object" || Array.isArray(tho)) throw new RfqError(`${ten} phải là một object`);
   for (const v of Object.values(tho as Record<string, unknown>)) {
-    if (typeof v !== "string") throw new RfqError("mọi giá trị của benchmark phải là chuỗi");
+    if (typeof v !== "string") throw new RfqError(`mọi giá trị của ${ten} phải là chuỗi`);
   }
   return JSON.stringify(tho);
 }
@@ -214,15 +223,17 @@ export async function createProcurementPolicy(
 
   const { tp, topN } = trongSoJson(input);
   const { bac, chiaNho, thamDinh } = bacJson(input);
-  const benchmark = benchmarkJson(input);
+  const benchmark = nhomChuoiJson(input.benchmark, "benchmark");
+  const tco = nhomChuoiJson(input.tco, "tco");
 
   const { rows } = await client.query<HangChinhSach>(
     `INSERT INTO public.org_procurement_policies
        (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n,
-        created_by, created_by_session_id, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, benchmark)
-     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8, $9::pg_catalog.jsonb, $10, $11, $12::pg_catalog.jsonb)
+        created_by, created_by_session_id, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, benchmark, tco)
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8, $9::pg_catalog.jsonb, $10, $11, $12::pg_catalog.jsonb,
+             $13::pg_catalog.jsonb)
      RETURNING ${COT_CHINH_SACH}`,
-    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId, bac, chiaNho, thamDinh, benchmark],
+    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId, bac, chiaNho, thamDinh, benchmark, tco],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("Câu INSERT org_procurement_policies không trả về hàng");
@@ -249,6 +260,8 @@ export async function createProcurementPolicy(
       soBac: input.tiers?.length ?? 0,
       // [S1.256 / S4.5b] Có cấu hình benchmark hay không — ngưỡng nằm ở chính hàng chính sách, bất biến, xuất được.
       coBenchmark: benchmark !== null,
+      // [S1.279 / S4.7a] Cùng lý do: có khai tham số quy đổi TCO hay không; tỷ lệ nằm ở chính hàng chính sách.
+      coTco: tco !== null,
     },
   });
 
@@ -324,6 +337,8 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly thamDinhHieuLucThang: number | null;
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
   readonly benchmark: Readonly<Record<string, string>> | null;
+  /** [S1.279 / S4.7a] Nhóm khoá `tco`, đúng như CSDL cất; `null`: chưa khai. */
+  readonly tco: Readonly<Record<string, string>> | null;
   /**
    * [S1.258 / khoản 329] Trọng số chấm và BAFO top-N, đúng như CSDL cất; cả hai `null` khi phiên bản không khai (`056` đòi chúng đi
    * cùng nhau). Màn `/chinh-sach` cần chúng để HIỆN và để *Chép phiên bản mới nhất* mang chúng sang phiên bản kế — trước vòng này
@@ -350,6 +365,7 @@ interface HangPhienBan extends HangChinhSach {
   chia_nho_cua_so_ngay: number | null;
   tham_dinh_hieu_luc_thang: number | null;
   benchmark: Record<string, string> | null;
+  tco: Record<string, string> | null;
   eval_components: ThanhPhanTrongSoVao[] | null;
   bafo_top_n: number | null;
   created_by: string;
@@ -371,7 +387,7 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
 
   const { rows } = await client.query<HangPhienBan>(
     `SELECT p.id, p.version, p.dual_approval_threshold, p.currency, p.effective_from, p.tiers,
-            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.benchmark, p.eval_components, p.bafo_top_n, p.created_by,
+            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.benchmark, p.tco, p.eval_components, p.bafo_top_n, p.created_by,
             s.signed_by, s.signed_at,
             p.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now()) AS hieu_luc
        FROM public.org_procurement_policies p
@@ -392,6 +408,7 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
       chiaNhoCuaSoNgay: h.chia_nho_cua_so_ngay,
       thamDinhHieuLucThang: h.tham_dinh_hieu_luc_thang,
       benchmark: h.benchmark,
+      tco: h.tco,
       evalComponents: h.eval_components,
       bafoTopN: h.bafo_top_n,
       createdBy: h.created_by,
