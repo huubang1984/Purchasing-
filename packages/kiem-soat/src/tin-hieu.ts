@@ -5,6 +5,7 @@ import {
   PERMISSIONS,
   laMaChot,
   listUserIdsWithPermission,
+  maChotTuLoi,
   requirePermission,
   resolveSessionActor,
   tuChoiTheoChot,
@@ -251,19 +252,24 @@ export async function ghiNhanTinHieu(
   if (signalId === null) signalId = await ghiTinHieu(client, orgId, input.rfqId, "GHI_NHAN", actor);
   if (signalId === null) throw new KiemSoatError("Gói thầu này không có tín hiệu nào cần ghi nhận.");
 
-  const { rows } = await client
-    .query<{ id: string }>(CAU_GHI_NHAN, [orgId, signalId, lyDo, actor.id, actor.sessionId])
-    .catch((loi: unknown) => {
-      const { code, constraint } = (loi ?? {}) as { code?: unknown; constraint?: unknown };
-      if (code === "23505") throw new KiemSoatError("Bạn đã ghi nhận tín hiệu này rồi.");
-      if (code === "23514" && constraint === "k10_bang_chung_da_doi") {
-        throw new KiemSoatError("Bằng chứng của tín hiệu vừa đổi — đọc lại rồi ghi nhận tín hiệu hiện tại.");
-      }
-      if (code === "23514" && constraint === "k10_ghi_nhan_sai_trang_thai") {
-        throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
-      }
-      throw loi;
-    });
+  let rows: readonly { id: string }[];
+  try {
+    ({ rows } = await client.query<{ id: string }>(CAU_GHI_NHAN, [orgId, signalId, lyDo, actor.id, actor.sessionId]));
+  } catch (loi: unknown) {
+    const { code, constraint } = (loi ?? {}) as { code?: unknown; constraint?: unknown };
+    if (code === "23505") throw new KiemSoatError("Bạn đã ghi nhận tín hiệu này rồi.");
+    if (code === "23514" && constraint === "k10_bang_chung_da_doi") {
+      throw new KiemSoatError("Bằng chứng của tín hiệu vừa đổi — đọc lại rồi ghi nhận tín hiệu hiện tại.");
+    }
+    if (code === "23514" && constraint === "k10_ghi_nhan_sai_trang_thai") {
+      throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
+    }
+    // [S1.9101 / S3.4a / K9] Ghi nhận tín hiệu là một cổng K9 (ADR-082 ⒄): trigger `governance_signal_acks_kiem_xung_dot` (`9501`)
+    // từ chối có tên — một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối của chốt (ADR-114).
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
+    throw loi;
+  }
   const ackId = rows[0]?.id;
   if (ackId === undefined) throw new KiemSoatError("Câu ghi nhận không trả về hàng nào.");
 

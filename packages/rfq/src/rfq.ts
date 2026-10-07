@@ -11,6 +11,7 @@ import {
 import {
   CAU_CHOT_CANH_TRANH,
   CAU_CHOT_CHU_KY_DOC_LAP,
+  CAU_CHOT_CHU_KY_XUNG_DOT_MO,
   CAU_CHOT_NGAN_SACH,
   CAU_CHOT_NHOM_HANG,
   CAU_CHOT_TIN_HIEU,
@@ -721,6 +722,10 @@ export async function openRfq(
     },
     auditPool,
   );
+  // [S1.9101 / S3.4a / K9] Chữ ký của người đã khai CÓ xung đột không đếm — hỏi TRƯỚC K5 và K10a, cùng thứ tự trigger ở cạnh (tên
+  // `…_kiem_chu_ky_xung_dot_khi_mo` xếp trước `…_kiem_danh_sach_khi_mo` của K4b): lời có tên chỉ khi K9 làm thiếu chữ ký; thiếu vì lý
+  // do khác thì K4b nói ở câu UPDATE, không hàng sổ.
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CHU_KY_XUNG_DOT_MO, [orgId, input.rfqId]);
   // [S1.269 / S3.3c2 / K5] Chữ ký độc lập, cùng khuôn, TRƯỚC K10a — cùng thứ tự với hai trigger ở cạnh (tên `…_kiem_doc_lap_khi_mo`
   // xếp trước `…_kiem_tin_hieu_khi_mo`).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_CHU_KY_DOC_LAP, [orgId, input.rfqId]);

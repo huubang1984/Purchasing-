@@ -777,6 +777,8 @@ describe("phủ RLS", () => {
       // [S1.197 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
       { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
+      // [S1.9101 / S3.4a] Khai báo xung đột lợi ích: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "coi_declarations", quyen: "SELECT" },
       // [S1.272 / S4.6a] Hai bảng giá ngoài (ADR-096 ⑹): SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "external_price_references", quyen: "SELECT" },
       { grantee: "app_api", bang: "external_purchase_history", quyen: "SELECT" },
@@ -1127,6 +1129,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "canonical_items", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "tac_gia", quyen: "INSERT" },
+      // [S1.9101 / S3.4a] Khai báo xung đột: CHỈ INSERT — `id`, `created_at` do CSDL đặt, `danh_sach_bam` do trigger đặt; người khai là dẫn xuất từ phiên.
+      { grantee: "app_api", bang: "coi_declarations", cot: "ghi_chu", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "supplier_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "trang_thai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "coi_declarations", cot: "user_id", quyen: "INSERT" },
       // [S1.272 / S4.6a] Theo CỘT: `id`, `seq`, `ghi_luc` do CSDL đặt (khuôn L1).
       { grantee: "app_api", bang: "external_price_references", cot: "canonical_item_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "external_price_references", cot: "don_gia", quyen: "INSERT" },
@@ -2197,6 +2207,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       // [S1.265 / S3.3b] Vì sao người mua không mời đủ nhà cung cấp là việc nội bộ — nhà cung cấp không đọc ngoại lệ.
       "rfq_sourcing_exceptions",
+      // [S1.9101 / S3.4a] Ai của bên mua khai gì về ai là việc nội bộ (K11) — nhà cung cấp không đọc khai báo xung đột.
+      "coi_declarations",
       // [S1.198 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
       "rfq_tra_ve",
       "sessions", "supplier_contacts",

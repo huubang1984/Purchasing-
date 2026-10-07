@@ -433,6 +433,13 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   "K4A_THU_HOI_SAI_TRANG_THAI",
   "K8A_NGUOI_MOI_XAC_MINH",
   "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.9101 / S3.4a] Sáu mã K9 của khai báo xung đột lợi ích (`9501_khai_bao_xung_dot`).
+  "K9_CHUA_KHAI_XUNG_DOT",
+  "K9_CHU_KY_CO_XUNG_DOT",
+  "K9_CO_XUNG_DOT",
+  "K9_KHAI_BAO_LOI_THOI",
+  "K9_KHONG_GO_DUOC_XUNG_DOT",
+  "K9_XAC_MINH_NCC_XUNG_DOT",
   "K5_THIEU_CHU_KY_DOC_LAP",
   "L14_PHIEN_BAN_KHONG_GHIM",
   "NGAN_SACH_GHIM_BAN_CU",

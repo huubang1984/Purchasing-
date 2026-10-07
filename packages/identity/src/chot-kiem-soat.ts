@@ -51,6 +51,13 @@
 // cửa sổ của người chọn danh sách, không ngoại lệ `ROTATION`; ở cạnh nộp duyệt VÀ cạnh mở gói. Khuôn K1: hàm vị từ `rfq_chot_xoay_vong`
 // (`108_xoay_vong`), tầng gói hỏi trước câu ghi, trigger hỏi lại. Chủ dự án chốt 2026-10-05: một mã, vào sổ ở cả hai cạnh.
 //
+// [S1.9101 / S3.4a / ADR-9201] Sáu dòng K9 — khai báo xung đột lợi ích (`9501_khai_bao_xung_dot`). Khuôn ADR-108/114: bảy trigger
+// cổng (chữ ký mở gói, lượt chấm, đề xuất và huỷ trao thầu, chữ ký duyệt trao thầu, xác minh nhà cung cấp, ghi nhận tín hiệu) lấy
+// khoá (gói, người) rồi hỏi hàm vị từ `coi_chot_hanh_dong` / `coi_chot_xac_minh` và từ chối với TÊN RÀNG BUỘC = mã viết thường; tầng
+// gói bắt chính lỗi ấy. Cạnh mở gói đi khuôn K1: `openRfq` hỏi `rfq_chot_chu_ky_xung_dot` trước lần đúc khoá, trigger hỏi lại — cùng
+// tên ràng buộc, nên một câu mở thô cũng vào sổ. Năm mã vào sổ; `K9_KHAI_BAO_LOI_THOI` không: danh sách mời đổi SAU khi khai là dữ
+// liệu đổi dưới chân người khai (ADR-060), và lối ra là khai lại.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -86,6 +93,12 @@ export type MaChotKiemSoat =
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
+  | "K9_CHUA_KHAI_XUNG_DOT"
+  | "K9_CHU_KY_CO_XUNG_DOT"
+  | "K9_CO_XUNG_DOT"
+  | "K9_KHAI_BAO_LOI_THOI"
+  | "K9_KHONG_GO_DUOC_XUNG_DOT"
+  | "K9_XAC_MINH_NCC_XUNG_DOT"
   | "K5_THIEU_CHU_KY_DOC_LAP"
   | "L14_PHIEN_BAN_KHONG_GHIM"
   | "NGAN_SACH_GHIM_BAN_CU"
@@ -320,6 +333,62 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.180)",
     thongDiep: "Phiên đã dùng để đề xuất trao thầu không được dùng để duyệt đề xuất ấy (J3).",
   },
+  // [S1.9101 / S3.4a / ADR-9201] Sáu dòng K9 — bảy trigger cổng của `9501_khai_bao_xung_dot` đặt tên ràng buộc bằng chính mã viết
+  // thường; tầng gói bắt theo `CHOT_THEO_RANG_BUOC`. Cổng mở gói còn hỏi trước (`rfq_chot_chu_ky_xung_dot`, khuôn K1).
+  K9_CHUA_KHAI_XUNG_DOT: {
+    chot: "K9",
+    vaoSo: true,
+    lyDo:
+      "một người ký duyệt gói, chấm, đề xuất hay duyệt trao thầu, huỷ trao thầu, hay ghi nhận tín hiệu của một gói mà bậc đòi khai " +
+      "xung đột, khi CHƯA khai gì về danh sách mời hiện tại (spec §4.5, K9): bỏ bước khai là bỏ đúng lời khai có chủ thể, có thời " +
+      "điểm, có phiên mà K9 tạo ra (§8.7) — kiểm toán viên hỏi tới lần cố ấy, cùng khuôn `TIN_HIEU_CHUA_GHI_NHAN`",
+    thongDiep:
+      "Gói thầu ở bậc đòi khai báo xung đột lợi ích: khai *không xung đột* với danh sách mời hiện tại trước khi ký, chấm, đề xuất, duyệt hay huỷ trao thầu, hoặc ghi nhận tín hiệu (K9).",
+  },
+  K9_KHAI_BAO_LOI_THOI: {
+    chot: "K9",
+    vaoSo: false,
+    lyDo:
+      "người ấy ĐÃ khai không xung đột, nhưng danh sách mời đổi SAU lúc khai (thêm, thu hồi lời mời; lập, rút ngoại lệ) — một lời " +
+      "khai về danh sách cũ chưa nói gì về nhà cung cấp mới (§4.5). Dữ liệu đổi dưới chân người khai, không ai cố lách; lối ra là " +
+      "khai lại, và ghi sổ thì mỗi lần sửa danh sách để lại một hàng cho từng người đã khai (ADR-060)",
+    thongDiep: "Danh sách mời đã đổi từ lúc bạn khai báo xung đột lợi ích: đọc lại danh sách rồi khai lại (K9).",
+  },
+  K9_CO_XUNG_DOT: {
+    chot: "K9",
+    vaoSo: true,
+    lyDo:
+      "người đã khai CÓ xung đột với một nhà cung cấp của gói lại ký duyệt, chấm, đề xuất, duyệt hay huỷ trao thầu, hay ghi nhận tín " +
+      "hiệu của gói ấy — mũi T5 ⑸ của spec §6 (*khai có xung đột rồi tìm đường ký*). Vĩnh viễn ở mọi bậc: một khai báo gỡ được là một " +
+      "lối đi vòng (§4.5)",
+    thongDiep: "Bạn đã khai có xung đột lợi ích với một nhà cung cấp của gói thầu này — bạn không ký, chấm, đề xuất, duyệt hay huỷ trao thầu, hay ghi nhận tín hiệu của gói ấy nữa (K9).",
+  },
+  K9_KHONG_GO_DUOC_XUNG_DOT: {
+    chot: "K9",
+    vaoSo: true,
+    lyDo:
+      "người đã khai CÓ xung đột trên một gói khai lại *không xung đột* trên chính gói ấy — đúng lối *khai có xung đột khi bị hỏi, " +
+      "gỡ khi tới lượt ký* mà §4.5 cấm bằng cấu tạo (chỉ ghi thêm, không hàng nào sau gỡ được)",
+    thongDiep: "Đã khai có xung đột lợi ích trên gói thầu này — lời khai ấy là vĩnh viễn cho gói, không khai lại *không xung đột* được (K9).",
+  },
+  K9_CHU_KY_CO_XUNG_DOT: {
+    chot: "K9",
+    vaoSo: true,
+    lyDo:
+      "gói chỉ đủ chữ ký khi đếm cả chữ ký của người đã khai CÓ xung đột — khai SAU khi ký thì chữ ký thôi đếm (ADR-082 ⒄), ở cạnh " +
+      "mở gói và ở hàng duyệt trao thầu. Lần mở hay lần duyệt dựa vào chữ ký ấy là đúng thứ kiểm toán viên hỏi tới",
+    thongDiep:
+      "Một chữ ký đang đếm là của người đã khai có xung đột lợi ích với gói thầu này và không còn giá trị: cần thêm chữ ký của người không có xung đột (K9).",
+  },
+  K9_XAC_MINH_NCC_XUNG_DOT: {
+    chot: "K9",
+    vaoSo: true,
+    lyDo:
+      "người đã khai CÓ xung đột với một nhà cung cấp — ở bất kỳ gói nào — xác minh hay thu hồi xác minh hồ sơ của chính nhà cung cấp " +
+      "ấy (ADR-082 ⒄: cổng ở xác minh). Xác minh là thứ cho nhà cung cấp được đếm vào K2, nên đó là lần người có quan hệ tự quyết " +
+      "cho người mình có quan hệ",
+    thongDiep: "Bạn đã khai có xung đột lợi ích với nhà cung cấp này — một người khác xác minh hay thu hồi xác minh hồ sơ của họ (K9).",
+  },
   // [S1.231 / khoản 231 / 093] Vế *lượt chấm mới nhất* của J5 — trigger `award_kiem_de_xuat` đặt tên, `deXuatTraoThau` bắt
   // CHÍNH lỗi của nó. Vào sổ: `deXuatTraoThau` tự suy lượt mới nhất và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở
   // `EVALUATING`, tạo lượt đòi `UNSEALED`/`BAFO_UNSEALED`), nên câu ghi nào tới được nhánh này là một award trỏ vào bảng xếp hạng
@@ -369,6 +438,13 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.9101 / S3.4a] Sáu tên K9 — bảy trigger cổng và trigger khai báo của `9501_khai_bao_xung_dot` đặt tên bằng chính mã viết thường.
+  k9_chu_ky_co_xung_dot: "K9_CHU_KY_CO_XUNG_DOT",
+  k9_chua_khai_xung_dot: "K9_CHUA_KHAI_XUNG_DOT",
+  k9_co_xung_dot: "K9_CO_XUNG_DOT",
+  k9_khai_bao_loi_thoi: "K9_KHAI_BAO_LOI_THOI",
+  k9_khong_go_duoc_xung_dot: "K9_KHONG_GO_DUOC_XUNG_DOT",
+  k9_xac_minh_ncc_xung_dot: "K9_XAC_MINH_NCC_XUNG_DOT",
   // [S1.253 / S4.5a] Nhánh duy nhất của `rfq_evaluations_kiem_phien_ban_ghim` (`102_ghim_chinh_sach_luot_cham`).
   l14_phien_ban_khong_ghim: "L14_PHIEN_BAN_KHONG_GHIM",
 };

@@ -63,6 +63,8 @@ const LUAT: readonly Luat[] = [
   { hang: "Hai người ký thì không ai trao thầu cho người quen được", bat: /không ai[^.!?;]{0,40}trao thầu cho người quen/iu },
   { hang: "Chống được thông đồng giữa người mua và nhà cung cấp", bat: /chống(?:\s+được)?\s+(?:việc\s+)?thông đồng/iu },
   { hang: "Chuẩn hoá dữ liệu chống thao túng giá", bat: /chống(?:\s+được)?\s+(?:việc\s+)?thao túng/iu },
+  // [S1.9101 / S3.4a] K9 tạo ra TRÁCH NHIỆM, không phải phát hiện (spec S3 §8.7): màn không nói *kiểm soát* hay *ngăn* xung đột.
+  { hang: "Kiểm soát xung đột lợi ích", bat: /(?:kiểm soát|ngăn(?:\s+chặn)?|phát hiện)(?:\s+được)?[^.!?;]{0,20}xung đột lợi ích/iu },
 ];
 
 /** Mẫu dương ngoài chính câu của hàng: những biến thể đã gặp hay dễ gặp. */
@@ -87,6 +89,8 @@ const MAU_AM: readonly string[] = [
   "Giảm khả năng can thiệp vào báo giá",
   "Làm việc móc nối đắt hơn và để lại dấu đọc được",
   "Phát hiện dấu hiệu bất thường",
+  "Buộc người quyết định khai báo và tự rút; khai sai để lại dấu",
+  "Gói thầu ở bậc đòi khai báo xung đột lợi ích: khai *không xung đột* với danh sách mời hiện tại trước khi ký (K9).",
 ];
 
 /** Các hàng của bảng §5 — nguyên văn ô đầu, bỏ đánh dấu Markdown và ngoặc kép. */

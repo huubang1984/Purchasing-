@@ -11838,3 +11838,171 @@ lệ có lý do. KPI tỷ lệ ngoại lệ (§8.2) dời sang S3.9 (bằng ch�
 
 `gieo:demo` và kịch bản 41 đi qua ngoại lệ, K2/K3/K5 bị chặn rồi qua (S3.3e2); K2b, K5b (S3.5); KPI tỷ lệ ngoại lệ (S3.9); quyền thêm
 người liên hệ (khoản nợ mới).
+
+---
+
+## ADR-9201 — S3.4a: K9 — khai báo xung đột lợi ích là lời khai chỉ-ghi-thêm ghim băm danh sách mời; `CO_XUNG_DOT` vĩnh viễn cho gói; cổng ở bảy chỗ; chữ ký của người có xung đột không đếm; S3.4 chia hai PR
+
+**Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai luôn hạng mục S3.4"*; vòng chia hai
+phần theo khuôn S3.6b (⑻), các quyết định hình dạng dưới đây theo đề xuất và chờ chủ dự án xác nhận lại ở lượt soi · **[S1.9101]** ·
+**Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, ADR-082 ⒄, ADR-084 ⑴ ⑷, ADR-108, ADR-114, ADR-145, ADR-147 ⑺ · **Spec:** S3 §4.5,
+§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Spec §4.5 đặt `coi_declarations` chỉ-ghi-thêm mang băm danh sách mời lúc khai, bốn cổng (chữ ký mở gói, lượt chấm, đề xuất, chữ ký
+trao thầu) và một `CO_XUNG_DOT` vĩnh viễn. Lượt soi hình dạng (ADR-082 ⒄) thêm ba cổng — xác minh/thẩm định, ghi nhận tín hiệu, huỷ
+trao thầu —, đòi phép đếm chữ ký loại người có `CO_XUNG_DOT`, và một khoá tư vấn (gói, người) chung cho khai báo và chữ ký. `107`
+(ADR-147 ⑺) đã để sẵn chỗ: bốn vế *còn hiệu lực* ở một hàm, *"khi K9 loại người khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi
+cùng nhau"*. Không dòng mã nào của K9 tồn tại trước vòng này; `khai_xung_dot` là một khoá bậc không ai đọc.
+
+### Quyết định
+
+⑴ **Bảng `coi_declarations` chỉ-ghi-thêm**, người khai dẫn xuất từ phiên (ADR-016), `danh_sach_bam` do trigger đặt bằng CHÍNH
+`rfq_bam_danh_sach` (`076`/`105`) — cùng băm người duyệt ký lên (K4b), nên *"khai với danh sách nào"* và *"ký lên danh sách nào"* là một
+câu hỏi. `KHONG_XUNG_DOT` chỉ hiệu lực khi băm ấy bằng băm hiện tại; thêm hay thu hồi lời mời, lập hay rút ngoại lệ đều làm lời khai
+LỖI THỜI — lối ra là khai lại. Ghi chú tuỳ chọn, cắt, trần 2000 byte, không vào sổ.
+
+⑵ **`CO_XUNG_DOT` trỏ một nhà cung cấp CÓ LỜI MỜI của gói và là vĩnh viễn cho gói ấy:** một hàng `KHONG_XUNG_DOT` ghi sau bị trigger từ
+chối có tên (`k9_khong_go_duoc_xung_dot`, vào sổ) — khai có xung đột khi bị hỏi, gỡ khi tới lượt ký là đúng lối §4.5 cấm. Khai được ở
+mọi trạng thái gói, kể cả SAU khi đã ký: chữ ký ấy thôi đếm (⑸).
+
+⑶ **Hai hàm vị từ, mã là từ vựng `CHOT_VAO_SO`.** `coi_chot_hanh_dong(org, gói, người)`: tổ chức chưa bật ⇒ qua (ADR-080); người có
+`CO_XUNG_DOT` trên gói ⇒ `K9_CO_XUNG_DOT` ở MỌI bậc; bậc ghim không bật `khai_xung_dot` ⇒ qua — gói không bậc ghim hay bậc vắng khoá
+coi như ĐÒI, fail-closed như K5; có `KHONG_XUNG_DOT` mang băm hiện tại ⇒ qua; đã khai mà băm đổi ⇒ `K9_KHAI_BAO_LOI_THOI` (KHÔNG vào
+sổ: danh sách đổi dưới chân người khai, ADR-060); chưa khai ⇒ `K9_CHUA_KHAI_XUNG_DOT` (vào sổ, khuôn `TIN_HIEU_CHUA_GHI_NHAN`).
+`coi_chot_xac_minh(org, nhà cung cấp, người)`: người đã khai `CO_XUNG_DOT` với nhà cung cấp ấy ở BẤT KỲ gói nào không xác minh hay thu
+hồi xác minh nó ⇒ `K9_XAC_MINH_NCC_XUNG_DOT` — xung đột ở đây theo (nhà cung cấp, người), không theo gói.
+
+⑷ **Bảy cổng là bảy trigger BEFORE INSERT, khuôn ADR-108/114:** `rfq_approvals`, `rfq_evaluations`, `rfq_awards` (`PROPOSED`,
+`CANCELLED`), `rfq_award_approvals`, `supplier_verifications`, `governance_signal_acks`; mỗi cái lấy khoá (gói, người) — seed 9,
+`coi_khoa_goi_nguoi`, cùng khoá trigger khai báo lấy — rồi hỏi ⑶ và từ chối với TÊN RÀNG BUỘC = mã viết thường; tầng gói chủ bảng bắt
+chính lỗi ấy (`maChotTuLoi`) và ghi `CONTROL_DENIED` ở giao dịch độc lập. Không vị từ hỏi trước ở sáu cổng này: một câu hỏi trước đua
+với một `CO_XUNG_DOT` đang chèn (ADR-114 đã nói về K4a); khoá (gói, người) ở trigger đóng cửa sổ ấy. KHÔNG cổng ở `unseal_approvals`:
+mở thầu chỉ giải mã (§4.5). Lượt chấm giữ cổng mà không chịu lực (J1/J2 tất định).
+
+⑸ **Chữ ký của người có `CO_XUNG_DOT` không đếm.** Bốn vế *còn hiệu lực* của `107` tách thành `rfq_chu_ky_khop_bam`;
+`rfq_chu_ky_con_hieu_luc` = khớp băm TRỪ người có `CO_XUNG_DOT` — K4b (phép đếm thứ ba) và K5 đổi cùng nhau mà không sửa chữ nào ở hai
+hàm ấy. Cạnh mở gói thêm vị từ `rfq_chot_chu_ky_xung_dot` (khuôn K1: `openRfq` hỏi trước, trigger xếp TRƯỚC K4b hỏi lại) nói lời có
+tên `K9_CHU_KY_CO_XUNG_DOT` CHỈ KHI K9 làm thiếu chữ ký — thiếu vì lý do khác thì K4b nói, không hàng sổ. Ở trao thầu, hàng `APPROVED`
+đòi ít nhất một chữ ký duyệt của người không có `CO_XUNG_DOT` — độc lập với `CHU_KY_CAN` của `061`/`094`; S3.5 gộp vào
+`award_so_chu_ky_can`.
+
+⑹ **Mã quyền `coi.declare`** cho mọi vai giữ một mã mà K9 chặn — tức mọi vai trừ `DATA_STEWARD`. Khai báo không tách người (ADR-084 ⑴)
+nhưng không mã nào sẵn có mà mọi người sắp quyết đều giữ; route khai và route đọc khai báo của CHÍNH mình cùng hỏi mã ấy. Khai báo của
+người khác không ra ngoài route (K11); lớp bằng chứng đọc bảng ở S3.9.
+
+⑺ **Sáu mã, năm vào sổ** — thêm `K9_CO_XUNG_DOT`, `K9_CHU_KY_CO_XUNG_DOT`, `K9_XAC_MINH_NCC_XUNG_DOT` theo luật ADR-060 (người cố
+đi tắt một chốt); `K9_KHAI_BAO_LOI_THOI` không.
+
+⑻ **S3.4 chia hai PR** (khuôn S3.6b1/S3.6b2): **S3.4a** — migration, hàm, trigger, mã, gói `kiem-soat`, hai route, K9 vào sổ đăng ký;
+**S3.4b** — màn khai báo ở `/tao-thau` (trước ô ký, chấm, duyệt), `gieo:demo --s3` khai cho những người nó ký thay, kịch bản 41, lượt
+đi thử T4. Giữa hai PR, tổ chức demo dùng bậc mặc định `khai_xung_dot: true` nên người đi trên màn bị K9 chặn ở nút ký cho tới
+S3.4b — cùng khoảng trống S3.6b1 đã để giữa K10a và màn ghi nhận.
+
+### Cái giá, nói thẳng
+
+- **Mỗi lần danh sách đổi, mọi người đã khai phải khai lại** — kể cả một lời mời thêm sau khi ký ở OPEN làm lời khai của người chấm
+  và người duyệt trao thầu lỗi thời. Đó là nghĩa của §4.5; màn S3.4b phải nói trước.
+- **Bảy người của kịch bản §7 thêm bảy lần khai** trước khi ký, chấm, đề xuất, duyệt; `gieo:demo --s3` phải gieo chúng (S3.4b).
+- **Khai báo là tự khai** (§8.7): người nói dối đi qua; thứ ở lại là một lời khai có chủ thể, phiên, thời điểm và băm.
+- **Khoá (gói, người) thêm một điểm xếp hàng** ở mỗi chữ ký và lượt chấm — rẻ: hai người khác nhau không chờ nhau.
+- **Hai chỉ dẫn mới ở màn chưa có** cho tới S3.4b: `422` mang mã đủ để màn gắn.
+
+### Phương án đã loại
+
+- **Vị từ hỏi trước ở cả sáu cổng (khuôn K1):** đua với `CO_XUNG_DOT` đang chèn; khoá ở trigger rẻ hơn và ADR-114 đã chọn cùng lối cho K4a.
+- **Băm RIÊNG chỉ tập nhà cung cấp** (đúng chữ §4.5 *"tập nhà cung cấp còn sống"*): hai băm cho một danh sách là hai chỗ trôi; băm K4b
+  rộng hơn (người liên hệ, kênh, ngoại lệ) chỉ làm lời khai lỗi thời sớm hơn, không bao giờ muộn hơn.
+- **Cho phép `KHONG_XUNG_DOT` sau `CO_XUNG_DOT` với lý do:** chính lối đi vòng §4.5 gọi tên.
+- **Dùng `rfq.approve` làm cổng route khai:** người chấm, người duyệt trao thầu, người xác minh không giữ nó.
+- **Cổng ở `unseal_approvals`:** §2.2 ⑵ giữ nguyên đường mở thầu.
+
+### Điều ADR này KHÔNG nói
+
+Màn, `gieo:demo`, kịch bản 41, lượt đi thử T4 (S3.4b); cổng ở THẨM ĐỊNH đầy đủ (K8b, S3.7); khai báo theo từng nhà cung cấp lúc mời
+(spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5); lớp bằng chứng (S3.9).
+
+---
+
+## ADR-9201 — S3.4a: K9 — khai báo xung đột lợi ích là lời khai chỉ-ghi-thêm ghim băm danh sách mời; `CO_XUNG_DOT` vĩnh viễn cho gói; cổng ở bảy chỗ; chữ ký của người có xung đột không đếm; S3.4 chia hai PR
+
+**Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai luôn hạng mục S3.4"*; vòng chia hai
+phần theo khuôn S3.6b (⑻), các quyết định hình dạng dưới đây theo đề xuất và chờ chủ dự án xác nhận lại ở lượt soi · **[S1.9101]** ·
+**Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, ADR-082 ⒄, ADR-084 ⑴ ⑷, ADR-108, ADR-114, ADR-145, ADR-147 ⑺ · **Spec:** S3 §4.5,
+§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Spec §4.5 đặt `coi_declarations` chỉ-ghi-thêm mang băm danh sách mời lúc khai, bốn cổng (chữ ký mở gói, lượt chấm, đề xuất, chữ ký
+trao thầu) và một `CO_XUNG_DOT` vĩnh viễn. Lượt soi hình dạng (ADR-082 ⒄) thêm ba cổng — xác minh/thẩm định, ghi nhận tín hiệu, huỷ
+trao thầu —, đòi phép đếm chữ ký loại người có `CO_XUNG_DOT`, và một khoá tư vấn (gói, người) chung cho khai báo và chữ ký. `107`
+(ADR-147 ⑺) đã để sẵn chỗ: bốn vế *còn hiệu lực* ở một hàm, *"khi K9 loại người khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi
+cùng nhau"*. Không dòng mã nào của K9 tồn tại trước vòng này; `khai_xung_dot` là một khoá bậc không ai đọc.
+
+### Quyết định
+
+⑴ **Bảng `coi_declarations` chỉ-ghi-thêm**, người khai dẫn xuất từ phiên (ADR-016), `danh_sach_bam` do trigger đặt bằng CHÍNH
+`rfq_bam_danh_sach` (`076`/`105`) — cùng băm người duyệt ký lên (K4b), nên *"khai với danh sách nào"* và *"ký lên danh sách nào"* là một
+câu hỏi. `KHONG_XUNG_DOT` chỉ hiệu lực khi băm ấy bằng băm hiện tại; thêm hay thu hồi lời mời, lập hay rút ngoại lệ đều làm lời khai
+LỖI THỜI — lối ra là khai lại. Ghi chú tuỳ chọn, cắt, trần 2000 byte, không vào sổ.
+
+⑵ **`CO_XUNG_DOT` trỏ một nhà cung cấp CÓ LỜI MỜI của gói và là vĩnh viễn cho gói ấy:** một hàng `KHONG_XUNG_DOT` ghi sau bị trigger từ
+chối có tên (`k9_khong_go_duoc_xung_dot`, vào sổ) — khai có xung đột khi bị hỏi, gỡ khi tới lượt ký là đúng lối §4.5 cấm. Khai được ở
+mọi trạng thái gói, kể cả SAU khi đã ký: chữ ký ấy thôi đếm (⑸).
+
+⑶ **Hai hàm vị từ, mã là từ vựng `CHOT_VAO_SO`.** `coi_chot_hanh_dong(org, gói, người)`: tổ chức chưa bật ⇒ qua (ADR-080); người có
+`CO_XUNG_DOT` trên gói ⇒ `K9_CO_XUNG_DOT` ở MỌI bậc; bậc ghim không bật `khai_xung_dot` ⇒ qua — gói không bậc ghim hay bậc vắng khoá
+coi như ĐÒI, fail-closed như K5; có `KHONG_XUNG_DOT` mang băm hiện tại ⇒ qua; đã khai mà băm đổi ⇒ `K9_KHAI_BAO_LOI_THOI` (KHÔNG vào
+sổ: danh sách đổi dưới chân người khai, ADR-060); chưa khai ⇒ `K9_CHUA_KHAI_XUNG_DOT` (vào sổ, khuôn `TIN_HIEU_CHUA_GHI_NHAN`).
+`coi_chot_xac_minh(org, nhà cung cấp, người)`: người đã khai `CO_XUNG_DOT` với nhà cung cấp ấy ở BẤT KỲ gói nào không xác minh hay thu
+hồi xác minh nó ⇒ `K9_XAC_MINH_NCC_XUNG_DOT` — xung đột ở đây theo (nhà cung cấp, người), không theo gói.
+
+⑷ **Bảy cổng là bảy trigger BEFORE INSERT, khuôn ADR-108/114:** `rfq_approvals`, `rfq_evaluations`, `rfq_awards` (`PROPOSED`,
+`CANCELLED`), `rfq_award_approvals`, `supplier_verifications`, `governance_signal_acks`; mỗi cái lấy khoá (gói, người) — seed 9,
+`coi_khoa_goi_nguoi`, cùng khoá trigger khai báo lấy — rồi hỏi ⑶ và từ chối với TÊN RÀNG BUỘC = mã viết thường; tầng gói chủ bảng bắt
+chính lỗi ấy (`maChotTuLoi`) và ghi `CONTROL_DENIED` ở giao dịch độc lập. Không vị từ hỏi trước ở sáu cổng này: một câu hỏi trước đua
+với một `CO_XUNG_DOT` đang chèn (ADR-114 đã nói về K4a); khoá (gói, người) ở trigger đóng cửa sổ ấy. KHÔNG cổng ở `unseal_approvals`:
+mở thầu chỉ giải mã (§4.5). Lượt chấm giữ cổng mà không chịu lực (J1/J2 tất định).
+
+⑸ **Chữ ký của người có `CO_XUNG_DOT` không đếm.** Bốn vế *còn hiệu lực* của `107` tách thành `rfq_chu_ky_khop_bam`;
+`rfq_chu_ky_con_hieu_luc` = khớp băm TRỪ người có `CO_XUNG_DOT` — K4b (phép đếm thứ ba) và K5 đổi cùng nhau mà không sửa chữ nào ở hai
+hàm ấy. Cạnh mở gói thêm vị từ `rfq_chot_chu_ky_xung_dot` (khuôn K1: `openRfq` hỏi trước, trigger xếp TRƯỚC K4b hỏi lại) nói lời có
+tên `K9_CHU_KY_CO_XUNG_DOT` CHỈ KHI K9 làm thiếu chữ ký — thiếu vì lý do khác thì K4b nói, không hàng sổ. Ở trao thầu, hàng `APPROVED`
+đòi ít nhất một chữ ký duyệt của người không có `CO_XUNG_DOT` — độc lập với `CHU_KY_CAN` của `061`/`094`; S3.5 gộp vào
+`award_so_chu_ky_can`.
+
+⑹ **Mã quyền `coi.declare`** cho mọi vai giữ một mã mà K9 chặn — tức mọi vai trừ `DATA_STEWARD`. Khai báo không tách người (ADR-084 ⑴)
+nhưng không mã nào sẵn có mà mọi người sắp quyết đều giữ; route khai và route đọc khai báo của CHÍNH mình cùng hỏi mã ấy. Khai báo của
+người khác không ra ngoài route (K11); lớp bằng chứng đọc bảng ở S3.9.
+
+⑺ **Sáu mã, năm vào sổ** — thêm `K9_CO_XUNG_DOT`, `K9_CHU_KY_CO_XUNG_DOT`, `K9_XAC_MINH_NCC_XUNG_DOT` theo luật ADR-060 (người cố
+đi tắt một chốt); `K9_KHAI_BAO_LOI_THOI` không.
+
+⑻ **S3.4 chia hai PR** (khuôn S3.6b1/S3.6b2): **S3.4a** — migration, hàm, trigger, mã, gói `kiem-soat`, hai route, K9 vào sổ đăng ký;
+**S3.4b** — màn khai báo ở `/tao-thau` (trước ô ký, chấm, duyệt), `gieo:demo --s3` khai cho những người nó ký thay, kịch bản 41, lượt
+đi thử T4. Giữa hai PR, tổ chức demo dùng bậc mặc định `khai_xung_dot: true` nên người đi trên màn bị K9 chặn ở nút ký cho tới
+S3.4b — cùng khoảng trống S3.6b1 đã để giữa K10a và màn ghi nhận.
+
+### Cái giá, nói thẳng
+
+- **Mỗi lần danh sách đổi, mọi người đã khai phải khai lại** — kể cả một lời mời thêm sau khi ký ở OPEN làm lời khai của người chấm
+  và người duyệt trao thầu lỗi thời. Đó là nghĩa của §4.5; màn S3.4b phải nói trước.
+- **Bảy người của kịch bản §7 thêm bảy lần khai** trước khi ký, chấm, đề xuất, duyệt; `gieo:demo --s3` phải gieo chúng (S3.4b).
+- **Khai báo là tự khai** (§8.7): người nói dối đi qua; thứ ở lại là một lời khai có chủ thể, phiên, thời điểm và băm.
+- **Khoá (gói, người) thêm một điểm xếp hàng** ở mỗi chữ ký và lượt chấm — rẻ: hai người khác nhau không chờ nhau.
+- **Hai chỉ dẫn mới ở màn chưa có** cho tới S3.4b: `422` mang mã đủ để màn gắn.
+
+### Phương án đã loại
+
+- **Vị từ hỏi trước ở cả sáu cổng (khuôn K1):** đua với `CO_XUNG_DOT` đang chèn; khoá ở trigger rẻ hơn và ADR-114 đã chọn cùng lối cho K4a.
+- **Băm RIÊNG chỉ tập nhà cung cấp** (đúng chữ §4.5 *"tập nhà cung cấp còn sống"*): hai băm cho một danh sách là hai chỗ trôi; băm K4b
+  rộng hơn (người liên hệ, kênh, ngoại lệ) chỉ làm lời khai lỗi thời sớm hơn, không bao giờ muộn hơn.
+- **Cho phép `KHONG_XUNG_DOT` sau `CO_XUNG_DOT` với lý do:** chính lối đi vòng §4.5 gọi tên.
+- **Dùng `rfq.approve` làm cổng route khai:** người chấm, người duyệt trao thầu, người xác minh không giữ nó.
+- **Cổng ở `unseal_approvals`:** §2.2 ⑵ giữ nguyên đường mở thầu.
+
+### Điều ADR này KHÔNG nói
+
+Màn, `gieo:demo`, kịch bản 41, lượt đi thử T4 (S3.4b); cổng ở THẨM ĐỊNH đầy đủ (K8b, S3.7); khai báo theo từng nhà cung cấp lúc mời
+(spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5); lớp bằng chứng (S3.9).

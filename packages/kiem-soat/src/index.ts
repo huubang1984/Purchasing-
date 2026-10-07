@@ -18,3 +18,6 @@ export {
   type TinHieu,
   type TinHieuCuaGoi,
 } from "./tin-hieu.js";
+// [S1.9101 / S3.4a] Khai báo xung đột lợi ích (K9, spec S3 §4.5): khai và đọc khai báo của CHÍNH người gọi. Chốt ở bảy cổng là
+// trigger của `9501_khai_bao_xung_dot`; gói này không giữ bản sao nào của phép so.
+export { docKhaiBaoXungDot, khaiBaoXungDot, type KhaiBaoXungDot, type KhaiBaoXungDotCuaToi, type TrangThaiXungDot } from "./xung-dot.js";
