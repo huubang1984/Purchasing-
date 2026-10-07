@@ -1,7 +1,7 @@
 // ==============================================================================================
-// [S1.9101 / S3.5a · spec S3 §2.4 ⑹iv ⑺, §4.7, §5.1 · K7 · K2b · K5b · K12] AWARD THEO BẬC — PHÉP ĐO TRÊN POSTGRES 16, DƯỚI `app_api`
+// [S1.280 / S3.5a · spec S3 §2.4 ⑹iv ⑺, §4.7, §5.1 · K7 · K2b · K5b · K12] AWARD THEO BẬC — PHÉP ĐO TRÊN POSTGRES 16, DƯỚI `app_api`
 //
-// Migration `9501_trao_thau_theo_bac`, ba lần hỏi trước của `trao-thau.ts` (`deXuatTraoThau`, `duyetTraoThau`). Hợp đồng đo ở đây:
+// Migration `113_trao_thau_theo_bac`, ba lần hỏi trước của `trao-thau.ts` (`deXuatTraoThau`, `duyetTraoThau`). Hợp đồng đo ở đây:
 //   ⑴ K7 — chữ ký SỐNG độc lập với hàng `APPROVED`: bậc cần hai thì chữ ký đầu còn đó (hàng `PROPOSED` đứng yên, `chuKyCan` 2),
 //      gọi lặp là `DA_KY_DE_XUAT_NAY` có tên, người thứ hai ⇒ `APPROVED`; bậc CAO HƠN trong hai bậc (khai thấp ước lượng ⇒ số
 //      chữ ký của bậc trao); vai thuộc `award_vai` của bậc ấy; tác giả phiên bản chính sách không ký; `award_vai_khac_nhau` là hệ
@@ -424,7 +424,7 @@ afterAll(async () => {
 // =============================================================================================
 // ⑴ K7 — SỐ CHỮ KÝ THEO BẬC CAO HƠN, CHỮ KÝ SỐNG ĐỘC LẬP
 // =============================================================================================
-describe("[S1.9101 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ ký sống độc lập với hàng APPROVED", { timeout: 300000 }, () => {
+describe("[S1.280 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ ký sống độc lập với hàng APPROVED", { timeout: 300000 }, () => {
   it("[INV-K7] ĐỐI CHỨNG DƯƠNG bậc 0: một chữ ký DIRECTOR ⇒ APPROVED ngay, chuKyCan 1, hai hàng sổ (SIGNED, APPROVED), không CONTROL_DENIED", async () => {
     const t = await taoToChuc();
     const g = await goiDaCham(t, UL_BAC0, GIA_BAC0);
@@ -595,7 +595,7 @@ describe("[S1.9101 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ k�
 // =============================================================================================
 // ⑵ K2b — HẬU KIỂM SỐ BÁO GIÁ HỢP LỆ
 // =============================================================================================
-describe("[S1.9101 / S3.5a / K2b] hậu kiểm: số nhóm có báo giá hợp lệ dưới ngưỡng của bậc cao hơn", { timeout: 300000 }, () => {
+describe("[S1.280 / S3.5a / K2b] hậu kiểm: số nhóm có báo giá hợp lệ dưới ngưỡng của bậc cao hơn", { timeout: 300000 }, () => {
   it("[INV-K2b] hai mời đếm được, MỘT báo giá ở bậc cần hai ⇒ đề xuất bị K2B_THIEU_CANH_TRANH_THUC; ngoại lệ LOW_ACTUAL_COMPETITION ở EVALUATING cứu; lập hay rút ở AWARDED ⇒ K2B_NGOAI_LE_SAI_TRANG_THAI; ĐỘT BIẾN bỏ hậu kiểm ⇒ đề xuất không ngoại lệ đi qua", async () => {
     const t = await taoToChuc();
     const g = await goiDaCham(t, UL_BAC1, [GIA_BAC1[0]!], { soMoi: 2 });
@@ -672,7 +672,7 @@ describe("[S1.9101 / S3.5a / K2b] hậu kiểm: số nhóm có báo giá hợp l
 // =============================================================================================
 // ⑶ K5b — CHỮ KÝ TRAO THẦU ĐỘC LẬP
 // =============================================================================================
-describe("[S1.9101 / S3.5a / K5b] chữ ký trao thầu của người ngoài tập loại trừ", { timeout: 300000 }, () => {
+describe("[S1.280 / S3.5a / K5b] chữ ký trao thầu của người ngoài tập loại trừ", { timeout: 300000 }, () => {
   /** Ghi `gd1` là người ĐÃ TỪNG điều phối mở gói — hàng lịch sử của `064`. */
   async function gd1DieuPhoi(t: ToChuc, rfqId: string): Promise<void> {
     const yc = (await db.pool.query<{ id: string }>("SELECT id FROM unseal_requests WHERE rfq_id = $1", [rfqId])).rows[0]!.id;
@@ -755,7 +755,7 @@ describe("[S1.9101 / S3.5a / K5b] chữ ký trao thầu của người ngoài t�
 // =============================================================================================
 // ⑷ K12 — HAI BẢNG KHÔNG TRÔI KHỎI NHAU
 // =============================================================================================
-describe("[S1.9101 / S3.5a / K12] tập mã của các hàm vị từ BẰNG các dòng K7, K2b, K5b của CHOT_VAO_SO", () => {
+describe("[S1.280 / S3.5a / K12] tập mã của các hàm vị từ BẰNG các dòng K7, K2b, K5b của CHOT_VAO_SO", () => {
   it("[INV-K7] [INV-K2b] [INV-K5b] mã trong thân năm hàm SQL = tập khoá có `chot` K7/K2b/K5b", async () => {
     const ham = [
       "public.award_chot_bac(uuid, uuid, uuid)",

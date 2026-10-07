@@ -26,7 +26,7 @@ import { InvitationError } from "./invitation.js";
 /** Ba loại của danh sách mời — đường ghi của S3.3b; màn `/tao-thau` chép đúng ba loại này. Loại còn lại của CHECK (`105`) thuộc OPEN (S3.6c). */
 export const LOAI_NGOAI_LE = ["SINGLE_SOURCE", "LIMITED_COMPETITION", "ROTATION"] as const;
 /**
- * [S1.9101 / S3.5a] Loại HẬU KIỂM của trao thầu (K2b): chỉ lập hay rút khi gói ở EVALUATING, trước đề xuất (`9501`); không nằm trong băm
+ * [S1.280 / S3.5a] Loại HẬU KIỂM của trao thầu (K2b): chỉ lập hay rút khi gói ở EVALUATING, trước đề xuất (`113`); không nằm trong băm
  * danh sách, nên không chạm chữ ký K4b. Tập riêng để màn danh sách mời không mời người dùng lập nó ở DRAFT.
  */
 export const LOAI_NGOAI_LE_HAU_KIEM = ["LOW_ACTUAL_COMPETITION"] as const;

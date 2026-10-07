@@ -424,7 +424,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/man-kiem-soat.int.test.ts",
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
   ],
-  // K7 · K2b · K5b — [S1.9101 / S3.5a] award theo bậc (`9501_trao_thau_theo_bac`). `trao-thau-theo-bac` đo dưới `app_api` trên tổ chức
+  // K7 · K2b · K5b — [S1.280 / S3.5a] award theo bậc (`113_trao_thau_theo_bac`). `trao-thau-theo-bac` đo dưới `app_api` trên tổ chức
   // đã bật: chữ ký sống độc lập (bậc cần hai: chữ ký đầu còn, gọi lặp có tên, người thứ hai hoàn tất), bậc CAO HƠN (khai thấp), vai
   // theo bậc, tác giả chính sách, hai vai khác nhau (hệ đại diện phân biệt), đấu thầu chính thức, gói không bậc ghim, tiền tệ lệch,
   // lớp chặn cuối ở trigger (K7); số nhóm có báo giá hợp lệ dưới ngưỡng, ngoại lệ LOW_ACTUAL_COMPETITION chỉ ở EVALUATING, nhà vỏ

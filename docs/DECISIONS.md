@@ -11944,15 +11944,15 @@ khác dạng.
 - Nhãn ngoài trong lượt chấm, bộ bằng chứng hay Risk Score — không có, và đổi điều ấy là một ADR mới (L15).
 - Quy đổi tiền tệ; tiền tệ khác `VND`/`USD`.
 - Nhập bằng tệp; khử trùng lô.
-## ADR-9201 — S3.5a: award theo bậc — số chữ ký của bậc CAO HƠN trong hai bậc, chữ ký sống độc lập với hàng `APPROVED`, vai theo bậc, hậu kiểm số báo giá (K2b) và chữ ký độc lập (K5b); S3.5 chia hai PR
+## ADR-154 — S3.5a: award theo bậc — số chữ ký của bậc CAO HƠN trong hai bậc, chữ ký sống độc lập với hàng `APPROVED`, vai theo bậc, hậu kiểm số báo giá (K2b) và chữ ký độc lập (K5b); S3.5 chia hai PR
 
 **Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai S3.5 luôn"*; sau lượt soi hình dạng,
 sáu câu, cả sáu theo đề xuất: ⑴ gói không bậc ghim ở tổ chức đã bật ⇒ từ chối (`K7_KHONG_BAC_GHIM`); ⑵ `tham_dinh_truoc_trao` CHƯA
 cưỡng chế (K8b là S3.7); ⑶ K5b áp thêm khi bậc trao CAO HƠN bậc ước lượng; ⑷ `award_vai_khac_nhau` là hệ đại diện phân biệt; ⑸ tập
 loại trừ của chữ ký trao thầu thêm người điều phối mở thầu và người xác minh nhà cung cấp thắng; ⑹ hai PR — **S3.5a** chốt, tầng gói,
-route, kịch bản 41, khối đo khoản 242 ⑴; **S3.5b** màn `/mo-thau`, `gieo:demo`, lượt đi thử T4 · **[S1.9101]** · **Liên quan:** ADR-051,
+route, kịch bản 41, khối đo khoản 242 ⑴; **S3.5b** màn `/mo-thau`, `gieo:demo`, lượt đi thử T4 · **[S1.280]** · **Liên quan:** ADR-051,
 ADR-057, ADR-060, ADR-080, ADR-082 ⑹ ⑺ ⑽ ⒄, ADR-084 ⑷, ADR-085, ADR-108, ADR-121, ADR-145, ADR-147, ADR-148 · **Spec:** S3 §2.4 ⑹iv
-⑺, §4.7, §5.1 K7 K2b K5b, §8.10, §9 S3.5 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+⑺, §4.7, §5.1 K7 K2b K5b, §8.10, §9 S3.5 · **Biên bản:** `evidence/security-reviews.md` §S1.280
 
 ### Bối cảnh
 
@@ -12018,7 +12018,7 @@ nhận dưới READ COMMITTED ở MỌI tổ chức (khuôn `107` (4)).
 ⑻ **`tham_dinh_truoc_trao` chưa cưỡng chế** (chủ dự án chốt): K8b và `supplier_qualifications` là S3.7; cưỡng chế ngay thì bậc 2 của ma trận
 demo (cờ TRUE) không trao được. Tín hiệu `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu — S3.6d; K9 ở chữ ký trao thầu — S3.4.
 
-⑼ **S3.5 chia hai PR:** S3.5a (vòng này) — `9501`, tầng gói, thân route (hình dạng trả về), kịch bản 41 luồng S3 hai chữ ký, khối đo khoản
+⑼ **S3.5 chia hai PR:** S3.5a (vòng này) — `113`, tầng gói, thân route (hình dạng trả về), kịch bản 41 luồng S3 hai chữ ký, khối đo khoản
 242 ⑴, lời sau khi bấm *Phê duyệt* ở `/mo-thau` đọc trạng thái máy chủ trả; S3.5b — màn (cần N, có M; khối lập ngoại lệ hậu kiểm ở
 EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
 

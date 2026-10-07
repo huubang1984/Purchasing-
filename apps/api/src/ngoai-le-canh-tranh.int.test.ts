@@ -713,8 +713,8 @@ describe("[S1.265 / S3.3b] hình dạng, quyền, công tắc, chỉ ghi thêm",
       expect(r.status, `${JSON.stringify(tuyChon)}: ${r.text}`).toBe(422);
     }
     const thang = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_LAP, thamSoLap(t, rfqId, t.pm, "LOW_ACTUAL_COMPETITION"))));
-    // [lượt soi hình dạng, L1] Thông điệp không nội suy giá trị của người gọi — `loai` đi tới trigger TRƯỚC CHECK. [S1.9101 / S3.5a] Loại
-    // hậu kiểm nay có đường ghi (EVALUATING, `9501`): ở DRAFT nó là *sai trạng thái* có tên, không còn *loại không lập ở danh sách mời*.
+    // [lượt soi hình dạng, L1] Thông điệp không nội suy giá trị của người gọi — `loai` đi tới trigger TRƯỚC CHECK. [S1.280 / S3.5a] Loại
+    // hậu kiểm nay có đường ghi (EVALUATING, `113`): ở DRAFT nó là *sai trạng thái* có tên, không còn *loại không lập ở danh sách mời*.
     expect(thang?.message).toBe("Ngoai le hau kiem chi lap hay rut khi goi o EVALUATING, truoc de xuat trao thau; goi dang o DRAFT (K2b)");
     expect(thang?.constraint).toBe("k2b_ngoai_le_sai_trang_thai");
     expect(await soHang(rfqId)).toBe(0);

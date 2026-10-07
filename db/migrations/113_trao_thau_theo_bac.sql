@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_trao_thau_theo_bac — [S1.9101 / S3.5a của spec S3] AWARD THEO BẬC: K7 (SỐ CHỮ KÝ, VAI, TÁC GIẢ CHÍNH SÁCH), K2b (HẬU KIỂM
+-- 113_trao_thau_theo_bac — [S1.280 / S3.5a của spec S3] AWARD THEO BẬC: K7 (SỐ CHỮ KÝ, VAI, TÁC GIẢ CHÍNH SÁCH), K2b (HẬU KIỂM
 -- SỐ BÁO GIÁ), K5b (CHỮ KÝ TRAO THẦU ĐỘC LẬP) — CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4 ⑹iv ⑺, §4.7, §5.1 (K7, K2b, K5b), §9

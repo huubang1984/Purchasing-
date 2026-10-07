@@ -359,7 +359,7 @@ export interface MocGhim {
 // [S1.269 / S3.3c2] 79 -> 81: K2 và K5 vào sổ đăng ký (cạnh tranh tối thiểu ở cạnh nộp duyệt, chữ ký độc lập ở cạnh mở gói).
 // [S1.270 / S3.3d] 81 -> 82: K3 vào sổ đăng ký (xoay vòng ở cạnh nộp duyệt và cạnh mở gói).
 // [S1.272 / S4.6a] 82 -> 83: L15 vào sổ đăng ký với vế ghi của lịch sử mua ngoài hệ thống (và mốc giá ngoài).
-// [S1.9101 / S3.5a] 83 -> 86: K7, K2b, K5b vào sổ đăng ký — award theo bậc (`9501_trao_thau_theo_bac`).
+// [S1.280 / S3.5a] 83 -> 86: K7, K2b, K5b vào sổ đăng ký — award theo bậc (`113_trao_thau_theo_bac`).
 export const MOC_GHIM: MocGhim = { soPhuToiThieu: 86, coDanhSachToiDa: 0 };
 
 /**

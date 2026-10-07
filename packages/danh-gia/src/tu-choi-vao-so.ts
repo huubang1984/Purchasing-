@@ -110,7 +110,7 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
     vaoSo: true,
     lyDo: "người đề xuất cố RÚT một đề xuất ĐÃ CÓ chữ ký duyệt — tức tháo một quyết định đã duyệt bằng chính tay mình mà không qua `po.approve`; đúng ca phê duyệt kép bị bào mòn mà ADR-057 dựng cổng huỷ để chặn",
   },
-  // ---- [S1.9101 / S3.5a] Lần ký LẶP — từ S3.5 chữ ký sống độc lập với hàng `APPROVED`, nên một người ký rồi gọi duyệt lần nữa
+  // ---- [S1.280 / S3.5a] Lần ký LẶP — từ S3.5 chữ ký sống độc lập với hàng `APPROVED`, nên một người ký rồi gọi duyệt lần nữa
   // là một bước thừa của chuỗi *award → duyệt*, không phải lỗi UNIQUE không tên
   DA_KY_DE_XUAT_NAY: {
     vaoSo: true,

@@ -213,7 +213,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     thongDiep:
       "Gói thầu cần một chữ ký duyệt của người KHÔNG tạo gói, không nộp, không mời hay thu hồi lời mời, không đặt ngân sách, không nhập nhà cung cấp trên danh sách và không lập ngoại lệ (K5).",
   },
-  // [S1.9101 / S3.5a] Tám dòng của trao thầu theo bậc (`9501_trao_thau_theo_bac`) — K7, K2b, K5b. Khuôn K2/K5: bốn hàm vị từ, tầng gói
+  // [S1.280 / S3.5a] Tám dòng của trao thầu theo bậc (`113_trao_thau_theo_bac`) — K7, K2b, K5b. Khuôn K2/K5: bốn hàm vị từ, tầng gói
   // hỏi trước, trigger riêng hỏi lại với tên ràng buộc bằng chính mã viết thường (bảng `CHOT_THEO_RANG_BUOC`).
   K7_KHONG_BAC_GHIM: {
     chot: "K7",
@@ -450,7 +450,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
-  // [S1.9101 / S3.5a] Tám tên của trao thầu theo bậc — ba trigger của `9501` đặt tên ràng buộc bằng chính mã viết thường (`lower(ly_do)`).
+  // [S1.280 / S3.5a] Tám tên của trao thầu theo bậc — ba trigger của `113` đặt tên ràng buộc bằng chính mã viết thường (`lower(ly_do)`).
   k7_khong_bac_ghim: "K7_KHONG_BAC_GHIM",
   k7_lech_tien_te: "K7_LECH_TIEN_TE",
   k7_dau_thau_chinh_thuc: "K7_DAU_THAU_CHINH_THUC",

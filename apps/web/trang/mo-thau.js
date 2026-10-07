@@ -901,7 +901,7 @@ $("nut-duyet-award").addEventListener("click", async () => {
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
-  // [S1.9101 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
+  // [S1.280 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
   // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. Phần màn còn lại (cần N, còn M; ngoại lệ hậu
   // kiểm) là S3.5b.
   const sau = r.body.award ?? {};

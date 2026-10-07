@@ -66,9 +66,9 @@ import { PERMISSIONS, laMaChot, maChotTuLoi, requirePermission, resolveSessionAc
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 // ==============================================================================================
-// [S1.9101 / S3.5a · spec S3 §4.7, §5.1 K7 · K2b · K5b] TRAO THẦU THEO BẬC — CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`
+// [S1.280 / S3.5a · spec S3 §4.7, §5.1 K7 · K2b · K5b] TRAO THẦU THEO BẬC — CHỮ KÝ SỐNG ĐỘC LẬP VỚI HÀNG `APPROVED`
 //
-// `9501_trao_thau_theo_bac` đặt số chữ ký cần ở CSDL (`award_so_chu_ky_can` — bậc CAO HƠN trong hai bậc ước lượng và số tiền trao),
+// `113_trao_thau_theo_bac` đặt số chữ ký cần ở CSDL (`award_so_chu_ky_can` — bậc CAO HƠN trong hai bậc ước lượng và số tiền trao),
 // vai người ký theo bậc, hậu kiểm số báo giá (K2b) và chữ ký độc lập (K5b). Tầng gói đi khuôn K1/K2/K5 (ADR-084 ⑷, ADR-147 ⑼): hỏi
 // hàm vị từ TRƯỚC mọi tác dụng phụ — một mã ⇒ `CONTROL_DENIED` ở giao dịch độc lập —, còn trigger riêng ở cạnh hỏi lại làm lớp chặn
 // cuối cho câu viết tay (bắt theo tên ràng buộc, `maChotTuLoi`). Bốn câu hỏi đứng ở đây, cạnh câu ghi, vì bộ đọc QT3 rút câu theo TỆP.
@@ -185,7 +185,7 @@ export interface ChuKyDuyet {
 export interface TraoThauDayDu extends TraoThau {
   readonly approvals: readonly ChuKyDuyet[];
   /**
-   * [S1.9101 / S3.5a] Số chữ ký mà đề xuất đang sống cần — `award_so_chu_ky_can` của bậc cao hơn (1 ở tổ chức chưa bật). `null` khi
+   * [S1.280 / S3.5a] Số chữ ký mà đề xuất đang sống cần — `award_so_chu_ky_can` của bậc cao hơn (1 ở tổ chức chưa bật). `null` khi
    * gói không có hàng đề xuất nào. Màn đọc *cần N, có M* từ đây, không tự đếm.
    */
   readonly chuKyCan: number | null;
@@ -380,7 +380,7 @@ export async function deXuatTraoThau(
     );
   }
 
-  // [S1.9101 / S3.5a] Hỏi trước hai chốt của cạnh đề xuất: bậc (gói không bậc ghim, tiền tệ lệch, bậc đấu thầu chính thức) và hậu
+  // [S1.280 / S3.5a] Hỏi trước hai chốt của cạnh đề xuất: bậc (gói không bậc ghim, tiền tệ lệch, bậc đấu thầu chính thức) và hậu
   // kiểm K2b — số nhóm có báo giá hợp lệ đã biết từ lúc chấm, nên ngoại lệ `LOW_ACTUAL_COMPETITION` phải có TRƯỚC đề xuất và mọi chữ ký
   // ký lên một gói đã có nó. Phiên bản báo giá không phải một báo giá đã mở của gói ⇒ hàm vị từ cho qua để J5 nói ở trigger.
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, input.rfqId, input.bidVersionId]);
@@ -475,8 +475,8 @@ export async function deXuatTraoThau(
  * của người duyệt thứ hai đi qua~~. **[S1.142 / khoản 242 ⑴] Vế vừa gạch SAI, và đã đo:** hai câu
  * `INSERT` nằm trong CÙNG một giao dịch, nên với `CHU_KY_CAN := 2` lời gọi đầu bị từ chối và chữ ký
  * của nó rơi theo giao dịch; người duyệt thứ hai gặp đúng lỗi ấy — trao thầu không bao giờ duyệt
- * được. ~~Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5).~~ **[S1.9101 / S3.5a] Nay là
- * `award_so_chu_ky_can` (`9501`): bậc CAO HƠN trong hai bậc ước lượng và số tiền trao, 1 ở tổ chức chưa bật. Hàm này ghi chữ ký,
+ * được. ~~Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5).~~ **[S1.280 / S3.5a] Nay là
+ * `award_so_chu_ky_can` (`113`): bậc CAO HƠN trong hai bậc ước lượng và số tiền trao, 1 ở tổ chức chưa bật. Hàm này ghi chữ ký,
  * hỏi `award_du_chu_ky`, và chỉ chèn hàng `APPROVED` khi đủ — chưa đủ thì chữ ký SỐNG và lời trả về nói còn cần bao nhiêu.** Không
  * có phép đếm nào ở lớp này — hai bản đếm là hai bản trôi.
  *
@@ -566,7 +566,7 @@ export async function duyetTraoThau(
     );
   }
 
-  // [S1.9101 / S3.5a] Một người ký rồi gọi lại khi đề xuất còn chờ chữ ký khác: lời có tên thay vì lỗi UNIQUE thô — chữ ký của
+  // [S1.280 / S3.5a] Một người ký rồi gọi lại khi đề xuất còn chờ chữ ký khác: lời có tên thay vì lỗi UNIQUE thô — chữ ký của
   // họ đã đếm, người cần ký là người KHÁC. (Đề xuất đã duyệt thì hàng mới nhất là `APPROVED` và vế trên đã nói.)
   const { rows: daKy } = await client.query<{ n: number }>(
     `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
@@ -589,7 +589,7 @@ export async function duyetTraoThau(
     );
   }
 
-  // [S1.9101 / S3.5a] Hỏi trước hai chốt của chữ ký: bậc (trigger chữ ký hỏi lại) và người ký — vai thuộc `award_vai` của bậc cao hơn,
+  // [S1.280 / S3.5a] Hỏi trước hai chốt của chữ ký: bậc (trigger chữ ký hỏi lại) và người ký — vai thuộc `award_vai` của bậc cao hơn,
   // không là tác giả phiên bản chính sách ghim (K7). Một mã ⇒ `CONTROL_DENIED` trước mọi câu ghi.
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, dx.rfq_id, dx.bid_version_id]);
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGUOI_KY, [orgId, dx.id, actor.id]);
@@ -604,13 +604,13 @@ export async function duyetTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
     // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi ~~chính lỗi trigger~~
-    // **[S1.180]** lời từ chối của chốt. [S1.9101] Và lớp chặn cuối của K7 ở trigger chữ ký (`9501`) đi cùng lối.
+    // **[S1.180]** lời từ chối của chốt. [S1.280] Và lớp chặn cuối của K7 ở trigger chữ ký (`113`) đi cùng lối.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
   }
 
-  // [S1.9101 / S3.5a] Đủ chữ ký chưa — hỏi CSDL, không đếm ở đây (hai bản đếm là hai bản trôi). Chưa đủ ⇒ chữ ký vừa ghi SỐNG
+  // [S1.280 / S3.5a] Đủ chữ ký chưa — hỏi CSDL, không đếm ở đây (hai bản đếm là hai bản trôi). Chưa đủ ⇒ chữ ký vừa ghi SỐNG
   // (commit cùng giao dịch này), đề xuất đứng yên ở `PROPOSED`, và lời trả về mang đề xuất kèm số cần — đó chính là chỗ khoản 242 ⑴
   // đo được rằng bản cũ không bao giờ tới.
   const { rows: dem } = await client.query<{ can: number; du: boolean }>(CAU_DU_CHU_KY, [orgId, dx.id]);
@@ -670,7 +670,7 @@ export async function duyetTraoThau(
       ],
     ));
   } catch (loi) {
-    // Lớp chặn cuối của cạnh APPROVED (`9501`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
+    // Lớp chặn cuối của cạnh APPROVED (`113`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
@@ -698,7 +698,7 @@ export async function duyetTraoThau(
 }
 
 /**
- * [S1.9101 / S3.5a] Hàng award kèm chữ ký của đề xuất đang sống và số chữ ký cần — hình dạng mà `duyetTraoThau` trả về ở CẢ hai lối
+ * [S1.280 / S3.5a] Hàng award kèm chữ ký của đề xuất đang sống và số chữ ký cần — hình dạng mà `duyetTraoThau` trả về ở CẢ hai lối
  * (chưa đủ: hàng `PROPOSED`; đủ: hàng `APPROVED`), cùng hình dạng `docTraoThau`. `deXuat` là hàng `PROPOSED` mới nhất của gói.
  */
 async function docDayDu(client: pg.PoolClient, orgId: string, h: HangAward, chuKyCan: number | null): Promise<TraoThauDayDu> {
@@ -1087,7 +1087,7 @@ export async function docTraoThau(
   // `PROPOSED` đều không muộn hơn nó — và còn là một bẫy: đưa `h.acted_at` (một `Date` của JS, độ chính
   // xác mili-giây) trở lại SQL so với cột micro-giây thì chính hàng mới nhất bị loại (đo: ca `docTraoThau
   // đọc chữ ký của ĐÚNG đề xuất mới nhất` đỏ với bản đầu của vá). Không tham số thời gian đi qua JS.
-  // [S1.9101 / S3.5a] Số chữ ký cần của đề xuất ấy — CSDL tính (`award_so_chu_ky_can`), `null` khi gói chưa có đề xuất nào.
+  // [S1.280 / S3.5a] Số chữ ký cần của đề xuất ấy — CSDL tính (`award_so_chu_ky_can`), `null` khi gói chưa có đề xuất nào.
   const { rows: can } = await client.query<{ can: number | null }>(
     `SELECT public.award_so_chu_ky_can($1::pg_catalog.uuid, dx.id) AS can
        FROM public.rfq_awards dx

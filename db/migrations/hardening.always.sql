@@ -9849,10 +9849,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ncc_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.5a / K4a K2b] Than tu 9501_trao_thau_theo_bac.sql: ba loai danh sach van chi o DRAFT (k4a_ngoai_le_sai_trang_thai); LOW_ACTUAL_COMPETITION lap va rut chi khi goi o EVALUATING — truoc de xuat, nen khong rut duoc sau khi award da duyet (k2b_ngoai_le_sai_trang_thai). Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky hay rut ngoai le hau kiem sau khi trao.
+    -- [S1.280 / S3.5a / K4a K2b] Than tu 113_trao_thau_theo_bac.sql: ba loai danh sach van chi o DRAFT (k4a_ngoai_le_sai_trang_thai); LOW_ACTUAL_COMPETITION lap va rut chi khi goi o EVALUATING — truoc de xuat, nen khong rut duoc sau khi award da duyet (k2b_ngoai_le_sai_trang_thai). Than `RETURN NEW` cho doi ngoai le sau khi nguoi duyet da ky hay rut ngoai le hau kiem sau khi trao.
     ARRAY[
-      $q$hàm + trigger ngoai_le_kiem (105_ngoai_le_canh_tranh, thân từ 9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$hàm + trigger ngoai_le_kiem (105_ngoai_le_canh_tranh, thân từ 113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -10089,10 +10089,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bac_ghim(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.269 / S3.3c2 / K2] So nhom nha cung cap dem duoc. Mot than tra hang so lon thi moi goi qua K2 bang nha cung cap vo.
-    -- [S1.9101 / S3.5a / K2] Than tu 9501_trao_thau_theo_bac.sql: rfq_dem_ncc_canh_tranh nay la loi goi rfq_dem_nhom_loi_moi voi tap rfq_loi_moi_dem_duoc — K2 va K2b MOT phep gop. Than cu (108) giu nguyen ket qua; mot than dem tren tap khac thi K2 va K2b troi khoi nhau.
+    -- [S1.280 / S3.5a / K2] Than tu 113_trao_thau_theo_bac.sql: rfq_dem_ncc_canh_tranh nay la loi goi rfq_dem_nhom_loi_moi voi tap rfq_loi_moi_dem_duoc — K2 va K2b MOT phep gop. Than cu (108) giu nguyen ket qua; mot than dem tren tap khac thi K2 va K2b troi khoi nhau.
     ARRAY[
-      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm rfq_dem_ncc_canh_tranh(uuid, uuid) (107_canh_tranh_toi_thieu, thân từ 113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_dem_ncc_canh_tranh(p_org uuid, p_rfq uuid) RETURNS integer
   LANGUAGE sql
   STABLE
@@ -10753,10 +10753,10 @@ $ham$;
                   'hàm public.rfq_kiem_xoay_vong_khi_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_xoay_vong_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] So tien va tien te cua bao gia duoc chon — doc qua bid_so_tien/bid_currency tu rfq_unsealed_bids, cung dai luong voi uoc luong (spec S3 §4.7). Mot than doc effective_cost thi bac do chi phi hieu dung, khong do chi tieu.
+    -- [S1.280 / S3.5a / K7] So tien va tien te cua bao gia duoc chon — doc qua bid_so_tien/bid_currency tu rfq_unsealed_bids, cung dai luong voi uoc luong (spec S3 §4.7). Mot than doc effective_cost thi bac do chi phi hieu dung, khong do chi tieu.
     ARRAY[
-      $q$định nghĩa hàm award_so_tien_trao(uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_so_tien_trao(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_so_tien_trao(p_org uuid, p_bid_version uuid, OUT so_tien numeric, OUT tien_te text)
   LANGUAGE sql
   STABLE
@@ -10784,10 +10784,10 @@ $ham$$q$,
                   'hàm public.award_so_tien_trao(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_so_tien_trao(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Bac CAO HON trong hai bac (uoc luong, so tien trao) — moi chot theo bac cua trao thau doc no. Mot than tra bac uoc luong thi khai thap uoc luong ha so chu ky; mot than tra NULL khi goi khong bac ghim thi chot theo bac lang le cho qua (ADR-082 (10)).
+    -- [S1.280 / S3.5a / K7] Bac CAO HON trong hai bac (uoc luong, so tien trao) — moi chot theo bac cua trao thau doc no. Mot than tra bac uoc luong thi khai thap uoc luong ha so chu ky; mot than tra NULL khi goi khong bac ghim thi chot theo bac lang le cho qua (ADR-082 (10)).
     ARRAY[
-      $q$định nghĩa hàm award_bac_cao_hon(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_bac_cao_hon(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_bac_cao_hon(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS jsonb
   LANGUAGE plpgsql
   STABLE
@@ -10853,10 +10853,10 @@ $ham$$q$,
                   'hàm public.award_bac_cao_hon(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_bac_cao_hon(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] So chu ky can — mot phep tinh, hai nguoi doc (tang goi va trigger), khuon unseal_so_phe_duyet_can (019). Mot than tra 1 o to chuc da bat thi bac 2 duyet bang mot chu ky; mot than tra NULL thay vi NEM o bac dau thau chinh thuc thi phep so sanh cho qua.
+    -- [S1.280 / S3.5a / K7] So chu ky can — mot phep tinh, hai nguoi doc (tang goi va trigger), khuon unseal_so_phe_duyet_can (019). Mot than tra 1 o to chuc da bat thi bac 2 duyet bang mot chu ky; mot than tra NULL thay vi NEM o bac dau thau chinh thuc thi phep so sanh cho qua.
     ARRAY[
-      $q$định nghĩa hàm award_so_chu_ky_can(uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_so_chu_ky_can(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_so_chu_ky_can(p_org uuid, p_award uuid) RETURNS integer
   LANGUAGE plpgsql
   STABLE
@@ -10901,10 +10901,10 @@ $ham$$q$,
                   'hàm public.award_so_chu_ky_can(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_so_chu_ky_can(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Vai cua nguoi ky TAI LUC HOI giao voi award_vai cua bac cao hon — trigger chu ky chup no vao vai_luc_ky. Mot than tra moi vai cua nguoi (khong giao) thi mot FINANCE ky duoc o bac chi cho DIRECTOR.
+    -- [S1.280 / S3.5a / K7] Vai cua nguoi ky TAI LUC HOI giao voi award_vai cua bac cao hon — trigger chu ky chup no vao vai_luc_ky. Mot than tra moi vai cua nguoi (khong giao) thi mot FINANCE ky duoc o bac chi cho DIRECTOR.
     ARRAY[
-      $q$định nghĩa hàm award_vai_cua_nguoi(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_vai_cua_nguoi(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_vai_cua_nguoi(p_org uuid, p_award uuid, p_user uuid) RETURNS text[]
   LANGUAGE plpgsql
   STABLE
@@ -10948,10 +10948,10 @@ $ham$$q$,
                   'hàm public.award_vai_cua_nguoi(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_vai_cua_nguoi(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Du chu ky chua: so nguoi ky khac nhau >= can, va khi bac bat award_vai_khac_nhau phai rut duoc hai vai khac nhau cho hai nguoi ky (he dai dien phan biet — chu du an chot). Mot than bo ve vai khac nhau thi hai FINANCE duyet duoc bac doi hai goc nhin.
+    -- [S1.280 / S3.5a / K7] Du chu ky chua: so nguoi ky khac nhau >= can, va khi bac bat award_vai_khac_nhau phai rut duoc hai vai khac nhau cho hai nguoi ky (he dai dien phan biet — chu du an chot). Mot than bo ve vai khac nhau thi hai FINANCE duyet duoc bac doi hai goc nhin.
     ARRAY[
-      $q$định nghĩa hàm award_du_chu_ky(uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_du_chu_ky(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_du_chu_ky(p_org uuid, p_award uuid) RETURNS boolean
   LANGUAGE plpgsql
   STABLE
@@ -11008,10 +11008,10 @@ $ham$$q$,
                   'hàm public.award_du_chu_ky(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_du_chu_ky(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K5b] Tap loai tru cua chu ky trao thau: rfq_tap_loai_tru + tac gia LOW_ACTUAL_COMPETITION con song + nguoi khai phien ban chinh sach ghim + moi nguoi tung dieu phoi mo goi + nguoi lam hang xac minh moi nhat cua nha cung cap thang. Mot than bo mot ve la mot nguoi da cham ban ro hay da dat thuoc tu ky trao thau.
+    -- [S1.280 / S3.5a / K5b] Tap loai tru cua chu ky trao thau: rfq_tap_loai_tru + tac gia LOW_ACTUAL_COMPETITION con song + nguoi khai phien ban chinh sach ghim + moi nguoi tung dieu phoi mo goi + nguoi lam hang xac minh moi nhat cua nha cung cap thang. Mot than bo mot ve la mot nguoi da cham ban ro hay da dat thuoc tu ky trao thau.
     ARRAY[
-      $q$định nghĩa hàm award_tap_loai_tru(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_tap_loai_tru(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_tap_loai_tru(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -11068,10 +11068,10 @@ $ham$$q$,
                   'hàm public.award_tap_loai_tru(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_tap_loai_tru(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K2 K2b] LOI dem nhom tach tu rfq_dem_ncc_canh_tranh (108): nut la moi loi moi con song, canh la khoa nhom (MST goc, email, chin so cuoi dien thoai), dem nhom co it nhat mot loi moi trong tap dem. K2 va K2b MOT phep gop. Mot than bo mot khoa nhom thi hai nha vo chung MST dem thanh hai.
+    -- [S1.280 / S3.5a / K2 K2b] LOI dem nhom tach tu rfq_dem_ncc_canh_tranh (108): nut la moi loi moi con song, canh la khoa nhom (MST goc, email, chin so cuoi dien thoai), dem nhom co it nhat mot loi moi trong tap dem. K2 va K2b MOT phep gop. Mot than bo mot khoa nhom thi hai nha vo chung MST dem thanh hai.
     ARRAY[
-      $q$định nghĩa hàm rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_dem_nhom_loi_moi(p_org uuid, p_rfq uuid, p_dem uuid[]) RETURNS integer
   LANGUAGE plpgsql
   STABLE
@@ -11133,10 +11133,10 @@ $ham$$q$,
                   'hàm public.rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_dem_nhom_loi_moi(uuid, uuid, uuid[]) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K2b] So NHOM nha cung cap co bao gia hop le o luot cham cua de xuat (effective_cost khac NULL) ma loi moi DEM DUOC (luat K2). Mot than bo ve dem duoc thi mot nha vo nop bao gia nang so dem hau kiem.
+    -- [S1.280 / S3.5a / K2b] So NHOM nha cung cap co bao gia hop le o luot cham cua de xuat (effective_cost khac NULL) ma loi moi DEM DUOC (luat K2). Mot than bo ve dem duoc thi mot nha vo nop bao gia nang so dem hau kiem.
     ARRAY[
-      $q$định nghĩa hàm award_dem_nhom_bao_gia(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_dem_nhom_bao_gia(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_dem_nhom_bao_gia(p_org uuid, p_rfq uuid, p_evaluation uuid) RETURNS integer
   LANGUAGE sql
   STABLE
@@ -11170,10 +11170,10 @@ $ham$$q$,
                   'hàm public.award_dem_nhom_bao_gia(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_dem_nhom_bao_gia(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Ham vi tu cua bac: goi khong bac ghim o to chuc da bat => K7_KHONG_BAC_GHIM (chu du an chot fail-closed); tien te bao gia lech chinh sach => K7_LECH_TIEN_TE; bac cao hon la dau thau chinh thuc => K7_DAU_THAU_CHINH_THUC. Mot than RETURN NULL cho trao thau o bac dau thau chinh thuc di qua bang bao gia tren nen tang.
+    -- [S1.280 / S3.5a / K7] Ham vi tu cua bac: goi khong bac ghim o to chuc da bat => K7_KHONG_BAC_GHIM (chu du an chot fail-closed); tien te bao gia lech chinh sach => K7_LECH_TIEN_TE; bac cao hon la dau thau chinh thuc => K7_DAU_THAU_CHINH_THUC. Mot than RETURN NULL cho trao thau o bac dau thau chinh thuc di qua bang bao gia tren nen tang.
     ARRAY[
-      $q$định nghĩa hàm award_chot_bac(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_chot_bac(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_bac(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11226,10 +11226,10 @@ $ham$$q$,
                   'hàm public.award_chot_bac(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_bac(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Ham vi tu cua nguoi ky: khong giu vai nao trong award_vai cua bac cao hon => K7_SAI_VAI; nguoi khai phien ban chinh sach ghim => K7_TAC_GIA_CHINH_SACH (spec S3 §2.4 (7)). Mot than RETURN NULL cho nguoi dat thuoc tu ky trao thau cua goi do minh do.
+    -- [S1.280 / S3.5a / K7] Ham vi tu cua nguoi ky: khong giu vai nao trong award_vai cua bac cao hon => K7_SAI_VAI; nguoi khai phien ban chinh sach ghim => K7_TAC_GIA_CHINH_SACH (spec S3 §2.4 (7)). Mot than RETURN NULL cho nguoi dat thuoc tu ky trao thau cua goi do minh do.
     ARRAY[
-      $q$định nghĩa hàm award_chot_nguoi_ky(uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_chot_nguoi_ky(uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_nguoi_ky(p_org uuid, p_award uuid, p_user uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11273,10 +11273,10 @@ $ham$$q$,
                   'hàm public.award_chot_nguoi_ky(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_nguoi_ky(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K2b] Ham vi tu hau kiem: so nhom co bao gia hop le duoi so_ncc_toi_thieu cua bac cao hon ma khong ngoai le LOW_ACTUAL_COMPETITION con song => K2B_THIEU_CANH_TRANH_THUC (spec S3 §2.4 (6)iv). Hoi o canh de xuat va canh duyet. Mot than RETURN NULL cho trao thau mot bao gia o bac can nam ma khong ai ky ngoai le.
+    -- [S1.280 / S3.5a / K2b] Ham vi tu hau kiem: so nhom co bao gia hop le duoi so_ncc_toi_thieu cua bac cao hon ma khong ngoai le LOW_ACTUAL_COMPETITION con song => K2B_THIEU_CANH_TRANH_THUC (spec S3 §2.4 (6)iv). Hoi o canh de xuat va canh duyet. Mot than RETURN NULL cho trao thau mot bao gia o bac can nam ma khong ai ky ngoai le.
     ARRAY[
-      $q$định nghĩa hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_hau_kiem(p_org uuid, p_rfq uuid, p_evaluation uuid, p_bid_version uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11328,10 +11328,10 @@ $ham$$q$,
                   'hàm public.award_chot_hau_kiem(uuid, uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K5b] Ham vi tu chu ky doc lap: bac cao hon bat ky_danh_sach_moi, hay goi co ngoai le con song, hay bac trao CAO HON bac uoc luong (khai thap) => can mot chu ky trao thau ngoai award_tap_loai_tru, khong thi K5B_THIEU_CHU_KY_DOC_LAP. Mot than RETURN NULL cho nguoi chon danh sach tu ky trao thau o bac doi.
+    -- [S1.280 / S3.5a / K5b] Ham vi tu chu ky doc lap: bac cao hon bat ky_danh_sach_moi, hay goi co ngoai le con song, hay bac trao CAO HON bac uoc luong (khai thap) => can mot chu ky trao thau ngoai award_tap_loai_tru, khong thi K5B_THIEU_CHU_KY_DOC_LAP. Mot than RETURN NULL cho nguoi chon danh sach tu ky trao thau o bac doi.
     ARRAY[
-      $q$định nghĩa hàm award_chot_doc_lap(uuid, uuid) (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$định nghĩa hàm award_chot_doc_lap(uuid, uuid) (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_doc_lap(p_org uuid, p_award uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11392,10 +11392,10 @@ $ham$$q$,
                   'hàm public.award_chot_doc_lap(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_doc_lap(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7 K2b] Canh de xuat (hang PROPOSED): chi duoi READ COMMITTED (moi to chuc), roi hoi bac va hau kiem — ngoai le hau kiem phai co TRUOC moi chu ky. Than `RETURN NEW` cho de xuat o bac dau thau chinh thuc hay duoi nguong hau kiem di qua.
+    -- [S1.280 / S3.5a / K7 K2b] Canh de xuat (hang PROPOSED): chi duoi READ COMMITTED (moi to chuc), roi hoi bac va hau kiem — ngoai le hau kiem phai co TRUOC moi chu ky. Than `RETURN NEW` cho de xuat o bac dau thau chinh thuc hay duoi nguong hau kiem di qua.
     ARRAY[
-      $q$hàm + trigger award_kiem_theo_bac_khi_de_xuat (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$hàm + trigger award_kiem_theo_bac_khi_de_xuat (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11467,10 +11467,10 @@ $ham$;
                   'hàm public.award_kiem_theo_bac_khi_de_xuat() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.award_kiem_theo_bac_khi_de_xuat() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7 K2b K5b] Canh duyet (hang APPROVED), xep sau khoa tu van cua J7: chi duoi READ COMMITTED, roi bac, du chu ky theo bac (k7_thieu_chu_ky — loi di sai thu tu, khong qua bang ten -> ma), hau kiem, chu ky doc lap. Than `RETURN NEW` cho hang APPROVED bang mot chu ky o bac doi hai, hay bang chu ky toan nguoi chon danh sach.
+    -- [S1.280 / S3.5a / K7 K2b K5b] Canh duyet (hang APPROVED), xep sau khoa tu van cua J7: chi duoi READ COMMITTED, roi bac, du chu ky theo bac (k7_thieu_chu_ky — loi di sai thu tu, khong qua bang ten -> ma), hau kiem, chu ky doc lap. Than `RETURN NEW` cho hang APPROVED bang mot chu ky o bac doi hai, hay bang chu ky toan nguoi chon danh sach.
     ARRAY[
-      $q$hàm + trigger award_kiem_theo_bac_khi_duyet (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$hàm + trigger award_kiem_theo_bac_khi_duyet (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11558,10 +11558,10 @@ $ham$;
                   'hàm public.award_kiem_theo_bac_khi_duyet() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.award_kiem_theo_bac_khi_duyet() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.5a / K7] Chu ky trao thau o to chuc da bat: hoi bac va nguoi ky (vai thuoc award_vai cua bac cao hon, khong la tac gia chinh sach), roi chup vai_luc_ky (cot ngoai GRANT INSERT, khuon tier_tu_so_tien). Than `RETURN NEW` khong dat vai_luc_ky thi award_vai_khac_nhau khong bao gio du; than bo hoi vai thi FINANCE ky o bac chi cho DIRECTOR.
+    -- [S1.280 / S3.5a / K7] Chu ky trao thau o to chuc da bat: hoi bac va nguoi ky (vai thuoc award_vai cua bac cao hon, khong la tac gia chinh sach), roi chup vai_luc_ky (cot ngoai GRANT INSERT, khuon tier_tu_so_tien). Than `RETURN NEW` khong dat vai_luc_ky thi award_vai_khac_nhau khong bao gio du; than bo hoi vai thi FINANCE ky o bac chi cho DIRECTOR.
     ARRAY[
-      $q$hàm + trigger award_kiem_vai_theo_bac (9501_trao_thau_theo_bac)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_trao_thau_theo_bac.sql')$q$,
+      $q$hàm + trigger award_kiem_vai_theo_bac (113_trao_thau_theo_bac)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '113_trao_thau_theo_bac.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

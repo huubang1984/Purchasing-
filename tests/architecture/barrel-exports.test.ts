@@ -616,7 +616,7 @@ const DANH_SACH_TRANG_INVITATION = [
   "PepperRing",
   // [S1.265 / S3.3b · spec S3 §4.4] Hai tập đóng và hai trần của ngoại lệ cạnh tranh — hằng số, route và màn dùng lại.
   "LOAI_NGOAI_LE",
-  // [S1.9101 / S3.5a] Loại ngoại lệ HẬU KIỂM của trao thầu (K2b) — tập riêng, route và màn đọc.
+  // [S1.280 / S3.5a] Loại ngoại lệ HẬU KIỂM của trao thầu (K2b) — tập riêng, route và màn đọc.
   "LOAI_NGOAI_LE_HAU_KIEM",
   "MA_LY_DO_NGOAI_LE",
   "SAN_GIAI_TRINH_OTHER_BYTE",

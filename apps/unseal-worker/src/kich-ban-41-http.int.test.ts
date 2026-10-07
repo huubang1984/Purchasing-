@@ -2061,7 +2061,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
     const sauMot = (ok.body as { award: { status: string; chuKyCan: number; approvals: unknown[] } }).award;
-    // [S1.9101 / S3.5a] Luồng S3: gói 1 tỷ ghim bậc 2 của §4.1 — `award_so_chu_ky` 2 — nên chữ ký đầu SỐNG mà đề xuất đứng yên ở
+    // [S1.280 / S3.5a] Luồng S3: gói 1 tỷ ghim bậc 2 của §4.1 — `award_so_chu_ky` 2 — nên chữ ký đầu SỐNG mà đề xuất đứng yên ở
     // `PROPOSED` (khoản 242 ⑴ lật); luồng MVP1 một chữ ký là xong, nguyên văn.
     expect([sauMot.status, sauMot.chuKyCan, sauMot.approvals.length]).toEqual(batS3 ? ["PROPOSED", 2, 1] : ["APPROVED", 1, 1]);
     if (batS3) {

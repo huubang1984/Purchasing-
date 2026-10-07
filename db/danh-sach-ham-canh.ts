@@ -188,7 +188,7 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // bậc đòi mà mọi chữ ký còn hiệu lực đều của người chọn danh sách. `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.
   "public.rfq_kiem_doc_lap_khi_mo",
   "public.rfq_kiem_so_ncc_khi_nop",
-  // [S1.9101 / S3.5a / K7 · K2b · K5b] BA hàm cạnh của trao thầu theo bậc, từ chối CÓ ĐIỀU KIỆN (chỉ gắn INSERT): `award_kiem_theo_bac_khi_de_xuat`
+  // [S1.280 / S3.5a / K7 · K2b · K5b] BA hàm cạnh của trao thầu theo bậc, từ chối CÓ ĐIỀU KIỆN (chỉ gắn INSERT): `award_kiem_theo_bac_khi_de_xuat`
   // (hàng PROPOSED — bậc, hậu kiểm), `award_kiem_theo_bac_khi_duyet` (hàng APPROVED — bậc, đủ chữ ký theo bậc, hậu kiểm, chữ ký độc lập),
   // `award_kiem_vai_theo_bac` (chữ ký — vai, tác giả chính sách; đặt `vai_luc_ky`). Tổ chức chưa bật đi qua cả ba — chuỗi trao thầu của `dungKichBan()`.
   "public.award_kiem_theo_bac_khi_de_xuat",
