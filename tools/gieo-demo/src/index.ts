@@ -70,6 +70,7 @@ import {
   taoNhomHang,
 } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
+import { docHoSoXacMinh, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
@@ -435,6 +436,17 @@ async function chinh(): Promise<void> {
     const xacMinhNcc = S3 ? nguoiMua.find((n) => n.email.startsWith("taichinh2.")) : undefined;
     if (S3 && (nhapNcc === undefined || xacMinhNcc === undefined)) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
     const nguoiDungNcc = nhapNcc ?? { id: nguoiGieo, sessionId: phienGieo };
+    // [S1.275 / S3.3e2] Xác minh đi ĐƯỜNG CỦA MÀN `/nha-cung-cap` (S3.3e1, lượt soi CAO-2): đọc băm hồ sơ như màn hiện, rồi
+    // `xacMinhNhaCungCap` ràng băm ấy — trigger `ncc_kiem_xac_minh` (`082`) tính lại lúc ghi, lệch thì ném. Trước vòng này công cụ
+    // chèn thẳng hàng `VERIFIED`: trigger vẫn kiểm luật người, nhưng cổng quyền `supplier.qualify`, hàng sổ `SUPPLIER_VERIFIED` và
+    // phép so băm-đã-xem không đi qua lượt demo nào. Gọi SAU khi hồ sơ có người liên hệ — băm hồ sơ phủ nó.
+    const xacMinhQuaMan = async (c: pg.PoolClient, supplierId: string): Promise<void> => {
+      if (xacMinhNcc === undefined) throw new GieoError("--s3: thiếu người xác minh nhà cung cấp");
+      const bamDaXem = (await docHoSoXacMinh(c, org)).find((h) => h.supplierId === supplierId)?.bamHoSo;
+      if (bamDaXem === undefined) throw new GieoError("--s3: không đọc được hồ sơ nhà cung cấp vừa dựng");
+      const xm = await xacMinhNhaCungCap(c, org, { supplierId, actorSessionId: xacMinhNcc.sessionId, bamDaXem }, pool);
+      if (!xm.conHieuLuc) throw new GieoError("--s3: xác minh xong mà không còn hiệu lực");
+    };
     const taoNccVaMoi = async (c: pg.PoolClient): Promise<(NhaCungCapGieo & { readonly invitationId: string })[]> => {
       const daMoi: (NhaCungCapGieo & { readonly invitationId: string })[] = [];
       for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
@@ -447,12 +459,7 @@ async function chinh(): Promise<void> {
             "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
           [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiDungNcc.id, nguoiDungNcc.sessionId],
         )).rows[0]?.id ?? "";
-        if (xacMinhNcc !== undefined) {
-          await c.query(
-            "INSERT INTO public.supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4)",
-            [org, ncc, xacMinhNcc.id, xacMinhNcc.sessionId],
-          );
-        }
+        if (xacMinhNcc !== undefined) await xacMinhQuaMan(c, ncc);
         const lm = await createInvitation(c, org, {
           rfqId: rfq,
           supplierId: ncc,
@@ -550,8 +557,7 @@ async function chinh(): Promise<void> {
           // mới của riêng nó, dựng như tám người kia (nhapncc dựng, taichinh2 xác minh SAU khi có người liên hệ); MST và số điện thoại
           // mang đầu `04`/`08`, khác đầu `03`/`09` của gói chính.
           const nhapMoi = nhapNcc;
-          const xacMinhMoi = xacMinhNcc;
-          if (nhapMoi === undefined || xacMinhMoi === undefined) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
+          if (nhapMoi === undefined || xacMinhNcc === undefined) throw new GieoError("--s3: thiếu người nhập hay người xác minh nhà cung cấp");
           const nccMoi = await withTenant(pool, org, async (c) => {
             const ra: { readonly supplierId: string; readonly contactId: string }[] = [];
             for (const i of [0, 1, 2]) {
@@ -564,10 +570,7 @@ async function chinh(): Promise<void> {
                   "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
                 [org, ncc, `Nguoi bao gia luan phien ${String(i + 1)}`, `luanphien${String(i + 1)}.${duoi}@vidu.vn`, `08${soDienThoai}${String(i)}`, nhapMoi.id, nhapMoi.sessionId],
               )).rows[0]?.id ?? "";
-              await c.query(
-                "INSERT INTO public.supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4)",
-                [org, ncc, xacMinhMoi.id, xacMinhMoi.sessionId],
-              );
+              await xacMinhQuaMan(c, ncc);
               ra.push({ supplierId: ncc, contactId: lh });
             }
             return ra;
@@ -620,6 +623,58 @@ async function chinh(): Promise<void> {
           return goi;
         })()
       : [];
+
+    // [S1.275 / S3.3e2 / K2 · K5] `--s3`: gói MỘT NGUỒN — người demo đi tay qua ngoại lệ cạnh tranh trên màn `/tao-thau`. Chủ dự án
+    // chốt 2026-10-06: khuôn K10a — công cụ dựng tới cạnh bị chặn rồi dừng; đường demo đi K2 rồi K5. Gói 200 triệu ở bậc từ 100 triệu
+    // (ba nhà cung cấp, ký danh sách, xoay vòng 5), nhóm hàng RIÊNG (`MOT-NGUON` — không gói anh em nào cho K10a). soan tạo và mời MỘT
+    // nhà cung cấp đếm được, mới với cửa sổ K3 của soan (MST đầu `05`, điện thoại đầu `07` — khác `03`/`09` và `04`/`08` ở trên),
+    // nhapncc dựng, taichinh2 xác minh. Gói ở DRAFT, chưa nộp. Người demo: soan nộp → K2 chặn; soan2 lập `SINGLE_SOURCE` (một lời mời
+    // còn sống ⇒ đúng loại ấy) → soan nộp qua; soan2 ký → soan mở → K5 chặn: tác giả ngoại lệ thuộc tập loại trừ — một ngoại lệ không
+    // bao giờ tự duyệt (spec S3 §4.4); soan3 ký → mở. Không `--s3`: không gói này.
+    const motNguon = S3
+      ? await (async (): Promise<string> => {
+          const f1 = nguoiMua.find((n) => n.email.startsWith("taichinh1."));
+          const soan = nguoiMua.find((n) => n.email.startsWith("soan."));
+          if (f1 === undefined || soan === undefined || nhapNcc === undefined) throw new GieoError("--s3: thiếu người cho gói một nguồn");
+          const nhom = (await withTenant(pool, org, (c) =>
+            taoNhomHang(c, org, { ma: "MOT-NGUON", ten: "Van dieu ap mot nguon", actorSessionId: f1.sessionId }, pool),
+          )).id;
+          return await withTenant(pool, org, async (c) => {
+            const ncc = (await c.query<{ id: string }>(
+              "INSERT INTO public.suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+              [org, `Van cong nghiep Mot Nguon ${duoi}`, `05${soDienThoai}0`, nhapNcc.id, nhapNcc.sessionId],
+            )).rows[0]?.id ?? "";
+            const lh = (await c.query<{ id: string }>(
+              "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+                "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+              [org, ncc, "Nguoi bao gia mot nguon", `motnguon.${duoi}@vidu.vn`, `07${soDienThoai}0`, nhapNcc.id, nhapNcc.sessionId],
+            )).rows[0]?.id ?? "";
+            await xacMinhQuaMan(c, ncc);
+            const r = await createRfq(c, org, {
+              title: `Van dieu ap mot nguon ${duoi}`,
+              deadlineAt: new Date(Date.now() + 2 * 24 * 3600 * 1000),
+              createdBySessionId: soan.sessionId,
+              categoryId: nhom,
+            });
+            await setRfqBudget(c, org, { rfqId: r.id, estimatedValue: "200000000.00", currency: "VND", actorSessionId: soan.sessionId });
+            await addRfqItem(c, org, {
+              rfqId: r.id,
+              lineNo: 1,
+              description: "Van dieu ap DN100 PN16",
+              quantity: "4.0000",
+              unit: "cai",
+              actorSessionId: soan.sessionId,
+            });
+            await createInvitation(
+              c,
+              org,
+              { rfqId: r.id, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: soan.sessionId },
+              pool,
+            );
+            return r.id;
+          });
+        })()
+      : null;
 
     // [S1.251 / S4.4b] Ba gói đã mở niêm phong qua đường thật (`goi-da-mo.ts`), để lịch sử giá của ba hàng chuẩn có quan sát.
     const nguoi = (dau: string): { readonly id: string; readonly sessionId: string } => {
@@ -724,6 +779,17 @@ async function chinh(): Promise<void> {
       ra.push("  ở /tao-thau, bấm «Mở gói» thì bị chặn, và màn nói soan không tự ghi nhận được. soan3 đọc gói, ghi nhận tín hiệu kèm lý do;");
       ra.push("  rồi soan mở gói. Đăng nhập bằng link của người ấy ở trên, rồi mở /tao-thau — trang hỏi «Tiếp tục với phiên này».");
       for (const g of chiaNho) ra.push(`  ${`gói ${g.giaTri.slice(0, 3)} triệu`.padEnd(24)} ${g.id}`);
+    }
+    if (motNguon !== null) {
+      ra.push("");
+      ra.push("NGOẠI LỆ CẠNH TRANH (K2 + K5) — gói van điều áp 200 triệu, nhóm hàng MOT-NGUON, còn soạn thảo: soan đã mời MỘT nhà cung");
+      ra.push("  cấp đếm được (nhapncc dựng, taichinh2 xác minh) mà bậc từ 100 triệu đòi ba. Ở /tao-thau, dán mã gói vào bước 2, bấm «Đọc»:");
+      ra.push("  ⑴ soan bấm «Nộp duyệt» — bị chặn (K2), màn trỏ khối «Ngoại lệ cạnh tranh» ở bước 5;");
+      ra.push("  ⑵ soan2 lập «Một nguồn duy nhất» kèm mã lý do và giải trình; ⑶ soan nộp duyệt — qua; soan2 «Phê duyệt»;");
+      ra.push("  ⑷ soan bấm «Mở gói» — bị chặn (K5): người lập ngoại lệ không ký độc lập được cho chính gói ấy;");
+      ra.push("  ⑸ soan3 «Phê duyệt», soan «Mở gói» — link mời đi tới nhà cung cấp (hộp thư dev).");
+      ra.push("  Mỗi lần đổi người: đăng nhập bằng link của người ấy ở trên, rồi mở /tao-thau.");
+      ra.push(`  ${"gói một nguồn".padEnd(24)} ${motNguon}`);
     }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);
