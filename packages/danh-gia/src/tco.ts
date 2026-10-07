@@ -38,6 +38,22 @@ export const MA_KHONG_NGUON: Readonly<Record<string, string>> = {
   thue: "thuế GTGT khấu trừ được không phải chi phí, và mã này đã bị bỏ (ADR-097 ⑻)",
 };
 
+/**
+ * [rà soát §S1.9101 — CAO-3] Trần của mọi số tiền: `numeric(18, 2)` (`022`, `057`) giữ tối đa 16 chữ số phần nguyên. Ô khai qua
+ * `bid_so_tien` đã dưới trần, nhưng một mã quy đổi (chi phí trễ tới 365 lần giá) hay TỔNG các mã thì không — và một hàng vượt trần làm
+ * câu ghi của lượt chấm nổ 22003 ở MỌI lần thử: một nhà cung cấp khoá được cả gói. Vượt trần ⇒ báo giá ấy không có hạng, gọi tên.
+ */
+export const TRAN_TIEN_X100 = 10n ** 18n;
+
+/** Mã giả của `ma_thieu`: tổng các thành phần vượt trần tiền dù từng thành phần thì không. Chữ HOA — không trùng một mã thành phần nào. */
+export const MA_TONG_VUOT_MIEN = "TONG_VUOT_MIEN";
+
+/** `true` khi chuỗi tiền (hai chữ số lẻ) không biểu diễn được trong `numeric(18, 2)`. */
+export function vuotMienTien(tien: string): boolean {
+  const v = docSo(tien, 2);
+  return v === null || v >= TRAN_TIEN_X100;
+}
+
 /** Số chữ số lẻ tối đa của hai tỷ lệ — khớp `CHECK` `org_procurement_policies_tco_hinh_dang`. */
 export const SO_LE_CHI_PHI_VON = 4;
 export const SO_LE_TY_LE_TRE = 6;
@@ -92,7 +108,8 @@ export function kiemChinhSachTco(
         cau: `thành phần "${c.ma}" là điểm phi giá (DIEM), mà chưa có màn chấm điểm nào cho nó`,
       };
     }
-    const khongNguon = MA_KHONG_NGUON[c.ma];
+    // `Object.hasOwn`, không tra thẳng: `MA_KHONG_NGUON["constructor"]` là hàm của nguyên mẫu (rà soát §S1.9101 — THẤP-6).
+    const khongNguon = Object.hasOwn(MA_KHONG_NGUON, c.ma) ? MA_KHONG_NGUON[c.ma] : undefined;
     if (khongNguon !== undefined) {
       return { lyDo: "THANH_PHAN_CHUA_CO_NGUON", ma: c.ma, cau: `thành phần "${c.ma}" không chấm được: ${khongNguon}` };
     }
@@ -196,8 +213,8 @@ export function chiPhiTre(tong: string, ngayYeuCau: number, ngayKhai: number, ty
  * Giá trị của từng mã cho MỘT báo giá. Phiên bản phải đã qua `kiemChinhSachTco` — hàm này không kiểm lại tham số.
  *
  * Mã nào không có giá trị đọc được thì báo giá ấy KHÔNG CÓ HẠNG, và mọi mã thiếu được gọi tên (spec §4.8). Mã quy đổi thiếu khi Ô
- * KHAI của chính nó thiếu; khi `totalAmount` không đọc được, `gia` thiếu và hai mã quy đổi không tính được — chúng không bị kể là
- * thiếu nếu ô của chính chúng có.
+ * KHAI của chính nó thiếu, hay khi giá trị quy đổi vượt trần tiền; khi `totalAmount` không đọc được, `gia` thiếu và hai mã quy đổi
+ * không tính được — chúng không bị kể là thiếu nếu ô của chính chúng có.
  */
 export function dauVaoTco(
   thanhPhan: readonly ThanhPhanChinhSach[],
@@ -229,10 +246,12 @@ export function dauVaoTco(
         }
         if (o.tongTien === null || thamSo.chiPhiVonNam === null || thamSo.ngayThanhToanChuan === null) break;
         const ngayChuan = Number(thamSo.ngayThanhToanChuan);
-        dauVao.push({
-          ma: c.ma,
-          giaTri: chiPhiThanhToan(o.tongTien, ngayChuan, o.soNgayThanhToan, thamSo.chiPhiVonNam),
-        });
+        const gt = chiPhiThanhToan(o.tongTien, ngayChuan, o.soNgayThanhToan, thamSo.chiPhiVonNam);
+        if (vuotMienTien(gt)) {
+          maThieu.push(c.ma);
+          break;
+        }
+        dauVao.push({ ma: c.ma, giaTri: gt });
         nguon.set(c.ma, {
           coSo: o.tongTien,
           ngayKhai: String(o.soNgayThanhToan),
@@ -247,7 +266,12 @@ export function dauVaoTco(
           break;
         }
         if (o.tongTien === null || thamSo.tyLeTreNgay === null || soNgayGiao === null) break;
-        dauVao.push({ ma: c.ma, giaTri: chiPhiTre(o.tongTien, soNgayGiao, o.soNgayGiaoKhai, thamSo.tyLeTreNgay) });
+        const gt = chiPhiTre(o.tongTien, soNgayGiao, o.soNgayGiaoKhai, thamSo.tyLeTreNgay);
+        if (vuotMienTien(gt)) {
+          maThieu.push(c.ma);
+          break;
+        }
+        dauVao.push({ ma: c.ma, giaTri: gt });
         nguon.set(c.ma, {
           coSo: o.tongTien,
           ngayKhai: String(o.soNgayGiaoKhai),

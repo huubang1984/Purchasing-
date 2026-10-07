@@ -2134,7 +2134,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "105_ngoai_le_canh_tranh.sql" },
     // [S1.269 / S3.3c2] Người ký có chữ ký CÒN HIỆU LỰC — K4b đếm, K5 đọc; cùng khuôn `RETURNS SETOF` nên đứng ở đây. Một thân bỏ vế
     // trả về đếm chữ ký của người đã trả gói về ở cả hai chốt.
-    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
+    // [S1.9101 / S4.7a / L16] `9501_tco` định nghĩa lại — cộng vế số ngày giao; con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "rfq_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "9501_tco.sql" },
     // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
   ];

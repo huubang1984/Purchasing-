@@ -907,6 +907,8 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       rfq_che_do_nghiem: "QUA_HAM",
       rfq_key_material_bat_bien: "QUA_HAM",
       rfq_khoa_du_dieu_kien_xoa: "QUA_HAM",
+      // [S1.9101 / S4.7a / L16] Cạnh vào OPEN chụp tập mã thành phần của ĐÚNG phiên bản gói vừa ghim (`chinh_sach_ghim_id`).
+      rfq_tco_khi_mo: "THEO_ID",
       // [S1.203 / S3.6b1] Hàm tín hiệu đọc cửa sổ và bậc của ĐÚNG phiên bản ngân sách gói ghim; luật người ghi nhận đọc tác giả của
       // phiên bản mà bằng chứng mang.
       tin_hieu_chia_nho: "THEO_ID",

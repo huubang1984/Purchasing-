@@ -4155,6 +4155,30 @@ describe("[S1.9101 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
     }
   });
 
+  it("[INV-L8] [rà soát §S1.9101 — CAO-3] một báo giá vượt trần `numeric(18, 2)` — mã quy đổi hay TỔNG — không khoá được lượt chấm: nó không có hạng, gọi tên; báo giá khác xếp hạng bình thường", async () => {
+    const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+    const tran = "9999999999999999.99";
+    const { rfqId, banRo } = await goiTcoDaMo(tp, '{"ty_le_tre_ngay":"0.1"}', 1, [
+      { totalAmount: tran, currency: "VND", freight: tran, leadTimeDays: "1" },
+      { totalAmount: "30000000000000.00", currency: "VND", freight: "0.00", leadTimeDays: "3650" },
+      { totalAmount: "100.00", currency: "VND", freight: "1.00", leadTimeDays: "1" },
+    ]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const h = await hangLuot(kq.evaluationId);
+    expect(banRo.map((v) => [h.get(v)?.cost, h.get(v)?.rank, h.get(v)?.maThieu])).toEqual([
+      [null, null, ["TONG_VUOT_MIEN"]],
+      [null, null, ["chi_phi_tre"]],
+      ["101.00", 1, null],
+    ]);
+  });
+
+  it("[rà soát §S1.9101 — TRUNG-4] ô tiền viết thừa số 0 (`100.000`, `5.0`) đọc theo GIÁ TRỊ — không làm cả lượt chấm bị từ chối như một lỗi cấu hình", async () => {
+    const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"}]';
+    const { rfqId } = await goiTcoDaMo(tp, null, null, [{ totalAmount: "100.000", currency: "VND", freight: "5.0" }]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.lines.map((l) => [l.effectiveCost, l.rank])).toEqual([["105.00", 1]]);
+  });
+
   it("luồng MVP1 KHÔNG ĐỔI: phiên bản chỉ `gia` không đọc ô TCO nào của phong bì; báo giá không đọc được giá gọi tên `gia`", async () => {
     const { rfqId, banRo } = await goiTcoDaMo(TP_GIA, null, null, [
       { totalAmount: "100.00", currency: "VND", freight: "999999.00", paymentDays: "0", leadTimeDays: "999" },

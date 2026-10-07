@@ -131,8 +131,30 @@ describe("[INV-L8] dauVaoTco — mỗi mã một nguồn; ô thiếu gọi tên,
     expect(dauVaoTco([tien("gia")], THAM_SO_TRONG, null, { ...O_DU, tongTien: null })).toEqual({ maThieu: ["gia"] });
   });
 
+  it("[rà soát §S1.9101 — CAO-3] mã quy đổi vượt trần `numeric(18, 2)` ⇒ mã ấy thiếu, không một con số không ghi được", () => {
+    const tre = [tien("gia"), tien("chi_phi_tre")];
+    // 3650 ngày × 10 %/ngày × gần 10^16 ⇒ gấp 365 lần trần.
+    expect(
+      dauVaoTco(tre, { ...DU_THAM_SO, tyLeTreNgay: "0.1" }, 0, { ...O_DU, tongTien: "9999999999999999.99", soNgayGiaoKhai: 3650 }),
+    ).toEqual({ maThieu: ["chi_phi_tre"] });
+    // Sát trần vẫn tính: 9 999 999 999 999 999,99 × 0,1 % = 9 999 999 999 999,99… ⇒ dưới trần.
+    const kq = dauVaoTco(tre, DU_THAM_SO, 0, { ...O_DU, tongTien: "9999999999999999.99", soNgayGiaoKhai: 1 });
+    expect(laThieuOKhai(kq)).toBe(false);
+  });
+
   it("mã không có nguồn tới được đây là gọi sai thứ tự ⇒ NÉM", () => {
     expect(() => dauVaoTco([tien("gia"), tien("chat_luong")], THAM_SO_TRONG, null, O_DU)).toThrow(RangeError);
+  });
+});
+
+describe("[INV-L8] mã trùng tên một thuộc tính của nguyên mẫu đối tượng", () => {
+  it("`constructor`, `toString` ⇒ từ chối gọi tên như mọi mã lạ, không câu lẫn thân hàm (rà soát §S1.9101 — THẤP-6)", () => {
+    for (const ma of ["constructor", "toString", "__proto__"]) {
+      const loi = kiemChinhSachTco([tien("gia"), tien(ma)], THAM_SO_TRONG, null);
+      expect(loi?.lyDo, ma).toBe("THANH_PHAN_CHUA_CO_NGUON");
+      expect(loi?.cau, ma).toContain("không có nguồn dữ liệu");
+      expect(loi?.cau, ma).not.toContain("native code");
+    }
   });
 });
 

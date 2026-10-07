@@ -77,7 +77,8 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // `so_ngay_giao`) chỉ khi gói đã rời DRAFT — `dungKichBan()` khai số ngày giao cho gói vừa về DRAFT: một nhân chứng.
   // `rfq_approvals_dat_bam_giao_hang` (BEFORE INSERT) không bao giờ từ chối — nó ĐẶT băm; mọi câu duyệt đi qua. `rfq_tco_khi_mo`
   // (BEFORE UPDATE `WHEN` cạnh vào OPEN) chụp tập mã, và chỉ từ chối khi phiên bản ghim tính chi phí trễ mà gói không khai số ngày
-  // giao, hay đủ chữ ký gốc mà thiếu người ký trên số ngày giao hiện tại; mọi câu mở gói của `dungKichBan()` đi qua.
+  // giao, hay — ở tổ chức chưa bật — D2 đủ mà thiếu NGƯỜI ký trên nội dung cộng số ngày giao hiện tại; mọi câu mở gói của
+  // `dungKichBan()` đi qua.
   "public.rfq_kiem_so_ngay_giao",
   "public.rfq_approvals_dat_bam_giao_hang",
   "public.rfq_tco_khi_mo",

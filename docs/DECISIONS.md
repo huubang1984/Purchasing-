@@ -11999,16 +11999,47 @@ hàm của một hàng bất biến.
 
 ⑹ **Số ngày giao của gói** (`rfq_packages.so_ngay_giao`, [1, 3650], tuỳ chọn) chỉ đổi ở DRAFT — trigger riêng `rfq_packages_so_ngay_giao`,
 khuôn `category_id` của `085` — và nằm trong chữ ký: `approved_delivery_hash` do trigger `rfq_approvals_dat_bam_giao_hang` đặt ở MỌI tổ
-chức; hai `UNIQUE` chữ ký nới thêm cột ấy, nên người đã ký ký lại được sau khi chỉ số ngày giao đổi. Cạnh mở đếm NGƯỜI (`DISTINCT`) ký trên
-nội dung hiện tại cộng số ngày giao hiện tại (cộng danh sách, ngân sách và hiệu lực K4b ở tổ chức đã bật) — và chỉ nói khi phép đếm gốc
-của D2/K4b đã đủ, nên không phụ thuộc thứ tự trigger và các lời từ chối cũ giữ nguyên văn. `DISTINCT` là chỗ chịu lực: sau `UNIQUE` mới,
-một người có hai hàng trên cùng nội dung, và `count(*)` của D2 đếm họ hai lần. Tầng gói: `datSoNgayGiao` (vào sổ `RFQ_DELIVERY_DAYS_SET`).
+chức; hai `UNIQUE` chữ ký nới thêm cột ấy (bên cạnh `lan_nop_da_xem` của `087`), nên người đã ký ký lại được sau khi chỉ số ngày giao đổi.
+Kiểm ở cạnh mở theo loại tổ chức (**[sau rà soát đối kháng]** — bản đầu ghép hai vế theo hai đơn vị khác nhau, xem ⑼):
+- **Đã bật S3** — đường DUY NHẤT đổi số ngày giao sau khi ký: vế số ngày giao nằm trong CHÍNH vị từ chữ ký còn hiệu lực
+  `rfq_chu_ky_con_hieu_luc` (`107` (5), định nghĩa lại một dòng), xét trên CÙNG một hàng với vế *"chưa tự trả về"*; K4b đếm nó và nói lời
+  từ chối, K5 đọc nó.
+- **Chưa bật** — không có cạnh về DRAFT (`077`), nên số ngày giao không đổi được sau khi ký: `rfq_packages_tco_khi_mo` đếm NGƯỜI
+  (`DISTINCT`) ký trên nội dung cộng số ngày giao hiện tại, như lớp thứ hai, chỉ nói khi `count(*)` của D2 đã đủ (D2 nói lời của nó khi
+  thiếu). `DISTINCT` chặn luôn ca một người có hai hàng trên cùng nội dung mà `count(*)` của D2 đếm hai lần.
+Tầng gói: `datSoNgayGiao` (vào sổ `RFQ_DELIVERY_DAYS_SET`).
 
 ⑺ **Thiếu số ngày giao khi phiên bản ghim tính chi phí trễ** ⇒ trigger cạnh mở từ chối với tên `tco_thieu_so_ngay_giao`; `openRfq` hỏi
-cùng câu TRƯỚC lần đúc khoá (khoản 31), dưới khoá chính sách vừa lấy, và từ chối CẤU HÌNH có tên — không vào sổ.
+cùng câu TRƯỚC lần đúc khoá (khoản 31), dưới khoá chính sách vừa lấy, và từ chối CẤU HÌNH có tên — không vào sổ. Lời từ chối theo loại tổ
+chức: đã bật thì chỉ lối trả về DRAFT; chưa bật thì nói thật rằng gói đã nộp chỉ còn lối huỷ.
 
 ⑻ **Hàng L tách bằng số mới** (ADR-097 ⒇): **L8** — TCO có nguồn; **L16** — thước TCO của gói cố định trước khi giá lộ, vế TCO và form của
 L14. Vế cam kết của L8 ở S4.7c; vế form của L16 ở S4.7b.
+
+⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
+- **CAO-1** — bản đầu chép bộ cột `UNIQUE` của `086` thay vì `087`, đánh rơi `lan_nop_da_xem`: người duyệt đã trả gói về không ký lại được
+  trên chính nội dung ấy. Sửa: `UNIQUE` mang CẢ `lan_nop_da_xem` lẫn `approved_delivery_hash`.
+- **CAO-2** — phép đếm riêng của bản đầu xét hiệu lực theo NGƯỜI và số ngày giao theo HÀNG: chữ ký đã bị chính người ký rút trên số ngày cũ
+  sống lại nhờ một chữ ký còn hiệu lực trên số ngày khác; K5 đếm chữ ký độc lập trên số ngày cũ. Sửa: ⑹ — vế số ngày giao vào vị từ một
+  hàng mà K4b và K5 cùng đọc.
+- **CAO-3** — tổng các thành phần (hay một mã quy đổi, chi phí trễ tới 365 lần giá) vượt `numeric(18, 2)`: câu ghi của lượt chấm nổ
+  22003 ở mọi lần thử, một nhà cung cấp khoá được cả gói. Sửa: mã quy đổi vượt trần ⇒ mã ấy thiếu; tổng vượt trần ⇒ báo giá không hạng,
+  `ma_thieu` mang mã giả `TONG_VUOT_MIEN` (chữ hoa — không trùng mã thành phần nào).
+- **TRUNG-4** — `bid_so_tien` giữ thang của chuỗi nhà cung cấp gõ (`"100.000"`), hàm thuần chỉ nhận hai chữ số lẻ: một ô như thế làm cả
+  lượt chấm bị từ chối bằng câu cấu hình sai. Có từ S2 ở `totalAmount`; vòng này nới ra ba ô. Sửa: đọc `round(bid_so_tien(…), 2)` —
+  không đổi giá trị, chỉ thang.
+- **TRUNG-5** — xem ⑺ và giới hạn dưới. **THẤP-6** — mã trùng tên thuộc tính nguyên mẫu (`constructor`) cho câu lẫn thân hàm: tra bằng
+  `Object.hasOwn`. **THẤP-9** — câu hỏi trước ở `openRfq` gọi hàm chọn phiên bản một lần mỗi hàng chính sách: `LATERAL`.
+
+### Giới hạn nói ra
+
+- **Tổ chức chưa bật S3 khai một phiên bản tính chi phí trễ** trong lúc có gói ĐANG CHỜ DUYỆT chưa khai số ngày giao: các gói ấy không mở
+  được, không trả về được, chỉ còn lối huỷ. Màn `/chinh-sach` của S4.7b cảnh báo trước (số gói chờ duyệt thiếu số ngày giao).
+- **Phiên bản hệ số khác 1 đã ghim vào một gói đang chạy** làm gói ấy không chấm được nữa (`CHINH_SACH_TCO_SAI`), và phiên bản ghim không
+  đổi được. Hôm nay không tổ chức thật nào (PRODUCT §10).
+- **Người duyệt ký số ngày giao mà màn chưa hiện nó** — tới S4.7b. Hôm nay không route nào đặt được số ngày giao, nên cột luôn `NULL` ở đường
+  sản phẩm.
+- **Lớp đếm của tổ chức chưa bật** không tới được bằng đường sản phẩm (không cạnh về DRAFT); đo bằng một đường ghi thứ hai.
 
 ### Hệ quả
 
