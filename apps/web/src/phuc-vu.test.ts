@@ -1258,17 +1258,30 @@ describe("bề mặt tệp", () => {
         lyDo: nhan === "KHONG_DO_DUOC" ? "CHUA_ANH_XA" : null, tienTe: "VND", cuaSoTu: null,
         soQuanSat: 9, soGoi: 3, soNcc: 5, soGoiCungNguoiTao: 1, soQuanSatHoiTo: 9, soLoaiTienTe: 0, soLoaiGia0: 0, hoiTo: [],
       });
+      const dongNgoai = (bidVersionId: string, nhan: string, chieu: string | null = null) => ({
+        bidVersionId, lineNo: 1, canonicalItemId: "ci-1", tienTe: "VND", cuaSoTu: "2025-10-01", denNgay: "2026-10-01", nhan, chieu,
+        soDong: 6, soGoi: 4, soNcc: 3, soLoaiTienTe: 0, soLoaiKhongQuyDoi: 0,
+      });
       const BM_CO = {
         trangThai: "CO", nguon: "TINH_MOI", snapshotId: "s-1", unsealRequestId: "u-1", bafoRoundId: null, policyId: "p-1", policyVersion: 1,
         phuongPhap: "TRUNG_VI_THEO_GOI_V1", mocMoGia: "2026-10-01T00:00:00Z", tinhLuc: "2026-10-01T01:00:00Z",
         dong: [dongBm("bv-1", 1, "BINH_THUONG"), dongBm("bv-2", 1, "LECH_CAO", "TREN"), dongBm("bv-1", 2, "KHONG_DO_DUOC"), dongBm("bv-2", 2, "KHONG_DO_DUOC")],
+        // [S1.276 / S4.6b] Nhãn ngoài của hai dòng đo được; cờ mốc ngoài của (ci-1, VND).
+        dongNgoai: [dongNgoai("bv-1", "LECH_CAO", "TREN"), dongNgoai("bv-2", "BINH_THUONG")],
+        mocNgoai: [{ canonicalItemId: "ci-1", tienTe: "VND", nguon: "Bảng giá nhà máy", ngayHieuLuc: "2026-09-15" }],
       };
       const DAI = {
         trangThai: "CO", snapshotId: "s-1", lineNo: 1, mocMoGia: "2026-10-01T00:00:00Z", tinhLuc: "2026-10-01T01:00:00Z", donViGoc: "kg",
         dai: [{ canonicalItemId: "ci-1", tienTe: "VND", cuaSoTu: "2025-10-01T00:00:00Z", duSan: true, q1: "18000", trungVi: "18500", q3: "19000",
           soQuanSat: 9, soGoi: 3, soNcc: 5, soGoiCungNguoiTao: 1, soQuanSatHoiTo: 9, soLoaiTienTe: 0, soLoaiGia0: 0, sauMoc: { ANH_XA: 1 }, khopBanLuu: true }],
-        giaCuaGoi: [{ bidVersionId: "bv-1", trangThai: "HOP_LE", donGiaQuyDoi: "18600", tienTe: "VND" },
-          { bidVersionId: "bv-2", trangThai: "HOP_LE", donGiaQuyDoi: "25000.125", tienTe: "VND" }],
+        giaCuaGoi: [{ bidVersionId: "bv-1", trangThai: "HOP_LE", donGiaQuyDoi: "18600", tienTe: "VND", lechMoc: "3.3" },
+          { bidVersionId: "bv-2", trangThai: "HOP_LE", donGiaQuyDoi: "25000.125", tienTe: "VND", lechMoc: "38.9" }],
+        // [S1.276 / S4.6b] Dải lịch sử ngoài và mốc ngoài của dòng.
+        daiNgoai: [{ canonicalItemId: "ci-1", tienTe: "VND", cuaSoTu: "2025-10-01", denNgay: "2026-10-01", duSan: true, q1: "17000",
+          trungVi: "17500", q3: "18000", soDong: 6, soGoi: 4, soNcc: 3, soLoaiTienTe: 1, soLoaiKhongQuyDoi: 0,
+          nguon: ["Sổ mua 2025", "Sổ mua 2026"], sauMoc: { GHI: 0, RUT: 1 }, khopBanLuu: true }],
+        mocNgoai: [{ canonicalItemId: "ci-1", tienTe: "VND", moc: { id: "m-1", nguon: "Bảng giá nhà máy", ngayHieuLuc: "2026-09-15",
+          donGiaQuyDoi: "18000" }, ghiSauMoc: 0, rutSauMoc: false }],
       };
       const XEP_HANG = {
         evaluationId: "e-1", policyVersion: 1, currency: "VND", evaluatedAt: "2026-10-01T02:00:00Z",
@@ -1310,7 +1323,7 @@ describe("bề mặt tệp", () => {
         const hang = chuHang(p, "bang-benchmark");
         expect(hang).toHaveLength(4);
         expect(p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con.map((x) => x.textContent)).toEqual(["Dòng 1 ", "Xem dải"]);
-        expect(hang[0]).toMatch(/^\|Công ty Thép Một\|.*\|trong dải lịch sử nội bộ \(3 gói, 5 nhà cung cấp\)\|3 gói · 5 nhà cung cấp · 1 gói do chính người tạo gói này lập · 9 quan sát ánh xạ hồi tố$/u);
+        expect(hang[0]).toMatch(/^\|Công ty Thép Một\|.*\|trong dải lịch sử nội bộ \(3 gói, 5 nhà cung cấp\)\|3 gói · 5 nhà cung cấp · 1 gói do chính người tạo gói này lập · 9 quan sát ánh xạ hồi tố\|/u);
         expect(hang[1]).toMatch(/^\|Công ty Thép Hai\|.*\|Giá bất thường — nên xem xét\|/u);
         expect(p.el("bang-benchmark").querySelector("tbody").con[1]?.className).toBe("lech");
         expect(hang[2]).toMatch(/không đo được — dòng chưa ánh xạ về hàng chuẩn nào/u);
@@ -1421,8 +1434,66 @@ describe("bề mặt tệp", () => {
         const q = await dung(BM_CO);
         await q.bam("nut-benchmark");
         expect(q.el("bang-benchmark").querySelector("tbody").con[0]?.con.slice(1).map((td) => td.dataset["nhan"])).toEqual([
-          "Nhà cung cấp", "Đơn giá chào", "Benchmark", "Thành phần dải",
+          "Nhà cung cấp", "Đơn giá chào", "Benchmark", "Thành phần dải", "Lịch sử ngoài", "Mốc ngoài",
         ]);
+      });
+
+      it("[S1.276 / S4.6b] cột Lịch sử ngoài in nhãn RIÊNG ghi rõ nguồn, tô riêng ô của nó; cột Mốc ngoài chỉ là cờ, không con số; dòng không đo được là gạch", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-benchmark");
+        const hang = chuHang(p, "bang-benchmark").map((h) => h.split("|"));
+        expect(hang[0]?.slice(5)).toEqual([
+          "Giá bất thường so với lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập — nên xem xét",
+          "có mốc ngoài (Bảng giá nhà máy, hiệu lực 15/09/2026) — số và độ lệch ở «Xem dải»",
+        ]);
+        expect(hang[1]?.[5]).toBe("trong dải lịch sử mua ngoài hệ thống, do người quản lý dữ liệu nhập (4 lần mua theo ngày và nhà cung cấp, 3 nhà cung cấp)");
+        expect(hang[2]?.slice(5), "dòng không đo được").toEqual(["—", "—"]);
+        const tbody = p.el("bang-benchmark").querySelector("tbody");
+        expect(tbody.con[0]?.className, "nhãn ngoài lệch cao KHÔNG tô cả hàng (L15)").toBe("");
+        expect(tbody.con[0]?.con[5]?.className).toBe("lech");
+        expect(tbody.con[1]?.con[5]?.className).toBe("");
+        expect(hang.flat().join("|"), "cờ mốc ngoài không mang con số nào").not.toMatch(/18\.000|18000/u);
+        // Cột Benchmark của bảng xếp hạng vẫn chỉ đọc nhãn NỘI BỘ.
+        await p.bam("nut-xep-hang");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual([
+          "1 bất thường (cao) · 1 không đo được · phủ 1/2 dòng",
+          "1 trong dải · 1 không đo được · phủ 1/2 dòng",
+        ]);
+      });
+
+      it("[S1.276 / S4.6b] bản lưu tính trước khi có lịch sử ngoài (`dongNgoai: null`) ⇒ cột nói ra và chỉ sang Xem dải", async () => {
+        const p = await dung({ ...BM_CO, dongNgoai: null, mocNgoai: [] });
+        await p.bam("nut-benchmark");
+        const hang = chuHang(p, "bang-benchmark").map((h) => h.split("|"));
+        expect(hang[0]?.slice(5)).toEqual(["bản benchmark này tính trước khi có lịch sử ngoài — xem ở «Xem dải»", "—"]);
+        expect(hang[2]?.slice(5)).toEqual(["—", "—"]);
+      });
+
+      it("[S1.276 / S4.6b] Xem dải in dải lịch sử ngoài (số, cửa sổ ngày, nguồn, rút sau mốc), mốc ngoài (con số, không nhãn) và độ lệch của từng báo giá", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-benchmark");
+        const nut = p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        for (const f of nut?.nghe["click"] ?? []) await f();
+        const tt = ttChu(p, "tt-dai");
+        expect(tt).toContain(
+          "Dòng 1 — dải lịch sử mua ngoài hệ thống (VND)|Q1 17.000,00 · trung vị 17.500,00 · Q3 18.000,00 VND/kg (6 dòng, 4 lần mua theo ngày và nhà cung cấp, 3 nhà cung cấp). Ngày mua từ 01/10/2025 tới 01/10/2026. Nguồn (lời khai của người nhập): Sổ mua 2025; Sổ mua 2026. Đã loại 1 khác tiền tệ. 1 dòng đã vào dải bị rút SAU mốc mở giá (dải này vẫn dùng)",
+        );
+        expect(tt).toContain(
+          "Dòng 1 — mốc giá ngoài (VND)|18.000,00 VND/kg (Bảng giá nhà máy, hiệu lực 15/09/2026) — chỉ để so độ lệch, không sinh nhãn",
+        );
+        expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Một|18.600,00 VND/kg · +3,3% so với mốc ngoài");
+        expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Hai|25.000,13 VND/kg · +38,9% so với mốc ngoài");
+        // [rà soát §S1.276] Báo giá mà tiền tệ của nó không có mốc: không câu "so với mốc ngoài" nào, kể cả khi tiền tệ khác của dòng có.
+        const q = await dung(BM_CO, SO_SANH, {
+          ...DAI,
+          giaCuaGoi: [DAI.giaCuaGoi[0], { ...DAI.giaCuaGoi[1], tienTe: "USD", lechMoc: null }],
+        });
+        await q.bam("nut-benchmark");
+        const nutQ = q.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        for (const f of nutQ?.nghe["click"] ?? []) await f();
+        const ttQ = ttChu(q, "tt-dai");
+        expect(ttQ).toMatch(/Đơn giá quy đổi — Công ty Thép Hai\|25\.000,13 USD\/kg(\||$)/u);
+        expect(ttQ).toContain("Đơn giá quy đổi — Công ty Thép Một|18.600,00 VND/kg · +3,3% so với mốc ngoài");
       });
 
       it("cột Benchmark của bảng xếp hạng: gạch trước khi đọc benchmark, tóm tắt nhãn và độ phủ sau — kể cả khi bảng xếp hạng vẽ TRƯỚC", async () => {
