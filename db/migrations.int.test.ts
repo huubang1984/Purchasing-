@@ -4195,6 +4195,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
+        "9501_tco.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8850,6 +8852,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
+        "9501_tco.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9185,6 +9189,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.9101 / S4.7a / L8, L16] TCO: nhóm khoá `tco`, số ngày giao trong chữ ký, tập mã chụp lúc mở (ADR-9201).
+        "9501_tco.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
