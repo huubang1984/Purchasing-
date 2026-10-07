@@ -2363,6 +2363,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh — tổ chức đã bật, người giữ `rfq.invite`, gói ở DRAFT, hàng rút hợp lệ.
     { ham: "ngoai_le_kiem", migration: "105_ngoai_le_canh_tranh.sql", trigger: ["rfq_sourcing_exceptions_kiem_ngoai_le"] },
+    // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ thêm được người liên hệ. Một thân `RETURN NEW` cho người thứ hai thêm người liên hệ
+    // vào hồ sơ người khác dựng — mất xác minh và mất đếm K2 của nhà cung cấp ấy.
+    { ham: "ncc_kiem_them_lien_he", migration: "111_lien_he_chi_nguoi_dung_ho_so.sql", trigger: ["supplier_contacts_kiem_nguoi_them"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },
     // [S1.166 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
     // `rfq_kiem_ngan_sach_khi_nop` thì cạnh nộp duyệt chỉ còn tầng gói canh — một câu UPDATE viết tay tắt được S3.
@@ -4188,6 +4191,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8843,6 +8848,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9178,6 +9185,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "109_du_lieu_ngoai.sql",
         // [S1.276 / S4.6b / L15] Nhãn theo dải lịch sử ngoài trong bản lưu benchmark — bảng con không cột tiền (ADR-151).
         "110_ban_luu_benchmark_ngoai.sql",
+        // [S1.278 / khoản 344 / K8a] Chỉ người dựng hồ sơ nhà cung cấp thêm được người liên hệ.
+        "111_lien_he_chi_nguoi_dung_ho_so.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
