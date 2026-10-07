@@ -25536,7 +25536,7 @@ sáu tệp — không ca nào là lỗi của lớp K9; cả sáu là tiền đ�
   hàm vị từ viết thường — thành một tập.
 - `danh-sach-moi.int` (1/23): gói có từ trước lần bật không bậc ghim — K9 coi như ĐÒI (fail-closed, cùng K5): người ký lại khai trước,
   bằng chính câu chèn của `khaiBaoXungDot`.
-Không dòng mã sản xuất nào đổi ở lượt này. Sau bản vá: SAU_VA.
+Không dòng mã sản xuất nào đổi ở lượt này. Sau bản vá: sáu tệp 258/258 (53 s, một lượt vitest chung, lượt đầu); rồi lượt evidence hai ở §9.
 
 ## 8. Giới hạn còn lại
 - Màn khai báo, `gieo:demo --s3`, lượt đi thử T4 — S3.4b. Giữa hai PR, tổ chức demo (bậc mặc định `khai_xung_dot: true`) bị K9 chặn
@@ -25547,4 +25547,15 @@ Không dòng mã sản xuất nào đổi ở lượt này. Sau bản vá: SAU_V
 - Việc chia S3.4 hai PR và các chốt hình dạng ở §3 là quyết định của vòng; chủ dự án xác nhận lại ở lượt soi.
 
 ## 9. Số đo
-SO_DO
+Nhánh dựng từ `master` `ca94227` (PR #252, S1.275). Trên `802cf72` (mã, tài liệu, biên bản — lượt đầu): `pnpm test` 150 tệp xanh;
+bốn cổng CSDL (`migrations.int`, `hardening-suy-tu`, `rls-coverage`, `check-an-ninh`) 231/231 (2029 s); tệp K9 12/12 (14,6 s); 14 đột biến
+CSDL và 5 đột biến TS đều chết (§6); `pnpm evidence` lượt đầu: vitest thoát mã 1, 4870 khẳng định, 59 đỏ ở sáu tệp (§7) — ma trận đọc
+được 84/84 nhưng cổng không in XANH ([[evidence-xanh-khong-bang-vitest-0]]); `pnpm t0` đỏ hai lỗi lint ở tệp test K9 sau lần sửa cuối
+(import thừa, `expect.any`), gỡ ở lượt sau. Trên `834a770` (sau §7, một lượt sửa test và tài liệu, không dòng mã sản xuất nào): `pnpm t0`
+xanh (553 mô-đun, không vi phạm); `pnpm test` 151 tệp (2 bỏ qua), 2609 ca đạt, 14 bỏ qua, 0 đỏ — bộ đối chiếu sổ nợ chạy với số tạm,
+`pnpm cap-so --dem` viết lại lời khai đếm ADR sau khi gỡ bản ADR-9201 chép đôi; `pnpm cap-so --kiem` chỉ báo số tạm (cấp ở lượt gộp);
+`pnpm evidence`: vitest thoát mã 0, 248 tệp, 4870 khẳng định (4847 đạt, 23 bỏ qua, 0 đỏ), 84/84 bất biến (62/62 nghiệp vụ + 22/22 hàng
+rào), *"Cổng evidence: XANH"*, 3821 s; `evidence/INV-matrix.md` thêm hàng K9 (12 ca), mốc độ phủ 83 → 84. Trong lượt ấy: hai kịch bản 41
+34/34 + 87/87, `canh-tranh-toi-thieu` 36/36, `xoay-vong` 21/21, `man-kiem-soat` 15/15, tệp K9 12/12.
+Sau lượt đo, `master` thêm `0e966bc` (PR #253, §S1.276 — S4.6b: migration `110_ban_luu_benchmark_ngoai`, ADR-151, hàng L1/L15 của ma
+trận; không bất biến mới, 83/83) và được gộp vào nhánh: MERGE_GHI
