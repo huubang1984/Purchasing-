@@ -918,6 +918,9 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       // [S1.203 / S3.6b1] Hàm tín hiệu đọc cửa sổ và bậc của ĐÚNG phiên bản ngân sách gói ghim; luật người ghi nhận đọc tác giả của
       // phiên bản mà bằng chứng mang.
       tin_hieu_chia_nho: "THEO_ID",
+      // [S1.9101 / S3.6d · K10b] Hàm tín hiệu khai thấp đọc tiền tệ và ngưỡng kép của ĐÚNG phiên bản ngân sách gói ghim
+      // (`rfq_budgets.policy_id`), bậc qua `rfq_bac_cua(policy_id, …)` — không tự chọn.
+      tin_hieu_khai_thap: "THEO_ID",
       tin_hieu_chot_nguoi_ghi_nhan: "THEO_ID",
       to_chuc_da_bat_s3: "KHAC",
     };

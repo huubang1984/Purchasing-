@@ -2083,8 +2083,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.203 / S3.6b1] Ba hàm của tín hiệu chia nhỏ: hàm tín hiệu — một thân `RETURN NULL` tắt K10a ở cả tầng gói lẫn cạnh —,
     // luật người ghi nhận — một thân `RETURN NULL` cho người gây ra tự ghi nhận —, và vị từ của chốt ở cạnh mở gói.
     { ham: "tin_hieu_chia_nho", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
-    { ham: "tin_hieu_chot_nguoi_ghi_nhan", chuKy: "uuid, jsonb, uuid", migration: "088_tin_hieu_chia_nho.sql" },
+    // [S1.9101 / S3.6d] Thân `9501`: luật người ghi nhận theo LOẠI bằng chứng — con trỏ dời theo.
+    { ham: "tin_hieu_chot_nguoi_ghi_nhan", chuKy: "uuid, jsonb, uuid", migration: "9501_tin_hieu_khai_thap.sql" },
     { ham: "rfq_chot_tin_hieu", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
+    // [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp, tín hiệu hiện tại theo loại, hàm vị từ K10b ở chữ ký trao thầu.
+    { ham: "tin_hieu_khai_thap", chuKy: "uuid, uuid", migration: "9501_tin_hieu_khai_thap.sql" },
+    { ham: "tin_hieu_hien_tai", chuKy: "uuid, uuid, text", migration: "9501_tin_hieu_khai_thap.sql" },
+    { ham: "award_chot_tin_hieu", chuKy: "uuid, uuid", migration: "9501_tin_hieu_khai_thap.sql" },
     // [S1.269 / S3.3c2] Bốn hàm của K2 và K5: bậc ghim — một thân trả bậc khác đọc sai ngưỡng —, số nhóm nhà cung cấp đếm được — một
     // thân trả hằng lớn cho nhà cung cấp vỏ qua —, và hai vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh.
     { ham: "rfq_bac_ghim", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
@@ -2544,8 +2549,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.203 / S3.6b1] Ba hàm trigger của tín hiệu chia nhỏ. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng:
     // người gọi khai bằng chứng của tín hiệu, người gây ra tự ghi nhận tín hiệu của mình, và gói mở qua một câu UPDATE viết tay
     // khi tín hiệu chưa ai ghi nhận.
-    { ham: "tin_hieu_kiem_ghi", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signals_tinh"] },
-    { ham: "tin_hieu_kiem_ghi_nhan", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
+    // [S1.9101 / S3.6d] Thân `9501`: hai trigger của tín hiệu rẽ theo LOẠI (chia nhỏ ở PENDING_APPROVAL, khai thấp ở AWARDED) — con trỏ dời theo.
+    { ham: "tin_hieu_kiem_ghi", migration: "9501_tin_hieu_khai_thap.sql", trigger: ["governance_signals_tinh"] },
+    { ham: "tin_hieu_kiem_ghi_nhan", migration: "9501_tin_hieu_khai_thap.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
+    // [S1.9101 / S3.6d / K10b] Chữ ký trao thầu: tín hiệu khai thấp chưa ai ghi nhận ⇒ từ chối `k10b_tin_hieu_chua_ghi_nhan`.
+    { ham: "award_kiem_tin_hieu_khai_thap", migration: "9501_tin_hieu_khai_thap.sql", trigger: ["rfq_award_approvals_kiem_tin_hieu_khai_thap"] },
     { ham: "rfq_kiem_tin_hieu_khi_mo", migration: "088_tin_hieu_chia_nho.sql", trigger: ["rfq_packages_kiem_tin_hieu_khi_mo"] },
     // [S1.269 / S3.3c2] K2 ở cạnh nộp duyệt và K5 ở cạnh mở gói. Một thân `RETURN NEW` ở cái đầu cho gói dưới ngưỡng cạnh tranh đi
     // qua một câu UPDATE viết tay (và bỏ chốt READ COMMITTED); ở cái sau cho người chọn danh sách tự ký mở gói.
@@ -4265,6 +4273,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
+        // [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng và K10 ở chữ ký trao thầu (ADR-9201).
+        "9501_tin_hieu_khai_thap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8930,6 +8940,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
+        // [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng và K10 ở chữ ký trao thầu (ADR-9201).
+        "9501_tin_hieu_khai_thap.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9275,6 +9287,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
+        // [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng và K10 ở chữ ký trao thầu (ADR-9201).
+        "9501_tin_hieu_khai_thap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

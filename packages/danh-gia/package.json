@@ -10,6 +10,7 @@
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/du-lieu-nen": "workspace:*",
     "@trustprocure/identity": "workspace:*",
+    "@trustprocure/kiem-soat": "workspace:*",
     "pg": "^8.13.0"
   }
 }

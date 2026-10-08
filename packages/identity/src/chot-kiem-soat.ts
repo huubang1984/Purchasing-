@@ -113,6 +113,9 @@ export type MaChotKiemSoat =
   | "NGAN_SACH_GHIM_BAN_CU"
   | "K10A_TAC_GIA_CHINH_SACH"
   | "K10A_TU_GHI_NHAN"
+  | "K10B_TAC_GIA_CHINH_SACH"
+  | "K10B_TIN_HIEU_CHUA_GHI_NHAN"
+  | "K10B_TU_GHI_NHAN"
   | "THIEU_NGAN_SACH"
   | "THIEU_NHOM_HANG"
   | "TIN_HIEU_CHUA_GHI_NHAN";
@@ -307,6 +310,35 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "người khai phiên bản chính sách mà gói ghim cố ghi nhận tín hiệu của gói ấy (spec §2.4 ⑺): người đặt cận bậc không tự xác " +
       "nhận một tập gói nằm ngay dưới cận của chính mình",
     thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu của gói.",
+  },
+  // [S1.9101 / S3.6d / ADR-9201] Ba dòng K10b — tín hiệu khai thấp ước lượng (`ESTIMATE_UNDERSTATED`) và K10 ở chữ ký trao thầu
+  // (`9501`). Như K10a: tên ràng buộc `k10b_*` KHÔNG vào `CHOT_THEO_RANG_BUOC` — tầng gói hỏi `award_chot_tin_hieu` trước câu chèn
+  // chữ ký và luật người trước lần ghi nhận; trigger là lớp chặn cuối cho câu đi tắt (ADR-120).
+  K10B_TIN_HIEU_CHUA_GHI_NHAN: {
+    chot: "K10b",
+    vaoSo: true,
+    lyDo:
+      "một người ký duyệt trao thầu khi tín hiệu khai thấp ước lượng tính NGAY LÚC ẤY — bậc của số tiền trao cao hơn bậc ước lượng, " +
+      "hay số tiền trao vượt ngưỡng kép mà ước lượng thì không (spec §4.6, §8.4) — chưa được ai ghi nhận: tín hiệu không chặn cạnh " +
+      "nào, nó chặn việc không ai đọc nó, và chữ ký bỏ qua bước đọc ấy là đúng thứ kiểm toán viên hỏi tới, cùng khuôn `TIN_HIEU_CHUA_GHI_NHAN`",
+    thongDiep:
+      "Gói thầu có tín hiệu khai thấp ước lượng chưa được ghi nhận: một người giữ quyền duyệt trao thầu không tạo, không nộp gói, không đặt ngân sách, không đề xuất phải ghi nhận nó trước khi ký (K10b).",
+  },
+  K10B_TU_GHI_NHAN: {
+    chot: "K10b",
+    vaoSo: true,
+    lyDo:
+      "người tạo, người nộp, người đặt ngân sách (người khai ước lượng) hay người đề xuất của gói cố ghi nhận chính tín hiệu soi mình " +
+      "— cùng khuôn `K10A_TU_GHI_NHAN`; spec §4.6 loại {người tạo gói, người gây ra tín hiệu}",
+    thongDiep: "Người tạo, người nộp, người đặt ngân sách hay người đề xuất trao thầu của gói không ghi nhận được tín hiệu khai thấp của gói ấy.",
+  },
+  K10B_TAC_GIA_CHINH_SACH: {
+    chot: "K10b",
+    vaoSo: true,
+    lyDo:
+      "người khai phiên bản chính sách mà gói ghim cố ghi nhận tín hiệu khai thấp của gói ấy (spec §2.4 ⑺): người đặt cận bậc không tự " +
+      "xác nhận một ước lượng rơi ngay dưới cận của chính mình",
+    thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu khai thấp của gói.",
   },
   D2_NGUOI_TAO_TU_DUYET: {
     chot: "D2",

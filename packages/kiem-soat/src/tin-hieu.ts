@@ -74,6 +74,20 @@ export interface NguoiXemTinHieu {
   readonly lyDo: string | null;
 }
 
+/** [S1.9101 / S3.6d] Loại tín hiệu — hai loại, hai cạnh bị chặn, hai quyền của cạnh (ADR-084 ⑵). */
+export type LoaiTinHieu = "PURCHASE_SPLITTING" | "ESTIMATE_UNDERSTATED";
+
+/** [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng của gói — phần `/mo-thau` cần, cùng hình dạng với phần chia nhỏ. */
+export interface TinHieuKhaiThap {
+  /** Tín hiệu tính NGAY LÚC ĐỌC — `null` khi gói không có đề xuất đang sống hay số tiền trao không khai thấp. */
+  readonly hienTai: unknown;
+  /** Gói có đề xuất và tín hiệu hiện tại chưa có lần ghi nhận nào trên một tín hiệu có bằng chứng bằng nó — chữ ký trao thầu bị chặn. */
+  readonly canGhiNhan: boolean;
+  readonly nguoiXem: NguoiXemTinHieu;
+  /** Số người giữ `po.approve` mà luật người cho ghi nhận; `null` khi không có gì cần ghi nhận. */
+  readonly soNguoiGhiNhanDuoc: number | null;
+}
+
 export interface TinHieuCuaGoi {
   /** Tín hiệu tính NGAY LÚC ĐỌC — `null` khi gói không có tín hiệu nào. */
   readonly hienTai: unknown;
@@ -88,10 +102,18 @@ export interface TinHieuCuaGoi {
    * `null` khi không có gì cần ghi nhận.
    */
   readonly soNguoiGhiNhanDuoc: number | null;
+  /** [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng — loại thứ hai, chặn chữ ký trao thầu thay vì cạnh mở gói. */
+  readonly khaiThap: TinHieuKhaiThap;
 }
 
 /** [S3.6b2] Câu màn nói khi người đang xem không giữ quyền của cạnh bị chặn. */
 const CAN_QUYEN_GHI_NHAN = "Ghi nhận tín hiệu cần quyền duyệt gói thầu.";
+const CAN_QUYEN_GHI_NHAN_KT = "Ghi nhận tín hiệu khai thấp cần quyền duyệt trao thầu.";
+/** Quyền của cạnh bị chặn theo loại (ADR-084 ⑵): `rfq.approve` ở mở gói, `po.approve` ở chữ ký trao thầu. */
+const QUYEN_THEO_LOAI = {
+  PURCHASE_SPLITTING: PERMISSIONS.RFQ_APPROVE,
+  ESTIMATE_UNDERSTATED: PERMISSIONS.PO_APPROVE,
+} as const satisfies Readonly<Record<LoaiTinHieu, unknown>>;
 
 export interface KetQuaGhiNhan {
   readonly signalId: string;
@@ -100,25 +122,28 @@ export interface KetQuaGhiNhan {
   readonly tinHieuMoi: boolean;
 }
 
+// [S1.9101 / S3.6d] `$6` là LOẠI; tín hiệu hiện tại theo loại đọc qua `tin_hieu_hien_tai` (`9501`) — một chỗ cho cả gói lẫn trigger.
 const CAU_GHI_TIN_HIEU =
   "INSERT INTO public.governance_signals (org_id, rfq_id, loai, nguon, created_by, created_by_session_id) " +
-  "SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, 'PURCHASE_SPLITTING', $3::pg_catalog.text, $4::pg_catalog.uuid, $5::pg_catalog.uuid " +
-  "WHERE public.tin_hieu_chia_nho($1::pg_catalog.uuid, $2::pg_catalog.uuid) IS NOT NULL RETURNING id";
+  "SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, $6::pg_catalog.text, $3::pg_catalog.text, $4::pg_catalog.uuid, $5::pg_catalog.uuid " +
+  "WHERE public.tin_hieu_hien_tai($1::pg_catalog.uuid, $2::pg_catalog.uuid, $6::pg_catalog.text) IS NOT NULL RETURNING id";
 
 const CAU_DOC_GOI =
-  "SELECT r.status, public.tin_hieu_chia_nho(r.org_id, r.id) AS bang_chung, public.rfq_chot_tin_hieu(r.org_id, r.id) AS ly_do " +
+  "SELECT r.status, public.tin_hieu_chia_nho(r.org_id, r.id) AS bang_chung, public.rfq_chot_tin_hieu(r.org_id, r.id) AS ly_do, " +
+  "public.tin_hieu_khai_thap(r.org_id, r.id) AS bang_chung_kt, public.award_chot_tin_hieu(r.org_id, r.id) AS ly_do_kt " +
   "FROM public.rfq_packages r " +
   "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid";
 
-/** Luật người ghi nhận trên tín hiệu HIỆN TẠI của gói — `$1` tổ chức, `$2` gói, `$3` người. */
+/** Luật người ghi nhận trên tín hiệu HIỆN TẠI của gói — `$1` tổ chức, `$2` gói, `$3` người, `$4` loại. */
 const CAU_CHOT_NGUOI_GHI_NHAN =
   "SELECT public.tin_hieu_chot_nguoi_ghi_nhan($1::pg_catalog.uuid, " +
-  "public.tin_hieu_chia_nho($1::pg_catalog.uuid, $2::pg_catalog.uuid), $3::pg_catalog.uuid) AS ly_do";
+  "public.tin_hieu_hien_tai($1::pg_catalog.uuid, $2::pg_catalog.uuid, $4::pg_catalog.text), $3::pg_catalog.uuid) AS ly_do";
 
 const CAU_TIM_TIN_HIEU =
   "SELECT s.id FROM public.governance_signals s " +
   "WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND s.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
-  "AND s.bang_chung OPERATOR(pg_catalog.=) public.tin_hieu_chia_nho($1::pg_catalog.uuid, $2::pg_catalog.uuid) " +
+  "AND s.loai OPERATOR(pg_catalog.=) $3::pg_catalog.text " +
+  "AND s.bang_chung OPERATOR(pg_catalog.=) public.tin_hieu_hien_tai($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.text) " +
   "ORDER BY s.tinh_luc DESC LIMIT 1";
 
 const CAU_GHI_NHAN =
@@ -149,7 +174,7 @@ const CAU_DOC_GOI_BANG_CHUNG =
  */
 const CAU_LUAT_NGUOI_NHIEU =
   "SELECT n.id::pg_catalog.text AS id, public.tin_hieu_chot_nguoi_ghi_nhan($1::pg_catalog.uuid, " +
-  "public.tin_hieu_chia_nho($1::pg_catalog.uuid, $2::pg_catalog.uuid), n.id) AS ly_do " +
+  "public.tin_hieu_hien_tai($1::pg_catalog.uuid, $2::pg_catalog.uuid, $4::pg_catalog.text), n.id) AS ly_do " +
   "FROM pg_catalog.unnest($3::pg_catalog.uuid[]) AS n(id)";
 
 interface NguoiGoi {
@@ -185,10 +210,11 @@ async function ghiTinHieu(
   client: pg.PoolClient,
   orgId: string,
   rfqId: string,
-  nguon: "NOP_DUYET" | "GHI_NHAN",
+  nguon: "NOP_DUYET" | "GHI_NHAN" | "DE_XUAT",
   actor: NguoiGoi,
+  loai: LoaiTinHieu,
 ): Promise<string | null> {
-  const { rows } = await client.query<{ id: string }>(CAU_GHI_TIN_HIEU, [orgId, rfqId, nguon, actor.id, actor.sessionId]);
+  const { rows } = await client.query<{ id: string }>(CAU_GHI_TIN_HIEU, [orgId, rfqId, nguon, actor.id, actor.sessionId, loai]);
   return rows[0]?.id ?? null;
 }
 
@@ -203,7 +229,7 @@ export async function ghiTinHieuKhiNop(
   actor: NguoiGoi,
 ): Promise<string | null> {
   await assertTenantBound(client, orgId, "ghiTinHieuKhiNop");
-  const signalId = await ghiTinHieu(client, orgId, rfqId, "NOP_DUYET", actor);
+  const signalId = await ghiTinHieu(client, orgId, rfqId, "NOP_DUYET", actor, "PURCHASE_SPLITTING");
   if (signalId !== null) {
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
@@ -218,6 +244,33 @@ export async function ghiTinHieuKhiNop(
 }
 
 /**
+ * [S1.9101 / S3.6d / K10b] ⑴b Ảnh chụp tín hiệu KHAI THẤP lúc vừa đề xuất trao thầu — gọi SAU câu chèn đề xuất và sau cạnh
+ * `EVALUATING->AWARDED`, trong cùng giao dịch, TRƯỚC mọi hàng sổ của đường đề xuất (hàng sổ giữ khoá chuỗi tới commit). Gói không
+ * khai thấp (hay tổ chức chưa bật) thì không ghi gì và trả `null`. Không chặn gì: tín hiệu chặn CHỮ KÝ duyệt trao thầu khi chưa ai ghi
+ * nhận nó (`award_chot_tin_hieu`).
+ */
+export async function ghiTinHieuKhiDeXuat(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  actor: NguoiGoi,
+): Promise<string | null> {
+  await assertTenantBound(client, orgId, "ghiTinHieuKhiDeXuat");
+  const signalId = await ghiTinHieu(client, orgId, rfqId, "DE_XUAT", actor, "ESTIMATE_UNDERSTATED");
+  if (signalId !== null) {
+    await appendAuditEvent(client, orgId, {
+      actorType: actor.type,
+      actorId: actor.id,
+      action: "GOVERNANCE_SIGNAL_RECORDED",
+      resourceType: "rfq_package",
+      resourceId: rfqId,
+      payload: { signalId, loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT" },
+    });
+  }
+  return signalId;
+}
+
+/**
  * ⑵ Ghi nhận tín hiệu HIỆN TẠI của một gói đang chờ duyệt. Thứ tự: quyền (`rfq.approve`, lần từ chối vào sổ
  * `PERMISSION_DENIED`) → lý do → trạng thái và tín hiệu hiện tại → luật người (`K10A_TU_GHI_NHAN`, `K10A_TAC_GIA_CHINH_SACH`,
  * vào sổ `CONTROL_DENIED`) → tín hiệu có bằng chứng bằng hiện tại, không có thì lưu một cái mới → lần ghi nhận → sổ. Trigger
@@ -226,30 +279,38 @@ export async function ghiTinHieuKhiNop(
 export async function ghiNhanTinHieu(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly rfqId: string; readonly lyDo: string; readonly actorSessionId: string },
+  input: { readonly rfqId: string; readonly lyDo: string; readonly actorSessionId: string; readonly loai?: LoaiTinHieu },
   auditPool: pg.Pool,
 ): Promise<KetQuaGhiNhan> {
   await assertTenantBound(client, orgId, "ghiNhanTinHieu");
+  // [S1.9101 / S3.6d] Hai loại, hai cạnh bị chặn: chia nhỏ — gói chờ duyệt, `rfq.approve`; khai thấp — gói có đề xuất, `po.approve`.
+  const loai: LoaiTinHieu = input.loai ?? "PURCHASE_SPLITTING";
+  const khaiThap = loai === "ESTIMATE_UNDERSTATED";
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await requirePermission(
     client,
-    { userId: actor.id, orgId, permission: PERMISSIONS.RFQ_APPROVE, resourceType: "RFQ", resourceId: input.rfqId },
+    { userId: actor.id, orgId, permission: QUYEN_THEO_LOAI[loai], resourceType: "RFQ", resourceId: input.rfqId },
     auditPool,
   );
   const lyDo = input.lyDo.trim();
   if (lyDo === "") throw new KiemSoatError("Ghi lý do khi ghi nhận tín hiệu.");
   if (Buffer.byteLength(lyDo, "utf8") > 2000) throw new KiemSoatError("Lý do ghi nhận dài quá 2000 byte.");
 
-  const goi = (await client.query<{ status: string; bang_chung: unknown }>(CAU_DOC_GOI, [orgId, input.rfqId])).rows[0];
+  const goi = (await client.query<{ status: string; bang_chung: unknown; bang_chung_kt: unknown }>(CAU_DOC_GOI, [orgId, input.rfqId])).rows[0];
   if (goi === undefined) throw new KiemSoatError("Không tìm thấy gói thầu trong tổ chức đang gắn.");
-  if (goi.status !== "PENDING_APPROVAL") throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
-  if (goi.bang_chung === null) throw new KiemSoatError("Gói thầu này không có tín hiệu nào cần ghi nhận.");
+  if (khaiThap) {
+    if (goi.status !== "AWARDED") throw new KiemSoatError("Chỉ ghi nhận tín hiệu khai thấp khi gói thầu đang có đề xuất trao thầu.");
+    if (goi.bang_chung_kt === null) throw new KiemSoatError("Gói thầu này không có tín hiệu khai thấp nào cần ghi nhận.");
+  } else {
+    if (goi.status !== "PENDING_APPROVAL") throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
+    if (goi.bang_chung === null) throw new KiemSoatError("Gói thầu này không có tín hiệu nào cần ghi nhận.");
+  }
 
-  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGUOI_GHI_NHAN, [orgId, input.rfqId, actor.id]);
+  await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGUOI_GHI_NHAN, [orgId, input.rfqId, actor.id, loai]);
 
-  let signalId = (await client.query<{ id: string }>(CAU_TIM_TIN_HIEU, [orgId, input.rfqId])).rows[0]?.id ?? null;
+  let signalId = (await client.query<{ id: string }>(CAU_TIM_TIN_HIEU, [orgId, input.rfqId, loai])).rows[0]?.id ?? null;
   const tinHieuMoi = signalId === null;
-  if (signalId === null) signalId = await ghiTinHieu(client, orgId, input.rfqId, "GHI_NHAN", actor);
+  if (signalId === null) signalId = await ghiTinHieu(client, orgId, input.rfqId, "GHI_NHAN", actor, loai);
   if (signalId === null) throw new KiemSoatError("Gói thầu này không có tín hiệu nào cần ghi nhận.");
 
   let rows: readonly { id: string }[];
@@ -262,7 +323,9 @@ export async function ghiNhanTinHieu(
       throw new KiemSoatError("Bằng chứng của tín hiệu vừa đổi — đọc lại rồi ghi nhận tín hiệu hiện tại.");
     }
     if (code === "23514" && constraint === "k10_ghi_nhan_sai_trang_thai") {
-      throw new KiemSoatError("Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.");
+      throw new KiemSoatError(
+        khaiThap ? "Chỉ ghi nhận tín hiệu khai thấp khi gói thầu đang có đề xuất trao thầu." : "Chỉ ghi nhận tín hiệu khi gói thầu đang chờ duyệt.",
+      );
     }
     // [S1.281 / S3.4a / K9] Ghi nhận tín hiệu là một cổng K9 (ADR-082 ⒄): trigger `governance_signal_acks_kiem_xung_dot` (`114`)
     // từ chối có tên — một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối của chốt (ADR-114).
@@ -281,7 +344,7 @@ export async function ghiNhanTinHieu(
       action: "GOVERNANCE_SIGNAL_RECORDED",
       resourceType: "rfq_package",
       resourceId: input.rfqId,
-      payload: { signalId, loai: "PURCHASE_SPLITTING", nguon: "GHI_NHAN" },
+      payload: { signalId, loai, nguon: "GHI_NHAN" },
     });
   }
   await appendAuditEvent(client, orgId, {
@@ -316,11 +379,12 @@ async function nguoiGhiNhanDuoc(
   orgId: string,
   rfqId: string,
   nguoiXemId: string,
+  loai: LoaiTinHieu = "PURCHASE_SPLITTING",
 ): Promise<{ readonly nguoiXem: NguoiXemTinHieu; readonly soNguoiGhiNhanDuoc: number }> {
-  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_APPROVE);
+  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, QUYEN_THEO_LOAI[loai]);
   const hoi = [...new Set([...nguoiDuyet, nguoiXemId])];
   const luat = new Map(
-    (await client.query<{ id: string; ly_do: string | null }>(CAU_LUAT_NGUOI_NHIEU, [orgId, rfqId, hoi])).rows.map((r) => [
+    (await client.query<{ id: string; ly_do: string | null }>(CAU_LUAT_NGUOI_NHIEU, [orgId, rfqId, hoi, loai])).rows.map((r) => [
       r.id,
       r.ly_do,
     ]),
@@ -330,7 +394,9 @@ async function nguoiGhiNhanDuoc(
     return luat.get(id) ?? null;
   };
   const soNguoiGhiNhanDuoc = nguoiDuyet.filter((id) => maCua(id) === null).length;
-  if (!nguoiDuyet.includes(nguoiXemId)) return { nguoiXem: { ghiNhanDuoc: false, lyDo: CAN_QUYEN_GHI_NHAN }, soNguoiGhiNhanDuoc };
+  if (!nguoiDuyet.includes(nguoiXemId)) {
+    return { nguoiXem: { ghiNhanDuoc: false, lyDo: loai === "ESTIMATE_UNDERSTATED" ? CAN_QUYEN_GHI_NHAN_KT : CAN_QUYEN_GHI_NHAN }, soNguoiGhiNhanDuoc };
+  }
   const ma = maCua(nguoiXemId);
   if (ma === null) return { nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc };
   if (!laMaChot(ma)) throw new Error("luật người trả một mã không có trong CHOT_VAO_SO — hai bên đã trôi khỏi nhau");
@@ -350,8 +416,12 @@ export async function lietKeTinHieu(
   await assertTenantBound(client, orgId, "lietKeTinHieu");
   const nguoiXem = await resolveSessionActor(client, orgId, input.actorSessionId);
   const rfqId = input.rfqId;
-  const goi = (await client.query<{ status: string; bang_chung: unknown; ly_do: string | null }>(CAU_DOC_GOI, [orgId, rfqId]))
-    .rows[0];
+  const goi = (
+    await client.query<{ status: string; bang_chung: unknown; ly_do: string | null; bang_chung_kt: unknown; ly_do_kt: string | null }>(
+      CAU_DOC_GOI,
+      [orgId, rfqId],
+    )
+  ).rows[0];
   if (goi === undefined) throw new KiemSoatError("Không tìm thấy gói thầu trong tổ chức đang gắn.");
   const tinHieu = (
     await client.query<{
@@ -376,16 +446,25 @@ export async function lietKeTinHieu(
       nguoi_ten: string | null;
     }>(CAU_DOC_GHI_NHAN, [orgId, rfqId])
   ).rows;
-  const idGoi = [...new Set([goi.bang_chung, ...tinHieu.map((t) => t.bang_chung)].flatMap(goiCuaBangChung))];
+  const idGoi = [...new Set([goi.bang_chung, goi.bang_chung_kt, ...tinHieu.map((t) => t.bang_chung)].flatMap(goiCuaBangChung))];
   const goiBangChung =
     idGoi.length === 0
       ? []
       : (await client.query<{ id: string; title: string; status: string }>(CAU_DOC_GOI_BANG_CHUNG, [orgId, idGoi])).rows;
   const canGhiNhan = goi.status === "PENDING_APPROVAL" && goi.ly_do !== null;
   const xem = canGhiNhan ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id) : null;
+  // [S1.9101 / S3.6d / K10b] Phần khai thấp: cùng khuôn, cạnh bị chặn là chữ ký trao thầu, quyền `po.approve`.
+  const canGhiNhanKt = goi.status === "AWARDED" && goi.ly_do_kt !== null;
+  const xemKt = canGhiNhanKt ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id, "ESTIMATE_UNDERSTATED") : null;
   return {
     hienTai: goi.bang_chung,
     canGhiNhan,
+    khaiThap: {
+      hienTai: goi.bang_chung_kt,
+      canGhiNhan: canGhiNhanKt,
+      nguoiXem: xemKt?.nguoiXem ?? { ghiNhanDuoc: false, lyDo: null },
+      soNguoiGhiNhanDuoc: xemKt?.soNguoiGhiNhanDuoc ?? null,
+    },
     tinHieu: tinHieu.map((t) => ({
       id: t.id,
       loai: t.loai,

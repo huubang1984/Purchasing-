@@ -319,6 +319,46 @@ export function khungTinHieu(body: unknown, rfqId: string): KhungTinHieu {
   return { hien: true, tomTat, goi, lichSu, choGhiNhan, khongDuoc };
 }
 
+/**
+ * [S1.9101 / S3.6d / K10b] Khung tín hiệu KHAI THẤP ƯỚC LƯỢNG ở bước 7 của `/mo-thau` — thân `GET /rfqs/:rfqId/signals`, phần
+ * `tinHieu.khaiThap` cộng các hàng `ESTIMATE_UNDERSTATED` đã lưu. Tóm tắt là câu `giaiThich` CSDL viết cho hàng có bằng chứng BẰNG
+ * tín hiệu hiện tại (không số tiền nào — bằng chứng chỉ mang hai mốc bậc); không hàng nào thì nói bằng hai mốc bậc của bằng chứng.
+ * Lịch sử: các lần ghi nhận của hàng ấy. Ô lý do và nút chỉ khi còn chờ ghi nhận VÀ người đang xem ghi nhận được.
+ */
+export interface KhungTinHieuKhaiThap {
+  readonly hien: boolean;
+  readonly tomTat: string;
+  /** Còn chờ ghi nhận (chữ ký trao thầu bị chặn) hay đã có người đọc. */
+  readonly choDoc: boolean;
+  readonly lichSu: readonly DongLichSu[];
+  readonly choGhiNhan: boolean;
+  readonly khongDuoc: string | null;
+}
+
+export const KHUNG_TIN_HIEU_KHAI_THAP_RONG: KhungTinHieuKhaiThap = { hien: false, tomTat: "", choDoc: false, lichSu: [], choGhiNhan: false, khongDuoc: null };
+
+export function khungTinHieuKhaiThap(body: unknown): KhungTinHieuKhaiThap {
+  const t = laDoiTuong(body) && laDoiTuong(body.tinHieu) ? body.tinHieu : null;
+  const kt = t !== null && laDoiTuong(t.khaiThap) ? t.khaiThap : null;
+  if (t === null || kt === null) return KHUNG_TIN_HIEU_KHAI_THAP_RONG;
+  const hienTai = laDoiTuong(kt.hienTai) ? kt.hienTai : null;
+  if (hienTai === null) return KHUNG_TIN_HIEU_KHAI_THAP_RONG;
+  const daLuu = (Array.isArray(t.tinHieu) ? t.tinHieu.filter(laDoiTuong) : []).filter((h) => h.loai === "ESTIMATE_UNDERSTATED");
+  const khop = daLuu.find((h) => JSON.stringify(h.bangChung) === JSON.stringify(hienTai)) ?? null;
+  const tomTat = khop !== null && typeof khop.giaiThich === "string" && khop.giaiThich !== ""
+    ? khop.giaiThich
+    : `Bậc của số tiền trao (từ ${soNghin(hienTai.bac_trao)}) so với bậc của ước lượng (từ ${soNghin(hienTai.bac_uoc_luong)})${hienTai.vuot_nguong_kep === true ? "; số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không" : ""}.`;
+  const lichSu: DongLichSu[] = (khop !== null && Array.isArray(khop.ghiNhan) ? khop.ghiNhan.filter(laDoiTuong) : []).map((g) => ({
+    luc: chuHoacNull(g.luc),
+    noiDung: `${chuHoacNull(g.nguoiTen) ?? "một người duyệt"} đã ghi nhận: ${chuHoacNull(g.lyDo) ?? "—"}`,
+  }));
+  const choDoc = kt.canGhiNhan === true;
+  const nguoiXem = laDoiTuong(kt.nguoiXem) ? kt.nguoiXem : null;
+  const choGhiNhan = choDoc && nguoiXem?.ghiNhanDuoc === true;
+  const khongDuoc = choDoc && !choGhiNhan ? chuHoacNull(nguoiXem?.lyDo) : null;
+  return { hien: true, tomTat, choDoc, lichSu, choGhiNhan, khongDuoc };
+}
+
 /** Lý do ghi nhận: bắt buộc, không quá trần — cùng số và đơn vị với `ghiNhanTinHieu` (`packages/kiem-soat`). `null` là hợp lệ. */
 export function loiLyDoGhiNhan(lyDo: string): string | null {
   const t = lyDo.trim();
@@ -455,6 +495,14 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
     case "K7_KHONG_BAC_GHIM":
     case "K7_LECH_TIEN_TE":
       return "Huỷ gói và lập lại với ngân sách ghim bậc, cùng tiền tệ với chính sách.";
+    // [S1.9101 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
+    case "K10B_TIN_HIEU_CHUA_GHI_NHAN":
+      return "Trên màn: khối «Tín hiệu khai thấp» ở bước 7 — ai đứng ngoài gói mà giữ quyền ký đọc tín hiệu, ghi lý do rồi bấm " +
+        "«Ghi nhận», sau đó mới ký.";
+    case "K10B_TU_GHI_NHAN":
+      return "Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này.";
+    case "K10B_TAC_GIA_CHINH_SACH":
+      return "Đổi ở bước 1 sang người khác: tác giả của bản chính sách gói ghim không làm việc này được.";
     default:
       return null;
   }

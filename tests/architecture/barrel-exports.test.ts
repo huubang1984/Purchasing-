@@ -1166,7 +1166,9 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 // tầng cho hai câu trả lời về cùng một gói.
 // [S1.281 / S3.4a] Hai hàm của khai báo xung đột lợi ích (K9): khai và đọc khai báo của CHÍNH người gọi — hàm vị từ của chốt là
 // MỘT hàm SQL (`coi_chot_hanh_dong`), gói chỉ hỏi nó.
-const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "docKhaiBaoXungDot", "ghiNhanTinHieu", "ghiTinHieuKhiNop", "khaiBaoXungDot", "lietKeTinHieu"];
+// [S1.9101 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc ĐỀ XUẤT trao thầu (`ghiTinHieuKhiDeXuat`): phép tính vẫn là MỘT
+// hàm SQL (`tin_hieu_khai_thap`); `ghiNhanTinHieu`/`lietKeTinHieu` nhận `loai`, không symbol riêng cho loại.
+const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "docKhaiBaoXungDot", "ghiNhanTinHieu", "ghiTinHieuKhiDeXuat", "ghiTinHieuKhiNop", "khaiBaoXungDot", "lietKeTinHieu"];
 
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
