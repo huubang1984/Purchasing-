@@ -26139,3 +26139,106 @@ fixture (FINANCE thứ ba, không tác giả, không ký bản v2) ở `37a2fbb`
 0, 251 tệp, 4981 khẳng định (4958 đạt, 23 bỏ qua, 0 đỏ), 89/89 bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*,
 2014 s; ma trận sinh lại (K9 12 ca, tổng 89); hai kịch bản 41 34/34 + 87/87, `trao-thau-theo-bac` 15/15, K9 12/12. CI của PR #257 trên
 commit cuối: xem PR.
+
+---
+
+# §S1.9101 — S3.4b: MÀN KHAI BÁO XUNG ĐỘT LỢI ÍCH Ở `/tao-thau` VÀ `/mo-thau`; CHỮ KÝ TRAO THẦU CỦA NGƯỜI ĐÃ KHAI *CÓ XUNG ĐỘT* KHÔNG ĐẾM Ở K7 LẪN K5b; `gieo:demo --s3` KHAI THAY; S3.4 KHÉP — ADR-155 ⑼–⒀
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105). Một thay đổi chạm mọi
+tổ chức: `award_du_chu_ky` và `award_chot_doc_lap` đọc một hàm mới; tổ chức chưa bật không khai được nên tập ấy là mọi chữ ký — hành vi y
+như trước (cụm test hiện có là đối chứng). Migration `9501`, không ADR mới (ADR-155 phần hai), không khoản nợ mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-08: *"Làm S3.4b đi, gộp luôn mục 2"*. S3.4b là nửa sau của S3.4 theo ADR-155 ⑻ — màn khai báo, `gieo:demo --s3`, lượt
+đi thử T4. *Mục 2* là giới hạn ADR-155 ghi ở phần *không nói* khi gộp S3.5a: `award_du_chu_ky` (`113`) đếm người ký trao thầu mà không loại
+người có `CO_XUNG_DOT` — ở bậc cần hai chữ ký, chữ ký của người khai xung đột sau khi ký vẫn đếm vào số hai.
+
+## 2. Đo trước (đọc mã trên `d2062fd`)
+- **`gieo:demo --s3` trên master GÃY từ S1.281** — đo bằng đối chứng ở §6: tắt riêng ba lời gọi khai thay của vòng này thì công cụ dừng ở
+  `Chua ky duyet goi thau duoc (K9): K9_CHUA_KHAI_XUNG_DOT`. Trigger `rfq_approvals_kiem_xung_dot` là `ENABLE ALWAYS`, bậc demo
+  (`BAC_DEMO`) bật `khai_xung_dot` ở mọi bậc thường, và công cụ chèn thô hai chữ ký của gói chính. ADR-155 ⑻ chỉ nói *"người đi trên màn
+  bị K9 chặn ở nút ký"* — đánh giá thấp: tổ chức demo không dựng được.
+- `award_du_chu_ky` và `award_chot_doc_lap` (`113`) đọc `rfq_award_approvals` thô. `coi_kiem_trao_thau` (`114`) có một nhánh `APPROVED`
+  riêng (*ít nhất một chữ ký không xung đột*) — và trigger K7 `rfq_awards_kiem_theo_bac_khi_duyet` xếp TRƯỚC nó theo tên.
+- Không màn nào đọc hay ghi `coi_declarations`. Bốn trong bảy cổng có nút ở `/mo-thau` (chấm, đề xuất, duyệt, huỷ trao thầu), ba ở
+  `/tao-thau` hay `/nha-cung-cap`.
+- Danh sách mời của một gói chỉ đọc được qua `rfq.invite` (`listInvitations`) và sau mở thầu qua bảng so sánh (`bid.view`); `GET /suppliers`
+  không cổng nhưng không nói nhà cung cấp nào dự gói nào.
+- Lượt tìm cho *"không có màn nào"*: `grep -rn "coi-declarations\|coi_declarations" apps/web` — 0 dòng.
+
+## 3. Lượt soi hình dạng, trước dòng mã đầu — tự soi, không agent
+Năm câu hỏi đặt cho hình dạng, mỗi câu một lựa chọn (ADR-155 ⑼–⒀):
+- *Khối khai báo đặt ở đâu?* Spec §9 nói `/tao-thau`; bốn cổng ở `/mo-thau` ⇒ một module, hai trang, cùng bộ id (khuôn `dang-nhap`).
+- *Người khai thấy danh sách từ đâu?* Route khai báo trả tên nhà cung cấp là nới *"ai dự gói này"* tới REQUESTER, TECHNICAL trước đóng thầu
+  ⇒ lấy từ thứ trang đã đọc được. Cái giá: người chấm REQUESTER, TECHNICAL khai mà không chọn được nhà cung cấp — cổng chấm không chịu lực.
+- *Người không giữ `coi.declare` mở trang thì sao?* Tự đọc khai báo ⇒ một 403 và một `PERMISSION_DENIED` mỗi lần đọc gói (ADR-118 F3) ⇒ cờ
+  `coQuyenKhai` trên `GET /rfqs/:id`, khuôn khoản 340, `false` với phiên agent.
+- *Mục 2 đặt ở hàm nào?* Một hàm `award_chu_ky_con_hieu_luc` cho cả K7 (đếm, hai vai) và K5b — khuôn `rfq_chu_ky_con_hieu_luc` — chứ không
+  sửa ba chỗ đếm riêng. Nhánh `APPROVED` của K9 thành mã chết ⇒ bỏ, không giữ làm *lớp hai* (không phép đo nào giữ được nó).
+- *Chưa đủ chữ ký vì K9 có phải một lần từ chối?* Không — khuôn S3.5a: chưa đủ là chờ. Dấu vết là hàng `CO_XUNG_DOT` và cờ `conHieuLuc`.
+
+## 4. Thay đổi
+- Migration `9501_xung_dot_chu_ky_trao_thau`: `award_chu_ky_con_hieu_luc(org, đề xuất) RETURNS TABLE (nguoi uuid, vai text[])`;
+  `award_du_chu_ky`, `award_chot_doc_lap` đọc nó; `coi_kiem_trao_thau` bỏ nhánh `APPROVED`. Hardening: một khối mới (kèm
+  `pg_get_function_result`), ba khối đổi thân và tiền đề migration — sinh từ catalog của một cụm `postgres:16-alpine` dùng một lần đã áp cả
+  112 migration bằng `psql`; hardening chạy trọn `day_du` trên cụm ấy không mục đỏ; `migrate()` hai lần trên CSDL mới, lần hai 0 tệp, thân
+  mới sống qua hardening.
+- Tầng gói: `docKhaiBaoXungDot` trả `toChucDaBat`; `GET /rfqs/:id` mang `coQuyenKhai`; chữ ký trong lời đọc trao thầu mang `conHieuLuc`
+  (đọc từ hàm, không đếm ở TS); hàng xếp hạng mang `supplierId` (§6, lượt đi thử T4).
+- `apps/web/src/xung-dot.ts` (`/lib/xung-dot.js`, `MODULE_WEB`): khung của khối từ lời đọc, thân lời khai, trần ghi chú bằng byte, danh sách
+  nhà cung cấp từ bảng lời mời / so sánh / xếp hạng, câu chỉ dẫn K9, `ganKhaiBao`. `/tao-thau` bước 4, `/mo-thau` bước 2; lời từ chối K9 ở
+  sáu nút bị chặn mang câu chỉ khối và khối đọc lại.
+- `tools/gieo-demo`: `khai-bao.ts` (`khaiKhongXungDot` — hàm gói thật, giao dịch riêng), gọi trước bảy chữ ký công cụ ghi thay; dòng in
+  hướng dẫn K9; phụ thuộc `@trustprocure/kiem-soat` (`pnpm-lock.yaml` ba dòng).
+- Sổ đăng ký: `migrations.int` (hai hàm dời con trỏ, hàm mới, khuôn đọc `RETURNS TABLE`, trigger dời, ba danh sách migration), `so-khai-nhan`
+  (K9 thêm `trao-thau-theo-bac.int`), `man-kiem-soat.int` (thân `GET /rfqs/:id`), `phuc-vu.test.ts` (thư viện thật). Tên hàm `chuoi` đụng
+  bảng kiểm kê mã chép api ↔ worker (sáu đơn vị) ⇒ đổi thành `chuoiKb`.
+
+## 5. Phép đo
+- `packages/danh-gia/src/trao-thau-theo-bac.int.test.ts` ⑸ (ba ca, `[INV-K9]`): K7 bậc 1 — gd1 ký, khai `CO_XUNG_DOT`, gd2 ký ⇒ `PROPOSED`,
+  `chuKyCan` 2, chữ ký gd1 `conHieuLuc: false`, lời đọc trao thầu cùng cờ, không `CONTROL_DENIED`; DIRECTOR thứ ba ⇒ `APPROVED`. K7 hai vai
+  (bậc 2) — DIRECTOR khai xung đột, hai FINANCE đủ số mà không đủ vai ⇒ `PROPOSED`. K5b (bậc 2) — người độc lập duy nhất khai xung đột ⇒
+  người xác minh + người điều phối đủ số, đủ vai mà không ai độc lập ⇒ `K5B_THIEU_CHU_KY_DOC_LAP`, đúng người.
+- `apps/api/src/xung-dot-loi-ich.int.test.ts`: câu chèn thô `APPROVED` ⇒ `k7_thieu_chu_ky` (trước là `k9_chu_ky_co_xung_dot`); `coQuyenKhai`
+  — PM, FINANCE, DIRECTOR `true`, DATA_STEWARD `false` và ba lần đọc gói 0 hàng `PERMISSION_DENIED` (đối chứng: đọc khai báo ⇒ một), phiên
+  agent `false`; `toChucDaBat` hai chiều; hàng xếp hạng mang mã nhà cung cấp.
+- `apps/web/src/xung-dot.test.ts` (14 ca): khung từ lời đọc (sáu trạng thái), thân lời khai, trần byte đối chiếu VĂN BẢN CHECK của `114`,
+  danh sách từ ba bảng, câu chỉ dẫn không chép câu máy chủ, bộ id ở hai tệp HTML.
+- `apps/web/src/phuc-vu.test.ts` (năm ca trên trang thật trong `node:vm`): `/tao-thau` — khối hiện, «không xung đột» gửi thân đúng và đọc
+  lại; «có xung đột» đòi ô xác nhận; người không giữ mã và tổ chức chưa bật không đọc; «Phê duyệt» bị K9 chặn ⇒ câu chỉ khối. `/mo-thau` —
+  khối hiện theo cờ và `toChucDaBat`, «Chấm thầu» bị K9 chặn ⇒ câu chỉ khối.
+
+## 6. Đột biến, đối chứng gieo, lượt đi thử T4
+- **CSDL (trong tệp, khôi phục tự kiểm sha256):** `award_chu_ky_con_hieu_luc` bỏ vế loại trừ ⇒ gd2 duyệt xong, hai cờ `true`; vế hai vai
+  của `award_du_chu_ky` đọc chữ ký thô ⇒ `APPROVED`; `award_chot_doc_lap` đọc chữ ký thô ⇒ `APPROVED`. Cả ba chết.
+- **TS/JS (`dot-bien-ts-2.py`: áp vào nguồn, chạy tệp canh nó với `--reporter=json`, khôi phục và tự kiểm sha256):** 12/12 chết, mỗi cái
+  đúng ca mong đợi — `conHieuLuc` luôn `true`; `toChucDaBat` luôn `true`; `coQuyenKhai` bỏ vế quyền; bỏ vế agent; khung bỏ qua `CO_XUNG_DOT`;
+  thân mang `supplierId` ở mọi trạng thái; bỏ ô xác nhận; `/tao-thau` và `/mo-thau` tự đọc khi không giữ mã; bỏ câu chỉ dẫn K9 ở hai trang;
+  không vẽ lại ô nhà cung cấp. Bốn lượt đối chứng trên mã nguyên 0 đỏ.
+- **Đối chứng `gieo:demo --s3`:** CSDL `pilot_s34b_dc`, `khaiKhongXungDot` thành no-op (khôi phục sha256) ⇒ thoát 1,
+  `K9_CHUA_KHAI_XUNG_DOT` — trạng thái của master; bản thật thoát 0.
+- **Lượt đi thử T4** — cụm `pnpm pilot:gia-lap cum` trên CSDL mới (`tp-pilot-gia-lap`, 16-alpine), tổ chức của `gieo:demo --s3` trên mã vòng
+  này, `playwright-core` 1.63 với Chromium 1228 (sẵn trên máy), mỗi người một ngữ cảnh, link đăng nhập mới qua `POST /auth/link` và hộp thư
+  dev. Lượt một dừng ở bước đăng nhập: link in lúc gieo đã hết hạn — lỗi của script. **Lượt hai tìm ra một lỗ màn:** ở `AWARDED` bảng so
+  sánh đã đóng (`COMPARISON_ALLOWED_STATUSES`), nên người duyệt trao thầu không có danh sách để khai *có xung đột* — sửa: hàng xếp hạng
+  mang `supplierId`, `/mo-thau` gộp bảng xếp hạng (phép đo ở §5). **Lượt ba 28/28** trên CSDL mới: soan3 ở `/tao-thau` (gói tín hiệu 490
+  triệu) — khối nói bậc đòi khai, ô chọn ba nhà cung cấp của bảng lời mời, «Ghi nhận» bị K9 chặn kèm câu chỉ khối, 375 px không cuộn ngang
+  (375/375), khai *không xung đột* có ghi chú ⇒ lịch sử một dòng giờ người đọc, «Ghi nhận» qua; dulieu — khối ẩn, 0 lời gọi khai báo; soan
+  ở `/mo-thau` (gói đã mở 1) — câu chỉ đường khi chưa đọc bảng, «Chấm» bị chặn, đọc bảng so sánh ⇒ ba nhà cung cấp, khai, «Chấm» qua; soan2
+  — lời khai thay của gieo còn hiệu lực, «Đề xuất» qua; duyet2 ở `AWARDED` — đọc bảng xếp hạng ⇒ ô chọn, «Khai có xung đột» thiếu ô xác
+  nhận không gửi, đủ ⇒ tóm tắt *vĩnh viễn*, «Phê duyệt» ⇒ `K9_CO_XUNG_DOT` kèm câu nhờ người khác; duyet1 — «Phê duyệt» bị chặn, khai,
+  «Phê duyệt» ⇒ `APPROVED`. Phản hồi ≥ 400 từ `api`: đúng bốn, cả bốn có chủ đích. Sổ của tổ chức: `CONTROL_DENIED` ×4 đúng người, đúng mã
+  (`K9_CHUA_KHAI_XUNG_DOT` @soan3, @soan, @duyet1; `K9_CO_XUNG_DOT` @duyet2), `COI_DECLARED` ×12 (bảy của soan2 và một của soan3 là lời khai
+  thay của gieo), 0 `PERMISSION_DENIED`. Một lần, không phải cổng; script ngoài kho. Cụm dừng theo cây tiến trình, bốn CSDL thử đã xoá.
+
+## 7. Giới hạn còn lại
+- Người chấm REQUESTER, TECHNICAL khai *không xung đột* mà không thấy danh sách, và không khai được *có xung đột* (§3).
+- K9 làm thiếu chữ ký trao thầu thì không có hàng `CONTROL_DENIED` (khác cạnh mở gói); dấu vết là hàng `CO_XUNG_DOT` và cờ `conHieuLuc`.
+  Lượt đi thử không phủ cờ ấy trên màn (bậc demo của gói đã mở cần một chữ ký) — đo ở T3.
+- PR #259 (S3.5b, đang mở, dựng từ master trước K9) thêm `goi-trao-thau.ts` vào `gieo:demo` — chấm và trao thầu thay người, sẽ gặp K9 khi
+  gộp master; `khaiKhongXungDot` là hàm cho việc ấy. Bảng *có M / cần N* của nó đếm `approvals.length` — gộp với `conHieuLuc` ở vòng
+  merge sau.
+- Lượt đi thử T4 là một lần, script ngoài kho. Các chốt hình dạng ⑼–⒀ theo đề xuất của vòng, chờ chủ dự án xác nhận lại.
+
+## 8. Số đo
+SO_DO
