@@ -361,7 +361,13 @@ const doc: readonly BuyerReadRoute[] = [
       const coQuyenMoi =
         ctx.actor.kind === "USER" &&
         (await listUserIdsWithPermission(ctx.client, ctx.orgId, PERMISSIONS.RFQ_INVITE)).includes(ctx.actor.id);
-      return { status: 200, body: { rfq: r, coQuyenMoi } };
+      // [S1.9101 / S3.4b · K9] Cùng khuôn: người xem giữ `coi.declare`, tức khối khai báo xung đột lợi ích ở `/tao-thau` và `/mo-thau`
+      // tự đọc được khai báo của CHÍNH họ. Người không giữ (`DATA_STEWARD`) không sinh một 403 và một hàng `PERMISSION_DENIED` ở mỗi
+      // lần đọc gói. Không phải cổng: route đọc khai báo tự cổng trong `docKhaiBaoXungDot`.
+      const coQuyenKhai =
+        ctx.actor.kind === "USER" &&
+        (await listUserIdsWithPermission(ctx.client, ctx.orgId, PERMISSIONS.COI_DECLARE)).includes(ctx.actor.id);
+      return { status: 200, body: { rfq: r, coQuyenMoi, coQuyenKhai } };
     },
   },
   // [S1.200 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-115) — người duyệt đọc được con số mình ký. Màn

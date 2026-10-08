@@ -45,6 +45,12 @@ export interface KhaiBaoXungDotCuaToi {
   readonly bacDoiKhai: boolean;
   /** Mã của `coi_chot_hanh_dong` cho người gọi lúc đọc — `null` là đi qua được mọi cổng K9. */
   readonly chot: string | null;
+  /**
+   * [S1.9101 / S3.4b] Tổ chức đã bật S3 chưa (`to_chuc_da_bat_s3`). Chưa bật thì không khai được (trigger từ chối) và không cổng K9
+   * nào sống — màn ẩn khối khai báo. `/mo-thau` không tự biết luồng của tổ chức (`/tao-thau` hỏi `GET /policy/versions`), nên lời
+   * đọc này nói thay; không phải cổng.
+   */
+  readonly toChucDaBat: boolean;
 }
 
 const CAU_KHAI =
@@ -61,7 +67,7 @@ const CAU_DOC =
 
 /** Băm hiện tại, bậc có đòi khai không, và chốt cho người `$3` — cùng hàm vị từ mà bảy cổng hỏi, nên màn và cổng không trôi nhau. */
 const CAU_HIEN_TAI =
-  "SELECT pg_catalog.encode(public.rfq_bam_danh_sach(r.id), 'hex') AS bam, " +
+  "SELECT pg_catalog.encode(public.rfq_bam_danh_sach(r.id), 'hex') AS bam, public.to_chuc_da_bat_s3(r.org_id) AS bat, " +
   "public.to_chuc_da_bat_s3(r.org_id) AND coalesce((public.rfq_bac_ghim(r.org_id, r.id) OPERATOR(pg_catalog.->>) 'khai_xung_dot')::pg_catalog.bool, true) AS doi, " +
   "public.coi_chot_hanh_dong(r.org_id, r.id, $3::pg_catalog.uuid) AS chot " +
   "FROM public.rfq_packages r " +
@@ -157,8 +163,15 @@ export async function docKhaiBaoXungDot(
     { userId: actor.id, orgId, permission: PERMISSIONS.COI_DECLARE, resourceType: "RFQ", resourceId: input.rfqId },
     auditPool,
   );
-  const hienTai = (await client.query<{ bam: string; doi: boolean; chot: string | null }>(CAU_HIEN_TAI, [orgId, input.rfqId, actor.id])).rows[0];
+  const hienTai = (await client.query<{ bam: string; bat: boolean; doi: boolean; chot: string | null }>(CAU_HIEN_TAI, [orgId, input.rfqId, actor.id])).rows[0];
   if (hienTai === undefined) throw new KiemSoatError("Không tìm thấy gói thầu trong tổ chức đang gắn.");
   const { rows } = await client.query<HangKhaiBao>(CAU_DOC, [orgId, input.rfqId, actor.id]);
-  return { rfqId: input.rfqId, khaiBao: rows.map(doiHang), danhSachBamHienTai: hienTai.bam, bacDoiKhai: hienTai.doi, chot: hienTai.chot };
+  return {
+    rfqId: input.rfqId,
+    khaiBao: rows.map(doiHang),
+    danhSachBamHienTai: hienTai.bam,
+    bacDoiKhai: hienTai.doi,
+    chot: hienTai.chot,
+    toChucDaBat: hienTai.bat,
+  };
 }

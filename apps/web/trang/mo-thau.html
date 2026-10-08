@@ -70,6 +70,26 @@
     <button id="nut-doc" class="phu">Đọc</button>
     <dl class="tt" id="tt-rfq"></dl>
     <div class="bao luu" id="dem" hidden></div>
+    <!-- [S1.9101 / S3.4b · K9] Khai báo xung đột lợi ích của CHÍNH người đang xem trên gói này — trước Chấm thầu, Đề xuất, Phê duyệt và Huỷ trao thầu ở các bước dưới. Khối
+         chỉ hiện ở tổ chức đã bật S3, cho người giữ `coi.declare`; module `/lib/xung-dot.js`, cùng bộ id ở `/tao-thau` và `/mo-thau`. -->
+    <div id="khoi-khai-bao" hidden>
+      <h3>Khai báo xung đột lợi ích</h3>
+      <p class="ghi" id="kb-tom-tat"></p>
+      <ul id="kb-lich-su"></ul>
+      <label for="kb-ghi-chu">Ghi chú (tuỳ chọn) — lưu cùng lời khai, không vào sổ kiểm toán</label>
+      <input id="kb-ghi-chu" autocomplete="off" placeholder="Không quen biết nhà cung cấp nào trong danh sách">
+      <button id="nut-kb-khong" class="phu" hidden>Tôi không có xung đột lợi ích với danh sách mời hiện tại</button>
+      <div id="kb-co" hidden>
+        <label for="kb-ncc">Hoặc: tôi có quan hệ với nhà cung cấp</label>
+        <select id="kb-ncc"></select>
+        <label><input type="checkbox" id="kb-xac-nhan"> Tôi hiểu: lời khai có xung đột là vĩnh viễn cho gói này — từ đó tôi không
+          ký, chấm, đề xuất, duyệt hay huỷ trao thầu, hay ghi nhận tín hiệu của gói.</label>
+        <button id="nut-kb-co" class="phu">Khai có xung đột</button>
+      </div>
+      <p class="ghi" id="kb-khong-ds" hidden></p>
+      <div class="bao loi" id="kb-loi" hidden></div>
+      <div class="bao ok" id="kb-ok" hidden></div>
+    </div>
     <!-- [S1.165 / khoản 225] Lối ra khi gói thầu không đi tiếp được — ví dụ lượt chấm bị từ chối vì
          các báo giá không cùng một đơn vị tiền. Huỷ được ở mọi trạng thái trước khi trao, kể cả sau khi
          mở thầu; lý do là BẮT BUỘC và nhà cung cấp đã mời ĐỌC ĐƯỢC nó ở trang nộp thầu. -->

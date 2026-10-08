@@ -2103,13 +2103,16 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // `award_tap_loai_tru` trả SETOF — ngoài khuôn `RETURNS \w+` của khối này; cái sau ở `HAM_ANH_XA`.)
     { ham: "award_bac_cao_hon", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "award_so_chu_ky_can", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
-    { ham: "award_du_chu_ky", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    // [S1.9101 / S3.4b / K9] `award_du_chu_ky` và `award_chot_doc_lap` định nghĩa lại ở `9501` — đếm trên chữ ký KHÔNG xung đột
+    // (`award_chu_ky_con_hieu_luc`); con trỏ theo quy tắc *migration CUỐI CÙNG*. Một thân đếm `rfq_award_approvals` thô thì chữ ký
+    // của người khai `CO_XUNG_DOT` sau khi ký vẫn đủ số (K7) hay vẫn là chữ ký độc lập (K5b).
+    { ham: "award_du_chu_ky", chuKy: "uuid, uuid", migration: "9501_xung_dot_chu_ky_trao_thau.sql" },
     { ham: "rfq_dem_nhom_loi_moi", chuKy: "uuid, uuid, uuid[]", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "award_dem_nhom_bao_gia", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "award_chot_bac", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "award_chot_nguoi_ky", chuKy: "uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
     { ham: "award_chot_hau_kiem", chuKy: "uuid, uuid, uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
-    { ham: "award_chot_doc_lap", chuKy: "uuid, uuid", migration: "113_trao_thau_theo_bac.sql" },
+    { ham: "award_chot_doc_lap", chuKy: "uuid, uuid", migration: "9501_xung_dot_chu_ky_trao_thau.sql" },
     // [S1.281 / S3.4a] Năm hàm của K9: khoá (gói, người) — một thân rỗng thì CO_XUNG_DOT chen được vào giữa lần hỏi và câu ghi —, hai
     // hàm vị từ — một thân `RETURN NULL` tắt K9 ở mọi cổng —, năm vế *khớp băm* tách từ `107` và `112`, và vị từ cạnh mở gói — một thân
     // `RETURN NULL` để K4b nói thay mà không hàng sổ.
@@ -2166,9 +2169,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_chu_ky_khop_bam", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     // [S1.270 / S3.3d] Vị từ *đếm được* của K2 — K2 và K3 đọc. Một thân trả mọi lời mời sống cho nhà cung cấp vỏ đếm đủ ngưỡng.
     { ham: "rfq_loi_moi_dem_duoc", chuKy: "uuid, uuid", migration: "108_xoay_vong.sql" },
+    // [S1.9101 / S3.4b / K9] Chữ ký trao thầu CÒN HIỆU LỰC — chữ ký của đề xuất trừ người đã khai `CO_XUNG_DOT` trên gói; K7 (đủ chữ
+    // ký, hai vai) và K5b (độc lập) cùng đọc. `RETURNS TABLE (…)` — khuôn đọc dưới nhận thêm dạng ấy. Một thân bỏ vế loại trừ thì
+    // chữ ký của người khai xung đột sau khi ký vẫn đếm ở cả hai chốt.
+    { ham: "award_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "9501_xung_dot_chu_ky_trao_thau.sql" },
   ];
 
-  it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ [S1.280] bốn hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực và tập loại trừ trao thầu: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ ~~[S1.280] bốn~~ [S1.9101] bảy hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực và tập loại trừ trao thầu: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -2178,7 +2185,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       .sort();
     for (const { ham, chuKy, migration } of HAM_ANH_XA) {
       const re = new RegExp(
-        String.raw`CREATE OR REPLACE FUNCTION public\.${ham}\([^)]*\) RETURNS (?:SETOF \w+|\w+)\s+LANGUAGE sql[^$]*?AS \$ham\$([\s\S]*?)\$ham\$`,
+        String.raw`CREATE OR REPLACE FUNCTION public\.${ham}\([^)]*\) RETURNS (?:SETOF \w+|TABLE \([^)]*\)|\w+)\s+LANGUAGE sql[^$]*?AS \$ham\$([\s\S]*?)\$ham\$`,
         "g",
       );
       const dinhNghiaO = tenFile.filter((f) => [...docFile(f).matchAll(re)].length > 0);
@@ -2558,7 +2565,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // xung đột đi qua cổng ấy; ở cái cuối cho gói mở bằng chữ ký của người đã khai có xung đột (K4b vẫn chặn, nhưng không tên, không sổ).
     { ham: "coi_kiem_chu_ky_mo_goi", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_approvals_kiem_xung_dot"] },
     { ham: "coi_kiem_luot_cham", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_evaluations_kiem_xung_dot"] },
-    { ham: "coi_kiem_trao_thau", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_awards_kiem_xung_dot"] },
+    // [S1.9101 / S3.4b] `coi_kiem_trao_thau` định nghĩa lại ở `9501` — bỏ nhánh APPROVED (K7 nay đòi đủ chữ ký không xung đột).
+    { ham: "coi_kiem_trao_thau", migration: "9501_xung_dot_chu_ky_trao_thau.sql", trigger: ["rfq_awards_kiem_xung_dot"] },
     { ham: "coi_kiem_duyet_trao_thau", migration: "114_khai_bao_xung_dot.sql", trigger: ["rfq_award_approvals_kiem_xung_dot"] },
     { ham: "coi_kiem_xac_minh", migration: "114_khai_bao_xung_dot.sql", trigger: ["supplier_verifications_kiem_xung_dot"] },
     { ham: "coi_kiem_ghi_nhan", migration: "114_khai_bao_xung_dot.sql", trigger: ["governance_signal_acks_kiem_xung_dot"] },
@@ -4255,6 +4263,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
+        // [S1.9101 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
+        "9501_xung_dot_chu_ky_trao_thau.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8918,6 +8928,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
+        // [S1.9101 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
+        "9501_xung_dot_chu_ky_trao_thau.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9261,6 +9273,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "113_trao_thau_theo_bac.sql",
         // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích: bảng chỉ-ghi-thêm, hai hàm vị từ, bảy cổng, chữ ký của người có xung đột không đếm.
         "114_khai_bao_xung_dot.sql",
+        // [S1.9101 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
+        "9501_xung_dot_chu_ky_trao_thau.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -24,6 +24,7 @@ import {
 } from "/lib/tao-thau.js";
 import { docNhomHang, hienDatNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
+import { chiDanK9, ganKhaiBao, nhaCungCapTuLoiMoi } from "/lib/xung-dot.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -35,6 +36,9 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 // Phê duyệt sẽ gửi (lượt soi CAO-1). `soLoiMoiSong`: số lời mời còn sống của gói — để chọn sẵn loại ngoại lệ.
 const phienMoi = () => ({
   rfqId: "", supplierId: "", contactId: "", soHangMuc: 0, nccTaoTrongPhien: false, coQuyenMoi: false, danhSachKhop: true, soLoiMoiSong: 0,
+  // [S1.9101 / S3.4b] `coQuyenKhai`: cờ của `GET /rfqs/:id` — người xem giữ `coi.declare`. `nccKhai`: nhà cung cấp của bảng lời mời
+  // vừa đọc — ô *có xung đột với* của khối khai báo chọn từ đó.
+  coQuyenKhai: false, nccKhai: [],
 });
 let phien = phienMoi();
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
@@ -44,6 +48,18 @@ let luong = { daBat: false, trangThaiGoi: "" };
 let nhomHang = [];
 // [S1.200 / khoản 258] `userId` của phiên đang dùng màn (`GET /me`), rỗng trước khi đăng nhập.
 let nguoiDung = "";
+// [S1.9101 / S3.4b · K9] Khối khai báo xung đột lợi ích ở bước 4 — trước ô Phê duyệt và Ghi nhận tín hiệu. Chỉ tự đọc ở tổ chức đã
+// bật và khi người xem giữ `coi.declare` (cờ của `GET /rfqs/:id`, khuôn khoản 340): người không giữ không để lại một 403 và một hàng
+// `PERMISSION_DENIED` ở mỗi lần đọc gói. Danh sách nhà cung cấp là bảng lời mời mà trang đã đọc được (quyền mời) — không đọc thêm.
+const khaiBao = ganKhaiBao({
+  taiLieu: document,
+  goi,
+  loiCua,
+  rfqId: () => phien.rfqId,
+  nhaCungCap: () => phien.nccKhai ?? [],
+  khiKhongCoDanhSach: "Màn này chỉ thấy danh sách nhà cung cấp của gói khi bạn giữ quyền mời. Khai «có xung đột» cần chọn nhà " +
+    "cung cấp: nhờ người tạo gói xem danh sách, hay khai ở /mo-thau sau mở thầu (bảng so sánh).",
+});
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -116,6 +132,7 @@ window.addEventListener("hashchange", () => {
   nguoiDung = "";
   xoaNganSach();
   veTinHieu(KHUNG_TIN_HIEU_RONG);
+  khaiBao.an();
   xoaDanhSach();
   xoaNhaCungCap();
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh", "loi5", "ok5", "loi-nl", "ok-nl"]) {
@@ -275,6 +292,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     nguoiDung = "";
     xoaNganSach();
     veTinHieu(KHUNG_TIN_HIEU_RONG);
+    khaiBao.an();
     xoaDanhSach();
     xoaNhaCungCap();
     dongCacBuoc();
@@ -301,6 +319,8 @@ async function napRfq(rfqId, lanThu = 0) {
   phien = { ...phien, rfqId, lanNop: typeof g.lanNop === "number" ? g.lanNop : undefined };
   // [S1.273 / S3.3e1 · khoản 340] Cờ hiển thị của máy chủ: người xem giữ quyền mời, tức hai danh sách sẽ cho họ đọc.
   phien = { ...phien, coQuyenMoi: r.body?.coQuyenMoi === true, danhSachKhop: true };
+  // [S1.9101 / S3.4b] Cờ thứ hai cùng khuôn: người xem giữ `coi.declare`. Danh sách nhà cung cấp của gói TRƯỚC đi ngay.
+  phien = { ...phien, coQuyenKhai: r.body?.coQuyenKhai === true, nccKhai: [] };
   datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
   // [S1.200 / khoản 258 — lượt soi F4] Bảng ngân sách của gói TRƯỚC đi ngay, trước lần chờ đầu tiên: một lần đọc sau đó hỏng
   // giữa chừng không được để lại ngân sách của gói khác cạnh lần nộp mà nút Phê duyệt sẽ gửi.
@@ -310,6 +330,8 @@ async function napRfq(rfqId, lanThu = 0) {
   hien($("nut-xem-ns"), !toiTao);
   // [S3.6b2 / K10a] Khung tín hiệu của gói trước cũng đi ngay, cùng lý do với bảng ngân sách.
   veTinHieu(KHUNG_TIN_HIEU_RONG);
+  // [S1.9101 / S3.4b] …và khai báo của người xem trên gói trước.
+  khaiBao.an();
   const hang = [
     ["Mã gói thầu", rfqId],
     ["Tên", g.title],
@@ -348,6 +370,8 @@ async function napRfq(rfqId, lanThu = 0) {
   // soi F3: lần từ chối phải đến từ một thao tác cố ý, không từ nhịp đọc gói).
   if (toiTao) await napNganSach();
   if (luong.daBat) await napTinHieu();
+  // [S1.9101 / S3.4b · K9] Khai báo của chính người xem — sau bảng lời mời, để ô *có xung đột với* có danh sách.
+  if (luong.daBat && phien.coQuyenKhai) await khaiBao.nap();
   return true;
 }
 
@@ -402,7 +426,14 @@ $("nut-ghi-nhan").addEventListener("click", async () => {
   try {
     const r = await goi("POST", `/rfqs/${id}/signals/acknowledge`, { lyDo: lyDo.trim() });
     if (phien.rfqId !== id) return;
-    if (r.status !== 201) { bao($("loi4"), loiCua(r, "Không ghi nhận được tín hiệu")); await napTinHieu(); return; }
+    if (r.status !== 201) {
+      // [S1.9101 / S3.4b · K9] Lời từ chối K9 mang mã: một câu chỉ chỗ khai trên màn, và khối khai báo đọc lại.
+      const chiDan = chiDanK9(r.body?.ma);
+      bao($("loi4"), chiDan === null ? loiCua(r, "Không ghi nhận được tín hiệu") : `${loiCua(r, "Không ghi nhận được tín hiệu")} ${chiDan}`);
+      await napTinHieu();
+      if (chiDan !== null && phien.coQuyenKhai) await khaiBao.nap();
+      return;
+    }
     $("ly-do-ghi-nhan").value = "";
     bao($("ok4"), r.body?.ghiNhan?.tinHieuMoi === true
       ? "Đã ghi nhận. Tập gói đã đổi từ lần nộp, nên tín hiệu được ghi lại theo tập hiện tại trước khi ghi nhận. Gói mở được khi đủ chữ ký."
@@ -578,7 +609,8 @@ for (const [nut, duong, xong] of [
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`, than);
     if (r.status !== 200) {
       // [S1.273 / S3.3e1] Lời từ chối có mã của chốt (K2, K3, K5) kèm MỘT câu chỉ dẫn; câu của máy chủ vẫn đứng trước.
-      const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi);
+      // [S1.9101 / S3.4b · K9] …và của K9 — câu chỉ khối khai báo ở bước này.
+      const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi) ?? chiDanK9(r.body?.ma);
       const cau = loiCua(r, "Bước này không đi được");
       // [lượt soi CAO-1] Lần duyệt hỏng (lần nộp lệch, gói đổi trạng thái) ⇒ đọc lại trọn gói trước khi người duyệt thử lại.
       if (duong === "approve") await napRfq(phien.rfqId);
@@ -888,6 +920,9 @@ async function napLoiMoi() {
   const ds = Array.isArray(r.body?.invitations) ? r.body.invitations : [];
   // [S1.273 / S3.3e1] Số lời mời còn sống chọn sẵn loại ngoại lệ; số NHÓM đếm được của K2 nói ở một câu trên bảng (lượt soi TRUNG-2).
   phien = { ...phien, soLoiMoiSong: ds.filter((m) => m?.revokedAt === null).length };
+  // [S1.9101 / S3.4b · K9] Nhà cung cấp của bảng vừa đọc — ô *có xung đột với* của khối khai báo vẽ lại từ đó.
+  phien = { ...phien, nccKhai: nhaCungCapTuLoiMoi(ds) };
+  khaiBao.veNhaCungCap();
   if (luong.daBat) bao($("tom-tat-canh-tranh"), nhanCanhTranh(r.body?.canhTranh) ?? "");
   veChonNgoaiLe();
   for (const m of ds) {

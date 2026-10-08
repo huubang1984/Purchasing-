@@ -180,6 +180,12 @@ export interface TraoThau {
 export interface ChuKyDuyet {
   readonly approverUserId: string;
   readonly approvedAt: Date;
+  /**
+   * [S1.9101 / S3.4b / K9] Chữ ký này có đếm ở K7 (đủ chữ ký, hai vai) và K5b (độc lập) không — `false` khi người ký đã khai
+   * `CO_XUNG_DOT` trên gói (kể cả SAU khi ký). Đọc từ CHÍNH hàm mà hai chốt đếm (`award_chu_ky_con_hieu_luc`, `9501`), không đếm
+   * lại ở lớp này: màn nói *có M / cần N* trên chữ ký còn hiệu lực, và chỉ ra chữ ký nào không đếm.
+   */
+  readonly conHieuLuc: boolean;
 }
 
 export interface TraoThauDayDu extends TraoThau {
@@ -671,9 +677,10 @@ export async function duyetTraoThau(
     ));
   } catch (loi) {
     // Lớp chặn cuối của cạnh APPROVED (`113`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
-    // [S1.281 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
-    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`. Tới được khi người ký vừa khai `CO_XUNG_DOT` SAU chữ
-    // ký của mình, trước câu này: một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối có tên (ADR-114).
+    // ~~[S1.281 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
+    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`.~~ [S1.9101 / S3.4b] Nhánh ấy bỏ ở `9501`: `award_du_chu_ky`
+    // (hỏi ở trên, và lại ở trigger K7 của cạnh này) nay đếm chữ ký KHÔNG xung đột, nên một chữ ký của người khai `CO_XUNG_DOT` sau
+    // khi ký đơn giản là không đếm — đề xuất đứng yên ở `PROPOSED`, lời trả về đánh dấu chữ ký ấy (`conHieuLuc`).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
@@ -705,8 +712,10 @@ export async function duyetTraoThau(
  * (chưa đủ: hàng `PROPOSED`; đủ: hàng `APPROVED`), cùng hình dạng `docTraoThau`. `deXuat` là hàng `PROPOSED` mới nhất của gói.
  */
 async function docDayDu(client: pg.PoolClient, orgId: string, h: HangAward, chuKyCan: number | null): Promise<TraoThauDayDu> {
-  const { rows: chuKy } = await client.query<{ approver_user_id: string; approved_at: Date }>(
-    `SELECT ap.approver_user_id, ap.approved_at
+  const { rows: chuKy } = await client.query<{ approver_user_id: string; approved_at: Date; con_hieu_luc: boolean }>(
+    `SELECT ap.approver_user_id, ap.approved_at,
+            EXISTS (SELECT 1 FROM public.award_chu_ky_con_hieu_luc($1::pg_catalog.uuid, ap.award_id) k
+                     WHERE k.nguoi OPERATOR(pg_catalog.=) ap.approver_user_id) AS con_hieu_luc
        FROM public.rfq_award_approvals ap
       WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND ap.award_id OPERATOR(pg_catalog.=) (
@@ -722,7 +731,7 @@ async function docDayDu(client: pg.PoolClient, orgId: string, h: HangAward, chuK
   );
   return {
     ...doiAward(h),
-    approvals: chuKy.map((c) => ({ approverUserId: c.approver_user_id, approvedAt: c.approved_at })),
+    approvals: chuKy.map((c) => ({ approverUserId: c.approver_user_id, approvedAt: c.approved_at, conHieuLuc: c.con_hieu_luc })),
     chuKyCan,
   };
 }

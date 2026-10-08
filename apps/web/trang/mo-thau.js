@@ -15,6 +15,7 @@ import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
+import { chiDanK9, ganKhaiBao, nhaCungCapTuSoSanh } from "/lib/xung-dot.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -28,6 +29,23 @@ let phien = { rfqId: "", unsealRequestId: "" };
  * bước đi qua `moSauDangNhap`, nơi nó được đặt lại.
  */
 let nguoiDangVao = null;
+// [S1.9101 / S3.4b · K9] Khối khai báo xung đột lợi ích ở bước 2 — trước Chấm thầu, Đề xuất, Phê duyệt và Huỷ trao thầu. Tự đọc khi
+// người xem giữ `coi.declare` (cờ của `GET /rfqs/:id`); khối tự ẩn ở tổ chức chưa bật (`toChucDaBat` của lời đọc). Danh sách nhà
+// cung cấp là bảng so sánh mà trang đã đọc được (`bid.view`, sau mở thầu) — không đọc thêm.
+const khaiBao = ganKhaiBao({
+  taiLieu: document,
+  goi,
+  loiCua,
+  rfqId: () => phien.rfqId,
+  nhaCungCap: () => nhaCungCapTuSoSanh(phien.soSanh),
+  khiKhongCoDanhSach: "Khai «có xung đột» cần chọn nhà cung cấp: đọc bảng so sánh ở bước 4 (sau mở thầu), rồi ô chọn hiện ở đây.",
+});
+/** [S1.9101 / S3.4b · K9] Câu từ chối của máy chủ cộng câu chỉ chỗ khai, và khối khai báo đọc lại khi mã là của K9. */
+async function loiK9(r, macDinh) {
+  const chiDan = chiDanK9(r.body?.ma);
+  if (chiDan !== null) await khaiBao.nap();
+  return chiDan === null ? loiCua(r, macDinh) : `${loiCua(r, macDinh)} ${chiDan}`;
+}
 
 /** [S1.90 / khoản 190] Câu này phải chỉ ra LỐI ĐI, vì lối đi ấy vừa mới tồn tại. */
 const CHUA_CO_YEU_CAU =
@@ -183,6 +201,8 @@ function dongCacBuoc() {
   hien($("nut-dang-xuat"), false);
   // [S1.216 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
   dangNhap.anLinkGanDay();
+  // [S1.9101 / S3.4b] Khai báo của người trước cũng đi.
+  khaiBao.an();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -300,6 +320,8 @@ $("nut-doc").addEventListener("click", async () => {
   const id = $("rfq").value.trim();
   if (id === "") { bao($("loi2"), "Cần mã gói thầu."); return; }
   phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "", soSanh: undefined };
+  // [S1.9101 / S3.4b] Khai báo của gói TRƯỚC không sống sang gói này.
+  khaiBao.an();
   // [rà soát S4.5c1] Benchmark của gói TRƯỚC không được sống sang gói này: cột Benchmark của bảng xếp hạng đọc `benchmarkHien`.
   datLaiBenchmark();
   const r = await goi("GET", `/rfqs/${id}`);
@@ -312,6 +334,8 @@ $("nut-doc").addEventListener("click", async () => {
     ["Cần hai người duyệt", rfq.requiresDualApproval === true ? "có" : "không"],
     ...(rfq.status === "CANCELLED" ? [["Lý do huỷ", rfq.cancelReason ?? "(gói huỷ trước khi hệ thống lưu lý do)"]] : []),
   ]);
+  // [S1.9101 / S3.4b · K9] Khai báo của chính người xem trên gói vừa đọc.
+  if (r.body?.coQuyenKhai === true) await khaiBao.nap();
   const d = await goi("GET", `/rfqs/${id}/bid-count`);
   if (d.status === 200) {
     const c = d.body.bidCount ?? d.body;
@@ -462,6 +486,8 @@ async function docBangSoSanh() {
   }
   const c = r.body.comparison;
   phien = { ...phien, soSanh: Array.isArray(c.rows) ? c.rows : [] };
+  // [S1.9101 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
+  khaiBao.veNhaCungCap();
   const tbody = $("bang").querySelector("tbody");
   tbody.replaceChildren();
   const reNhoNhat = c.aggregates?.min ?? null;
@@ -759,7 +785,7 @@ $("nut-cham").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/evaluate`);
   // Năm lối từ chối của cổng chấm đi ra dưới 422 kèm câu người đọc được (`DanhGiaTuChoiError`),
   // nên `loiCua` đã đủ: câu ấy gọi tên được phiên bản chính sách, và trang không cần đoán lại.
-  if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không chấm được")); return; }
+  if (r.status !== 201) { bao($("loi5"), await loiK9(r, "Không chấm được")); return; }
   bao($("ok5"), `Đã chấm theo chính sách phiên bản ${r.body.evaluation?.policyVersion ?? "?"}. Gói thầu sang EVALUATING.`);
   await veXepHang();
 });
@@ -854,7 +880,8 @@ async function veTraoThau() {
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
     ["Chữ ký duyệt", `${a.approvals.length === 0
       ? "chưa có"
-      : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")}${a.chuKyCan == null ? "" : ` (cần ${String(a.chuKyCan)})`}`],
+      // [S1.9101 / S3.4b · K9] Chữ ký của người đã khai xung đột sau khi ký còn đó nhưng không đếm — máy chủ đánh dấu (`conHieuLuc`).
+      : a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}${a.chuKyCan == null ? "" : ` (cần ${String(a.chuKyCan)})`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
 }
@@ -868,7 +895,7 @@ $("nut-de-xuat").addEventListener("click", async () => {
   // Bốn lối từ chối có tên của lớp trao thầu đi ra dưới 422 với câu của lớp gói; ba trigger của
   // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
   // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
-  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không đề xuất được")); return; }
+  if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không đề xuất được")); return; }
   bao($("ok7"), "Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần MỘT người KHÁC phê duyệt.");
   await veTraoThau();
 });
@@ -900,14 +927,14 @@ $("nut-duyet-award").addEventListener("click", async () => {
     return;
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
-  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
+  if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không duyệt được")); return; }
   // [S1.280 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
   // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. Phần màn còn lại (cần N, còn M; ngoại lệ hậu
   // kiểm) là S3.5b.
   const sau = r.body.award ?? {};
   bao($("ok7"), sau.status === "APPROVED"
     ? "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất."
-    : `Đã ký. Đề xuất còn chờ thêm chữ ký (cần ${String(sau.chuKyCan ?? "?")}, đã có ${String((sau.approvals ?? []).length)}) — của người khác, thuộc vai mà bậc của gói đòi.`);
+    : `Đã ký. Đề xuất còn chờ thêm chữ ký (cần ${String(sau.chuKyCan ?? "?")}, đã có ${String((sau.approvals ?? []).filter((c) => c.conHieuLuc !== false).length)}) — của người khác, thuộc vai mà bậc của gói đòi.`);
   await veTraoThau();
 });
 
@@ -944,7 +971,7 @@ $("nut-huy-award").addEventListener("click", async () => {
     return;
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/cancel`, { reason: lyDo });
-  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không huỷ được")); return; }
+  if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không huỷ được")); return; }
   bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
   await veTraoThau();
 });

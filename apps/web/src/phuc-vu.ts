@@ -103,9 +103,12 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * [S1.260 / S4.5c1] `benchmark` — chữ của nhãn, thành phần dải, độ phủ và chữ của dải ở `/mo-thau` (spec S4 §4.6).
  *
  * [S1.273 / S3.3e1] `nha-cung-cap` — trạng thái xác minh, người liên hệ và nút của màn xác minh nhà cung cấp (`/nha-cung-cap`).
+ *
+ * [S1.9101 / S3.4b] `xung-dot` — khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` (K9); chạm DOM qua `document` mà
+ * trang trao vào, khuôn `dang-nhap`.
  */
 export const MODULE_WEB = [
-  "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap",
+  "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap", "xung-dot",
 ] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */

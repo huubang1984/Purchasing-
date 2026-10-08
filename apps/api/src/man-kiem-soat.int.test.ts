@@ -259,7 +259,8 @@ describe("[INV-D5] [S1.273 / S3.3e1 · khoản 340] A1 — `coQuyenMoi` trên GE
     const cua = async (ai: Nguoi): Promise<PhanHoi> => {
       const r = await goi("GET", `/rfqs/${rfqId}`, ai.cookie);
       expect(r.status, r.text).toBe(200);
-      expect(Object.keys(r.body).sort(), "thân không mang danh sách ai giữ quyền").toEqual(["coQuyenMoi", "rfq"]);
+      // [S1.9101 / S3.4b] Cờ thứ hai cùng khuôn: `coQuyenKhai` (`coi.declare`) — đo ở `xung-dot-loi-ich.int.test.ts`.
+      expect(Object.keys(r.body).sort(), "thân không mang danh sách ai giữ quyền").toEqual(["coQuyenKhai", "coQuyenMoi", "rfq"]);
       return r;
     };
     expect((await cua(t.pm)).body.coQuyenMoi).toBe(true);

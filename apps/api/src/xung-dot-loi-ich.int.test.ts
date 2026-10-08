@@ -11,7 +11,9 @@
 //   ⑶ `CO_XUNG_DOT` vĩnh viễn: người khai có xung đột không ký được ở mọi bậc (kể cả bậc không đòi khai) — `K9_CO_XUNG_DOT`; khai
 //      lại *không xung đột* ⇒ `K9_KHONG_GO_DUOC_XUNG_DOT`, vào sổ; nhà cung cấp khai phải có lời mời; hình dạng đầu vào;
 //   ⑷ chữ ký của người có xung đột không đếm: khai CÓ xung đột SAU khi ký ⇒ cạnh mở gói `K9_CHU_KY_CO_XUNG_DOT`, vào sổ; chữ ký
-//      của người khác cứu; ở hàng duyệt trao thầu cùng luật (câu thô);
+//      của người khác cứu; ở hàng duyệt trao thầu cùng luật (câu thô) — ~~nhánh `APPROVED` của `coi_kiem_trao_thau`~~ **[S1.9101 /
+//      S3.4b]** nay là K7 (`award_du_chu_ky` đếm chữ ký KHÔNG xung đột, `9501`): `k7_thieu_chu_ky`; phần trao thầu đo kỹ ở
+//      `packages/danh-gia/src/trao-thau-theo-bac.int.test.ts` ⑸;
 //   ⑸ bốn cổng còn lại trên một gói đã mở thầu thật: lượt chấm, đề xuất, chữ ký duyệt, huỷ trao thầu — mỗi cổng một lần bị chặn kèm
 //      hàng sổ, rồi khai và đi qua;
 //   ⑹ xác minh nhà cung cấp: người đã khai có xung đột với nhà cung cấp không thu hồi xác minh của nó — `K9_XAC_MINH_NCC_XUNG_DOT`,
@@ -233,6 +235,30 @@ interface PhanHoi {
   readonly status: number;
   readonly body: Record<string, unknown>;
 }
+/** [S1.9101 / S3.4b] Một người mới mang `vai` trong tổ chức — không phiên. */
+async function nguoiMoi(org: string, vai: string): Promise<string> {
+  const u = await motId("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, $2, 'ACTIVE') RETURNING id", [
+    org,
+    `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}@vidu.vn`,
+  ]);
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, u, vai]);
+  return u;
+}
+/** [S1.9101 / S3.4b] Một phiên MỚI của người `u` — `USER` hay `AGENT_READONLY` (khuôn `man-kiem-soat.int.test.ts`). */
+async function phienMoi(org: string, u: string, kind: "USER" | "AGENT_READONLY"): Promise<{ u: string; s: string; cookie: string }> {
+  const token = randomBytes(32).toString("base64url");
+  const s = await motId(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, kind) VALUES ($1, $2, $3, now() + interval '20 minutes', now(), $4) RETURNING id",
+    [org, u, createHash("sha256").update(token, "utf8").digest(), kind],
+  );
+  return { u, s, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}` };
+}
+async function demTuChoiQuyen(org: string, actor: string): Promise<number> {
+  return Number(
+    (await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'", [org, actor]))
+      .rows[0]!.n,
+  );
+}
 async function goi(method: string, duong: string, cookie: string, than?: unknown): Promise<PhanHoi> {
   const res = await fetch(`${goc}${duong}`, {
     method,
@@ -442,6 +468,8 @@ describe("[S1.281 / S3.4a / K9] khai báo và chữ ký mở gói — route, bă
     expect(kb0.bacDoiKhai).toBe(true);
     expect(kb0.chot).toBe("K9_CHUA_KHAI_XUNG_DOT");
     expect(kb0.danhSachBamHienTai).toMatch(/^[0-9a-f]{64}$/u);
+    // [S1.9101 / S3.4b] Lời đọc nói tổ chức đã bật — `/mo-thau` dựa vào nó để hiện khối khai báo.
+    expect((truoc.body.khaiBao as { toChucDaBat: unknown }).toChucDaBat).toBe(true);
 
     const chan = await duyet(t, g.rfqId, t.pm2);
     expect(chan.status).toBe(422);
@@ -652,7 +680,9 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
     const e3 = await loi(withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId: g.rfqId, awardId: dx.awardId, actorSessionId: t.gd.s }, auditPool)));
     expect(e3).toMatchObject({ name: "ChotKiemSoatError", lyDo: "K9_CHUA_KHAI_XUNG_DOT" });
     expect(await db.pool.query("SELECT 1 FROM rfq_award_approvals WHERE award_id = $1", [dx.awardId]).then((r) => r.rowCount)).toBe(0);
-    // Hàng APPROVED thô: chữ ký thô của gd (đã khai), rồi gd khai CÓ xung đột, rồi hàng APPROVED ⇒ `k9_chu_ky_co_xung_dot`.
+    // Hàng APPROVED thô: chữ ký thô của gd (đã khai), rồi gd khai CÓ xung đột, rồi hàng APPROVED ⇒ ~~`k9_chu_ky_co_xung_dot`~~
+    // [S1.9101 / S3.4b] `k7_thieu_chu_ky`: `award_du_chu_ky` (trigger K7 của cạnh APPROVED, xếp TRƯỚC `_kiem_xung_dot`) không đếm
+    // chữ ký của người đã khai xung đột (`9501`), nên nhánh APPROVED riêng của K9 thôi tồn tại — chặn sớm hơn, cùng ca.
     expect((await khongXungDot(g.rfqId, t.gd)).status).toBe(201);
     const eA = await loi(
       trongDotBien(t.org, [], async (c) => {
@@ -664,7 +694,7 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
         );
       }),
     );
-    expect(eA).toMatchObject({ code: "23514", constraint: "k9_chu_ky_co_xung_dot" });
+    expect(eA).toMatchObject({ code: "23514", constraint: "k7_thieu_chu_ky" });
     const dy = await withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId: g.rfqId, awardId: dx.awardId, actorSessionId: t.gd.s }, auditPool));
     expect(dy.status).toBe("APPROVED");
     expect(await trangThai(g.rfqId)).toBe("AWARDED");
@@ -753,13 +783,33 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
     expect(kb.status).toBe(422);
     expect(String(kb.body.error)).toMatch(/da bat S3/u);
     const doc = (await docKhai(g.rfqId, t.pm2)).body.khaiBao as { bacDoiKhai: boolean; chot: string | null; khaiBao: unknown[] };
-    expect(doc).toMatchObject({ bacDoiKhai: false, chot: null, khaiBao: [] });
+    expect(doc).toMatchObject({ bacDoiKhai: false, chot: null, khaiBao: [], toChucDaBat: false });
     const gm = await goiDaMoThau(t);
     await withTenant(apiPool, t.org, (c) => taoLuotDanhGia(c, t.org, { rfqId: gm.rfqId, actorSessionId: t.pm3.s }, auditPool));
     const dx = await withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId: gm.rfqId, bidVersionId: gm.bidVersionId, reason: "gia tot", actorSessionId: t.pm2.s }, auditPool));
     const dy = await withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId: gm.rfqId, awardId: dx.awardId, actorSessionId: t.gd.s }, auditPool));
     expect(dy.status).toBe("APPROVED");
     expect(await tuChoiChot(t.org, gm.rfqId)).toEqual([]);
+  });
+
+  it("[S1.9101 / S3.4b] cờ `coQuyenKhai` trên GET /rfqs/:id: người giữ `coi.declare` ⇒ true; DATA_STEWARD ⇒ false và đọc gói không để lại PERMISSION_DENIED (đối chứng: đọc khai báo thì để lại một); phiên agent ⇒ false", async () => {
+    const t = await taoToChuc();
+    const g = await goiNhap(t);
+    const cua = async (cookie: string): Promise<PhanHoi> => {
+      const r = await goi("GET", `/rfqs/${g.rfqId}`, cookie);
+      expect(r.status).toBe(200);
+      expect(Object.keys(r.body).sort(), "thân không mang danh sách ai giữ quyền").toEqual(["coQuyenKhai", "coQuyenMoi", "rfq"]);
+      return r;
+    };
+    for (const ai of [t.pm, t.pm3, t.tc, t.gd]) expect((await cua(ai.cookie)).body.coQuyenKhai).toBe(true);
+    const dl = await phienMoi(t.org, await nguoiMoi(t.org, "DATA_STEWARD"), "USER");
+    const truoc = await demTuChoiQuyen(t.org, dl.u);
+    for (let i = 0; i < 3; i += 1) expect((await cua(dl.cookie)).body.coQuyenKhai).toBe(false);
+    expect(await demTuChoiQuyen(t.org, dl.u), "đọc gói không sinh từ chối").toBe(truoc);
+    expect((await goi("GET", `/rfqs/${g.rfqId}/coi-declarations`, dl.cookie)).status).toBe(403);
+    expect(await demTuChoiQuyen(t.org, dl.u), "route đọc khai báo vẫn tự cổng và vào sổ").toBe(truoc + 1);
+    const agent = await phienMoi(t.org, t.pm.u, "AGENT_READONLY");
+    expect((await cua(agent.cookie)).body.coQuyenKhai, "phiên agent của người giữ mã").toBe(false);
   });
 
   it("tập mã của ba hàm vị từ và hai trigger có tên BẰNG tập mã K9 của `CHOT_VAO_SO` — SQL và bảng không trôi khỏi nhau", async () => {
