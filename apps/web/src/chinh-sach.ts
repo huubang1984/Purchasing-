@@ -343,14 +343,7 @@ export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tc
     return [`Trọng số này bị từ chối khi chấm — ${loi} — nên gói mở dưới phiên bản này không chấm được.`];
   }
   const ra: string[] = [];
-  // [S1.284 / S4.7b1 — TẠM, gỡ ở S4.7b2] Màn nộp báo giá chưa có ô khai TCO: nhà cung cấp chưa khai được mã nào ngoài giá, nên mọi báo
-  // giá của gói mở dưới phiên bản ấy không có hạng (`ma_thieu`). Câu nói thật điều đó cho tới khi `/nop-thau` có ô (ADR-156 ⑴).
-  if (thanhPhan.some((t) => t.ma !== "gia")) {
-    ra.push(
-      "Màn nộp báo giá CHƯA có ô khai cho các thành phần ngoài giá (tới S4.7b2): nhà cung cấp chưa khai được chúng, nên mọi báo giá " +
-        "của gói mở dưới phiên bản này sẽ không có hạng.",
-    );
-  }
+  // [S1.284 / S4.7b1] ~~Câu TẠM *"màn nộp báo giá chưa có ô khai"*~~ [S1.9101 / S4.7b2] Gỡ: `/nop-thau` có ô của mã bật, bắt buộc.
   if (thanhPhan.some((t) => t.ma === "chi_phi_tre")) {
     ra.push(
       "Chi phí trễ giao bật: mỗi gói phải khai số ngày giao yêu cầu ở màn Tạo gói thầu TRƯỚC khi nộp duyệt — gói thiếu con số ấy " +

@@ -211,6 +211,13 @@ export interface RfqRecord {
    * `rfq_packages_so_ngay_giao`), và nằm trong chữ ký phê duyệt: người duyệt phải THẤY nó ở màn duyệt.
    */
   readonly soNgayGiao: number | null;
+  /**
+   * [S1.9101 / S4.7b2 / L16] Thước TCO chụp lúc vào OPEN (`112` (4), `9501`): tập mã thành phần của phiên bản ghim, theo thứ tự chính
+   * sách, và nhóm khoá `tco` của cùng phiên bản — `null` trước lúc mở (và khi phiên bản không khai). Nhà cung cấp đọc chúng qua
+   * `GET /guest/rfq`; lượt chấm đối chiếu chúng với phiên bản ghim.
+   */
+  readonly tcoMaGhim: readonly string[] | null;
+  readonly tcoThamSoGhim: Readonly<Record<string, string>> | null;
 }
 
 export interface AddRfqItemInput {
@@ -247,6 +254,8 @@ interface HangRfq {
   category_id: string | null;
   lan_nop: number;
   so_ngay_giao: number | null;
+  tco_ma_ghim: string[] | null;
+  tco_tham_so_ghim: Record<string, string> | null;
 }
 
 interface HangItem {
@@ -260,7 +269,7 @@ interface HangItem {
 
 const COT_RFQ =
   "id, title, status, deadline_at, requires_dual_approval, created_by, created_at, " +
-  "opened_at, closed_at, cancelled_at, cancel_reason, category_id, lan_nop, so_ngay_giao";
+  "opened_at, closed_at, cancelled_at, cancel_reason, category_id, lan_nop, so_ngay_giao, tco_ma_ghim, tco_tham_so_ghim";
 const COT_ITEM = "id, rfq_id, line_no, description, quantity, unit";
 
 function doiRfq(h: HangRfq): RfqRecord {
@@ -279,6 +288,8 @@ function doiRfq(h: HangRfq): RfqRecord {
     categoryId: h.category_id,
     lanNop: h.lan_nop,
     soNgayGiao: h.so_ngay_giao,
+    tcoMaGhim: h.tco_ma_ghim,
+    tcoThamSoGhim: h.tco_tham_so_ghim,
   };
 }
 

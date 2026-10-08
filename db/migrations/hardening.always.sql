@@ -15464,9 +15464,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_giao_hang() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.279 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va (to chuc chua bat S3) dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
+    -- [S1.9101 / S4.7b2 / L16] Than doi o `9501_tco_tham_so_ghim`: chup them tham so quy doi (`tco_tham_so_ghim`) cua cung phien ban ghim — nha cung cap doc chung qua route khach.
     ARRAY[
-      $q$hàm + trigger rfq_tco_khi_mo (112_tco)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '112_tco.sql')$q$,
+      $q$hàm + trigger rfq_tco_khi_mo (9501_tco_tham_so_ghim)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco_tham_so_ghim.sql')$q$,
       $q$DO $fn289$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -15478,6 +15479,7 @@ $ham$;
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
   v_ma text[];
+  v_tham_so jsonb;
   can integer;
   nen integer;
   co integer;
@@ -15487,6 +15489,10 @@ BEGIN
          jsonb_array_elements(o.eval_components) WITH ORDINALITY AS c(value, thu_tu)
    WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id;
   NEW.tco_ma_ghim := v_ma;
+  SELECT o.tco INTO v_tham_so
+    FROM public.org_procurement_policies o
+   WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id;
+  NEW.tco_tham_so_ghim := v_tham_so;
 
   IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN
     RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)'
@@ -15531,7 +15537,7 @@ $ham$;
          END
          $fn289$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE v_ma text[]; can integer; nen integer; co integer; BEGIN SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma FROM public.org_procurement_policies o, jsonb_array_elements(o.eval_components) WITH ORDINALITY AS c(value, thu_tu) WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id; NEW.tco_ma_ghim := v_ma; IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao'; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(*)::integer INTO nen FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id); IF nen < can THEN RETURN NEW; END IF; SELECT count(DISTINCT a.approver_user_id)::integer INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE v_ma text[]; v_tham_so jsonb; can integer; nen integer; co integer; BEGIN SELECT array_agg(c.value ->> 'ma' ORDER BY c.thu_tu) INTO v_ma FROM public.org_procurement_policies o, jsonb_array_elements(o.eval_components) WITH ORDINALITY AS c(value, thu_tu) WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id; NEW.tco_ma_ghim := v_ma; SELECT o.tco INTO v_tham_so FROM public.org_procurement_policies o WHERE o.org_id = NEW.org_id AND o.id = NEW.chinh_sach_ghim_id; NEW.tco_tham_so_ghim := v_tham_so; IF 'chi_phi_tre' = ANY (v_ma) AND NEW.so_ngay_giao IS NULL THEN RAISE EXCEPTION 'Phien ban chinh sach ghim tinh chi phi tre giao nhung goi thau chua khai so ngay giao yeu cau (L16)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tco_thieu_so_ngay_giao'; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(*)::integer INTO nen FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id); IF nen < can THEN RETURN NEW; END IF; SELECT count(DISTINCT a.approver_user_id)::integer INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_delivery_hash = public.rfq_bam_giao_hang(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % NGUOI KY TREN NOI DUNG VA SO NGAY GIAO HIEN TAI, moi co % (L16)', can, co USING ERRCODE = 'check_violation', CONSTRAINT = 'giao_hang_chua_ky'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

@@ -72,7 +72,7 @@ import {
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { docHoSoXacMinh, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
-import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
+import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, THAM_SO_TCO_DEMO, TRONG_SO_DEMO, TRONG_SO_TCO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
 import { SO_NOP, chamGoiTraoThau, gieoGoiTraoThauDenDieuPhoi } from "./goi-trao-thau.js";
 import { khaiKhongXungDot } from "./khai-bao.js";
@@ -751,13 +751,79 @@ async function chinh(): Promise<void> {
           });
         })()
       : null;
-    await chayWorkerToiKhiMo(pool, org, [...daMo.map((g) => g.rfqId), ...(traoThau === null ? [] : [traoThau.rfqId])], {
-      databaseUrl: urlWorker,
-      masterKeys: bat("TRUSTPROCURE_MASTER_KEYS"),
-      masterKeyActive: bat("TRUSTPROCURE_MASTER_KEY_ACTIVE"),
-    });
+    // [S1.9101 / S4.7b2] `--s3`: gói TCO. Mọi gói trên đã mở dưới phiên bản 1 (chỉ giá) — phiên bản ghim lúc mở (ADR-141). Nay
+    // taichinh1 khai phiên bản 2 (cùng bậc, cộng vận chuyển, chi phí thanh toán, chi phí trễ và tham số giả định), taichinh2 ký — không
+    // phải chữ ký BẬT S3, nên `097` không chặn — rồi một gói bậc 1 (60 triệu) với số ngày giao yêu cầu 30 ngày mở dưới nó. Bốn phong bì
+    // mang ô khai sao cho hạng giá KHÁC hạng TCO: người nộp thứ ba rẻ nhất theo giá (×0,98) mà đòi trả ngay, giao 45 ngày và tính phí vận
+    // chuyển 1,5 triệu — hạng TCO thứ ba; người thứ nhất (×1,00, 0,5 triệu vận chuyển, đủ kỳ, đúng hạn) đứng đầu hạng TCO.
+    const goiTco = S3
+      ? await (async () => {
+          const f1 = nguoi("taichinh1.");
+          const f2 = nguoi("taichinh2.");
+          const v2 = await withTenant(pool, org, (c) =>
+            createProcurementPolicy(c, org, {
+              version: 2,
+              dualApprovalThreshold: MUC_DEMO.nguongKep,
+              currency: "VND",
+              tiers: BAC_DEMO,
+              evalComponents: TRONG_SO_TCO_DEMO,
+              bafoTopN: BAFO_TOP_N_DEMO,
+              benchmark: NHOM_BENCHMARK_MAU,
+              tco: THAM_SO_TCO_DEMO,
+              chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
+              thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
+              actorSessionId: f1.sessionId,
+            }),
+          );
+          await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: v2.id, actorSessionId: f2.sessionId }));
+          const nhom = (await withTenant(pool, org, (c) =>
+            taoNhomHang(c, org, { ma: "TCO", ten: "Vat tu goi TCO", actorSessionId: f1.sessionId }, pool),
+          )).id;
+          return await gieoGoiTraoThauDenDieuPhoi({
+            pool,
+            org,
+            duoi,
+            vong,
+            boKy,
+            nhomHang: nhom,
+            soan3: nguoi("soan3."),
+            soan: nguoi("soan."),
+            soan2: nguoi("soan2."),
+            duyet1: nguoi("duyet1."),
+            duyet2: nguoi("duyet2."),
+            taichinh1: f1,
+            taichinh2: f2,
+            nhaCungCap: nhaCungCapGoiChinh.slice(0, 5),
+            dong: baDong,
+            tco: {
+              tieuDe: `Goi TCO ${duoi}`,
+              nganSach: "60000000.00",
+              soLuong: [3, 40, 200],
+              soNgayGiao: 30,
+              khai: [
+                { freight: "500000", paymentDays: "60", leadTimeDays: "30" },
+                { freight: "0", paymentDays: "60", leadTimeDays: "25" },
+                { freight: "1500000", paymentDays: "0", leadTimeDays: "45" },
+                { freight: "0", paymentDays: "90", leadTimeDays: "20" },
+              ],
+            },
+          });
+        })()
+      : null;
+    await chayWorkerToiKhiMo(
+      pool,
+      org,
+      [...daMo.map((g) => g.rfqId), ...(traoThau === null ? [] : [traoThau.rfqId]), ...(goiTco === null ? [] : [goiTco.rfqId])],
+      {
+        databaseUrl: urlWorker,
+        masterKeys: bat("TRUSTPROCURE_MASTER_KEYS"),
+        masterKeyActive: bat("TRUSTPROCURE_MASTER_KEY_ACTIVE"),
+      },
+    );
     // Lượt chấm chỉ có sau khi worker mở xong; soan2 chấm (`evaluation.perform`) — rồi chính soan2 lập ngoại lệ và đề xuất trên màn.
     if (traoThau !== null) await chamGoiTraoThau(pool, org, traoThau.rfqId, nguoi("soan2."));
+    // [S1.9101 / S4.7b2] Lượt chấm của gói TCO — dưới phiên bản 2, năm mã có nguồn; `/mo-thau` hiện hai hạng và phép tính.
+    if (goiTco !== null) await chamGoiTraoThau(pool, org, goiTco.rfqId, nguoi("soan2."));
 
     const tokenNguoiMua: { readonly email: string; readonly token: string }[] = [];
     for (const nm of nguoiMua) {
@@ -793,6 +859,9 @@ async function chinh(): Promise<void> {
     if (S3) {
       ra.push("");
       ra.push("TÀI CHÍNH — taichinh1 đã khai, taichinh2 đã ký phiên bản 1 (bốn bậc mặc định §4.1, ngưỡng kép 1 tỷ): S3 ĐÃ BẬT.");
+      // [S1.9101 / S4.7b2] Phiên bản 2 — TCO — là phiên bản hiệu lực sau lần gieo: gói mới tạo ở /tao-thau phải khai số ngày giao.
+      ra.push("  Rồi phiên bản 2 (cùng bậc, cộng vận chuyển, chi phí thanh toán, chi phí trễ — tham số giả định) — bản hiệu lực: gói mới");
+      ra.push("  tạo ở /tao-thau phải khai số ngày giao yêu cầu trước khi nộp duyệt. «Goi TCO» đã chấm dưới nó: /mo-thau hiện hai hạng.");
       ra.push("  Màn /chinh-sach đọc trọn ma trận và số người tối thiểu mỗi bậc. Ký một phiên bản MỚI ở màn ấy cần `api` chạy");
       ra.push("  với TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat (ADR-105) — cờ ấy mặc định tắt, và không mở trên máy chủ thật.");
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {

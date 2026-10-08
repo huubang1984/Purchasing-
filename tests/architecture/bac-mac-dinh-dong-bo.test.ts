@@ -19,6 +19,7 @@ import {
   MAU_TY_LE_TRE,
   MA_TCO,
   TRONG_SO_MAC_DINH,
+  loiThamSoTco,
   loiTrongSo,
   thanhPhanTuMa,
   trongSoChamDuoc,
@@ -27,7 +28,15 @@ import {
 } from "../../apps/web/src/chinh-sach.js";
 import { MA_CO_NGUON, MA_THANH_PHAN_GIA, docNhomTco, kiemChinhSachTco } from "@trustprocure/danh-gia";
 import { NHOM_BENCHMARK_MAU, docNhomBenchmark } from "@trustprocure/du-lieu-nen";
-import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "../../tools/gieo-demo/src/chinh-sach-demo.js";
+import {
+  BAC_DEMO,
+  BAFO_TOP_N_DEMO,
+  MUC_DEMO,
+  THAM_SO_TCO_DEMO,
+  TRONG_SO_DEMO,
+  TRONG_SO_TCO_DEMO,
+} from "../../tools/gieo-demo/src/chinh-sach-demo.js";
+import { oCanKhai, truongKhai } from "../../apps/web/src/tco.js";
 
 describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:demo --s3 khai CÙNG một chính sách", () => {
   it("ma trận bậc trùng từng ô, và hai cột mức cùng ngưỡng kép trùng nhau", () => {
@@ -122,3 +131,45 @@ describe("[S1.284 / S4.7b1] miền tham số TCO của màn là bản chép củ
   });
 });
 
+
+// [S1.9101 / S4.7b2] Phiên bản TCO của `gieo:demo --s3` là thứ màn `/chinh-sach` dựng được từ bốn ô mã và ba ô tham số, luật L8 của màn
+// im với nó và lượt chấm nhận nó — một bộ demo màn không khai lại được là một demo nói dối về sản phẩm.
+describe("[S1.9101 / S4.7b2] [INV-L8] phiên bản TCO của gieo:demo --s3 là thứ màn /chinh-sach khai được", () => {
+  it("bộ trọng số là `thanhPhanTuMa` của chính các mã ấy; luật màn, miền tham số và lượt chấm đều im", () => {
+    expect(TRONG_SO_TCO_DEMO).toEqual(thanhPhanTuMa(TRONG_SO_TCO_DEMO.map((t) => t.ma)));
+    expect(loiTrongSo(TRONG_SO_TCO_DEMO, THAM_SO_TCO_DEMO)).toBeNull();
+    expect(loiThamSoTco(THAM_SO_TCO_DEMO)).toBeNull();
+    expect(
+      kiemChinhSachTco(
+        TRONG_SO_TCO_DEMO.map((t) => ({ ma: t.ma, donVi: t.don_vi as "TIEN" | "DIEM", heSo: t.he_so })),
+        docNhomTco(THAM_SO_TCO_DEMO),
+        30,
+      ),
+    ).toBeNull();
+  });
+});
+
+// [S1.9101 / S4.7b2 / L16 vế form] Bốn khoá phong bì màn `/nop-thau` viết (`truongKhai`) là đúng bốn khoá bộ đọc SQL của lượt chấm đọc
+// (`luot-danh-gia.ts` → `bid_so_tien`, `bid_so_ngay`). Một tên lệch là một báo giá THIẾU Ô ở lượt chấm dù nhà cung cấp đã khai — kịch bản
+// 41 đo ba khoá trên đường thật; ca này khoá cả bốn, kể cả `importCost`.
+describe("[S1.9101 / S4.7b2] [INV-L16] khoá phong bì của màn /nop-thau là khoá bộ đọc của lượt chấm", () => {
+  it("đủ bốn ô ⇒ bốn khoá, mỗi khoá có mặt ở câu đọc của lượt chấm qua đúng bộ đọc của nó", async () => {
+    const { readFileSync } = await import("node:fs");
+    const ts = readFileSync(new URL("../../packages/danh-gia/src/luot-danh-gia.ts", import.meta.url), "utf8");
+    const khoa = truongKhai(oCanKhai({ ma: [...MA_CO_NGUON], chiPhiVonNam: null, ngayThanhToanChuan: null, tyLeTreNgay: null }), {
+      vanChuyen: "1",
+      nhapKhau: "2",
+      ngayThanhToan: "3",
+      ngayGiao: "4",
+    });
+    expect(khoa).toEqual({ freight: "1", importCost: "2", paymentDays: "3", leadTimeDays: "4" });
+    for (const [k, boDoc] of [
+      ["freight", "bid_so_tien"],
+      ["importCost", "bid_so_tien"],
+      ["paymentDays", "bid_so_ngay"],
+      ["leadTimeDays", "bid_so_ngay"],
+    ] as const) {
+      expect(ts).toContain(`public.${boDoc}((u.payload OPERATOR(pg_catalog.->>) '${k}'))`);
+    }
+  });
+});

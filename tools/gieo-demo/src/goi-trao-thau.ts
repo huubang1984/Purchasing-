@@ -41,7 +41,7 @@ import {
   redeemMagicLink,
   verifyOtpAndStartSession,
 } from "@trustprocure/invitation";
-import { addRfqItem, approveRfq, closeRfq, createRfq, openRfq, setRfqBudget, submitRfqForApproval } from "@trustprocure/rfq";
+import { addRfqItem, approveRfq, closeRfq, createRfq, datSoNgayGiao, openRfq, setRfqBudget, submitRfqForApproval } from "@trustprocure/rfq";
 import { getRfqPublicKeys, sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, dispatchUnseal, requestUnseal } from "@trustprocure/unseal";
@@ -77,6 +77,18 @@ export interface BoiCanhGoiTraoThau {
   /** ĐÚNG năm nhà cung cấp đếm được (K2 bậc 2). */
   readonly nhaCungCap: readonly NhaCungCapGieo[];
   readonly dong: readonly DongGieo[];
+  /**
+   * [S1.9101 / S4.7b2] Gói TCO của `--s3` (`index.ts`): cùng đường đi, khác bốn chỗ — tiêu đề, ngân sách (bậc 1: không xoay vòng, nên
+   * cùng người chọn và cùng năm nhà cung cấp không vướng K3), số lượng từng dòng, và thước TCO: số ngày giao yêu cầu đặt lúc gói còn
+   * soạn, mỗi phong bì mang thêm ô khai của người nộp thứ k. Vắng ⇒ gói trao thầu như trước, nguyên văn.
+   */
+  readonly tco?: {
+    readonly tieuDe: string;
+    readonly nganSach: string;
+    readonly soLuong: readonly number[];
+    readonly soNgayGiao: number;
+    readonly khai: readonly Readonly<Record<string, string>>[];
+  };
 }
 
 /** Ngân sách một tỷ — bậc 2 từ 1 000 000 000 (`BAC_DEMO`). */
@@ -99,7 +111,8 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
   const { pool, org } = b;
   if (b.nhaCungCap.length !== 5) throw new GoiTraoThauError(`gói trao thầu cần đúng năm nhà cung cấp, có ${String(b.nhaCungCap.length)}`);
   const pepper = new PepperRing("gieo-demo-tt", { "gieo-demo-tt": randomBytes(32) });
-  const tieuDe = `Goi trao thau ${b.duoi}`;
+  const tieuDe = b.tco?.tieuDe ?? `Goi trao thau ${b.duoi}`;
+  const soLuong = b.tco?.soLuong ?? SO_LUONG_TRAO_THAU;
   const rfqId = await withTenant(pool, org, async (c) => {
     const r = await createRfq(c, org, {
       title: tieuDe,
@@ -107,13 +120,22 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
       createdBySessionId: b.soan3.sessionId,
       categoryId: b.nhomHang,
     });
-    await setRfqBudget(c, org, { rfqId: r.id, estimatedValue: NGAN_SACH_GOI_TRAO_THAU, currency: "VND", actorSessionId: b.soan3.sessionId });
+    await setRfqBudget(c, org, {
+      rfqId: r.id,
+      estimatedValue: b.tco?.nganSach ?? NGAN_SACH_GOI_TRAO_THAU,
+      currency: "VND",
+      actorSessionId: b.soan3.sessionId,
+    });
+    // [S1.9101 / S4.7b2] Số ngày giao yêu cầu — chỉ đặt được khi gói còn soạn, và nằm trong chữ ký của hai người duyệt phía dưới.
+    if (b.tco !== undefined) {
+      await datSoNgayGiao(c, org, { rfqId: r.id, soNgayGiao: b.tco.soNgayGiao, actorSessionId: b.soan3.sessionId });
+    }
     for (const [j, d] of b.dong.entries()) {
       await addRfqItem(c, org, {
         rfqId: r.id,
         lineNo: j + 1,
         description: d.mo,
-        quantity: `${String(SO_LUONG_TRAO_THAU[j] ?? 1)}.0000`,
+        quantity: `${String(soLuong[j] ?? 1)}.0000`,
         unit: d.dvt,
         actorSessionId: b.soan3.sessionId,
       });
@@ -184,14 +206,16 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
     });
     const lines = b.dong.map((d, j) => {
       const donGia = Math.round(d.donGiaGoc * heSo);
-      return { lineNo: j + 1, unitPrice: dongThanhChuoi(donGia), amount: dongThanhChuoi(donGia * (SO_LUONG_TRAO_THAU[j] ?? 1)) };
+      return { lineNo: j + 1, unitPrice: dongThanhChuoi(donGia), amount: dongThanhChuoi(donGia * (soLuong[j] ?? 1)) };
     });
     const tong = dongThanhChuoi(lines.reduce((s, l) => s + Number(l.amount), 0));
+    // [S1.9101 / S4.7b2] Ô khai TCO của người nộp thứ k — đúng bốn khoá màn `/nop-thau` đặt (`truongKhai`).
+    const khai = b.tco?.khai[k] ?? {};
     const phongBi = await sealBid({
       rfqId,
       algorithm: "ECDH_P256",
       recipientPublicKey: khoa.publicKey,
-      plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: tong, currency: "VND", lines })),
+      plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: tong, currency: "VND", lines, ...khai })),
     });
     await withTenant(pool, org, (c) => submitBid(c, org, { guestSessionId: phien, envelope: phongBi, signer: b.boKy }));
   }

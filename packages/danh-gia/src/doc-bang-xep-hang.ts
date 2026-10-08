@@ -22,6 +22,8 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { xepHang } from "./luot-danh-gia.js";
+import { MA_GIA } from "./tco.js";
 
 /** Một thành phần đã quy đổi, đúng như nó nằm trong cột `components`. */
 export interface ThanhPhanHien {
@@ -31,6 +33,11 @@ export interface ThanhPhanHien {
   readonly heSo: string | null;
   readonly giaTri: string | null;
   readonly tien: string | null;
+  /**
+   * [S1.9101 / S4.7b2] Phép tính của một mã QUY ĐỔI (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu
+   * cầu, tỷ lệ — đúng như lượt chấm lưu (`luot-danh-gia.ts`, spec §8.6: tham số hiện cạnh con số nó sinh ra). Vắng ở mã khai thẳng.
+   */
+  readonly nguon?: Readonly<Record<string, string>>;
 }
 
 export interface HangBangXepHang {
@@ -44,6 +51,13 @@ export interface HangBangXepHang {
   readonly supplierName: string;
   readonly effectiveCost: string | null;
   readonly rank: number | null;
+  /**
+   * [S1.9101 / S4.7b2] Hạng theo GIÁ (thành phần `gia`) trên ĐÚNG tập báo giá có hạng chi phí hiệu dụng (chủ dự án chốt 2026-10-08 —
+   * ADR-156 ⑷), cùng luật bằng nhau của `rank`. Tính lúc đọc từ thành phần đã lưu; lượt chấm không đổi. `null` ở báo giá không hạng.
+   */
+  readonly hangGia: number | null;
+  /** [S1.279 / S4.7a] Mã chính sách bật mà báo giá thiếu ô — chỉ ở hàng không hạng (`ma_thieu`, `112`). */
+  readonly maThieu: readonly string[] | null;
   readonly components: readonly ThanhPhanHien[];
 }
 
@@ -61,6 +75,7 @@ interface HangTho {
   readonly supplier_name: string;
   readonly effective_cost: string | null;
   readonly rank: number | null;
+  readonly ma_thieu: readonly string[] | null;
   readonly components: readonly ThanhPhanHienTho[];
 }
 
@@ -70,6 +85,7 @@ interface ThanhPhanHienTho {
   readonly heSo?: string;
   readonly giaTri?: string;
   readonly tien: string | null;
+  readonly nguon?: Readonly<Record<string, string>>;
 }
 
 export interface DocBangXepHangInput {
@@ -140,6 +156,7 @@ export async function docBangXepHang(
             s.legal_name AS supplier_name,
             l.effective_cost::pg_catalog.text AS effective_cost,
             l.rank,
+            l.ma_thieu,
             l.components
        FROM public.rfq_evaluation_lines l
        JOIN public.rfq_unsealed_bids u   ON u.bid_version_id OPERATOR(pg_catalog.=) l.bid_version_id
@@ -171,17 +188,23 @@ export async function docBangXepHang(
     payload: { evaluationId: l.id, viewedBySessionId: input.actorSessionId },
   });
 
+  // [S1.9101 / S4.7b2] Hạng giá: tiền của thành phần `gia` ở các hàng CÓ hạng, xếp bằng `xepHang` — đúng hàm lượt chấm dùng cho `rank`.
+  const giaCuaHang = rows.map((r) => (r.rank === null ? null : (r.components.find((c) => c.ma === MA_GIA)?.tien ?? null)));
+  const hangGia = xepHang(giaCuaHang);
+
   return {
     evaluationId: l.id,
     policyVersion: l.version,
     currency: l.currency,
     evaluatedAt: l.created_at,
-    rows: rows.map((r) => ({
+    rows: rows.map((r, i) => ({
       bidVersionId: r.bid_version_id,
       supplierId: r.supplier_id,
       supplierName: r.supplier_name,
       effectiveCost: r.effective_cost,
       rank: r.rank,
+      hangGia: hangGia[i] ?? null,
+      maThieu: r.ma_thieu,
       components: r.components.map((c) => ({
         ma: c.ma,
         // `don_vi` KHÔNG bắt buộc trong `components` (`057` chỉ đòi `ma` và `tien`). Khi nó
@@ -195,6 +218,7 @@ export async function docBangXepHang(
         heSo: c.heSo ?? null,
         giaTri: c.giaTri ?? null,
         tien: c.tien,
+        ...(c.nguon === undefined ? {} : { nguon: c.nguon }),
       })),
     })),
   };

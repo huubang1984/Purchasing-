@@ -1024,3 +1024,63 @@ describe("[S1.219 / khoản 230] lần nộp bị từ chối mang MÃ lý do tr
     expect(await hangSoTuChoi(rfqA, "PHIEN_KHACH_KHONG_HOP_LE")).toBe(1);
   });
 });
+
+// [S1.9101 / S4.7b2 / L16] THƯỚC TCO Ở `GET /guest/rfq` — tập mã và tham số chụp lúc gói mở (`112` (4), `9501`). Khối CUỐI tệp: nó khai
+// một phiên bản chính sách mới cho `orgA`, và mọi gói mở sau nó ghim phiên bản ấy (ADR-141).
+describe("[S1.9101 / S4.7b2] thước TCO của gói ở GET /guest/rfq", () => {
+  it("[INV-L16] gói không ảnh chụp ⇒ `tco: null`, `soNgayGiao: null`; gói mở dưới phiên bản TCO ⇒ tập mã theo thứ tự chính sách và tham số CHỈ của mã bật — chi phí vốn không lộ khi mã thanh toán không bật", async () => {
+    const a = await moi("NCC thuoc cu");
+    const ra = await goi("GET", "/guest/rfq", { cookie: await moPhienKhach(a) });
+    expect(ra.status, ra.text).toBe(200);
+    const ta = ra.body as { rfq: { soNgayGiao: unknown }; tco: unknown };
+    expect([ta.rfq.soNgayGiao, ta.tco], "phiên bản của `rfqA` không khai trọng số ⇒ không ảnh chụp").toEqual([null, null]);
+
+    // Phiên bản mới: giá và chi phí trễ; nhóm khoá `tco` mang cả ba tham số — hai tham số thanh toán thừa, không mã nào dùng.
+    const cs = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, tco, " +
+          "created_by, created_by_session_id) SELECT $1, coalesce(max(version), 0) + 1, '10000000000.00', 'VND', $2::jsonb, 0, $3::jsonb, $4, $5 " +
+          "FROM org_procurement_policies WHERE org_id = $1 RETURNING id",
+        [
+          orgA,
+          '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]',
+          '{"chi_phi_von_nam":"0.12","ngay_thanh_toan_chuan":"60","ty_le_tre_ngay":"0.001"}',
+          uA,
+          sA,
+        ],
+      )
+    ).rows[0]?.id ?? "";
+    const rfqB = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, so_ngay_giao) " +
+          "VALUES ($1, 'Mua van bi', now() + interval '7 days', false, $2, $3, 20) RETURNING id",
+        [orgA, uA, sA],
+      )
+    ).rows[0]?.id ?? "";
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Van bi DN50', '10.0000', 'cai', $3, $4)",
+      [orgA, rfqB, uA, sA],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) VALUES ($1, $2, $3, 'VND', $4, $5, $6)",
+      [orgA, rfqB, NGAN_SACH, cs, uA, sA],
+    );
+    await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqB, uA, sA]);
+    await kyMotChuKy(orgA, rfqB);
+    await withTenant(apiPool, orgA, async (c) => {
+      await issueRfqKeyPair(c, orgA, { rfqId: rfqB, actorSessionId: sA, orgKeys: boBocTest });
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqB, uA, sA]);
+    });
+
+    const b = await moi("NCC thuoc moi", rfqB);
+    const rb = await goi("GET", "/guest/rfq", { cookie: await moPhienKhach(b) });
+    expect(rb.status, rb.text).toBe(200);
+    const tb = rb.body as { rfq: { soNgayGiao: unknown }; tco: unknown };
+    expect(tb.rfq.soNgayGiao).toBe(20);
+    expect(tb.tco).toEqual({ ma: ["gia", "chi_phi_tre"], thamSo: { chiPhiVonNam: null, ngayThanhToanChuan: null, tyLeTreNgay: "0.001" } });
+    for (const lo of ["0.12", "chi_phi_von_nam", "he_so", "1.0000", "10000000000", "version"]) {
+      expect(rb.text, `thân khách không mang "${lo}"`).not.toContain(lo);
+    }
+  });
+});

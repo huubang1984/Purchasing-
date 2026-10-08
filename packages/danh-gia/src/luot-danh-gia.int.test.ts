@@ -4338,4 +4338,103 @@ describe("[S1.279 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên b�
       withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
     ).rejects.toThrow(/\(L16\)/u);
   });
+
+  // [S1.9101 / S4.7b2] Vế THAM SỐ của L16: nhà cung cấp đọc ảnh chụp (`GET /guest/rfq`), lượt chấm đọc phiên bản ghim — cùng một luật
+  // với tập mã ở trên.
+  async function thamSoGhim(rfqId: string): Promise<unknown> {
+    const { rows } = await db.pool.query<{ t: unknown }>("SELECT tco_tham_so_ghim AS t FROM rfq_packages WHERE id = $1", [rfqId]);
+    return rows[0]?.t ?? null;
+  }
+  const PHONG_BI_DU = { totalAmount: "100.00", currency: "VND", freight: "0.00", importCost: "0.00", paymentDays: "60", leadTimeDays: "14" };
+
+  it("[INV-L16] tham số quy đổi chụp lúc mở cùng tập mã: gói mang NGUYÊN nhóm khoá `tco` của phiên bản ghim; phiên bản khai SAU với tham số khác không đổi ảnh chụp lẫn lượt chấm", async () => {
+    const { rfqId } = await goiTcoDaMo(TP_TCO_DU, THAM_SO_TCO, 14, [{ ...PHONG_BI_DU, paymentDays: "30" }]);
+    expect(await thamSoGhim(rfqId)).toEqual(JSON.parse(THAM_SO_TCO));
+    await taoChinhSach(TP_TCO_DU, 0, '{"chi_phi_von_nam":"0.30","ngay_thanh_toan_chuan":"90","ty_le_tre_ngay":"0.005"}');
+    expect(await thamSoGhim(rfqId), "ảnh chụp không đổi theo phiên bản mới").toEqual(JSON.parse(THAM_SO_TCO));
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const h = [...(await hangLuot(kq.evaluationId)).values()];
+    expect(h.map((x) => x.cost), "chi phí vốn 12%/năm × 30 ngày sớm × 100 — tham số của phiên bản GHIM").toEqual(["100.99"]);
+    // Phiên bản chỉ `gia`: không nhóm khoá `tco` ⇒ ảnh chụp `NULL`, khớp `NULL` của phiên bản.
+    const chiGia = await goiDaMo([["100.00", "VND"]]);
+    expect(await thamSoGhim(chiGia.rfqId)).toBeNull();
+  });
+
+  it("[INV-L16] ảnh chụp tham số LỆCH phiên bản ghim (một đường ghi thứ hai) ⇒ lượt chấm không chạy, gọi tên L16; `app_api` không ghi được cột ấy (42501)", async () => {
+    const { rfqId } = await goiTcoDaMo(TP_TCO_DU, THAM_SO_TCO, 14, [PHONG_BI_DU]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query(`UPDATE rfq_packages SET tco_tham_so_ghim = '{"chi_phi_von_nam":"0.01"}'::jsonb WHERE id = $1`, [rfqId])),
+    ).rejects.toMatchObject({ code: "42501" });
+    // Vai chủ cụm dựng đúng hàng mà một đường ghi thứ hai để lại: nhà cung cấp đã thấy tham số khác thước lượt chấm sẽ dùng.
+    await db.pool.query(
+      `UPDATE rfq_packages SET tco_tham_so_ghim = '{"chi_phi_von_nam":"0.01","ngay_thanh_toan_chuan":"60","ty_le_tre_ngay":"0.001"}'::jsonb WHERE id = $1`,
+      [rfqId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toThrow(/^Tham số quy đổi TCO chụp lúc mở gói khác nhóm khoá tco của phiên bản ghim — không chấm \(L16\)\.$/u);
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1", [rfqId]);
+    expect(rows[0]?.n).toBe("0");
+    // Thứ tự khoá không phải một lần lệch — phép so ở CSDL là phép so `jsonb`.
+    await db.pool.query(
+      `UPDATE rfq_packages SET tco_tham_so_ghim = '{"ty_le_tre_ngay":"0.001","ngay_thanh_toan_chuan":"60","chi_phi_von_nam":"0.12"}'::jsonb WHERE id = $1`,
+      [rfqId],
+    );
+    await expect(withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool))).resolves.toBeDefined();
+  });
+});
+
+// ================================================================================================
+// [S1.9101 / S4.7b2] BẢNG XẾP HẠNG ĐỌC RA HẠNG GIÁ, MÃ THIẾU, PHÉP TÍNH (ADR-156 ⑷; spec S4 §8.6)
+//
+// Hạng giá là hạng của thành phần `gia` trên ĐÚNG tập báo giá có hạng chi phí (chủ dự án chốt 2026-10-08), cùng luật bằng nhau của
+// `rank` — tính lúc đọc, lượt chấm không đổi. Bốn báo giá: hai bằng giá (cùng hạng giá 1, hạng kế là 3), một rẻ nhất nhưng thiếu ô
+// (không hạng, không hạng giá — tính nó vào thì hai báo giá bằng giá rơi xuống hạng 2).
+// ================================================================================================
+describe("[S1.9101 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá có hạng, mã thiếu, phép tính của mã quy đổi", { timeout: 300000 }, () => {
+  it("[INV-L8] hạng giá ≠ hạng chi phí; bằng giá cùng hạng; báo giá không hạng không có hạng giá, gọi tên mã thiếu; mã quy đổi mang `nguon`, mã khai thẳng không", async () => {
+    const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+    const { rfqId, banRo } = await goiTcoDaMo(tp, '{"ty_le_tre_ngay":"0.001"}', 10, [
+      { totalAmount: "100.00", currency: "VND", freight: "0.00", leadTimeDays: "10" },
+      { totalAmount: "90.00", currency: "VND", freight: "20.00", leadTimeDays: "10" },
+      { totalAmount: "90.00", currency: "VND", freight: "5.00", leadTimeDays: "110" },
+      { totalAmount: "80.00", currency: "VND", freight: "0.00" },
+    ]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    if (bang === null) throw new Error("gói đã chấm mà không có bảng xếp hạng");
+    const theoBan = new Map(bang.rows.map((r) => [r.bidVersionId, r]));
+    expect(banRo.map((v) => [theoBan.get(v)?.effectiveCost, theoBan.get(v)?.rank, theoBan.get(v)?.hangGia, theoBan.get(v)?.maThieu])).toEqual([
+      ["100.00", 1, 3, null],
+      ["110.00", 3, 1, null],
+      ["104.00", 2, 1, null],
+      [null, null, null, ["chi_phi_tre"]],
+    ]);
+    const c = theoBan.get(banRo[2] ?? "");
+    expect(c?.components).toEqual([
+      { ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: "90.00", tien: "90.00" },
+      { ma: "van_chuyen", donVi: "TIEN", heSo: "1.0000", giaTri: "5.00", tien: "5.00" },
+      {
+        ma: "chi_phi_tre",
+        donVi: "TIEN",
+        heSo: "1.0000",
+        giaTri: "9.00",
+        tien: "9.00",
+        nguon: { coSo: "90.00", ngayKhai: "110", ngayYeuCau: "10", tyLe: "0.001" },
+      },
+    ]);
+    expect(Object.keys(c?.components[1] ?? {}), "mã khai thẳng KHÔNG mang khoá `nguon` — kể cả `undefined`").not.toContain("nguon");
+  });
+
+  it("luồng MVP1 KHÔNG ĐỔI thứ tự: phiên bản chỉ `gia` ⇒ hạng giá bằng hạng chi phí ở mọi hàng, mã thiếu `null`", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"], ["90.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    if (bang === null) throw new Error("gói đã chấm mà không có bảng xếp hạng");
+    expect(bang.rows.map((r) => [r.rank, r.hangGia, r.maThieu])).toEqual([
+      [1, 1, null],
+      [1, 1, null],
+      [3, 3, null],
+    ]);
+  });
 });

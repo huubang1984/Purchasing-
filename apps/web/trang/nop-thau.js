@@ -19,6 +19,7 @@
 import { chooseKeyAgreementAlgorithm, describeEnvelope, sealBid } from "/lib/browser.js";
 import { cong, donGiaNguoiGo, thanhTien, tien } from "/lib/so-tien.js";
 import { conLaiMs, doLechMayChu, docDauThoiGian, moTaConLai, moTaLechMay } from "/lib/dong-ho-may-chu.js";
+import { docThuocTco, loiOKhai, moTaQuyDoi, oCanKhai, truongKhai } from "/lib/tco.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -229,6 +230,8 @@ async function napGoiThau() {
     ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null,
     // [S1.181 / ADR-109] Tên doanh nghiệp được mời — máy chủ dẫn xuất từ phiên, trang chỉ in lại.
     tenNhaCungCap: typeof r.body.supplier?.legalName === "string" ? r.body.supplier.legalName : "",
+    // [S1.9101 / S4.7b2 / L16] Thước TCO chụp lúc gói mở — đúng thước lượt chấm sẽ dùng.
+    thuocTco: docThuocTco(r.body.tco),
   };
 
   // [S1.109 / S2.5 / khoản 227⑶] HẠN NÀO LÀ HẠN ĐANG CÓ HIỆU LỰC.
@@ -252,6 +255,8 @@ async function napGoiThau() {
   }
   lechMayChu = doLechMayChu(r.body.gioMayChu, guiLuc, nhanLuc);
   if (lechMayChu !== null) dong.push(["Giờ hệ thống lúc tải", gioDoc(r.body.gioMayChu)]);
+  // [S1.9101 / S4.7b2] Số ngày giao yêu cầu của gói — khi bên mua khai; là yêu cầu của gói, kể cả khi bên mua không tính chi phí trễ.
+  if (typeof phien.rfq.soNgayGiao === "number") dong.push(["Số ngày giao yêu cầu", `${phien.rfq.soNgayGiao} ngày`]);
   // [S1.165 / khoản 225] Gói đã huỷ thì nói ra VÌ SAO — người huỷ viết lý do cho chính anh/chị, kể cả
   // khi huỷ sau lúc mở thầu. Gói huỷ trước vòng ấy không có lý do lưu ở đây.
   if (phien.rfq.status === "CANCELLED") {
@@ -280,6 +285,7 @@ async function napGoiThau() {
     tr.append(td(`${it.lineNo}. ${it.description}`), sl, dvt, tdGia);
     tbody.append(tr);
   }
+  veTco();
   tinhLai();
   if (phien.rfq.status === "CANCELLED") {
     bao($("loi3"), "Gói thầu này đã bị huỷ — không nộp được báo giá nữa. Lý do ở bảng trên.");
@@ -316,6 +322,32 @@ function donGiaKhongDocDuoc() {
   return null;
 }
 
+// [S1.9101 / S4.7b2 / L16] Ô khai TCO — chỉ ô của mã bật; lời quy đổi với chính tham số của thước. Giá trị ô GIỮ qua lần nạp lại
+// (bản sửa đổi của cùng báo giá), như ô đơn giá.
+const O_TCO = { vanChuyen: "tco-van-chuyen", nhapKhau: "tco-nhap-khau", ngayThanhToan: "tco-ngay-thanh-toan", ngayGiao: "tco-ngay-giao" };
+const canKhai = () => oCanKhai(phien?.thuocTco ?? null);
+const oKhai = () => ({
+  vanChuyen: $(O_TCO.vanChuyen).value, nhapKhau: $(O_TCO.nhapKhau).value,
+  ngayThanhToan: $(O_TCO.ngayThanhToan).value, ngayGiao: $(O_TCO.ngayGiao).value,
+});
+
+function veTco() {
+  const can = canKhai();
+  hien($("o-van-chuyen"), can.vanChuyen);
+  hien($("o-nhap-khau"), can.nhapKhau);
+  hien($("o-ngay-thanh-toan"), can.ngayThanhToan);
+  hien($("o-ngay-giao"), can.ngayGiao);
+  const loi = moTaQuyDoi(phien?.thuocTco ?? null, typeof phien?.rfq?.soNgayGiao === "number" ? phien.rfq.soNgayGiao : null);
+  $("ghi-tco").replaceChildren();
+  for (const cau of loi) {
+    const p = document.createElement("p"); p.className = "ghi"; p.textContent = cau;
+    $("ghi-tco").append(p);
+  }
+  hien($("khoi-tco"), loi.length > 0);
+}
+
+for (const id of Object.values(O_TCO)) $(id).addEventListener("input", () => { tinhLai(); });
+
 function tinhLai() {
   const d = dongTien();
   const thieu = d.some((x) => x.amount === null);
@@ -327,9 +359,12 @@ function tinhLai() {
       : hong !== null
         ? `Đơn giá "${hong}" không đọc được. Đơn giá là số nguyên đồng, và dấu chấm chỉ dùng để nhóm nghìn — viết 1.500.000 hoặc 1500000.`
         : "Nhập đơn giá cho tất cả hạng mục để ra tổng.";
+  // [S1.9101 / S4.7b2] Ô khai TCO bắt buộc trên form (ADR-156 ⑶): ô đầu tiên còn trống hay không đọc được thì nói, và không niêm phong.
+  const loiTco = loiOKhai(canKhai(), oKhai());
+  bao($("tco-thieu"), loiTco ?? "");
   // [S1.165 / khoản 225] Gói đã huỷ: không niêm phong một báo giá mà máy chủ chắc chắn từ chối.
-  $("nut-nop").disabled = tong === null || phien?.rfq?.status === "CANCELLED";
-  return tong;
+  $("nut-nop").disabled = tong === null || loiTco !== null || phien?.rfq?.status === "CANCELLED";
+  return loiTco === null ? tong : null;
 }
 
 // [S1.165 / khoản 244] `#tien-te` nay là một <select>. `change` là sự kiện mà mọi trình duyệt phát
@@ -408,6 +443,8 @@ $("nut-nop").addEventListener("click", async () => {
       totalAmount: tong,
       currency: $("tien-te").value.trim() || "VND",
       lines: dongTien(),
+      // [S1.9101 / S4.7b2 / L16] Ô khai TCO của mã bật — chuỗi chuẩn (`truongKhai`); lượt chấm đọc chúng bằng `bid_so_tien`, `bid_so_ngay`.
+      ...truongKhai(canKhai(), oKhai()),
     };
     const phongBi = await sealBid({
       rfqId: phien.rfq.id,
