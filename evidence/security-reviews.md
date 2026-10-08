@@ -26495,4 +26495,10 @@ rò rỉ hay sink HTML. Tám phát hiện:
 
 ## 10. Đo cuối
 
-(điền)
+- Sau các sửa của mục 8: `pnpm t0` xanh (lượt đầu đỏ một lỗi lint — gán phần tử của mảng `any` ở `canhBaoSoNgayGiao`; định kiểu
+  `readonly unknown[]`); `pnpm test` 156 tệp / 2777 ca; `cap-so` cấp S1.284, ADR-156, `--kiem` sạch.
+- `pnpm evidence` trên `526fe5b`: vitest thoát mã 0, 5086 khẳng định; bộ sinh dừng ở bảy vấn đề CHẶN MERGE — bảy cặp nhãn ↔ tệp mới
+  (L8 ở `buyer.int`, `chinh-sach.test`, `phuc-vu.test`, `bac-mac-dinh-dong-bo`; L16 ở `buyer.int`, `phuc-vu.test`, `tao-thau.test`)
+  chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai bảy cặp kèm câu đo gì, chạy lại BƯỚC 2 (bộ sinh) trên cùng báo cáo:
+  **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận đổi đúng hai hàng: L8 24 → 49 khẳng định,
+  L16 14 → 31, tầng T3 → T1, T3.
