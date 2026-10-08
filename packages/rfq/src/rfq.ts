@@ -206,6 +206,11 @@ export interface RfqRecord {
    * lần nộp hiện tại bị từ chối — gói được trả về, sửa và nộp lại sau lúc người ấy xem thì chữ ký không rơi lên thứ họ chưa xem.
    */
   readonly lanNop: number;
+  /**
+   * [S1.9101 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — `null` khi gói chưa khai. Chỉ đổi ở DRAFT (trigger
+   * `rfq_packages_so_ngay_giao`), và nằm trong chữ ký phê duyệt: người duyệt phải THẤY nó ở màn duyệt.
+   */
+  readonly soNgayGiao: number | null;
 }
 
 export interface AddRfqItemInput {
@@ -241,6 +246,7 @@ interface HangRfq {
   cancel_reason: string | null;
   category_id: string | null;
   lan_nop: number;
+  so_ngay_giao: number | null;
 }
 
 interface HangItem {
@@ -254,7 +260,7 @@ interface HangItem {
 
 const COT_RFQ =
   "id, title, status, deadline_at, requires_dual_approval, created_by, created_at, " +
-  "opened_at, closed_at, cancelled_at, cancel_reason, category_id, lan_nop";
+  "opened_at, closed_at, cancelled_at, cancel_reason, category_id, lan_nop, so_ngay_giao";
 const COT_ITEM = "id, rfq_id, line_no, description, quantity, unit";
 
 function doiRfq(h: HangRfq): RfqRecord {
@@ -272,6 +278,7 @@ function doiRfq(h: HangRfq): RfqRecord {
     cancelReason: h.cancel_reason,
     categoryId: h.category_id,
     lanNop: h.lan_nop,
+    soNgayGiao: h.so_ngay_giao,
   };
 }
 

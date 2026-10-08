@@ -12348,3 +12348,68 @@ ký mang cờ. Lượt đi thử T4 là một lần, script ngoài kho.
 spec §9 — bốn cổng ở `/mo-thau` không chỗ khai. Giữ nhánh `APPROVED` của K9 làm lớp thứ hai — mã chết, không phép đo nào giữ được. Một
 hàm vị từ *"K9 làm thiếu chữ ký trao thầu"* (khuôn `rfq_chot_chu_ky_xung_dot`) — ở trao thầu, chưa đủ chữ ký không là lần từ chối; lời
 nói nằm ở cờ của chữ ký.
+
+## ADR-9201 — S4.7b: route và màn của TCO — hai phần; nhà cung cấp thấy tập mã, số ngày giao và tham số quy đổi; ô khai bắt buộc trên form; hạng giá trên báo giá có hạng
+
+**Ngày:** 2026-10-08 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu ngày 2026-10-08, cả bốn theo đề xuất, sau phép đo:
+⑴ S4.7b tách HAI phần — S4.7b1 phía người mua (vòng này), S4.7b2 phía nhà cung cấp và kết quả; ⑵ nhà cung cấp thấy tập mã ghim, số
+ngày giao yêu cầu VÀ tham số quy đổi của phiên bản ghim; ⑶ ô khai TCO ở `/nop-thau` BẮT BUỘC trên form; ⑷ hạng giá ở `/mo-thau` chỉ
+tính trên báo giá CÓ hạng TCO · **[S1.9101]** · **Migration:** không (S4.7b1); S4.7b2 thêm một · **Liên quan:** ADR-153 (S4.7a),
+ADR-141 (phiên bản ghim lúc mở), ADR-053 ⑶ (không lấy `0`), khoản 329 (màn gửi trọng số) · **Spec:** S4 §4.8, §8.6, §8.13, §2.5 ㉒,
+§9 S4.7b · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — phép đo trước khi viết
+
+1. **Không đường HTTP nào khai được TCO.** `createProcurementPolicy` nhận `tco` từ S4.7a nhưng `POST /policy` không chuyển nó; màn
+   `/chinh-sach` hiện thành phần CỐ ĐỊNH chỉ-đọc (`[gia]`, vế hẹp của khoản 329) và câu cảnh báo vẫn nói *"lượt chấm chỉ đọc một thành
+   phần giá"* — sai từ `112_tco`. Phép kiểm *"vế hẹp"* của màn (`trongSoChamDuoc`) vì thế để im trước phiên bản hệ số khác 1 mà lượt
+   chấm đã từ chối (L8).
+2. **Số ngày giao không có route** (`datSoNgayGiao` chưa ra barrel), `GET /rfqs/:rfqId` không mang nó, và màn duyệt không hiện con số
+   mà chữ ký phủ (`approved_delivery_hash`).
+3. **Nhà cung cấp không đọc gì của chính sách.** `GET /guest/rfq` là danh sách trắng; `org_procurement_policies` đóng với phiên khách
+   (`027` §6). `tco_ma_ghim` chụp tập mã lên gói lúc mở; tham số thì không.
+4. **Phong bì niêm phong ở trình duyệt** (`sealBid`): máy chủ không kiểm được ô nào trước lúc mở thầu.
+5. **Lượt chấm không lưu giá của báo giá không hạng** (`components: []`, `ma_thieu` gọi tên).
+
+### Quyết định
+
+⑴ **Hai phần.** S4.7b1: `POST /policy` chuyển `tco`; `/chinh-sach` chọn mã và khai tham số; `PUT /rfqs/:rfqId/delivery-days`; ô ở
+`/tao-thau`; dòng ở màn duyệt; cảnh báo. S4.7b2: route khách đọc tập mã, số ngày giao và tham số; ô khai ở `/nop-thau` (375×812);
+hai hạng, phép tính và `ma_thieu` ở `/mo-thau`; `gieo:demo`; kịch bản 41; L16 vế form. Giữa hai phần, màn nộp báo giá chưa có ô: một
+phiên bản bật mã ngoài giá làm mọi báo giá của gói mở dưới nó không có hạng — `/chinh-sach` nói điều ấy bằng một câu TẠM, gỡ ở b2.
+
+⑵ **Nhà cung cấp thấy cả tham số** — *"trả sớm hơn kỳ chuẩn 60 ngày tính chi phí vốn 12%/năm"*. Họ khai được ô có nghĩa, và hồ sơ mời
+thầu nêu cách xác định giá đánh giá là thông lệ của Luật Đấu thầu. Khách không đọc bảng chính sách, nên S4.7b2 chụp tham số vào gói lúc
+mở, cùng trigger với tập mã (`rfq_tco_khi_mo`) — một migration. Cái giá nói ra: chi phí vốn của tổ chức lộ cho nhà cung cấp được mời.
+
+⑶ **Ô bắt buộc trên form.** Nhà cung cấp không mất hạng vì sơ ý: form không cho niêm phong khi ô của một mã bật còn trống; không có phí
+thì gõ `0`. Lệch chữ *"ô khai là tuỳ chọn"* của spec §4.8 có chủ ý: TUỲ CHỌN ở lượt chấm — ai đi vòng form thì báo giá vẫn không hạng,
+gọi tên mã thiếu (ADR-153 ⑷) —, BẮT BUỘC ở màn.
+
+⑷ **Hạng giá chỉ trên báo giá có hạng**, tính lúc đọc từ thành phần `gia` đã lưu; lượt chấm không đổi. Báo giá không hạng vẫn hiện,
+ghi *"không hạng — thiếu: …"*, nên việc bị loại vì thiếu ô vẫn thấy được. Với ⑶, ca ấy hiếm.
+
+⑸ **S4.7b1 — phía người mua** (vòng này):
+- `POST /policy` chuyển `tco` (bộ đọc hình dạng ngoài `objectChuoiTuyChon`, `CHECK` của `112` phán phần còn lại).
+- `GET /policy/versions` mang `goiChoDuyetThieuSoNgayGiao` — số gói `PENDING_APPROVAL` chưa khai số ngày giao (ADR-153, giới hạn ⑴).
+- `/chinh-sach`: bốn ô mã (giá luôn tính), ba ô tham số hiện khi mã cần chúng bật, không mặc định nào (spec §4.8 — tổ chức tự khai chi
+  phí vốn); thân gửi tập chuẩn theo thứ tự chính sách, hệ số 1, và CHỈ khoá của mã đang bật. Phép kiểm của màn (`loiTrongSo`) là BẢN
+  CHÉP của `kiemChinhSachTco` trừ vế số ngày giao; `tests/architecture/bac-mac-dinh-dong-bo.test.ts` đòi hai bản cùng phán quyết và
+  CÙNG câu trên mười tám ca. Cảnh báo không chặn (§2.5 ㉒); bảng phiên bản có cột tham số.
+- `PUT /rfqs/:rfqId/delivery-days` (`rfq.create`, khuôn route nhóm hàng; `null` xoá, vắng trường là 422). `RfqRecord` mang
+  `soNgayGiao`. `/tao-thau`: ô và nút ở DRAFT; dòng *"Số ngày giao yêu cầu"* ở MỌI trạng thái — người duyệt thấy con số mình ký; cảnh
+  báo khi phiên bản hiệu lực, hay một phiên bản mới hơn chờ ký, tính chi phí trễ mà gói chưa khai — lời ra theo trạng thái và loại tổ
+  chức, cùng lời của `openRfq`.
+
+### Giới hạn nói ra
+
+- **Cảnh báo ở `/tao-thau` đọc chính sách lúc đăng nhập** (lần đọc `GET /policy/versions` sẵn có của màn) — cũ trong phiên; cạnh mở
+  gói mới là chốt (`tco_thieu_so_ngay_giao`).
+- **Giữa S4.7b1 và S4.7b2** nhà cung cấp chưa khai được ô nào ngoài giá (⑴). Hôm nay không tổ chức thật nào (PRODUCT §10).
+- **Không chặn lúc nộp duyệt.** Gói thiếu số ngày giao vẫn nộp được dưới phiên bản tính chi phí trễ — ADR-153 ⑶ chốt chặn ở cạnh mở;
+  màn cảnh báo trước.
+
+### Điều ADR này KHÔNG nói
+
+- Hình dạng route khách, migration chụp tham số, bố cục ô ở `/nop-thau`, hai hạng ở `/mo-thau` (S4.7b2).
+- Giải trình khi hạng giá khác hạng TCO, lời khai thành cam kết (S4.7c).

@@ -1008,6 +1008,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // sinh vừa ngừng dùng ⇒ 422 nghiệp vụ có tên, gói không đổi.
         case "PUT /rfqs/:rfqId/category":
           return { path: r.path.replace(":rfqId", hyB), body: { categoryId: trangThai.nhomHangId ?? hy.nhomId }, cookie: m };
+        // [S1.9101 / S4.7b1] Số ngày giao yêu cầu của gói hy sinh B ĐANG SOẠN — phiên bản của kịch bản không tính chi phí trễ, nên con
+        // số chỉ đi vào chữ ký (băm số ngày giao, `112`); gói B nộp duyệt và được ký như trước, trên đúng con số này.
+        case "PUT /rfqs/:rfqId/delivery-days":
+          return { path: r.path.replace(":rfqId", hyB), body: { soNgayGiao: 30 }, cookie: m };
         case "POST /rfqs/:rfqId/submit":
           return {
             path: r.path.replace(":rfqId", hyB),

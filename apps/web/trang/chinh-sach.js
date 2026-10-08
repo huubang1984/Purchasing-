@@ -18,9 +18,12 @@ import {
   TRONG_SO_MAC_DINH,
   canhBaoBenchmark,
   canhBaoChinhSach,
+  canhBaoGoiThieuSoNgayGiao,
   canhBaoTrongSo,
+  moTaTco,
   moTaTrongSo,
   soNguoiToiThieu,
+  thanhPhanTuMa,
 } from "/lib/chinh-sach.js";
 import { nhomSo, tien } from "/lib/so-tien.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
@@ -31,10 +34,12 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 // [S1.240 / khoản 282] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js`.
-let trangThai = { phienBan: [], daBat: false, choKy: false };
+let trangThai = { phienBan: [], daBat: false, choKy: false, goiThieuSoNgay: 0 };
 let bac = [];
 // [S1.258 / khoản 329] Thành phần trọng số sẽ gửi khi ô "Khai trọng số" được chọn — không có ô sửa: mẫu, hoặc nguyên văn của
 // phiên bản vừa chép (kể cả khi nó ngoài vế hẹp — màn hiện và cảnh báo, không tự đổi).
+// [S1.9101 / S4.7b1] ~~không có ô sửa~~ Bốn ô mã TCO (`O_MA_TCO`): bấm một ô thì trọng số thành tập chuẩn của các ô đang chọn
+// (`thanhPhanTuMa` — giá luôn có, hệ số 1, thứ tự chính sách); chưa bấm thì bản chép đi nguyên văn, như trước.
 let trongSo = TRONG_SO_MAC_DINH;
 
 async function goi(method, duong, than) {
@@ -200,7 +205,13 @@ async function napPhienBan() {
   bao($("loi2"), "");
   const r = await goi("GET", "/policy/versions");
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được các phiên bản chính sách")); return; }
-  trangThai = { phienBan: r.body?.phienBan ?? [], daBat: r.body?.daBat === true, choKy: r.body?.choKy === true };
+  trangThai = {
+    phienBan: r.body?.phienBan ?? [],
+    daBat: r.body?.daBat === true,
+    choKy: r.body?.choKy === true,
+    // [S1.9101 / S4.7b1] Gói chờ duyệt chưa khai số ngày giao — cảnh báo khi phiên bản đang soạn bật chi phí trễ (ADR-153 ⑴).
+    goiThieuSoNgay: typeof r.body?.goiChoDuyetThieuSoNgayGiao === "number" ? r.body.goiChoDuyetThieuSoNgayGiao : 0,
+  };
   dienDl($("tt-to-chuc"), [
     ["Kiểm soát theo bậc", trangThai.daBat ? "ĐÃ BẬT — không tắt lại được" : "chưa bật: tổ chức chạy như MVP1"],
     ["Ký phiên bản trên máy chủ này", trangThai.choKy ? "mở" : "khoá — S3 chưa đủ chốt để bật"],
@@ -215,6 +226,7 @@ async function napPhienBan() {
       o(tien(p.dualApprovalThreshold), "so"),
       o(p.tiers === null ? "không bậc" : `${p.tiers.length} bậc`),
       o(moTaTrongSo(p.evalComponents ?? null, p.bafoTopN ?? null)),
+      o(moTaTco(p.tco ?? null)),
       o(moTaBenchmark(p.benchmark)),
       o(p.signedBy === null ? (p.tiers === null ? "không cần" : "chưa ký") : `đã ký ${new Date(p.signedAt).toLocaleString("vi-VN")}`),
       o(p.hieuLuc ? "đang hiệu lực" : ""),
@@ -287,6 +299,21 @@ function benchmarkGuiLen() {
   return ra;
 }
 
+// [S1.9101 / S4.7b1] Bốn ô mã TCO — `gia` không có ô: luôn tính.
+const O_MA_TCO = [
+  ["ma-van-chuyen", "van_chuyen"],
+  ["ma-nhap-khau", "nhap_khau"],
+  ["ma-chi-phi-thanh-toan", "chi_phi_thanh_toan"],
+  ["ma-chi-phi-tre", "chi_phi_tre"],
+];
+// Ba ô tham số của nhóm khoá `tco`, mỗi ô thuộc đúng một mã quy đổi.
+const O_THAM_SO_TCO = [
+  ["tco-von", "chi_phi_von_nam", "chi_phi_thanh_toan"],
+  ["tco-ky", "ngay_thanh_toan_chuan", "chi_phi_thanh_toan"],
+  ["tco-tre", "ty_le_tre_ngay", "chi_phi_tre"],
+];
+const coMa = (ma) => trongSo.some((t) => t.ma === ma);
+
 /** [S1.258 / khoản 329] Đặt khối trọng số: `thanhPhan` `null` ⇒ bỏ chọn (ô top-N trống); ngược lại hiện thành phần chỉ-đọc. */
 function datTrongSo(thanhPhan, topN) {
   const co = thanhPhan !== null && thanhPhan !== undefined;
@@ -296,10 +323,32 @@ function datTrongSo(thanhPhan, topN) {
   veTrongSo();
 }
 
+/** [S1.9101 / S4.7b1] Ba ô tham số: giá trị của phiên bản (chép) hay rỗng (mẫu) — không mặc định nào: tổ chức tự khai (spec §4.8). */
+function datTco(tco) {
+  for (const [id, khoa] of O_THAM_SO_TCO) $(id).value = tco === null || tco === undefined ? "" : (tco[khoa] ?? "");
+}
+
 function veTrongSo() {
   const co = $("co-trong-so").checked;
   hien($("khoi-trong-so"), co);
+  for (const [id, ma] of O_MA_TCO) $(id).checked = coMa(ma);
+  hien($("khoi-tco-thanh-toan"), coMa("chi_phi_thanh_toan"));
+  hien($("khoi-tco-tre"), coMa("chi_phi_tre"));
   dienDl($("tt-trong-so"), trongSo.map((t) => [`Thành phần ${t.ma}`, `đơn vị ${t.don_vi}, hệ số ${t.he_so}`]));
+}
+
+/**
+ * [S1.9101 / S4.7b1] Nhóm khoá `tco` gửi lên: chỉ khoá của mã ĐANG BẬT, giá trị là chuỗi như người gõ (cắt khoảng trắng) — `CHECK`
+ * của `112` phán miền và cặp hai khoá thanh toán. Không khoá nào ⇒ `null` (`CHECK` từ chối object rỗng).
+ */
+function tcoGuiLen() {
+  if (!$("co-trong-so").checked) return null;
+  const ra = {};
+  for (const [id, khoa, ma] of O_THAM_SO_TCO) {
+    const v = $(id).value.trim();
+    if (coMa(ma) && v !== "") ra[khoa] = v;
+  }
+  return Object.keys(ra).length === 0 ? null : ra;
 }
 
 /** Cặp gửi lên: cả hai `null` khi bỏ chọn (`056` đòi chúng đi cùng nhau); top-N là số như người gõ — máy chủ phán. */
@@ -315,6 +364,7 @@ function dienMau() {
   $("chia-nho").value = String(MUC_MAC_DINH.chiaNhoCuaSoNgay);
   $("tham-dinh").value = String(MUC_MAC_DINH.thamDinhHieuLucThang);
   datTrongSo(TRONG_SO_MAC_DINH, BAFO_TOP_N_MAC_DINH);
+  datTco(null);
   datBenchmark(BENCHMARK_MAC_DINH);
   veBac();
 }
@@ -328,6 +378,7 @@ function chepMoiNhat() {
   $("chia-nho").value = p.chiaNhoCuaSoNgay === null ? "" : String(p.chiaNhoCuaSoNgay);
   $("tham-dinh").value = p.thamDinhHieuLucThang === null ? "" : String(p.thamDinhHieuLucThang);
   datTrongSo(p.evalComponents ?? null, p.bafoTopN ?? null);
+  datTco(p.tco ?? null);
   datBenchmark(p.benchmark);
   veBac();
 }
@@ -411,7 +462,13 @@ function tinhLai() {
     }
     tb.append(tr);
   }
-  const cb = [...canhBaoChinhSach(bac), ...canhBaoTrongSo(trongSoGuiLen().evalComponents), ...canhBaoBenchmark(benchmarkGuiLen())];
+  const tp = trongSoGuiLen().evalComponents;
+  const cb = [
+    ...canhBaoChinhSach(bac),
+    ...canhBaoTrongSo(tp, tcoGuiLen()),
+    ...canhBaoGoiThieuSoNgayGiao(tp, trangThai.goiThieuSoNgay, trangThai.daBat),
+    ...canhBaoBenchmark(benchmarkGuiLen()),
+  ];
   bao($("canh-bao"), cb.length === 0 ? "" : `Cảnh báo (không chặn): ${cb.join(" ")}`);
 }
 
@@ -446,6 +503,15 @@ $("co-trong-so").addEventListener("change", () => {
   veTrongSo();
   tinhLai();
 });
+// [S1.9101 / S4.7b1] Bấm một ô mã ⇒ trọng số thành tập chuẩn của các ô đang chọn.
+for (const [id] of O_MA_TCO) {
+  $(id).addEventListener("change", () => {
+    trongSo = thanhPhanTuMa(O_MA_TCO.filter(([i]) => $(i).checked).map(([, ma]) => ma));
+    veTrongSo();
+    tinhLai();
+  });
+}
+for (const [id] of O_THAM_SO_TCO) $(id).addEventListener("input", () => tinhLai());
 $("co-benchmark").addEventListener("change", () => { hien($("khoi-benchmark"), $("co-benchmark").checked); tinhLai(); });
 for (const [id] of O_BENCHMARK) $(id).addEventListener("input", () => tinhLai());
 
@@ -461,6 +527,8 @@ $("nut-tao-pb").addEventListener("click", async () => {
     chiaNhoCuaSoNgay: soNguyenHoacNull($("chia-nho").value),
     thamDinhHieuLucThang: soNguyenHoacNull($("tham-dinh").value),
     ...trongSoGuiLen(),
+    // [S1.9101 / S4.7b1] Nhóm khoá `tco` — `null` khi không mã quy đổi nào bật hay không ô nào điền.
+    tco: tcoGuiLen(),
     benchmark: benchmarkGuiLen(),
   };
   $("nut-tao-pb").disabled = true;

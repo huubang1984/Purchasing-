@@ -7,10 +7,15 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
-import { RFQ_STATUSES, RFQ_TRANSITIONS } from "@trustprocure/rfq";
+import { RFQ_STATUSES, RFQ_TRANSITIONS, SO_NGAY_GIAO_TOI_DA as SO_NGAY_GIAO_TOI_DA_GOI } from "@trustprocure/rfq";
 import { CHOT_VAO_SO } from "@trustprocure/identity";
 import * as GoiNgoaiLe from "@trustprocure/invitation";
 import {
+  SO_NGAY_GIAO_TOI_DA,
+  canhBaoSoNgayGiao,
+  docSoNgayGiao,
+  hienDatSoNgayGiao,
+  nhanSoNgayGiao,
   LOAI_NGOAI_LE,
   LOAI_NGOAI_LE_HAU_KIEM,
   MA_LY_DO_NGOAI_LE,
@@ -562,5 +567,47 @@ describe("[S1.273 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
     expect(nhanXacMinhNgan({ loai: "REVOKED", conHieuLuc: false })).toMatch(/^Xác minh đã bị thu hồi/u);
     expect(nhanXacMinhNgan({ loai: null, conHieuLuc: false })).toMatch(/^Chưa được xác minh/u);
     expect(nhanXacMinhNgan(null)).toBe("Không đọc được trạng thái xác minh.");
+  });
+});
+
+describe("[S1.9101 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau", () => {
+  it("biên của màn là biên của gói (CHECK `112`)", () => {
+    expect(SO_NGAY_GIAO_TOI_DA).toBe(SO_NGAY_GIAO_TOI_DA_GOI);
+  });
+
+  it.each([
+    ["", null],
+    ["  ", null],
+    [" 30 ", 30],
+    ["1", 1],
+    ["3650", 3650],
+    ["3651", undefined],
+    ["0", undefined],
+    ["030", undefined],
+    ["1.5", undefined],
+    ["-3", undefined],
+    ["1e3", undefined],
+    ["ba", undefined],
+  ])("ô %j ⇒ %j", (chuoi, mong) => {
+    expect(docSoNgayGiao(chuoi)).toBe(mong);
+  });
+
+  it("ô chỉ ở DRAFT; nhãn mọi trạng thái", () => {
+    expect(RFQ_STATUSES.filter((t) => hienDatSoNgayGiao(t))).toEqual(["DRAFT"]);
+    expect([nhanSoNgayGiao(30), nhanSoNgayGiao(null), nhanSoNgayGiao(undefined)]).toEqual(["30 ngày", "chưa khai", "—"]);
+  });
+
+  it("cảnh báo chỉ khi gói chưa khai, ở DRAFT hay chờ duyệt, và một phiên bản hiệu lực hay mới hơn tính chi phí trễ", () => {
+    const tre = { phienBan: [{ hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] }], daBat: false };
+    expect(canhBaoSoNgayGiao(tre, null, "DRAFT")).toContain("Khai số ngày giao ở ô trên");
+    expect(canhBaoSoNgayGiao(tre, 30, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, undefined, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, null, "OPEN")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, null, "PENDING_APPROVAL")).toContain("chỉ còn lối huỷ");
+    expect(canhBaoSoNgayGiao({ ...tre, daBat: true }, null, "PENDING_APPROVAL")).toContain("trả gói về soạn thảo");
+    expect(canhBaoSoNgayGiao(null, null, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao({ phienBan: [{ hieuLuc: true, evalComponents: null }] }, null, "DRAFT")).toBeNull();
+    // Không phiên bản nào hiệu lực (mọi bản chờ ký) ⇒ xét mọi bản.
+    expect(canhBaoSoNgayGiao({ phienBan: [{ hieuLuc: false, evalComponents: [{ ma: "chi_phi_tre" }] }] }, null, "DRAFT")).not.toBeNull();
   });
 });

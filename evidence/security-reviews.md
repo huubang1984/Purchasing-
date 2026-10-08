@@ -26376,3 +26376,75 @@ của nó — `pnpm t0` và `pnpm test` chạy lại trên HEAD sau lượt evid
 - Cây gộp S3.4a: `pnpm test` 153 tệp / 2673 ca; evidence vitest 0, 89/89 (67 + 22), 4989 khẳng định, 2 821 s. Cây gộp S3.4b (cuối):
   `pnpm t0` 50 s; `pnpm test` 154 tệp / 2692 ca; evidence vitest 0, **89/89**, **5012** khẳng định, 2 561 s (sau 6 lượt chờ máy rảnh). Sau
   bản vá *có M* của lượt soi chéo: `pnpm t0` xanh, `pnpm test` 154 tệp / 2693 ca trên HEAD — evidence giữ của cây trước bản vá (vá chỉ ở trang).
+
+---
+
+# §S1.9101 — S4.7b1: TCO PHÍA NGƯỜI MUA — `/chinh-sach` CHỌN MÃ VÀ KHAI THAM SỐ, `POST /policy` CHUYỂN `tco`; SỐ NGÀY GIAO YÊU CẦU CÓ ROUTE, Ô Ở `/tao-thau`, DÒNG Ở MÀN DUYỆT; CẢNH BÁO TRƯỚC KHI GÓI KẸT — ADR-9201
+
+## 1. Vòng này là gì
+
+Phần đầu trong hai phần của S4.7b (spec S4 §9): phía NGƯỜI MUA của TCO. S4.7a (§S1.279) đã cho lượt chấm năm mã có nguồn, nhưng không
+đường HTTP nào khai được chúng. Phía nhà cung cấp — route khách, ô khai ở `/nop-thau`, hai hạng ở `/mo-thau` — là S4.7b2. Không migration.
+
+## 2. Quyết định của chủ dự án (2026-10-08)
+
+Bốn câu, cả bốn theo đề xuất (ADR-9201): ⑴ S4.7b tách HAI phần; ⑵ nhà cung cấp thấy tập mã, số ngày giao VÀ tham số quy đổi (b2 chụp
+tham số vào gói lúc mở); ⑶ ô khai BẮT BUỘC trên form (tuỳ chọn ở lượt chấm); ⑷ hạng giá chỉ trên báo giá có hạng.
+
+## 3. Đo trước
+
+- `POST /policy` (`buyer.ts`) không chuyển `tco` dù `createProcurementPolicy` nhận nó; `GET /policy/versions` đã trả `tco` nhưng màn bỏ qua.
+- `/chinh-sach` hiện thành phần CỐ ĐỊNH chỉ-đọc `[gia]`; `canhBaoTrongSo` nói *"lượt chấm chỉ đọc một thành phần giá"* — sai từ `112`;
+  ca `chinh-sach.test` *"hệ số khác 1 vẫn là vế hẹp"* khẳng định màn im trước một phiên bản mà lượt chấm đã từ chối (L8).
+- `datSoNgayGiao` không ra barrel, không route; `GET /rfqs/:rfqId` không mang `so_ngay_giao`; màn duyệt (`/tao-thau` bước 4) không hiện
+  con số mà `approved_delivery_hash` phủ.
+- Phiên khách không đọc gì của chính sách (`027` §6); phong bì niêm phong ở trình duyệt; lượt chấm không lưu giá của báo giá không hạng.
+
+## 4. Thay đổi
+
+- **`apps/api`**: `PUT /rfqs/:rfqId/delivery-days` (`rfq.create`, `resourceType` `RFQ`, khuôn route nhóm hàng) với bộ đọc
+  `soNguyenHoacNull` — `null` xoá, vắng trường hay sai kiểu là 422; `POST /policy` chuyển `tco` (`objectChuoiTuyChon`); `GET /policy/versions`
+  mang `goiChoDuyetThieuSoNgayGiao`.
+- **`packages/rfq`**: `RfqRecord.soNgayGiao` (`COT_RFQ`); `datSoNgayGiao` và `SO_NGAY_GIAO_TOI_DA` ra barrel; `lietKePhienBanChinhSach`
+  đếm gói `PENDING_APPROVAL` chưa khai số ngày giao.
+- **`packages/danh-gia`**: `MA_CO_NGUON`, `docNhomTco`, `kiemChinhSachTco` ra barrel (thuần).
+- **`apps/web`**: `/chinh-sach` — bốn ô mã, ba ô tham số (hiện theo mã, không mặc định), cột *"Tham số TCO"*, cảnh báo thiếu tham số,
+  gói chờ duyệt thiếu số ngày giao (lời ra theo loại tổ chức), câu TẠM *"màn nộp báo giá chưa có ô"*; lõi `loiTrongSo` (bản chép
+  `kiemChinhSachTco`), `thanhPhanTuMa`. `/tao-thau` — ô và nút ở DRAFT, dòng *"Số ngày giao yêu cầu"* mọi trạng thái, cảnh báo chi phí
+  trễ; lõi `docSoNgayGiao`, `canhBaoSoNgayGiao`.
+- **Sổ**: `barrel-exports` (rfq hai symbol, danh-gia ba), `cong-quyen-route` (`datSoNgayGiao` ghi; `docNhomTco`, `kiemChinhSachTco` thuần),
+  `ma-chep-api-worker` (một hàng `RIENG`), kịch bản 41 (`thanHopLe` cho route mới).
+- **Tài liệu**: ADR-9201; TEST-PLAN L8, L16; spec §9 (S4.7b, S4.7b1, S4.7b2); STATE; PRODUCT; Handoff (155 ADR).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. Ô mã là ô chọn cố định trong HTML (bốn mã), giá không có ô — luôn tính; bấm một ô thì trọng số thành TẬP CHUẨN (`thanhPhanTuMa`:
+   thứ tự chính sách, hệ số `1.0000`) — thành phần lạ của một bản chép rơi đi; chưa bấm thì bản chép đi nguyên văn, như khoản 329.
+2. Thân chỉ mang khoá `tco` của mã ĐANG BẬT; không khoá nào thì `null` (`CHECK` từ chối object rỗng).
+3. Cảnh báo ở `/tao-thau` đọc lần `GET /policy/versions` sẵn có lúc đăng nhập — không thêm lời gọi; xét phiên bản hiệu lực VÀ mọi phiên
+   bản mới hơn (chờ ký) — một bản mới hơn có thể có hiệu lực trước lúc gói mở.
+4. Câu TẠM ở `/chinh-sach` cho khoảng giữa b1 và b2 — nói thật rằng nhà cung cấp chưa khai được mã ngoài giá.
+5. `GET /rfqs/:rfqId` mang `soNgayGiao` cho cả agent (route `agent: true`): con số là thuộc tính của gói như hạn nộp; danh sách trắng của
+   `GET /guest/rfq` không đổi (khách thấy nó ở b2, cùng tham số).
+
+## 6. Đo
+
+- **Đơn vị** — `chinh-sach.test` 28 ca (ca LẬT *"hệ số khác 1"* ⇒ *"bị từ chối khi chấm"*; tập chuẩn; tham số thiếu; bốn mã không nguồn
+  hay hỏng; gói chờ duyệt; mô tả); `tao-thau.test` 61 ca (biên khoá với gói; mười hai ô; ô chỉ DRAFT; cảnh báo bảy ca);
+  `bac-mac-dinh-dong-bo` — hai bản luật L8 cùng phán quyết, CÙNG câu trên mười tám ca, tập mã cùng thứ tự.
+- **DOM** — `phuc-vu.test` bốn ca: thân gửi tập chuẩn và chỉ khoá của mã bật, bỏ chọn ⇒ `null`; chép mang mã và tham số, bảng hiện tham
+  số, cảnh báo gói chờ duyệt theo loại tổ chức; ô số ngày ở DRAFT, dòng mọi trạng thái, `null` khi trống, ngoài miền không gọi; cảnh báo
+  chi phí trễ theo trạng thái, loại tổ chức và phiên bản mới hơn.
+- **HTTP** — `buyer.int` hai ca: route số ngày giao (vắng trường, sai kiểu, ngoài miền, cổng 403, đặt, đọc lại, xoá, hai hàng sổ, gói chờ
+  duyệt 422, đếm 1); `POST /policy` với `tco` (hai 422 của cửa, một 422 của `CHECK`, 201, trả nguyên văn, `coTco`).
+- **Không lùi**: kịch bản 41 HTTP, `man-kiem-soat.int`, `xung-dot-loi-ich.int`, `guest.int`, `tra-ve-nhap.int`, `apps/mcp` — 278/278;
+  `buyer.int` 31/31; QT3 cú pháp và ngữ pháp 8/8.
+
+## 7. Đột biến
+
+Script áp từng đột biến, chạy tệp test đích, khôi phục. Mười sáu đột biến, cả mười sáu ĐỎ:
+- **Máy chủ (5)**: `POST /policy` bỏ chuyển `tco` (M1); vắng `soNgayGiao` thành `null` (M2); đếm cả gói khác `OPEN` (M3); route đổi cổng
+  (M4); `GET` không mang số ngày giao (M16).
+- **Màn (11)**: gửi tham số của mã không bật (M5); bỏ kiểm hệ số (M6); bỏ đòi giá (M7); tập chuẩn không thêm giá (M8); cảnh báo chỉ xét
+  bản hiệu lực (M9); ô số ngày ở mọi trạng thái (M10); nhận số `0` (M11); dòng số ngày chỉ ở DRAFT (M12); chép không mang tham số (M13);
+  lời ra gói chờ duyệt bỏ vế loại tổ chức (M14); bỏ câu tạm (M15).

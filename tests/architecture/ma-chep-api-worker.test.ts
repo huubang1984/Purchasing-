@@ -946,6 +946,15 @@ const BANG_MAU: readonly HangMau[] = [
     lyDo: "Trang tạo thầu nhóm số cho người đọc; bộ giả lập nhóm số \"chỉ cho báo cáo\" (`dinhDangVnd`) — không bên nào so chuỗi hiển " +
       "thị với bên kia; phép tính tiền thật nằm ở `thanhTien` (hàng GIU TEP_TEST).",
   },
+  // [S1.9101 / S4.7b1] Số nguyên dương tối đa bốn chữ số, không số 0 đầu — hai việc khác nhau.
+  {
+    mau: "/^[1-9][0-9]{0,3}$/u",
+    ten: "số nguyên dương ≤ 4 chữ số",
+    tep: [`${WEB}tao-thau.ts`, "tools/neo-so-kiem-toan/src/canh-moc-neo.ts"],
+    xuLy: "RIENG",
+    lyDo: "Màn tạo thầu đọc ô số ngày giao yêu cầu (miền 1–3650 của `112_tco`, biên trên kiểm riêng); công cụ neo sổ đọc ngưỡng giờ " +
+      "`NGUONG_GIO` của biến môi trường — không phải bản chép, không bên nào đối chiếu với bên kia.",
+  },
   {
     mau: "/\\r?\\n/u",
     ten: "tách dòng",

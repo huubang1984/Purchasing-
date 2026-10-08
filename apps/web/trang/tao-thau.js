@@ -21,6 +21,7 @@ import {
   hangNganSach, hienCotHangChuan, hienTraVe, khungTinHieu, loaiNgoaiLeGoiY, loiGiaiTrinh, loiLyDo, loiLyDoGhiNhan, nhanAnhXa,
   nhanCanhTranh, nhanCo, nhanLoaiNgoaiLe, nhanLoiMoi, nhanMaLyDo, nhanXacMinhNgan, nutLoiMoi, tenKemMst, thuTuBuoc, tuDocNganSach,
   vanBanAnToan,
+  canhBaoSoNgayGiao, docSoNgayGiao, hienDatSoNgayGiao, nhanSoNgayGiao, SO_NGAY_GIAO_TOI_DA,
 } from "/lib/tao-thau.js";
 import { docNhomHang, hienDatNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
@@ -178,9 +179,14 @@ function moSauDangNhap(me, dungLai) {
  * [S1.191 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc chưa — `daBat` của `GET /policy/versions`, đúng hàm công tắc mà
  * máy chủ hỏi (ADR-080). Đọc hỏng thì màn ở luồng MVP1: máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ nói kém đi.
  */
+// [S1.9101 / S4.7b1] Thân của lần đọc ấy — cảnh báo số ngày giao đọc phiên bản đang hiệu lực từ đây, không gọi lần thứ hai. Cũ tới lần
+// đăng nhập sau: cảnh báo là lời nói trước, cạnh mở gói mới là chốt (`tco_thieu_so_ngay_giao`).
+let chinhSach = null;
+
 async function napLuong() {
   try {
     const r = await goi("GET", "/policy/versions");
+    chinhSach = r.status === 200 ? r.body : null;
     datLuong({ ...luong, daBat: r.status === 200 && r.body?.daBat === true });
     if (luong.daBat) await napNhomHang(null);
   } catch { /* mất mạng: giữ luồng MVP1 */ }
@@ -229,6 +235,8 @@ function datLuong(moi) {
   hien($("khoi-tra-ve"), hienTraVe(luong.daBat, luong.trangThaiGoi));
   hien($("khoi-nhom-hang"), luong.daBat);
   hien($("nut-nhom-hang"), hienDatNhomHang(luong.daBat, luong.trangThaiGoi));
+  // [S1.9101 / S4.7b1] Số ngày giao — mọi tổ chức, chỉ ở DRAFT (trigger `rfq_packages_so_ngay_giao`).
+  hien($("khoi-so-ngay-giao"), hienDatSoNgayGiao(luong.trangThaiGoi));
   // [S1.273 / S3.3e1] Câu về nhà cung cấp đếm được, hai cột của bảng lời mời và khối ngoại lệ — chỉ tổ chức đã bật; lập và rút
   // ngoại lệ chỉ ở DRAFT (máy chủ từ chối ở trạng thái khác — K4a).
   hien($("ghi-s3-ncc"), luong.daBat);
@@ -339,7 +347,11 @@ async function napRfq(rfqId, lanThu = 0) {
     ["Hạn nộp", g.deadlineAt === undefined ? null : new Date(g.deadlineAt).toLocaleString("vi-VN")],
     ["Cần hai người duyệt", g.requiresDualApproval === true ? "có" : "không"],
     ["Lần nộp duyệt", g.lanNop],
+    // [S1.9101 / S4.7b1 / L16] Mọi trạng thái: người duyệt ký lên con số này (`approved_delivery_hash`), nên nó đứng ở màn duyệt.
+    ["Số ngày giao yêu cầu", nhanSoNgayGiao(g.soNgayGiao)],
   ];
+  $("so-ngay-giao").value = typeof g.soNgayGiao === "number" ? String(g.soNgayGiao) : "";
+  bao($("canh-bao-so-ngay"), canhBaoSoNgayGiao(chinhSach, g.soNgayGiao, typeof g.status === "string" ? g.status : "") ?? "");
   // [S1.201 / S3.6a] Nhóm hàng của gói — chỉ ở tổ chức đã bật; ô chọn nhảy về đúng nhóm gói đang giữ.
   if (luong.daBat) {
     hang.push(["Nhóm hàng", nhanNhomHangCuaGoi(nhomHang, g.categoryId)]);
@@ -514,6 +526,21 @@ $("nut-nhom-hang").addEventListener("click", async () => {
   const r = await goi("PUT", `/rfqs/${phien.rfqId}/category`, { categoryId });
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đặt được nhóm hàng")); return; }
   bao($("ok2"), "Đã đặt nhóm hàng cho gói.");
+  await napRfq(phien.rfqId);
+});
+
+// [S1.9101 / S4.7b1] Số ngày giao yêu cầu: để trống là xoá; ngoài miền thì trang nói, không gửi — máy chủ vẫn kiểm lại.
+$("nut-so-ngay-giao").addEventListener("click", async () => {
+  bao($("loi2"), ""); bao($("ok2"), "");
+  if (phien.rfqId === "") { bao($("loi2"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const soNgayGiao = docSoNgayGiao($("so-ngay-giao").value);
+  if (soNgayGiao === undefined) {
+    bao($("loi2"), `Số ngày giao yêu cầu phải là số nguyên từ 1 đến ${SO_NGAY_GIAO_TOI_DA}, hoặc để trống.`);
+    return;
+  }
+  const r = await goi("PUT", `/rfqs/${phien.rfqId}/delivery-days`, { soNgayGiao });
+  if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không lưu được số ngày giao")); return; }
+  bao($("ok2"), soNgayGiao === null ? "Đã xoá số ngày giao yêu cầu của gói." : `Đã lưu số ngày giao yêu cầu: ${soNgayGiao} ngày.`);
   await napRfq(phien.rfqId);
 });
 
