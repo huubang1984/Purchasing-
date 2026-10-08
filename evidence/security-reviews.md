@@ -25937,3 +25937,206 @@ nguyên vẫn xanh: nâng riêng hằng J7 vẫn làm trao thầu gãy.
 - Gộp `origin/master` lần hai (PR #255 S1.278, #256 S1.279 — TCO, K8a) sau khi lượt 3 xanh: chín xung đột gỡ tay (danh sách migration
   111/112/113, `MOC_GHIM` 85 → 88, cổng tên ràng buộc 8 hàm trigger + bốn hàm vị từ, tổng điều tra trigger); trên cây gộp `pnpm t0`,
   `pnpm test` (153 tệp, 2658 ca) xanh; evidence lượt 4: vitest thoát mã 0, **88/88** bất biến (66 + 22), 4960 khẳng định, 1 800 s.
+
+# §S1.9102 — LƯỢT SOI HÌNH DẠNG SPEC S5, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 36 PHÁT HIỆN, BẢY CAO, MƯỜI MỘT LỜI KHAI ĐO TRÊN LƯỢC ĐỒ THẬT — VÀ MỘT LỖ CỦA MÃ ĐANG CHẠY
+
+**Mảnh của `docs/PRODUCT.md` §11 mà vòng này chạm (ADR-043 ⒞): không mảnh nào.** Vòng này soi một spec. Không mã, không
+migration, không sửa `docs/TEST-PLAN.md`. Khoản nợ duy nhất mở ra (9401) là của mã đang chạy từ `002`/`005`, không của S5.
+
+## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
+
+Chủ dự án, 2026-10-08: *"Chạy lượt soi hình dạng spec S5"*. Spec S5 vào kho ở vòng S1.9101 (`docs/superpowers/specs/2026-10-07-trustprocure-s5-tich-hop-erp-doanh-nghiep.md`,
+666 dòng, bản nháp), viết trước pilot, trước khi có khách nào có ERP, theo lựa chọn *"chuẩn bị trước"* của chủ dự án
+(khuôn ADR-098). Khuôn của lượt soi là S1.139, S1.159, S1.161: soi trước dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản
+phẩm, tự chốt phần tiền lệ trả lời được, sửa spec tại chỗ — GẠCH kèm nhãn `[S1.9102]`, không viết lại.
+
+Khác S1.161 ở hai điểm, cả hai cố ý: ⑴ các phép đo chạy trên LƯỢC ĐỒ THẬT của kho (mọi migration tới `113` cộng
+`hardening.always.sql`), không trên bảng tối giản — vì ba trong bảy CAO là lời khai về trigger đang ghim (`029`, `039`, `051`) và
+về `GRANT` đang cấp (`002`, `005`); ⑵ chủ dự án chưa được hỏi câu nào — vòng này để lại §2.7 của spec làm danh sách hỏi, không
+ADR quyết định nào ra đời cùng nó.
+
+Thứ vòng này để lại:
+- spec S5 sửa tại chỗ — §2.3 (Q4, Q5, Q6, Q10 sửa; Q11, Q12, Q13 mới), §2.4 (a), (c), (d), (f), (g), §2.5 ⑽ ⒀ ⒁, §2.6 (29 chốt
+  ⒃–㊹), §2.7 (13 câu còn chờ), §3.1–§3.5, §4.1–§4.9 gạch tại chỗ, §4.10, §5.1 (M11–M14), §6, §7, §8.2–§8.4, §8.13, §8.14, §9.2,
+  §11, §12;
+- ADR-9201 (chốt từ tiền lệ, khuôn ADR-099); một dòng đánh dấu tại chỗ ở mục hardening của ADR-111 trong `docs/DECISIONS.md`;
+- khoản nợ 9401 (MỞ, rổ đề xuất B) ở `docs/STATE.md`;
+- nhóm F (F1–F4) ở `docs/TIEN-DE-CHUA-DO.md`, bốn dòng trùng chép vào E6, B6, C4, D1 — 33 → 37 tiền đề, ba chỗ đếm viết tay sửa;
+- một dòng ở `docs/PRODUCT.md` §7, một cột mốc ở `docs/STATE.md`.
+
+## 2. Bốn góc độc lập, 55 phát hiện thô cộng 11 của lượt gộp, 36 sau khử trùng
+
+| Góc | Câu hỏi | Thô | CAO | TRUNG | THẤP |
+|---|---|---|---|---|---|
+| A | Lời khai của spec đối chiếu mã, và mâu thuẫn nội tại | 14 | 5 | 5 | 4 |
+| B | Khả thi cưỡng chế ở tầng CSDL và tầng tiến trình | 14 | 4 | 6 | 4 |
+| C | Đối kháng: lách chốt, người đặt thước, báo sai gắn tên, rò giá, cửa thứ hai | 13 | 3 | 9 | 1 |
+| D | Phạm vi, thứ tự, luồng, kiểm thử, quy trình | 14 | 1 | 11 | 2 |
+| **Cộng** | | **55** | **13** | **31** | **11** |
+
+Mỗi góc chỉ ĐỌC, có tệp:dòng; không góc nào chạy Postgres. Lượt gộp đo trước mười lời khai bằng Postgres thật (mục 5) và tự
+ghi 11 phát hiện L1–L11 (L11 là lời xác nhận ma trận vai), rồi gộp trùng: ba góc cùng thấy chứng chỉ máy không mint được
+(A①, A②, B①, C④ — cùng L1); ba góc cùng thấy chỗ cắm bản xuất sai (A③, B③, D⑦ — cùng L2); hai góc cùng thấy người của tích
+hợp là người chọn danh sách (C②, D⑥ — cùng L3); hai góc cùng thấy `app_api` còn chèn người (B⑥ — cùng L4). Kết quả: **36 — 7
+CAO, 21 TRUNG, 8 THẤP**. Chỗ nào góc soi ghi *"CHƯA CHẮC"* mà đo được trên lược đồ thật thì đã đo; một chỗ chưa đo (B⑫ vế
+`app_khoi_tao`) ghi là việc của S5.1.
+
+## 3. Bảy CAO
+
+| # | Phát hiện | Góc | Đọc / đo | Chốt |
+|---|---|---|---|---|
+| ① | **Chứng chỉ máy cho người đại diện không TOTP KHÔNG mint được và không dùng được.** `029` buộc mọi phiên `app_api` chèn mang `mfa_verified_at`; `039` buộc phiên mang `mfa_verified_at` đi sau một lần TOTP của CHÍNH `user_id` ấy; `resolveSessionByToken` đòi `IS NOT NULL`. Spec khai *"`039` không đổi"* ba lần và *"khuôn `/auth/agent-session`"* — route `self` không mang mã quyền, `startAgentSession` chỉ phát cho chính người gõ TOTP. Và *"không hồ sơ TOTP ⇒ không phiên USER"* là trạng thái, không bất biến: `app_api` có `INSERT` trên `mfa_credentials` | A① A② B① B⑬ C④ L1 | đọc · **đo** M1, M2a, M2b | Q11 (chủ dự án) · ⒃ ⒄ · §4.1 |
+| ② | **Người của tích hợp là PM — người chọn danh sách.** `supplier.manage` chỉ ở PM, vai cũng giữ `rfq.create` + `rfq.invite`; K2 (`107`) không đếm hồ sơ do người chọn danh sách dựng, nên cả sổ nhập về vô dụng ở tổ chức đã bật S3 khi PM mời; GRN trong tay PM là *người đặt thước cầm thứ bị đo* (L3); `test-support` đã phải dựng người nhập riêng vai `TECHNICAL` vì đúng lý do ấy | C② D⑥ L3 | đọc · ma trận vai **đo** M7 | Q12 (chủ dự án) · ⒇ ㊶ · §8.13 |
+| ③ | **Bản xuất PO: chỗ cắm, băm, khoá.** Không có điểm *"sau `APPROVED` và trước mọi hàng sổ"* — `RFQ_AWARD_SIGNED` ghi trước câu `INSERT APPROVED`; ADR-154 ⑹ là *hai PR*, không là thứ tự; từ chối có sổ ở điểm ấy tự khoá (`DenialAuditFailedError`). Băm *"hàm thuần của hồ sơ nhà cung cấp"* không tái lập vì `suppliers` có `GRANT UPDATE`; *"sha256 của tài liệu"* và *"hàm SQL tính lại"* là hai đại lượng chưa gọi tên là cặp J2. Trigger đọc *hàng mới nhất* không khoá: hai ACK song song cùng COMMIT. Deferred trigger *"khuôn ADR-123"* kiểm sai chiều; `xmin` gãy ở SAVEPOINT (S1.161 M6). Bộ dựng NÉM làm hỏng cạnh duyệt | A③ A⑩ B② B③ B④ B⑤ C⑧ D⑦ L2 L8 | đọc · **đo** M5 | ㉑ ㉒ ㉓ ㉔ ㉕ · §4.2 · §8.14 |
+| ④ | **SSO: cửa sổ ghi danh, khoá danh tính, và `app_api` còn chèn người.** `/auth/redeem` ghi danh TOTP cho người chưa có hồ sơ ⇒ quản trị IdP chiếm được mọi người CHƯA ghi danh (kể cả người duyệt mới) dù Q4 ⒜ giữ TOTP; `user_identities` *"một `sub` một người"* toàn cục là oracle ADR-013, và bản nháp vừa đặt bảng ngoài `GRANT` vừa cho `app_api` chèn lần ràng đầu; *"không tạo người dùng"* (M8) không có lớp CSDL — `app_api` có `INSERT` trên `users`, `INSERT`/`DELETE` trên `user_roles` | C③ B⑥ B⑧ A⑬ L4 | đọc · **đo** M3, M4a, M4b, M8, M9 | ㉙ ㉚ ㉛ · khoản 9401 · §4.7 |
+| ⑤ | **Tập tiền tệ là CHÍN `CHECK`, không bốn; và ở tổ chức bật S3 nới tập không đủ.** `('VND','USD')` ở `014`×2, `057`, `103`×2, `104`, `109`×2, `110` + `CURRENCIES` + `070` + ô chọn; `tien-te-dong-bo.test.ts` chỉ khoá bốn, `tien-te-mot-cho-doc.test.ts` là INV-J8; `award_chot_bac` trả `K7_LECH_TIEN_TE` khi báo giá khác tiền tệ chính sách — gói `EUR` ở tổ chức `VND` không bao giờ trao được | A⑤ C⑩ | đọc (grep vét cạn `db/migrations`) | Q5 đổi câu · ㉜ · §4.8 |
+| ⑥ | **Hình dạng S5.0 tự mâu thuẫn.** Câu đậm §3.1 *"không ghi vào bảng nào của S1–S4"* trái §4.5 (ghi `rfq_items`, `suppliers`, `supplier_contacts`); khuôn bảng nhận §2.5 ⑶⑷ không áp được cho hai bảng ấy; cột *mã vật tư ERP* không có chỗ đậu và `chuanHoaGoi` không chạy ở `DRAFT`; `docCsvNgoai` kiểu đóng cho hai hình dạng giá ngoài — S5.0 phải tách lõi và lật `csv-ngoai.test.ts` mà *Ra cái gì* không kê | A④ D④ D⑤ | đọc | ㊵ · §3.1 · §4.5 · §9.2 |
+| ⑦ | **Lịch vào sổ của nhóm M không đạt được ở hạng mục khai.** M1 đòi đối chứng dương (bản xuất) và M9 nói GRN/hoá đơn — bảng của S5.2/S5.3 — mà cả hai vào sổ ở S5.1: ô *xanh vì phạm vi* (spec S4 §2.5 ⒅); M6 *giết ERP* đo một thế giới mà cạnh không thể phụ thuộc; thiếu ca đo cho M3 (thu hồi, TTL), M8 (`exp`, `aud`, chữ ký) và cho chính S5.0 | D① D⑦ D⑪ | đọc | ㊷ · §5.1 (M12–M14) |
+
+**Ba CAO là chỗ bản nháp nói sai về mã, không phải lỗ thiết kế:** ③ (thứ tự trong `duyetTraoThau`, trích ADR-154), ⑤ (số
+bản chép), ⑥ (câu đậm §3.1). **Hai CAO có chung một hình dạng với S1.161 ①:** một luật đúng ở mỗi thời điểm mà sai theo thời
+gian — ④ (TOTP giữ phiên, trừ lúc chưa có TOTP) và C① (M1 đúng ở mỗi thời điểm, sai sau một lần huỷ–trao lại; hạ TRUNG vì người
+huỷ đã giữ `bid.view`, thành Q13).
+
+## 4. Hai mươi mốt TRUNG và tám THẤP
+
+| # | TRUNG | Góc | Chốt |
+|---|---|---|---|
+| 1 | Khuôn `agent` chỉ BẮT BUỘC trên route đọc/tự thân và BỊ CẤM trên route ghi; bốn `POST` của máy không có tiền lệ | A⑥ | ⒄ |
+| 2 | `kind` outbox mới chạm `095` + `099` (ADR-138) + union `KindOutbox`, không *"hai policy 095"*; quên `099` thì `enqueueJob` NÉM 42501 | A⑦ B⑪ L5 | ㉞ |
+| 3 | Tập mã TCO không ở `112` mà ở `tco.ts` `MA_CO_NGUON`; `CHECK` ở `erp_invoice_lines` là bản chép SQL đầu tiên | A⑧ | ㉝ |
+| 4 | `actor_type = 'SERVICE'` *"không nới"* chỉ đúng ở SQL; `SessionActor.type` là literal `"USER"`, ADR-039 ⑵ cố ý không nới | A⑨ C⑨ L6 | ⒅ |
+| 5 | *"`CHECK` lược đồ đóng + dây bẫy khoá tiền"* trên bảng không có cột jsonb | B⑦ | ㉗ |
+| 6 | Lô nhận không có khoá idempotent: ERP gửi lại sau timeout ⇒ GRN/hoá đơn nhân đôi | B⑨ | ㉘ |
+| 7 | Khuôn `033` cho ba luật vai/người: vế *mã ↔ một vai* là hình dạng mới; vế người đọc `user_roles` dưới RLS của `app_khoi_tao` — CHƯA ĐO | B⑫ | ㉟ |
+| 8 | Huỷ award đã `DA_KEO` rồi trao lại ⇒ ERP giữ giá của hai báo giá cùng gói | C① | Q13 · M12 |
+| 9 | Chứng chỉ lộ: 90 ngày là con số tròn; chưa có route nào thu hồi phiên người khác; §8.2 chỉ nói vế đọc | C⑤ | ⒆ · §8.2 |
+| 10 | *"Không cột tiền"* là lớp theo CỘT — giá dự toán đi trong `mo_ta` tới `GET /guest/rfq` | C⑦ | ㊲ |
+| 11 | Người đặt thước `diem_ncc` (FINANCE) là người đề xuất và duyệt; `033` không với tới | C⑪ | ㊴ |
+| 12 | Nội dung `v1` mơ hồ so với M1; bản tải cho người không chịu M1 | C⑬ | ㊳ |
+| 13 | Cột *Chờ* sai hai hàng: S5.0 ↔ S4.7b (cùng `tao-thau.js`), S5.2 ↔ S3.5b | D② | §2.4 (a) · §9.2 |
+| 14 | Cổng *bậc 2* sớm hơn điều kiện kỹ thuật của chính thang pilot (T4 trên cụm thật cần mảnh 3; ADR-062) | D③ | §2.4 (a) |
+| 15 | S5.7 là hạng mục duy nhất không bất biến dù §8.5 gọi nó là bề mặt SSRF | D⑧ | M11 |
+| 16 | Hai vế câu nghiệm thu không cấp được trên cụm demo: sàn ≥ 5 gói (gieo 3), IdP giả lập | D⑩ | ㊸ |
+| 17 | Trigger `integration.manage ∧ po.approve` đổi hành vi hôm nay cho cặp hợp lệ `FINANCE+PROCUREMENT_MANAGER` | D⑫ | ⒇ |
+| 18 | Băm bản xuất brute-force được: `bam` vào payload sổ, sổ xuất S5.8 dưới `audit.read` không `bid.view` | C⑥ | ㉖ |
+| 19 | Payload job PUSH là jsonb không `CHECK` — bảng giá thứ ba không khai ADR-054 | B⑩ | ㉖ |
+| 20 | Deferred trigger kiểm sai chiều; `xmin` không có tiền lệ và gãy ở SAVEPOINT | B⑤ | ㉕ |
+| 21 | Luật ghi từ ERP thiếu ba vế: ACK trước kéo, hai `DA_ACK`, `ngay_nhan` tương lai | C⑧ | ㉔ |
+
+| # | THẤP | Góc | Chốt |
+|---|---|---|---|
+| 1 | §2.5 ⒀ cấm tuyệt đối route `agent: true` trong khi §3.3 cho máy gọi `GET /me` — route đang `agent: true` | A⑪ | §2.5 ⒀ |
+| 2 | Trích sai: `132`/`139` là số ADR (migration `092`, `100`); `MIEN_TRU` không có cho `CHECK`; `SAN_SO_TRIGGER` là sàn của `ghim-trigger-tu-chua.int.test.ts:65`; ADR-154 ⑹ | A⑫ A⑭ L2 | ㊱ ㊹ |
+| 3 | `sessions_kind_hop_le` là `CHECK` ĐỔI ĐỊNH NGHĨA — đổi `mig` và deparse, không *"thêm dòng"* | B⑭ | ㊱ |
+| 4 | *"`ngay_nhan` ≥ ngày APPROVED; thời gian là của Postgres"* lẫn hai thứ: `ngay_nhan` là của ERP | L7 | §4.3 |
+| 5 | Dây bẫy `003` chỉ bắt khoá có TÊN: `so_tien_hoa_don` đi qua (đo M6) | L9 | §2.5 ⑺ |
+| 6 | Nhóm F trùng bốn tiền đề đã có; *"33 tiền đề"* ở ba chỗ viết tay | D⑬ | ㊹ · TIEN-DE |
+| 7 | Trôi số và tên: §1 thiếu S4.8; `/login` là bí danh; `/nha-cung-cap` là màn `supplier.qualify`; số tạm tự thiu; §12 *"nhóm M ở S5.0"*; dải 19 dòng/9 tệp; PRODUCT §5; KPI không ai đọc | D⑭ L10 | ㊹ |
+| 8 | Không trần đọc cho `INTEGRATION`; mỗi lần kéo giữ khoá chuỗi sổ của cả tổ chức; hai con số dòng 1000/≈500 | C⑫ | ⒆ |
+
+## 5. Mười một lời khai đo trên lược đồ THẬT
+
+**Bộ dựng.** Container không có docker daemon. Một cụm Postgres 16.15 dựng bằng `packages/test-support/src/postgres-cuc-bo.ts`
+(`TRUSTPROCURE_PG_LOCAL_BIN`, `TRUSTPROCURE_PG_LOCAL_DATA`) qua một shim `initdb`/`pg_ctl`/`postgres` chạy `runuser -u postgres`;
+`migrate()` áp TOÀN BỘ `db/migrations/*.sql` tới `113` cộng `hardening.always.sql`. Hai tệp đo tạm (`db/zz-soi-s5*.int.test.ts`)
+chạy qua `vitest`, đã xoá, không vào commit. Khác S1.161: bảng đo là bảng THẬT của kho, trigger là trigger đang ghim.
+
+| # | Lời khai | Cách đo | Kết quả | Chốt |
+|---|---|---|---|---|
+| M1 | A, B, D: `CHECK sessions_kind_hop_le` là tập đóng | Superuser `INSERT INTO sessions (…, kind = 'INTEGRATION')` | 23514 `sessions_kind_hop_le` | §2 ⑸ xác nhận |
+| M2a | Lead: người không TOTP không chèn được phiên với `mfa_verified_at` NULL | Dưới `app_api`, `SET app.org_id`, `INSERT INTO sessions (…, mfa_verified_at NULL)` | 23514, thông điệp `029`: *"app_api khong duoc tao mot phien chua qua MFA"* | ① · Q11 |
+| M2b | A②, B①, C④: người không TOTP không chèn được phiên với `mfa_verified_at = now()` | Như trên với `now()`, người không có `mfa_credentials` | 23514, thông điệp `039` (TOTP của chính người ấy trong ±3 bước) | ① · Q11 |
+| M3 | B⑥, L4: quyền cột hiệu dụng của `app_api` | `has_column_privilege`/`has_table_privilege` | `users.email INSERT = true`; `users UPDATE = false`; `user_roles INSERT (bảng) = false`, `DELETE = true`; `organizations INSERT/UPDATE = false` | ㉛ |
+| M4a | B⑥: `app_api` chèn được người dùng | Dưới `app_api` đã `SET app.org_id`, `INSERT INTO users (org_id, email, full_name, status)` | ĐI QUA, trả `id` | ㉛ · khoản 9401 |
+| M4b | B⑥: `app_api` gán được vai | `INSERT INTO user_roles (org_id, user_id, 'FINANCE')` | ĐI QUA | ㉛ · khoản 9401 |
+| M5 | B④, L8: hai ACK song song dưới READ COMMITTED trên bảng trạng thái chỉ-ghi-thêm | Bảng tạm cùng hình dạng, trigger đọc *hàng mới nhất*; hai phiên, phiên một ngủ trước COMMIT; chạy không khoá và có `pg_advisory_xact_lock(hashtextextended(lô, 1))` | Không khoá: cả hai COMMIT, **2 hàng `DA_ACK`**. Có khoá: phiên hai bị từ chối (*"ACK sai trang thai: DA_ACK"*), 1 hàng | ㉓ |
+| M6 | C⑥, L9: dây bẫy `003` với payload của S5 | `audit_events_payload_khong_mang_gia` trên bốn payload | `{loXuatId, soDong, bam, soPoErp, trangThai}` QUA; `{dong:[{don_gia}]}` và `{dong:[{thanh_tien}]}` BỊ CHẶN; `{so_tien_hoa_don}` QUA | §2.5 ⑺ · ㉖ (THẤP 5) |
+| M7 | A, B, C, D: ma trận vai thật | Đọc `role_permissions` sau migrate | `bid.view`: DIRECTOR, FINANCE, PM; `po.approve`: DIRECTOR, FINANCE; `supplier.manage`: chỉ PM; `supplier.qualify`, `policy.manage`: FINANCE; `item.manage`: DATA_STEWARD; `rfq.invite`: BUYER, PM; TECHNICAL chỉ `evaluation.perform` | ② · Q12 · L11 |
+| M8 | B⑥: quyền theo CỘT | `information_schema.column_privileges` cho `app_api` | `users`: INSERT trên `org_id, email, full_name, status`; `user_roles`: INSERT trên `org_id, user_id, role_code`; DELETE ở mức bảng | ㉛ |
+| M9 | L4: `app_api` xoá được vai người duyệt | `DELETE FROM user_roles` của một `DIRECTOR` | 1 hàng | ㉛ · khoản 9401 |
+
+Mười một phép đo; không phép tính nào. Hai lời khai của lượt soi vẫn CHƯA ĐO và ghi là việc của S5.1: vế RLS của `app_khoi_tao`
+khi chèn vai không `SET app.org_id` (B⑫, ㉟), và thời gian giữ khoá chuỗi sổ khi máy kéo liên tục (C⑫, ⒆ — T6).
+
+## 6. Mười ba câu cho chủ dự án — chưa câu nào được hỏi; 29 chốt từ tiền lệ
+
+Mười ba chỗ là lựa chọn sản phẩm (spec §2.7). Khác S1.161 §6, vòng này **không hỏi câu nào**: chủ dự án yêu cầu một lượt soi,
+không một lượt chốt. Lượt soi chỉ sửa câu (Q4 thêm vế ghi danh, Q5 đổi ba lối vì `K7_LECH_TIEN_TE`, Q6 và Q10 gộp vào Q12/Q11)
+và thêm ba câu mới ở chỗ lượt soi ĐỔI hình dạng thiết kế:
+- **Q11 — chứng chỉ máy gắn vào ai.** ⒜ người đại diện, `mfa_verified_at` NULL hợp lệ cho riêng `kind = 'INTEGRATION'` (thay
+  thân `029` cho nhánh `kind`, resolver rẽ `kind`, `039` không chạm) + hai trigger cấm TOTP và phiên `USER` cho vai `INTEGRATION`;
+  ⒝ chứng chỉ của chính người phát (khuôn agent). Đề xuất ⒜ — K2/K8a sạch, chứng chỉ không chết theo nhân sự; giá: hai lớp CSDL
+  mới ở đường đăng nhập.
+- **Q12 — người của tích hợp là ai.** ⒜ vai mới; ⒝ `TECHNICAL` nhận `integration.manage` + `supplier.import`; ⒞ PM như bản
+  nháp. Đề xuất ⒝ — không thêm người (B4), tiền lệ `test-support`; giá: người chấm kỹ thuật giữ hai thước về nhà cung cấp (§8.13).
+- **Q13 — huỷ một award đã xuất.** ⒜ chữ ký thứ hai; ⒝ nói ra: `THU_HOI` không trả dòng, F11 đọc cờ *đã xuất ERP*, M12 viết
+  *"đã từng được trao"*. Đề xuất ⒝ — người huỷ đã giữ `bid.view`, ADR-057 đã chốt cổng huỷ.
+
+Phần còn lại của spec viết theo ĐỀ XUẤT của Q11–Q13 và gọi tên chỗ đổi nếu chủ dự án chọn lối khác (§4.1, §4.5, §4.10, §5.1).
+Hai mươi chín chốt từ tiền lệ (⒃–㊹) theo khuôn ADR-050/ADR-099, mỗi chốt ghi tiền lệ hay phép đo, ở ADR-9201 và bảng §2.6.
+
+## 7. Lời khai của bản nháp mà lượt soi XÁC NHẬN
+
+- **Bề mặt và cổng** — 104 route / 87 đường dẫn (`grep -c 'method: "' apps/api/src/routes/*.ts`); `TRAN_THAN_BYTE = 64 KiB`
+  (`router.ts:104`); điều kiện xét lại *"vượt 40"* của ADR-020 (`DECISIONS.md:1901`) chưa ADR nào trả lời; vế 403 có sổ của agent
+  đứng TRƯỚC `requirePermission` (`dispatch.ts:822-843`); `agent` bắt buộc ở kiểu và test hình dạng route (A, B, D).
+- **Phiên** — `sessions_kind_hop_le` tập đóng, không `GRANT UPDATE (kind)`, chỉ `UPDATE (mfa_verified_at, revoked_at)`, TTL ràng
+  HIỆU hai cột với `created_at` ngoài `GRANT INSERT` (`051:91-104`, `006:296-301`); `kiem_danh_tinh_theo_phien` không đọc `kind`
+  (`013:66-71`) (A, B).
+- **Sổ** — `actor_type` có `'SERVICE'` (`003:176`); `audit_events_payload_khong_mang_gia` bắt khoá ở mọi độ sâu (`003:219-225`);
+  payload *id lô, số dòng, băm* đi qua (đo M6) (B, lead).
+- **Khuôn có thật** — trigger đọc hàng mới nhất + khoá tư vấn theo gói (`061:535-544`); `app_api` `SELECT` `rfq_unsealed_bids`
+  (`019:459`) và `EXECUTE bid_dong_tho` (`096:411`); cột do trigger đặt ngoài `GRANT` (`082:72`, `011:41-43`, `113:492`); bảng
+  nhận khuôn `109` (hàng rút, `_khach RESTRICTIVE`, `bid_chi_ghi_them`, chốt `TRUNCATE`); `rfq_items_chi_sua_khi_soan` chỉ `DRAFT`
+  (`011:341-345`); `UNIQUE (org_id, tax_code)` (`008:71`) (A, B).
+- **Vai** — PM là vai duy nhất của `005` giữ `bid.view` mà không `po.approve`; `supplier.manage` chỉ PM; `supplier.qualify`,
+  `policy.manage` chỉ FINANCE (đo M7) (A, B, D, lead).
+- **Thứ tự và cổng dự án** — S4.7c sau S3.5, S4b.2 chờ cổng (e), S3.4 ở nhánh khác, số tạm S1.9101 đúng dải `cap-so`; kịch
+  bản 41 có kim riêng cho bảng mới và `toEqual` vét cạn theo `pg_class`; bộ đọc văn bản dán ≤ 1000 dòng (D).
+- **Đứng vững trước góc đối kháng** (C): ERP tạo gói / GRN đổi hạng / hoá đơn đổi award; oracle xuyên tổ chức qua mã PO, mã
+  PR, `sub`, MST; SSRF qua `dich_webhook`; người mua thấy giá trước mở thầu qua đường ERP; ACK/webhook giả không chứng chỉ; ERP
+  chết hay trả dữ liệu lạ; IdP tạo người hay sửa cấu hình SSO; nhà cung cấp thấy điểm; quy đổi tiền tệ lặng lẽ; multipart vào
+  `apps/api`.
+
+## 8. Một lỗ của mã đang chạy — khoản 9401
+
+Không phải lỗ của spec: `app_api` còn `GRANT INSERT (org_id, email, full_name, status) ON users` (`002`), `GRANT INSERT (org_id,
+user_id, role_code) ON user_roles` và `GRANT DELETE ON user_roles` (`005`). ADR-111 dời việc tạo người sang `app_khoi_tao` (`075`)
+và không đường sản xuất nào của `api` dùng ba quyền ấy (`git grep` chỉ thấy `packages/test-support` và `tools/` dưới superuser hay
+`app_khoi_tao`), nhưng `002`/`005` chưa thu hồi; mục hardening của ADR-111 ở `docs/DECISIONS.md` còn viết *"năng lực mà `app_api`
+cố ý không có (002)"* — đánh dấu tại chỗ. Đo M3, M4a, M4b, M8, M9: chèn người đi qua, gán `FINANCE` đi qua, xoá vai của một
+`DIRECTOR` đi qua. Hệ quả: một `app_api` bị chiếm dựng được một người `FINANCE` rồi đi đường ghi danh TOTP cho người chưa có hồ
+sơ (`auth.ts:149-167`) thành một phiên có MFA; hay xoá vai người duyệt để kẹt chữ ký. Spec S5 M8 đứng trên câu *"không tạo người
+dùng, không gán vai"* mà không có lớp — M8 nay nhận `REVOKE` làm lớp. Khoản 9401 (MỞ, rổ đề xuất B): `REVOKE INSERT ON users`,
+`REVOKE INSERT, DELETE ON user_roles FROM app_api`, sửa census `rls-coverage`, chạy `gieo:demo`/`pilot:gia-lap` sau `REVOKE`;
+không chờ S5, đóng trước S5.5.
+
+## 9. Ranh giới nói ra
+
+- **Chưa một dòng mã S5 nào, và không migration.** Sổ đăng ký bất biến không đổi; nhóm M chỉ trên giấy (spec §5, §5.1).
+- **Mười một phép đo chạy trên lược đồ thật ở bộ dựng cục bộ, không trên CI.** Spec §6 ghi M5 thành test thường trực ở S5.2; M3/M4/M8/M9
+  thành test của khoản 9401.
+- **Trong 36 phát hiện, mười một có phép đo.** Phần còn lại là phép đọc trên tệp:dòng của bốn báo cáo và của lượt gộp.
+- **Mười ba câu cho chủ dự án chưa được hỏi** — cố ý. Spec §2.7 ghi đề xuất, không ghi quyết định; ADR-9201 không mang quyết định
+  nào của chủ dự án.
+- **Hai lời khai chưa đo** (mục 5) ghi là việc của S5.1, không giấu.
+- **Không soi lại spec S4, S4b, S3.** Chỗ S5 cần chúng để lại (§9.1) giữ là ĐỀ XUẤT; không sửa ba spec ấy.
+- **Chưa soi tệp xuất thật của ERP nào** — không có để soi. Mọi tên cột của §4.3 vẫn GIẢ ĐỊNH (§8.8).
+
+## 10. Số đo
+
+- `pnpm t0` — **0 vi phạm**, 557 module / 2423 phụ thuộc; typecheck và `eslint` sạch. Lần chạy đầu đỏ `TS6053` vì chạy SONG SONG
+  với `pnpm test`: một test probe viết rồi xoá `db/zzprobe-leak.ts` giữa lúc `tsc` quét — không phải lỗi của cây; chạy lại sau
+  khi test xong: xanh.
+- `pnpm test` — **155 tệp / 2671 đạt, 1 bỏ qua**, gồm `[INV-H20]` (sổ nợ tự đối chiếu: hàng 9401, dòng tổng kết, ba con trỏ
+  giải được) và `tep-van-ban-git`.
+- Tầng tích hợp: chỉ mười một phép đo của mục 5 chạy (vitest int trên cụm cục bộ, tệp đo đã xoá); không chạy toàn bộ
+  `test:int` — vòng này không đổi một dòng mã, migration hay test nào.
+- Sổ nợ **343 → 344** khoản, mở **51 → 52** (9401); rổ đề xuất B thêm một.
+- **153 → 154** ADR (9201; số tạm, `pnpm cap-so` cấp số thật lúc merge). **108** migration, không đổi. Sổ đăng ký bất biến
+  không đổi — nhóm M chỉ trên giấy.
+- Spec S5: **666 → 947 dòng**; trạng thái đổi từ *"bản nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng —
+  chủ dự án chưa chốt câu nào"*. `docs/TIEN-DE-CHUA-DO.md`: **33 → 37** tiền đề.
+- `pnpm cap-so --dem` viết lại số đếm ở `docs/STATE.md` và `Handoff.md` (154 ADR; 344 khoản, 52 mở). `pnpm cap-so --kiem` còn
+  đỏ vì số tạm `S1.9102`, `ADR-9201`, `9401` trên nhánh — đúng như ADR-090 định; `pnpm cap-so` cấp số thật lúc merge.

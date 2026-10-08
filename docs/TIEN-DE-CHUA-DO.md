@@ -61,7 +61,7 @@
 | **B3** | Người mua **khai ước lượng trung thực** | ADR-017 §*Điều KHÔNG đóng* | Né phê duyệt kép bằng cách khai thấp — **không lớp nào ở S1 chặn**, cùng họ với chia nhỏ đơn hàng. Thứ bắt được nó thuộc S2/S3 | *"Nếu một người mua muốn tránh phải xin hai chữ ký, anh nghĩ họ sẽ làm gì?"* |
 | **B4** | Tổ chức có **đủ người** để tách vai: người tạo ≠ hai người duyệt | `011` `rfq_kiem_nguoi_duyet`; D3 | Doanh nghiệp nhỏ có thể chỉ có **một** người mua. Lúc ấy D3 không phải một lớp bảo vệ mà là một **cửa khoá không mở được** | *"Ở công ty anh, người tạo yêu cầu mua và người duyệt có phải hai người khác nhau không?"* |
 | **B5** | Người mua biết **đúng người liên hệ** ở phía nhà cung cấp khi mời | `010` `rfq_invitations.contact_id`; một lời mời một người | Mời sai người ⇒ OTP về sai máy ⇒ A5 thành đường chính chứ không phải ngoại lệ | *"Anh mời đích danh một người, hay gửi vào địa chỉ chung của nhà cung cấp?"* |
-| **B6** | **[2026-09-06, ADR-020 đề xuất]** Nhân viên mua hàng **chấp nhận cài một ứng dụng TOTP** và đăng nhập bằng **email + TOTP, không mật khẩu** | ADR-020 mục 2; kế hoạch S1.10.4 | Nếu công ty đã chuẩn hoá SSO hoặc nhân viên không cài được ứng dụng TOTP trên máy công ty, S1.10.4 phải làm lại thành SSO (S5) — **di trú bảng phiên**, không phải sửa cấu hình | *"Nhân viên mua hàng của anh có sẵn sàng cài một ứng dụng TOTP (Google/Microsoft Authenticator) không, hay công ty đã có đăng nhập một lần (SSO)?"* |
+| **B6** | **[2026-09-06, ADR-020 đề xuất]** Nhân viên mua hàng **chấp nhận cài một ứng dụng TOTP** và đăng nhập bằng **email + TOTP, không mật khẩu** — **[S1.9102]** và, ở công ty đã có SSO, chấp nhận **vẫn gõ TOTP sau SSO** (spec S5 Q4 ⒜) | ADR-020 mục 2; kế hoạch S1.10.4; **[S1.9102]** spec S5 §4.7, §2.3 Q4, §2.6 ㉙ | Nếu công ty đã chuẩn hoá SSO hoặc nhân viên không cài được ứng dụng TOTP trên máy công ty, S1.10.4 phải làm lại thành SSO (S5) — ~~**di trú bảng phiên**, không phải sửa cấu hình~~ **[S1.9102]** KHÔNG di trú nào: phiên SSO vẫn là hàng `sessions` `kind = 'USER'` ra đời sau TOTP; cái mất nếu sai là Q4 ⒜ không bớt được ma sát nào đáng kể, hay ⒝ (SSO thay cả hai) phải mở — một quản trị IdP khi ấy mở được phiên của bất kỳ ai | *"Nhân viên mua hàng của anh có sẵn sàng cài một ứng dụng TOTP (Google/Microsoft Authenticator) không, hay công ty đã có đăng nhập một lần (SSO)?"* **[S1.9102]** *"Nếu đăng nhập bằng tài khoản Microsoft/Google rồi vẫn phải gõ thêm mã TOTP thì có chấp nhận không?"* |
 
 ## C. Về QUY TRÌNH
 
@@ -70,14 +70,14 @@
 | **C1** | **Một giờ** là sàn hợp lý cho cửa sổ thầu | `011` `CUA_SO_TOI_THIEU := interval '1 hour'` | Sàn CỦA HỆ, không phải chính sách tổ chức. Nếu thực tế mua gấp cần 20 phút, sàn này **chặn nghiệp vụ thật** | *"Lần gấp nhất anh từng cho nhà cung cấp bao lâu để báo giá?"* |
 | **C2** | Sửa hạng mục sau khi đã nộp duyệt là **bất thường** | `011` `rfq_items_chi_sua_khi_soan` (chỉ DRAFT) | Nếu sửa-rồi-duyệt-lại là **nhịp làm việc bình thường**, cạnh `PENDING_APPROVAL → DRAFT` bị đi lại liên tục và băm nội dung huỷ chữ ký mỗi lần | *"Sau khi gửi duyệt, danh sách hàng có hay bị sửa không?"* |
 | **C3** | Gia hạn deadline là **hiếm**, nên chưa cần ghi ai gia hạn | `016` §(3); `extendRfqDeadline` không có cột ký tên | Nếu gia hạn là thường xuyên, *"đã bị đẩy mấy lần, bởi ai"* trở thành câu hỏi kiểm toán chính — và hôm nay chỉ sổ kiểm toán trả lời được | *"RFQ có hay bị lùi hạn không? Ai quyết việc đó?"* |
-| **C4** | **VND và USD** đủ cho S1 | `014` `CHECK (currency IN ('VND','USD'))` | Một tổ chức mua bằng JPY/CNY/EUR không tạo được chính sách. `CHECK` chặn ở tầng CSDL ⇒ cần migration mới | *"Anh có mua hàng thanh toán bằng ngoại tệ nào ngoài đô không?"* |
+| **C4** | **VND và USD** đủ cho S1 — **[S1.9102]** và nếu có đơn vị thứ ba thì nó là một trong tám mã GIẢ ĐỊNH của spec S5 Q5 (`EUR`, `JPY`, `CNY`, `KRW`, `SGD`, `THB`) | `014` `CHECK (currency IN ('VND','USD'))`; **[S1.9102]** chín `CHECK` cùng tập (spec S5 §2.6 ㉜), spec S5 §4.8, Q5 ⒜′ | Một tổ chức mua bằng JPY/CNY/EUR không tạo được chính sách. `CHECK` chặn ở tầng CSDL ⇒ cần migration mới. **[S1.9102]** Một đơn vị ngoài tám mã là một migration nữa trên chín `CHECK`; và ở tổ chức đã bật S3 gói phải cùng tiền tệ của chính sách (`K7_LECH_TIEN_TE`) — nới tập không cho tổ chức ấy mua ngoại tệ | *"Anh có mua hàng thanh toán bằng ngoại tệ nào ngoài đô không?"* **[S1.9102]** *"— euro, yên, nhân dân tệ, won, đô Singapore, baht? Có gói nào mà một chính sách mua sắm phải trả bằng hai đơn vị tiền không?"* |
 | **C5** | **Level 0/1 đủ**; hồ sơ nhà cung cấp dùng chung (Level 2) chưa cần | ADR-013 mục 4; `008` `CHECK (level IN (0,1))` | Nếu người mua muốn *"nhà cung cấp này đã làm với công ty khác chưa"*, câu hỏi oracle xuyên tổ chức mà ADR-013 dành trọn một ADR để chặn **quay lại như một yêu cầu sản phẩm** | *"Anh có muốn thấy nhà cung cấp này đã bán cho ai khác trên hệ thống không?"* |
 
 ## D. Về TRIỂN KHAI
 
 | # | Tiền đề | Nằm ở đâu | Sai thì mất gì | Câu hỏi |
 |---|---|---|---|---|
-| **D1** | Khách hàng **chấp nhận khoá nằm ở AWS KMS Singapore** | ADR-009 §*Khi nào phải MỞ LẠI* | ADR-009 tự liệt kê ba điều kiện lật ngược: chủ quyền dữ liệu trong nước, khách FDI đã chuẩn hoá Azure, yêu cầu đa đám mây. **Đổi KMS sau khi có khoá thật là một cuộc di trú** | *"Dữ liệu và khoá mã hoá có buộc phải nằm trong lãnh thổ Việt Nam không?"* |
+| **D1** | Khách hàng **chấp nhận khoá nằm ở AWS KMS Singapore** — **[S1.9102]** và chấp nhận **hoá đơn, GRN** (dữ liệu tài chính) rời ERP sang một SaaS có khoá ở đó | ADR-009 §*Khi nào phải MỞ LẠI*; **[S1.9102]** spec S5 §8.10, §4.3 | ADR-009 tự liệt kê ba điều kiện lật ngược: chủ quyền dữ liệu trong nước, khách FDI đã chuẩn hoá Azure, yêu cầu đa đám mây. **Đổi KMS sau khi có khoá thật là một cuộc di trú**. **[S1.9102]** S5.3 (nhận GRN, hoá đơn) không mở được cho khách ấy; một khách Enterprise FDI có thể lật ADR-009 | *"Dữ liệu và khoá mã hoá có buộc phải nằm trong lãnh thổ Việt Nam không?"* **[S1.9102]** *"Số liệu hoá đơn mua hàng và phiếu nhập kho của anh có được phép đưa lên một dịch vụ đám mây đặt ngoài Việt Nam không?"* |
 | **D2** | Kiểm chứng biên nhận diễn ra **trong trình duyệt** của nhà cung cấp | ADR-011 mục 2 | `Ed25519` chỉ vào WebCrypto ở **Chrome 137**. Nếu kiểm chứng phải chạy trong trình duyệt máy cũ, ứng viên đầu của B2 kế thừa đúng vấn đề đuôi mà mục 1 vừa gỡ | *"Khi cần chứng minh 'tôi đã nộp lúc 15:42', nhà cung cấp của anh sẽ tự kiểm hay nhờ ai kiểm?"* |
 
 ## E. Về DỮ LIỆU — S4 **[S1.159]**
@@ -92,7 +92,7 @@ dòng mã nào của S4, nên *"nằm ở đâu"* trỏ vào mục spec mà mã 
 | **E3** | Nhà cung cấp **chịu khai tách** phí vận chuyển, chi phí nhập khẩu, kỳ thanh toán, thời gian giao | Spec S4 §4.8; ô đã bật là bắt buộc | Bật mã nào là mất nhà cung cấp — trái PRODUCT §8 ⑴ | *"Nhà cung cấp của anh có tách phí vận chuyển khỏi đơn giá không, hay luôn gộp?"* |
 | **E4** | Cùng một mặt hàng **được mua lại** ≥ 3 gói, từ ≥ 3 nhà cung cấp, trong 12 tháng | Spec S4 §4.6, §2.4 ⑾ | Mọi dòng hiện *"chưa đủ lịch sử"*; benchmark nội bộ không bao giờ ra nhãn | *"Trong một năm anh mua lại cùng một mặt hàng bao nhiêu lần, từ bao nhiêu nơi?"* |
 | **E5** | Giá **từng dòng** nhà cung cấp khai là giá thật của dòng ấy — không dồn giá | Spec S4 §8.4 | Lịch sử theo dòng méo; tổng vẫn đúng nên không ai thấy | *"Nhà cung cấp có hay dồn giá vào vài dòng để tổng không đổi không?"* |
-| **E6** | Bên mua có **mốc giá ngoài** và **lịch sử PO xuất được** — Excel hay ERP — trích dẫn được nguồn | Spec S4 §4.7, §2.4 ⑽; ADR-096 | S4a không có phép so nào từ ngày đầu | *"Anh có bảng giá tham khảo, hay lịch sử đơn mua xuất ra Excel được không?"* |
+| **E6** | Bên mua có **mốc giá ngoài** và **lịch sử PO xuất được** — Excel hay ERP — trích dẫn được nguồn; **[S1.9102]** và xuất được **PR, PO, GRN, hoá đơn** ra bảng tính, hay ERP có API gọi ra ngoài được | Spec S4 §4.7, §2.4 ⑽; ADR-096; **[S1.9102]** spec S5 §2.4 (b), §4.3 | S4a không có phép so nào từ ngày đầu. **[S1.9102]** S5.1–S5.3 không có đầu vào; chỉ S5.0 (dán từ bảng tính) dùng được | *"Anh có bảng giá tham khảo, hay lịch sử đơn mua xuất ra Excel được không?"* **[S1.9102]** *"Phần mềm kế toán/ERP của anh xuất được danh sách đơn mua và phiếu nhập kho ra Excel không? Có ai bên IT viết được một đoạn gọi API không?"* |
 | **E7** | Phân tích tỷ lệ chọn nhà cung cấp của **từng nhân viên** là hợp pháp và được người lao động biết | Spec S4 §8.7, §4.9 — chủ: chủ dự án. **[S1.161]** Spec S4b §2.4 ㉖: cả F2a | ~~S4b.4~~ **[S1.161]** S4b.5 — phân tích người mua và F2a — không làm được, hoặc làm được mà vi phạm | *"Nhân viên mua hàng của anh có biết và đồng ý việc phân tích tỷ lệ chọn nhà cung cấp của từng người không?"* |
 
 **[S1.161]** Sáu dòng dưới suy từ spec S4b (`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`) sau
@@ -107,6 +107,20 @@ lượt soi hình dạng; góc D⑪ của biên bản §S1.161.
 | **E12** | Khách chịu ma sát S4b.1 ở MỌI lần trao suốt ít nhất sáu tháng đầu | Spec S4b §2.5 ㉚ — độ phủ tối đa 27% trước S4b.2 | Công tắc ADR-080 một chiều nên không tắt được; khách rời bỏ thay vì tắt | *"Nếu nửa năm đầu mỗi lần duyệt trao cần thêm một người ký xác nhận đã đọc cảnh báo, anh có chấp nhận không?"* |
 | **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score. **[S1.162]** Supplier Score hoãn tới S5 (ADR-100): dòng này chờ spec S5 | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
 | **E14** **[S1.162]** | Tổ chức có **một người kiểm toán** không mua, không duyệt, không xem giá, và đủ thời gian đọc sổ tín hiệu | Spec S4b §2.7 Q2 — vai `AUDITOR`; ADR-100 | Không ai đọc sổ tín hiệu và phân tích người mua; hai màn ấy thành công cụ không người dùng — nhân lên từ B4 và E1 | *"Công ty anh có ai kiểm tra việc mua hàng mà không trực tiếp mua hay duyệt không — kiểm soát nội bộ, kiểm toán nội bộ?"* |
+
+
+## F. Về TÍCH HỢP và DOANH NGHIỆP — S5 **[S1.9102]**
+
+Suy từ spec S5 (`docs/superpowers/specs/2026-10-07-trustprocure-s5-tich-hop-erp-doanh-nghiep.md` §11) sau lượt soi hình dạng
+(biên bản §S1.9102, góc D⑬). Chưa dòng mã nào của S5, nên *"nằm ở đâu"* trỏ vào mục spec mà mã sắp cư xử theo. Bốn tiền đề
+nữa của spec ấy TRÙNG dòng đã có và được chép vào E6, B6, C4, D1 tại chỗ thay vì mở hàng mới.
+
+| # | Tiền đề | Nằm ở đâu | Sai thì mất gì | Câu hỏi |
+|---|---|---|---|---|
+| **F1** | ERP của khách ghi **NGÀY NHẬN** và **SỐ LƯỢNG TỪ CHỐI** theo từng dòng PO | Spec S5 §4.3 `erp_receipt_lines`, §4.6 *Quality*, *Delivery* | Hai thành phần mới của Supplier Score không có nguồn — Supplier Score lại hoãn, lần thứ hai sau ADR-100 Q1 | *"Khi hàng về, kho của anh ghi gì: chỉ số lượng nhận, hay cả số bị trả lại và lý do?"* |
+| **F2** | ERP chấp nhận một PO có nguồn từ hệ ngoài — nhận tài liệu PO, hay ít nhất nhận *đề nghị PO* rồi tự tạo số PO | Spec S5 §4.2, §3.3 (`ack`); V2.1 §4 *ERP PO* | Bản xuất không có nơi đến; `so_po_erp` không bao giờ có; GRN và hoá đơn không trỏ được vào `export_id` | *"PO của anh tạo ở đâu — kế toán gõ tay từ bản duyệt, hay nhập từ tệp?"* |
+| **F3** | Có một người ở khách giữ việc kết nối (IT hay một người không mua) và người ấy **không duyệt trao thầu, không chọn danh sách, không đề xuất** | Spec S5 §4.1 `integration.manage`, `supplier.import`; Q12; §2.6 ⒇ ㊶ | Vai cấu hình rơi vào người giữ `po.approve` hay `rfq.invite` — trigger khuôn `033` chặn và tổ chức nhỏ kẹt (nhân lên từ B4, E1, E14); hay cần gạt GRN nằm trong tay người đề xuất | *"Ai ở công ty anh sẽ cầm việc nối hai phần mềm? Người ấy có duyệt đơn mua, có chọn nhà cung cấp để hỏi giá không?"* |
+| **F4** | Mã vật tư trong ERP của khách **ổn định** và là **một-một** với hàng chuẩn | Spec S5 §2.5 ⑾ (bí danh hàng chuẩn), §4.5 (lô `HANG_MUC` của S5.1) | Bí danh hàng chuẩn đổi liên tục; hàng đợi S4.3 đầy; PR của ERP không ánh xạ được thành hạng mục | *"Một mặt hàng trong ERP của anh có một mã cố định không, hay mỗi lần nhập một mã?"* |
 
 ---
 
@@ -134,4 +148,5 @@ lượt soi hình dạng; góc D⑪ của biên bản §S1.161.
   hoặc một sửa đổi ADR — **không** ở lại đây dưới dạng một dấu tích.
 - **Danh sách này chưa chắc đủ.** Nó suy từ mã đã viết (S1.1–S1.3; B6 thêm 2026-09-06 từ ADR-020), nên nó mù với mọi tiền đề của
   S1.4–S1.9 chưa tồn tại. Bổ sung khi mỗi hạng mục mới ra đời là một phần của vòng lặp, không phải
-  một việc riêng.
+  một việc riêng. **[S1.9102]** Nhóm F thêm từ spec S5 sau lượt soi hình dạng; bốn tiền đề trùng của spec ấy chép vào E6, B6,
+  C4, D1 tại chỗ — 37 dòng, không dòng nào có tên người và ngày.

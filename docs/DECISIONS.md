@@ -3288,7 +3288,7 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 
 **[ADR-072 phần 1 / 065] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_NEO_SAI`** — *quyền quan hệ của `app_neo`*, vai chỉ-đọc của job neo. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_neo` gọi được hàm liệt kê tổ chức mà `app_api` cố ý không có (ADR-040), và đổi lại nó được ĐỊNH NGHĨA bằng việc không ghi được gì — một `GRANT INSERT … TO app_neo` hay `GRANT SELECT ON <bảng nghiệp vụ> TO app_neo` sau deploy biến vai liệt kê-mọi-tổ-chức thành một vai đọc/ghi dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG (`has_*_privilege`), hai chiều: THỪA (mọi quyền ghi trên mọi quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, cột mốc neo ngoài `org_id, seq, hash`, mọi quyền sequence) và THIẾU (đúng các quyền 065 cấp). Câu sửa **đơn điệu theo §2⑵**: `REVOKE` những gì cấp ĐÍCH DANH cho `app_neo` ngoài danh sách, `GRANT` lại đúng danh sách của 065 — thứ 065 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi (chạm mọi vai của cụm) — mục phán xét và nêu lối ra. Đo ở `db/vai-neo.int.test.ts`.
 
-**[S1.182 / ADR-111 / 075] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — năng lực mà `app_api` cố ý không có (002) — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 075; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 075 — thứ 075 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
+**[S1.182 / ADR-111 / 075] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — ~~năng lực mà `app_api` cố ý không có (002)~~ **[S1.9102]** chỉ đúng với `organizations`: `app_api` CÒN `INSERT (org_id, email, full_name, status) ON users` (`002:173`) và `INSERT`/`DELETE ON user_roles` (`005:476-480`), đo đi qua trên lược đồ thật — khoản 9401 — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 075; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 075 — thứ 075 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
 
 **[S1.205 / khoản 259 — ADR-122] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_TRIGGER_LA_DU_AN`** — *không trigger lạ trên bảng của dự án*. Lý do nó CHẶN ĐƯỢC DEPLOY: một trigger ngoài tập đã ghim đứng được TRƯỚC một chốt — bản đổi tên của `rfq_approvals_so_lan_nop` xếp trước `rfq_approvals_kiem_nguoi_duyet` làm lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng `CONTROL_DENIED` (ADR-108 ⑴), và bản chép thân hàm sang một tên hàm khác cũng vậy — mà mục ghim hỏi trigger theo TÊN không thấy nó (khoản 259). Chủ thể là mọi trigger không nội bộ, không phải bản sao phân mảnh, trên mọi bảng của lược đồ dự án, trừ bảng sổ ([CR1]) và trigger gọi `chan_sua_xoa()` ([CR4]); tập được phép là `TRIGGER_DUOC_PHEP`, cổng tĩnh giữ nó trùng khít tập đã ghim. Câu sửa là `DROP TRIGGER` — **KHÔNG đơn điệu** —, nên theo §2⑵ nó chỉ chạy trên bảng mà danh sách khai TÊN (tập trigger của bảng ấy đã ghim trọn, đúng khuôn [CR1] của bảng sổ); trên phần còn lại — tập SUY RA — mục chỉ phán xét (chủ dự án chốt ở S1.205). Chỉ ở lượt sửa SAU vòng đánh số: `migrate()` đặt `app.hardening_sau_vong = 'khong'` ở lượt đầu, vì một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (`059`). Đo ở `db/trigger-la-mac-dinh-dong.int.test.ts`.
 
@@ -12203,3 +12203,60 @@ EVALUATING), `gieo:demo --s3` tới trao thầu, lượt đi thử T4.
 
 Màn, `gieo:demo`, T4 (S3.5b); K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); K9 ở chữ ký trao thầu (S3.4); bộ bằng
 chứng mang số tiền trao và bậc (S3.9).
+
+## ADR-9201 — Lượt soi hình dạng spec S5: những gì lượt soi chốt từ tiền lệ
+
+**Ngày:** 2026-10-08 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.9102 · Liên quan: ADR-013, ADR-020, ADR-038, ADR-039 §3,
+ADR-050 (khuôn), ADR-054 [S1.157], ADR-057, ADR-084 ⑴, ADR-093 ⑷, ADR-099 (khuôn), ADR-102, ADR-103, ADR-111, ADR-134,
+ADR-138, ADR-149 ⑷, ADR-154 · Spec: `docs/superpowers/specs/2026-10-07-trustprocure-s5-tich-hop-erp-doanh-nghiep.md` §2.6,
+§2.7, §4.10, §5.1, §9.2 · Biên bản: `evidence/security-reviews.md` §S1.9102
+
+**Bối cảnh.** Lượt soi S1.9102 chạy bốn góc độc lập trên bản nháp spec S5 (vòng S1.9101) — lời khai đối chiếu mã, khả thi
+cưỡng chế ở CSDL, đối kháng, phạm vi–thứ tự–kiểm thử–quy trình — rồi gộp, thẩm tra, và đo mười một lời khai trên lược đồ THẬT
+(mọi migration + hardening) ở một cụm Postgres 16.15 cục bộ. 36 phát hiện sau khử trùng, 7 CAO. Khuôn ADR-050/ADR-099: chỗ nào
+tiền lệ trong kho hay một phép đo trả lời được thì chốt ở đây; chỗ nào là lựa chọn sản phẩm thì ở spec §2.7 — **chủ dự án
+chưa chốt câu nào trong vòng này**, nên ADR này không mang quyết định của chủ dự án và không ADR nào như ADR-098/ADR-100 ra đời
+cùng nó.
+
+Hai mươi chín chốt ⒃–㊹, mỗi chốt kèm tiền lệ hay phép đo, ở bảng §2.6 của spec S5. Những chốt chịu lực nhất:
+- ⒃ ⒄ **Đường phát chứng chỉ máy là một `BuyerWriteRoute` dưới `integration.manage`, hàm phát MỚI**; trường `integration`
+  bắt buộc trên CẢ BA kiểu route, `integrationGoiDuoc` cho qua route ghi khi và chỉ khi `permission === 'erp.sync'`. Khuôn
+  `/auth/agent-session` không đứng được: route `self` không mang mã quyền, `startAgentSession` chỉ phát cho chính người gõ
+  TOTP; khuôn `agent` đóng vô điều kiện với route ghi. `039` KHÔNG nới dù Q11 chọn lối nào (ADR-039 §3).
+- ㉑ ㉒ ㉓ ㉕ **Bản xuất PO**: hàng `SAN_SANG` tối giản chèn SAU hàng `APPROVED` — tức sau hàng sổ `RFQ_AWARD_SIGNED`; không có điểm
+  *"trước mọi hàng sổ"* và ADR-154 ⑹ là *hai PR*, không là thứ tự. Lỗi của móc NÉM trong cùng giao dịch (fail-closed) và vì thế
+  chỉ ở trạng thái không thể; dữ liệu vắng ra tài liệu ghi vắng (ADR-093 ⑷). `bam` = sha256 của chuỗi chuẩn hoá từ cột CHỤP do
+  trigger đặt ∪ `bid_dong_tho(payload)` ∪ ánh xạ — không bảng sửa được nào (`suppliers` có `GRANT UPDATE`); lõi TS tái lập,
+  một test J2 so khớp. Khoá tư vấn `hashtextextended(rfq_id, 1)` của `061` ở mọi hàng trạng thái — **đo**: không khoá thì hai ACK
+  song song cùng COMMIT. *Cùng giao dịch* bằng `transaction_timestamp()`, không `xmin` (ADR-099 ㉛); chiều ngược bằng constraint
+  trigger hoãn trên `rfq_awards`.
+- ㉔ ㉘ **Luật ACK và idempotent**: ACK chỉ từ `DA_KEO`/`DA_TAI`, đúng một `DA_ACK`, `ngay_nhan ≤ clock_timestamp()` (khuôn ADR-149
+  ⑷); lô nhận có `khoa_idempotent`, lần gửi lại trả cùng id lô (khuôn chỉ mục dedupe của outbox).
+- ㉖ ㉗ **`bam` là một đường đưa giá ra** (brute-force được): không vào payload sổ, chỉ `export_id`; ADR (d) khai nó theo câu
+  [S1.157] của ADR-054. Dây bẫy jsonb chỉ có đối tượng ở `outbox_jobs.payload` (`CHECK outbox_jobs_payload_khong_mang_gia`);
+  bảng nhận không có cột jsonb — cổng là test lược đồ `information_schema.columns` + bước 14.
+- ㉙ ㉚ **SSO**: ghi danh TOTP lần đầu/sau đặt lại và lần ràng `sub` đầu KHÔNG đi qua SSO (kênh thứ hai) — hôm nay `/auth/redeem`
+  ghi danh TOTP cho người chưa có hồ sơ, nên một quản trị IdP chiếm được mọi người chưa ghi danh; `user_identities` `UNIQUE` có
+  tiền tố `org_id`, không `UNIQUE (issuer, sub)` toàn cục (oracle ADR-013); `app_api` có `GRANT INSERT` theo cột — hai vế của bản
+  nháp loại trừ nhau.
+- ㉜ ㉝ ㉞ **Tập đóng là chín `CHECK`**, không bốn (`014`×2, `057`, `103`×2, `104`, `109`×2, `110`), cộng `CURRENCIES`, `070`, hai ô
+  chọn; `tien-te-dong-bo.test.ts` phải quét mọi migration; ở tổ chức bật S3 nới tập không đủ (`K7_LECH_TIEN_TE`). Tập mã TCO sống
+  ở `tco.ts` `MA_CO_NGUON`, không ở `112`. `kind` outbox mới là `095` + `099` (ADR-138) + union, không *"hai policy 095"*.
+- ㊵ ㊶ **S5.0**: ERP không ghi bảng S1–S4; người dán ghi `rfq_items`/`suppliers`/`supplier_contacts` qua đường S1 — câu đậm §3.1
+  sửa; không cột mã vật tư ERP; lõi của `csv-ngoai.ts` tách thành hàm nhận bảng cột (ca lật kê tên). Người nhập sổ không là người
+  chọn danh sách — K2 (`107`) không đếm hồ sơ PM dựng; theo Q12.
+- ㊷ ㊸ ㊹ **Lịch bất biến và kiểm thử**: M1 tách vế âm (S5.1)/M12 vế dương theo thời gian (S5.2); M9 chia M9/M13/M14; M6 đo bằng đột
+  biến ERP giả lập, không *giết ERP*; bước 14 ở CẢ HAI bản nới `erp_po_export_lines`, không *kim đơn giá xuất*; cổng bậc 2 chỉ
+  mở vòng mã, dữ liệu ERP thật sau mảnh 3; nhóm F gộp bốn dòng trùng vào E6, B6, C4, D1 (33 → 37).
+
+**Một khoản nợ mới — khoản 9401, lỗ của mã đang chạy, không của spec** (rổ đề xuất B): `app_api` còn `INSERT` trên `users`
+(`002`), `INSERT`/`DELETE` trên `user_roles` (`005`) — **đo**: chèn người và gán `FINANCE` đi qua, xoá vai của một `DIRECTOR` đi
+qua — trong khi ADR-111 dời việc ấy sang `app_khoi_tao` và không đường sản xuất nào dùng; đường ghi danh TOTP cho người chưa có
+hồ sơ biến một `app_api` bị chiếm thành một người `FINANCE` có MFA. `REVOKE` không chờ S5. Câu *"năng lực mà `app_api` cố ý
+không có (002)"* của ADR-111 đánh dấu tại chỗ.
+
+**Điều ADR này KHÔNG chốt:** mười ba câu của spec §2.7 (Q1–Q13) — đặc biệt Q11 (chứng chỉ gắn vào ai), Q12 (người của tích hợp),
+Q13 (huỷ award đã xuất) là ba chỗ lượt soi ĐỔI hình dạng; spec viết theo đề xuất của chúng và gọi tên chỗ đổi nếu chủ dự án
+chọn lối khác.
+
+---
