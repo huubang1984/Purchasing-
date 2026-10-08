@@ -436,6 +436,9 @@ importers:
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/kiem-soat':
+        specifier: workspace:*
+        version: link:../../packages/kiem-soat
       '@trustprocure/rfq':
         specifier: workspace:*
         version: link:../../packages/rfq

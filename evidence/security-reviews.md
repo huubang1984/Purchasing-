@@ -25940,6 +25940,208 @@ nguyên vẫn xanh: nâng riêng hằng J7 vẫn làm trao thầu gãy.
 
 ---
 
+# §S1.281 — S3.4a: K9 — KHAI BÁO XUNG ĐỘT LỢI ÍCH: BẢNG CHỈ-GHI-THÊM GHIM BĂM DANH SÁCH, `CO_XUNG_DOT` VĨNH VIỄN, CỔNG Ở BẢY CHỖ, CHỮ KÝ CỦA NGƯỜI CÓ XUNG ĐỘT KHÔNG ĐẾM — ADR-155
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và tổ chức chưa bật
+chạy nguyên MVP1 (đo ở ⑻ của §6). Một thay đổi chạm MỌI tổ chức: bảy trigger cổng gắn vào bảy bảng sẵn có, nhưng mỗi cái hỏi *đã bật*
+trước (hàm vị từ trả NULL) — cụm test hiện có là đối chứng. Migration `114`, ADR-155, mã quyền `coi.declare`. Không khoản nợ mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-07: *"triển khai luôn hạng mục S3.4"*. S3.4 là hạng mục thứ tư của spec S3 §9 (xung đột lợi ích — `coi_declarations`,
+cổng ở bốn chỗ, K9, dòng PRODUCT §5), cộng ba cổng lượt soi hình dạng thêm (ADR-082 ⒄). Vòng này chia hai PR theo khuôn S3.6b1/S3.6b2:
+**S3.4a** — lớp CSDL, tầng gói, route, K9 vào sổ đăng ký, và kịch bản 41 hai bản (vòng này — §7); **S3.4b** — màn khai báo,
+`gieo:demo --s3`, lượt đi thử T4. Việc chia là quyết định của vòng, ghi ở ADR-155 ⑻ và chờ chủ dự án xác nhận lại.
+
+## 2. Đo trước (đọc mã trên `ca94227`)
+- Không một dòng mã nào của K9: không `coi_declarations`, không `CO_XUNG_DOT`/`KHONG_XUNG_DOT` ở `db/`, `packages/`, `apps/`, `tools/`;
+  khoá bậc `khai_xung_dot` có từ `069` (một trong mười khoá `KHOA_BAC`) nhưng không hàm nào đọc nó.
+- `107` (5) đã để sẵn chỗ: bốn vế *còn hiệu lực* ở MỘT hàm `rfq_chu_ky_con_hieu_luc`, K4b (phép đếm thứ ba) và K5 cùng đọc — *"khi K9
+  loại người khai `CO_XUNG_DOT` khỏi phép đếm chữ ký, hai chốt đổi cùng nhau"* (ADR-147 ⑺).
+- Seed khoá tư vấn đang dùng: 0 sổ, 1 trao thầu, 2 chính sách, 3 dữ liệu nền, 7 xác minh, 8 nhóm hàng; chưa khoá (gói, người) nào.
+- Bảy bảng của bảy cổng và cột người hành động: `rfq_approvals.approver_user_id`, `rfq_evaluations.created_by`, `rfq_awards.acted_by`
+  (`PROPOSED`, `CANCELLED`), `rfq_award_approvals.approver_user_id` (gói qua award), `supplier_verifications.created_by` (không gói),
+  `governance_signal_acks.created_by` (gói qua tín hiệu). Mỗi bảng đã có `kiem_danh_tinh_theo_phien` nên cột người là thật.
+- Mã quyền: không mã nào sẵn có mà mọi người sắp quyết đều giữ — `rfq.approve` chỉ PM; `po.approve` FINANCE, DIRECTOR; `evaluation.perform`
+  năm vai; `supplier.qualify` FINANCE. `DATA_STEWARD` không giữ mã nào bị K9 chặn.
+- Bậc mặc định của `apps/web/src/chinh-sach.ts` và `tools/gieo-demo/src/chinh-sach-demo.ts` đặt `khai_xung_dot: true` ở cả ba bậc thường;
+  mọi fixture test đặt `false` trừ `apps/api/src/buyer.int.test.ts:1220` (test đọc phiên bản, không ký).
+
+## 3. Lượt soi hình dạng, trước dòng mã đầu — tự soi, không agent
+- **CAO — vị từ hỏi trước đua với `CO_XUNG_DOT` đang chèn:** khuôn K1 (tầng gói hỏi, trigger hỏi lại) để một cửa sổ giữa lần hỏi và câu
+  ghi; ADR-114 đã nói về K4a. Chốt: khoá tư vấn (gói, người) — seed 9 — ở trigger khai báo VÀ ở sáu trigger cổng; sáu cổng đi khuôn
+  ADR-108/114 (trigger có thẩm quyền, tên ràng buộc, tầng gói bắt), chỉ cạnh mở gói giữ lần hỏi trước (nó không hỏi về một người).
+- **TRUNG — băm riêng của *tập nhà cung cấp* (đúng chữ §4.5) là bản thứ hai của băm K4b:** chốt dùng CHÍNH `rfq_bam_danh_sach`; băm rộng
+  hơn chỉ làm lời khai lỗi thời sớm hơn, không bao giờ muộn hơn.
+- **TRUNG — ai được khai:** không mã sẵn có; chốt mã mới `coi.declare` cho mọi vai trừ `DATA_STEWARD` (ADR-084 ⑴: mã mới khi hành vi cần
+  tách người — ở đây là tách khỏi người chỉ đọc).
+- **TRUNG — `CO_XUNG_DOT` với nhà cung cấp lạ:** chốt phải có lời mời của gói (kể cả đã thu hồi); lỗi không tên, không sổ.
+- **THẤP — `K9_KHAI_BAO_LOI_THOI` vào sổ hay không:** danh sách đổi dưới chân người khai ⇒ KHÔNG (ADR-060); năm mã còn lại vào sổ.
+- **THẤP — trigger K9 ở cạnh mở gói nói trước hay sau K4b:** xếp TRƯỚC (`…_kiem_chu_ky_xung_dot_khi_mo` < `…_kiem_danh_sach_khi_mo`) để
+  lời có tên nói trước; thiếu chữ ký vì lý do khác thì hàm vị từ trả NULL và K4b nói.
+- **Lỗ ở gói `kiem-soat` tìm ra lúc viết test:** `ghiNhanTinHieu` bắt lỗi trigger bằng `.catch` chỉ biết hai tên K10 — lời từ chối K9 ở
+  cổng ghi nhận sẽ ra ngoài là 23514 trần, không hàng sổ. Sửa trong vòng: bắt theo `maChotTuLoi` như sáu chỗ còn lại.
+
+## 4. Thay đổi
+- `db/migrations/114_khai_bao_xung_dot.sql`: mã quyền `coi.declare` (sáu vai); bảng `coi_declarations` (chỉ-ghi-thêm, RLS + policy khách
+  đóng hẳn, GRANT INSERT theo cột — `danh_sach_bam` ngoài GRANT, trigger đặt); `coi_khoa_goi_nguoi` (seed 9); `coi_kiem_khai_bao`;
+  hai hàm vị từ `coi_chot_hanh_dong`, `coi_chot_xac_minh`; bảy trigger `…_kiem_xung_dot`; `rfq_chu_ky_khop_bam` (năm vế: bốn của `107` cộng vế số ngày giao của `112`),
+  `rfq_chu_ky_con_hieu_luc` định nghĩa lại (khớp băm trừ `CO_XUNG_DOT`); `rfq_chot_chu_ky_xung_dot` + trigger cạnh mở gói.
+- `db/migrations/hardening.always.sql` trong CÙNG commit: 14 khối ghim (một thay khối `rfq_chu_ky_con_hieu_luc` của `107`), bảng mới ở
+  `TRIGGER_DUOC_PHEP`, `BANG_TENANT_KHAI`, hai CHECK K9 ở `CHECK_AN_NINH_KHAI`, ba trigger chuẩn ở hai khối `kiem_danh_tinh_theo_phien`
+  và `bid_chi_ghi_them`. Khối ghim sinh bằng script từ catalog của một cụm `postgres:16-alpine` dùng một lần đã áp cả 107 migration
+  (cùng khuôn S1.269); hardening chạy trọn `day_du` trên cụm ấy: không mục đỏ.
+- `@trustprocure/identity`: sáu mã K9 ở `CHOT_VAO_SO` (năm `vaoSo`), sáu tên ở `CHOT_THEO_RANG_BUOC`, sáu tên ở `DANH_MUC_VE_CONG`,
+  `PERMISSIONS.COI_DECLARE`.
+- `@trustprocure/kiem-soat`: `xung-dot.ts` — `khaiBaoXungDot` (cổng `coi.declare`, bắt lỗi có tên của trigger khai), `docKhaiBaoXungDot`
+  (khai báo của CHÍNH người gọi + băm hiện tại + bậc đòi khai + chốt); `ghiNhanTinHieu` bắt lỗi K9 theo `maChotTuLoi`.
+- `@trustprocure/rfq`: `CAU_CHOT_CHU_KY_XUNG_DOT_MO`, `openRfq` hỏi trước K5. `@trustprocure/danh-gia`: `duyetTraoThau` (hàng `APPROVED`)
+  và `huyTraoThau` bắt lỗi có tên.
+- `apps/api`: `GET`/`POST /rfqs/:rfqId/coi-declarations`; `apps/mcp/src/cong-cu.ts` khai route đọc không phơi cho tác tử.
+- Sổ đăng ký: `migrations.int` (năm hàm, tám trigger, ba danh sách migration), `danh-sach-ham-canh` (tám hàm), `migration-shape`,
+  `rls-coverage`, `check-an-ninh` (hai CHECK hình dạng miễn), `hardening-suy-tu` (bảng chỉ-ghi-thêm + nhân chứng khai báo),
+  `cong-quyen-route` (hai hàm), `barrel-exports`, `so-khai-nhan` (K9), `MOC_GHIM` 83 → 84, `docs/TEST-PLAN.md` hàng K9, PRODUCT §5
+  hàng *"Kiểm soát xung đột lợi ích"*, spec §9/§4.5/§5.1, ADR-155, hai lời khai số bất biến (P6, P8), `cap-so --dem`.
+
+## 5. Phép đo — `apps/api/src/xung-dot-loi-ich.int.test.ts`, trên Postgres 16, qua HTTP và dưới `app_api`
+12 ca, hai `describe`, mỗi ca một tổ chức mới (công tắc ADR-080 một chiều; tín hiệu chia nhỏ đọc cả tổ chức). Bậc 0 ĐÒI khai, bậc 1 (từ
+100 triệu) KHÔNG đòi, ngưỡng cấp kép 1 tỷ. Gói đã mở thầu dựng theo khuôn `luot-danh-gia.int.test.ts`: phong bì giả, bản rõ ghi thẳng dưới
+`app_unseal`; ở tổ chức đã bật, token đúc lúc mở gói (ADR-113) được dùng cho phiên khách của báo giá.
+- ⑴ đối chứng dương: `pm2` chưa khai ký duyệt ⇒ `422 {error, ma: K9_CHUA_KHAI_XUNG_DOT}`, MỘT hàng `CONTROL_DENIED` mang mã và đúng
+  `actor_id`, không hàng chữ ký; route đọc trước đó trả `khaiBao: []`, `bacDoiKhai: true`, `chot: K9_CHUA_KHAI_XUNG_DOT`, băm hex 64; khai
+  `KHONG_XUNG_DOT` ⇒ `201` mang băm bằng băm hiện tại; đọc lại ⇒ `chot: null`; `pm3` đọc thấy sổ của chính mình rỗng (K11); ký ⇒ `200`;
+  sổ `COI_DECLARED` chỉ mang `declarationId`, `trangThai`, `supplierId`; mở gói ⇒ `200`.
+- ⑵ băm danh sách: khai ở DRAFT, thêm một lời mời, nộp ⇒ băm của hàng khai ≠ băm hiện tại, `chot: K9_KHAI_BAO_LOI_THOI`; ký ⇒ `422` mang
+  mã, KHÔNG hàng `CONTROL_DENIED`; khai lại ⇒ ký `200`.
+- ⑶ `CO_XUNG_DOT`: ba hình dạng sai ⇒ `422` với câu của GÓI (không câu của CHECK); nhà cung cấp không có lời mời ⇒ `422` câu của trigger,
+  0 hàng; khai có xung đột kèm ghi chú (lưu đã cắt) ⇒ `201`; ký ⇒ `K9_CO_XUNG_DOT`; khai lại không xung đột ⇒ `K9_KHONG_GO_DUOC_XUNG_DOT`;
+  sổ đúng hai hàng theo thứ tự; `pm3` khai rồi ký `200`; `DELETE` dưới `app_api` ⇒ 42501.
+- ⑷ bậc không đòi khai: `pm2` ký không cần khai (`bacDoiKhai: false`, `chot: null`); khai CÓ xung đột SAU khi ký ⇒ mở gói `422
+  K9_CHU_KY_CO_XUNG_DOT`, hàng sổ của NGƯỜI MỞ, gói còn PENDING_APPROVAL; `rfq_chu_ky_khop_bam` = 1, `rfq_chu_ky_con_hieu_luc` = 0,
+  `rfq_chot_chu_ky_xung_dot` = mã; `pm2` ký lại ⇒ `K9_CO_XUNG_DOT` ở mọi bậc; `pm3` ký ⇒ mở `200`.
+- ⑸ lớp chặn cuối ở chữ ký: câu `INSERT rfq_approvals` viết tay dưới `app_api` ⇒ 23514 mang tên `k9_chua_khai_xung_dot` và thông điệp của
+  trigger; sau khai có xung đột ⇒ `k9_co_xung_dot`.
+- ⑹ lớp chặn cuối ở cạnh mở: câu `UPDATE` thô ⇒ 23514 `k9_chu_ky_co_xung_dot`.
+- ⑺ bốn cổng sau mở thầu, trên MỘT gói `UNSEALED` thật: `taoLuotDanhGia` của `pm3` chưa khai ⇒ `ChotKiemSoatError K9_CHUA_KHAI_XUNG_DOT`
+  + hàng sổ; khai ⇒ EVALUATING. `pm2` (đã ký) khai CÓ xung đột ⇒ `deXuatTraoThau` bị `K9_CO_XUNG_DOT`; `pm3` đề xuất. `gd` chưa khai
+  ⇒ `duyetTraoThau` bị chặn, 0 chữ ký; câu thô: chữ ký của `gd` (đã khai) rồi `gd` khai CÓ xung đột rồi hàng `APPROVED` ⇒ 23514
+  `k9_chu_ky_co_xung_dot`; `duyetTraoThau` thật ⇒ APPROVED, AWARDED. `tc2` chưa khai ⇒ `huyTraoThau` bị chặn, gói còn AWARDED; khai ⇒
+  CANCELLED, EVALUATING. Sổ: bốn hàng đúng mã và đúng người theo thứ tự.
+- ⑻ xác minh: `tc2` khai CÓ xung đột với nhà cung cấp của gói ⇒ `thuHoiXacMinhNhaCungCap` bị `K9_XAC_MINH_NCC_XUNG_DOT`, hàng sổ mang
+  `resource_type = SUPPLIER` và id nhà cung cấp; `coi_chot_xac_minh` trả mã cho `tc2`, NULL cho `tc`; câu thô ⇒ 23514 có tên.
+- ⑼ ghi nhận tín hiệu: hai gói 60 + 50 triệu cùng nhóm hàng ⇒ gói thứ hai mang tín hiệu lúc nộp; `ghiNhanTinHieu` của `pm2` chưa khai ⇒
+  `K9_CHUA_KHAI_XUNG_DOT` + hàng sổ, 0 hàng ghi nhận; khai ⇒ ghi nhận được; câu thô của `pm3` ⇒ 23514 có tên.
+- ⑽ tổ chức chưa bật: khai ⇒ `422` *"da bat S3"*; route đọc `bacDoiKhai: false, chot: null`; gói đi trọn ký → mở → báo giá → mở thầu
+  → chấm → đề xuất → duyệt không một khai báo nào, 0 hàng `CONTROL_DENIED`.
+- ⑾ tập mã: `RETURN 'K9_…'` của ba hàm vị từ cộng hai `CONSTRAINT = 'k9_…'` của hai trigger BẰNG sáu dòng K9 của `CHOT_VAO_SO`.
+
+Lượt đầu của tệp đỏ ba ca, cả ba do fixture hay khẳng định của test, không do chốt: đột biến bỏ vế `CO_XUNG_DOT` phải dùng câu rỗng `NULL;`
+(một `RETURN NULL` thoát hàm — đột biến viết sai giết vế không nhắm) và người có hàng `CO_XUNG_DOT` rơi xuống vế *lỗi thời* chứ không
+*chưa khai*; cột `issued_at` không có ở `rfq_invitation_tokens`; ở tổ chức chưa bật, hàm gói `createInvitation` không đúc token (route
+đúc) nên fixture đúc thẳng; mã số thuế cố định trùng khi hai gói chung tổ chức. Lượt hai 12/12, 14,6 s.
+
+## 6. Đột biến
+Mười bốn đột biến CSDL trong chính tệp — mỗi ca áp trong một giao dịch rồi ROLLBACK, câu đột biến dưới chủ cụm, câu đo dưới `app_api`:
+tắt từng trigger cổng (`rfq_approvals`, `rfq_evaluations`, `rfq_awards`, `rfq_award_approvals`, `supplier_verifications`,
+`governance_signal_acks`, cạnh mở gói) ⇒ câu thô của người chưa khai hay đã khai có xung đột đi lọt; `coi_chot_hanh_dong` thân
+`RETURN NULL` ở vế *chưa khai* ⇒ lọt; vế *có xung đột* thay bằng câu rỗng ⇒ rơi xuống vế *lỗi thời* (đột biến giết đúng vế nó nhắm),
+bỏ cả hai vế ⇒ lọt; `coi_kiem_khai_bao` bỏ vế *không gỡ được* ⇒ hàng `KHONG_XUNG_DOT` sau `CO_XUNG_DOT` đi lọt; `rfq_chu_ky_con_hieu_luc`
+bỏ vế loại trừ ⇒ câu mở thô không còn bị K9 lẫn K4b chặn; tắt riêng trigger K9 ở cạnh mở ⇒ K4b vẫn chặn nhưng KHÔNG tên;
+`rfq_chot_chu_ky_xung_dot` thân `RETURN NULL` ⇒ cùng kết quả không tên; `coi_chot_xac_minh` thân `RETURN NULL` ⇒ câu thu hồi xác minh
+của người có xung đột đi lọt. Sống: 0.
+
+Năm đột biến lớp TS, mỗi cái áp vào nguồn, chạy tệp với `--reporter=json`, khôi phục và tự kiểm sha256 (script ngoài kho):
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| TS1 | bỏ lần hỏi trước K9 ở `openRfq` | 1/12 — ca ⑷: lần mở bị trigger chặn nhưng không hàng `CONTROL_DENIED`, `422` không mang mã |
+| TS2 | `huyTraoThau` không bắt lỗi có tên của trigger | 1/12 — ca ⑺: lần huỷ bị chặn mà không hàng sổ |
+| TS3 | `CHOT_THEO_RANG_BUOC` thiếu dòng `k9_chua_khai_xung_dot` | 3/12 — ⑴, ⑺, ⑼: lỗi trigger ra ngoài trần, không mã, không sổ |
+| TS4 | `ghiNhanTinHieu` không bắt lỗi K9 | 1/12 — ca ⑼ |
+| TS5 | `khaiBaoXungDot` bỏ kiểm hình dạng `KHONG_XUNG_DOT` kèm nhà cung cấp | 1/12 — ca ⑶. **Lượt đầu SỐNG** (0/12): CHECK `coi_declarations_hinh_dang` là lớp có thẩm quyền nên vẫn `422`, chỉ câu đổi, và test chỉ khẳng định mã trạng thái; sửa test khẳng định CÂU của gói — đột biến chết |
+
+Năm sống: 0. Đối chứng sau khôi phục: 0/12 đỏ, 17,3 s.
+
+## 7. Lượt evidence đầu đỏ: sáu tệp int của `master` chưa biết K9
+`pnpm test` bỏ `*.int`, nên evidence là lượt int song song đầu tiên. Trên `802cf72`: vitest thoát mã 1, 4870 khẳng định, 59 ca đỏ ở
+sáu tệp — không ca nào là lỗi của lớp K9; cả sáu là tiền đề cũ của test gặp một cổng mới. Đọc từ `vitest-report.json`, từng ca:
+- `kich-ban-41.int` (15/34 đỏ) và `kich-ban-41-http.int` (37/87): luồng S3 dùng `BAC_MAC_DINH` (`khai_xung_dot: true`) nên hai giám đốc
+  ký ở bước 2 nhận `K9_CHUA_KHAI_XUNG_DOT`, mọi bước sau đổ theo; bộ quét rò rỉ đòi thân hợp lệ cho route ghi mới (sổ nợ 49). Sửa:
+  người của luồng S3 khai *không xung đột* ngay trước mỗi cổng — tầng gói qua `khaiBaoXungDot` trong giao dịch riêng (hàng `COI_DECLARED`
+  không chen vào giao dịch của chữ ký — [[hoi-chot-truoc-hang-so]]), HTTP qua chính route `POST /rfqs/:rfqId/coi-declarations`: hai giám
+  đốc / `pm2`, `pm3` ở bước 2; `pm2` ở hai gói hy sinh (thân của ca ký trong bộ quét là một lời hứa *khai rồi ký*, như ca xác minh); người
+  chấm ở 12b (lời khai sống tới 12g); `gd1` ở 12i; `pm2` ở ba gói bước 16; `pm3` ghi nhận g3; `pm2`/`pm4` ở bước 17. Bộ quét thêm ca
+  khai của `pm3` trên gói hy sinh B — S3 đi trọn tới 201, MVP1 dừng ở 422 có tên của trigger *tổ chức chưa bật*. Danh sách mời của luồng
+  S3 đứng yên từ DRAFT nên một lời khai sống trọn kịch bản; luồng MVP1 không khai. Thứ tự trigger theo tên giữ các lời từ chối cũ: D2,
+  J3, K10a, K8a, L14 đứng TRƯỚC `_kiem_xung_dot` ở bảng của chúng — ca *tự duyệt*, *tự đề xuất*, *tự ghi nhận* vẫn nhận mã cũ. Đây là
+  hạng mục *kịch bản 41* của S3.4b, kéo về S3.4a; các chuỗi sự kiện đúng-thứ-tự của hai tệp lọc theo tập hành động nên `COI_DECLARED`
+  không làm chúng đổi.
+- `lan-nop-da-xem.int` (3/39) và `rang-ngan-sach.int` (2/15): bốn đột biến nhắm vế *khớp băm* trong `rfq_chu_ky_con_hieu_luc` — vế ấy
+  nay ở `rfq_chu_ky_khop_bam`, đột biến dời theo (`voiHamDotBien` đòi khớp đúng một chỗ nên nó ĐỎ chứ không sống im). `rfq_approvals`
+  có BỐN trigger chuẩn: thêm `rfq_approvals_kiem_xung_dot`.
+- `rfq.int` (1/60): phép so hai chiều tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` chỉ đọc `CONSTRAINT = '…'` tĩnh; bảy trigger K9 đặt tên ĐỘNG
+  (`lower(ly_do)`). Phép so gom thêm năm thân — tên tĩnh của `coi_kiem_khai_bao`, `coi_kiem_trao_thau` cộng mã `RETURN 'K9_…'` của ba
+  hàm vị từ viết thường — thành một tập.
+- `danh-sach-moi.int` (1/23): gói có từ trước lần bật không bậc ghim — K9 coi như ĐÒI (fail-closed, cùng K5): người ký lại khai trước,
+  bằng chính câu chèn của `khaiBaoXungDot`.
+Không dòng mã sản xuất nào đổi ở lượt này. Sau bản vá: sáu tệp 258/258 (53 s, một lượt vitest chung, lượt đầu); rồi lượt evidence hai ở §9.
+
+## 8. Giới hạn còn lại
+- Màn khai báo, `gieo:demo --s3`, lượt đi thử T4 — S3.4b. Giữa hai PR, tổ chức demo (bậc mặc định `khai_xung_dot: true`) bị K9 chặn
+  ở nút ký trên màn: cùng khoảng trống S3.6b1 → S3.6b2.
+- Cổng ở THẨM ĐỊNH đầy đủ — S3.7 (K8b). `award_so_chu_ky_can` và vai theo bậc — S3.5: vế *hàng APPROVED đòi một chữ ký của người không
+  có xung đột* đứng độc lập với `CHU_KY_CAN`, S3.5 gộp.
+- `award_du_chu_ky` (K7, `113` — gộp S1.280) đếm người ký đủ theo bậc mà không loại người có `CO_XUNG_DOT`; K9 chỉ đòi hàng `APPROVED`
+  mang ít nhất một chữ ký của người không xung đột, nên ở bậc cần hai chữ ký, một chữ ký của người có xung đột vẫn ĐẾM vào số hai.
+  Khuôn `rfq_chu_ky_con_hieu_luc` (khớp băm trừ xung đột) áp cho `award_du_chu_ky` là việc của S3.4b hoặc S3.5b — ghi ở ADR-155 ⑻.
+- Khai báo là tự khai (§8.7); không lớp nào biết quan hệ thật. Một quản trị viên tự tạo tài khoản thứ hai vẫn phá được — giới hạn ADR-058.
+- Việc chia S3.4 hai PR và các chốt hình dạng ở §3 là quyết định của vòng; chủ dự án xác nhận lại ở lượt soi.
+
+## 9. Số đo
+Nhánh dựng từ `master` `ca94227` (PR #252, S1.275). Trên `802cf72` (mã, tài liệu, biên bản — lượt đầu): `pnpm test` 150 tệp xanh;
+bốn cổng CSDL (`migrations.int`, `hardening-suy-tu`, `rls-coverage`, `check-an-ninh`) 231/231 (2029 s); tệp K9 12/12 (14,6 s); 14 đột biến
+CSDL và 5 đột biến TS đều chết (§6); `pnpm evidence` lượt đầu: vitest thoát mã 1, 4870 khẳng định, 59 đỏ ở sáu tệp (§7) — ma trận đọc
+được 84/84 nhưng cổng không in XANH ([[evidence-xanh-khong-bang-vitest-0]]); `pnpm t0` đỏ hai lỗi lint ở tệp test K9 sau lần sửa cuối
+(import thừa, `expect.any`), gỡ ở lượt sau. Trên `834a770` (sau §7, một lượt sửa test và tài liệu, không dòng mã sản xuất nào): `pnpm t0`
+xanh (553 mô-đun, không vi phạm); `pnpm test` 151 tệp (2 bỏ qua), 2609 ca đạt, 14 bỏ qua, 0 đỏ — bộ đối chiếu sổ nợ chạy với số tạm,
+`pnpm cap-so --dem` viết lại lời khai đếm ADR sau khi gỡ bản ADR-155 chép đôi; `pnpm cap-so --kiem` chỉ báo số tạm (cấp ở lượt gộp);
+`pnpm evidence`: vitest thoát mã 0, 248 tệp, 4870 khẳng định (4847 đạt, 23 bỏ qua, 0 đỏ), 84/84 bất biến (62/62 nghiệp vụ + 22/22 hàng
+rào), *"Cổng evidence: XANH"*, 3821 s; `evidence/INV-matrix.md` thêm hàng K9 (12 ca), mốc độ phủ 83 → 84. Trong lượt ấy: hai kịch bản 41
+34/34 + 87/87, `canh-tranh-toi-thieu` 36/36, `xoay-vong` 21/21, `man-kiem-soat` 15/15, tệp K9 12/12.
+Sau lượt đo, `master` thêm `0e966bc` (PR #253, §S1.276 — S4.6b: migration `110_ban_luu_benchmark_ngoai`, ADR-151, hàng L1/L15 của ma
+trận; không bất biến mới, 83/83) và được gộp vào nhánh: gộp ở `6c1ce9b` — năm tệp xung đột gỡ tay, giữ cả hai phía, master trước (ba danh sách migration `110` rồi `114`; ADR-151 rồi
+ADR-155; ba cột mốc STATE; §S1.276, §S1.277 rồi §S1.281; lời khai đếm lấy của master rồi `pnpm cap-so --dem`), mã tự gộp sạch; số cấp
+ở `ca416d9` (vòng 281, ADR-155, migration 114 — chín số trần `9501` trong chú thích thay tay); `pnpm cap-so --kiem` sạch. Trên cây gộp:
+`pnpm t0` xanh (556 mô-đun); `pnpm test` lượt đầu đỏ hai cổng H20 P6/P8 — lời khai *83 bất biến* của master đứng sống trong khi sổ đăng
+ký đã 84 (`--dem` không viết lại số bất biến; gạch [S1.272] 83, lên [S1.281] 84 ở `3e35b0f`), rồi 151 tệp xanh, 2635 ca đạt, 14 bỏ qua;
+bốn cổng CSDL + hai kịch bản 41 + tệp K9 chạy chung một lượt: 363/364 — một ca `[INV-F1]` của `migrations.int` hết hạn 180 s vì tải bảy
+tệp song song (lượt 3564 s), chạy lại riêng tệp 128/128 (2206 s) ([[evidence-qua-han-do-day-chuyen]]); hai kịch bản 41 34/34 + 87/87,
+K9 12/12. CI của PR #257 trên `3e35b0f`: bảy cổng xanh, kể cả Evidence pack; lượt CI trên commit tài liệu này: xem PR.
+Rồi `master` thêm `80aad1e` (PR #255, §S1.278 — khoản 344: migration `111`, ADR-152) và `46a48e2` (PR #256, §S1.279 — S4.7a: migration
+`112_tco`, ADR-153, L8 và L16 — 85/85), gộp lần hai: mười tệp xung đột (CI không chạy cho hai commit tài liệu `f20d279`, `5c16167`).
+Xung đột NGHĨA, không tự gộp sạch: `112_tco` định nghĩa lại `rfq_chu_ky_con_hieu_luc` cộng vế số ngày giao (L16), còn `114` định nghĩa
+lại nó thành *khớp băm trừ xung đột* — chạy sau, `114` giữ nguyên sẽ XOÁ vế ấy ([[gop-sach-khong-noi-hai-ban-va-con-dung]]). Sửa:
+`rfq_chu_ky_khop_bam` mang NĂM vế (bốn của `107` cộng vế của `112`), ghim hardening và đột biến L16 của `tra-ve-nhap.int` dời theo;
+`rfq_approvals` năm trigger (`dat_bam_giao_hang` của `112` đứng trước `kiem_xung_dot`); phép so tên ràng buộc gom thêm
+`ncc_kiem_them_lien_he` (13 thân); mốc độ phủ 86 (64 + 22). Trên cây gộp lần hai: `pnpm t0` xanh (558 mô-đun), `pnpm test` 153 tệp, 2657 ca đạt, 14 bỏ qua;
+`migrate()` hai lần trên cụm dùng một lần OK ([[cum-dung-mot-lan-de-do-truoc-khi-ghim]]); lượt evidence thứ ba dừng giữa chừng — chủ
+dự án tạm ngưng để nhường máy cho phiên khác. Rồi `master` thêm `c57ea67` (PR #258, §S1.280 — S3.5a: migration
+`113_trao_thau_theo_bac`, ADR-154, K7/K2b/K5b — 88/88), gộp lần ba: mười hai tệp xung đột — hardening (hai dải ghim chèn cùng chỗ,
+diff cắt vụn thành mười lăm hunk: ghép lại dải S3.5a rồi dải K9), `CHOT_THEO_RANG_BUOC` (tám tên K7/K2b/K5b cạnh sáu tên K9), phép so
+tên ràng buộc gom bốn hàm vị từ award và ba hàm vị từ K9 thành một tập (`k9_chu_ky_co_xung_dot` đứng ở hai thân), `duyetTraoThau`
+(lớp chặn cuối của `113` và K9 chung một `catch`), bước 12i của kịch bản 41 HTTP — luồng S3 nay HAI giám đốc ký, cả hai khai trước;
+mốc độ phủ 89 (67 + 22). Giới hạn mới lộ ra ở giao điểm (§8): `award_du_chu_ky` (K7) đếm người ký KHÔNG loại người có `CO_XUNG_DOT`;
+K9 chỉ đòi hàng `APPROVED` có ít nhất một chữ ký của người không xung đột. Số đo trên cây gộp lần ba (`d86b50e`):
+`cap-so --kiem` sạch; `migrate()` hai lần trên cụm dùng một lần OK (111 tệp, lần hai 0); `pnpm t0` xanh (559 mô-đun); `pnpm test` 153 tệp,
+2667 ca đạt, 14 bỏ qua; `pnpm evidence`: vitest thoát mã 1 — 1/4981 đỏ, ở CHÍNH tệp K9: câu ký thô của `tc` (phép đột biến cổng chữ ký
+duyệt trao thầu) nhận `k7_tac_gia_chinh_sach` thay vì `k9_chua_khai_xung_dot` — `tc` là tác giả bản v2 của fixture, và trigger K7
+`rfq_award_approvals_kiem_vai_theo_bac` (`113`) đứng TRƯỚC `_kiem_xung_dot` theo tên; 89/89 đọc được nhưng cổng không in XANH. Sửa
+fixture (FINANCE thứ ba, không tác giả, không ký bản v2) ở `37a2fbb`, không dòng mã sản xuất nào. Lượt bốn trên `37a2fbb`: vitest thoát mã
+0, 251 tệp, 4981 khẳng định (4958 đạt, 23 bỏ qua, 0 đỏ), 89/89 bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*,
+2014 s; ma trận sinh lại (K9 12 ca, tổng 89); hai kịch bản 41 34/34 + 87/87, `trao-thau-theo-bac` 15/15, K9 12/12. CI của PR #257 trên
+commit cuối: xem PR.
+
+---
+
 # §S1.282 — S3.5b: NỬA MÀN CỦA AWARD THEO BẬC — `/mo-thau` NÓI *CÓ M / CẦN N*, KHỐI NGOẠI LỆ HẬU KIỂM (K2b) Ở BƯỚC 7, TÁM CÂU CHỈ DẪN K7/K2b/K5b; `gieo:demo --s3` TỚI LƯỢT CHẤM; KỊCH BẢN 41 HTTP BƯỚC 12g2; LƯỢT ĐI THỬ T4 25/25 — S3.5 KHÉP
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi; không ADR mới, không migration, 88 bất biến giữ nguyên. Đổi ở
@@ -26022,7 +26224,20 @@ danh; mỗi người một ngữ cảnh trình duyệt. **25/25**:
 - K5b chưa có lượt đi thử tới chỗ bị chặn: với duyet1 + duyet2 đều ngoài tập, chỉ ca *taichinh2 ký thay duyet1* mới đo được, và nó vẫn
   APPROVED (duyet1/duyet2 độc lập). Ca K5b đỏ đo ở T3 (`trao-thau-theo-bac.int`), chưa ở trình duyệt.
 - `gieo:demo --s3` không gieo ca khai thấp (bậc trao cao hơn ước lượng) — K7 bậc cao hơn chỉ đo ở T3.
-- K8b `tham_dinh_truoc_trao` (S3.7), K9 ở chữ ký trao thầu (S3.4), K10/`ESTIMATE_UNDERSTATED` ở chữ ký (S3.6d) — không đổi.
+- K8b `tham_dinh_truoc_trao` (S3.7), K10/`ESTIMATE_UNDERSTATED` ở chữ ký (S3.6d) — không đổi. ~~K9 ở chữ ký trao thầu (S3.4)~~ xem §7b.
+
+## 7b. Gộp `origin/master` lần hai — S3.4a / K9 (PR #257, S1.281) vào giữa vòng
+CI của PR #259 xanh trọn mà PR DIRTY: #257 merge trước. Ba tài liệu xung đột (STATE, spec dòng S3.4/S3.5, biên bản) gỡ tay; mã tự gộp.
+Nhưng K9 (`114`, ADR-155 ⑷) đổi nghĩa của lượt gieo và lượt đi thử: bốn bậc mặc định của `BAC_DEMO` bật `khai_xung_dot`, nên chữ ký
+duyệt gói, lượt chấm, đề xuất và chữ ký trao thầu của tổ chức demo đòi lời khai *không xung đột* mang băm danh sách mời hiện tại — ADR-155
+⑻ xếp *"gieo:demo --s3 khai cho những người nó ký thay"* vào S3.4b, và `gieo:demo --s3` trên master lúc ấy KHÔNG chạy trọn được (chữ ký
+duyệt đầu tiên bị `k9_chua_khai_xung_dot`). Phần tối thiểu làm ở đây (`tools/gieo-demo/src/khai-xung-dot.ts`, ghi ở ADR-155 ⑻): công cụ
+khai qua hàm gói cho đúng những người nó ký thay — soan2, soan3 (gói chính, câu INSERT thẳng vẫn bị trigger ENABLE ALWAYS hỏi), soan2 (ba
+gói đã mở, ba gói chia nhỏ), và ở gói trao thầu: soan, soan2, duyet1, duyet2 cùng hai người tài chính (để lượt thử sai chạm K7 chứ không
+dừng ở K9) — ngay sau khi danh sách mời đủ; ngoại lệ hậu kiểm lập sau không đổi băm (ADR-154 ⑸) nên lời khai còn nguyên tới lúc ký. Gói
+một nguồn (người demo duyệt tay trên `/tao-thau`) và màn khai báo vẫn là S3.4b. Kịch bản 41 HTTP trên cây gộp 89/89 (bước 12g2 đứng cạnh
+các lời khai S3.4a thêm). Gieo lại, dựng lại cụm trên mã gộp, lượt đi thử T4 lần ba: **25/25**, cùng ba phản hồi 422 được chờ; sổ theo gói
+thêm `COI_DECLARED` của sáu người trước lần nộp.
 
 ## 8. Số đo
 - `pnpm t0` xanh (46 s); `pnpm test` 153 tệp, 2664 ca đạt, 14 bỏ qua (124 s) — sau khi hai cổng kiến trúc bắt hai lỗi của tệp công cụ mới
@@ -26032,4 +26247,5 @@ danh; mỗi người một ngữ cảnh trình duyệt. **25/25**:
   định — *đồng hồ CSDL lệch +2569 ms so với đồng hồ tiến trình (ngưỡng 2000 ms)* (ADR-074, fail-closed của worker). Đồng hồ VM Docker trôi
   +8 s so với máy; `hwclock -s` trong một container đặc quyền đưa về 0 s. Lượt 2 (sau khi chờ máy rảnh container test lạ 3 phút): vitest
   thoát mã 0, **88/88** (66 + 22), **4968** khẳng định (K2b 4 → 6 ca), 1 794 s. Cấp số và nối biên bản SAU lượt ấy — chỉ đổi nhãn vòng.
-- Lượt đi thử T4: 25/25 ở lượt hai (lượt một 22/25 — ba ✗ là script đọc bảng trước khi trang nạp lại, không phải lỗi màn).
+- Lượt đi thử T4: 25/25 ở lượt hai (lượt một 22/25 — ba ✗ là script đọc bảng trước khi trang nạp lại, không phải lỗi màn); lượt ba
+  25/25 trên cây gộp S3.4a với lời khai K9 gieo sẵn (§7b). Chuỗi t0 → test → evidence chạy lại trên cây gộp — số ở dưới.

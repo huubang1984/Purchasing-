@@ -45,6 +45,7 @@ import { addRfqItem, approveRfq, closeRfq, createRfq, openRfq, setRfqBudget, sub
 import { getRfqPublicKeys, sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, dispatchUnseal, requestUnseal } from "@trustprocure/unseal";
+import { khaiKhongXungDot } from "./khai-xung-dot.js";
 
 export class GoiDaMoError extends Error {
   constructor(message: string) {
@@ -174,6 +175,8 @@ export async function gieoBaGoiDaDieuPhoi(b: BoiCanhGoiDaMo): Promise<readonly G
       if (n === undefined) throw new GoiDaMoError(`gói ${tieuDe} không đọc được lần nộp`);
       return n;
     });
+    // [S1.282 / S3.5b — cầu tới S3.4b] K9 (`114`): ở tổ chức đã bật, soan2 khai *không xung đột* trước chữ ký (`khai-xung-dot.ts`).
+    if (b.s3) await khaiKhongXungDot(pool, org, rfqId, [b.soan2]);
     await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId, sessionId: b.soan2.sessionId, lanNopDaXem: lanNop }, pool));
 
     const token: string[] = await withTenant(pool, org, async (c) => {

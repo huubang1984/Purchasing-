@@ -75,6 +75,7 @@ import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/ten
 import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
 import { SO_NOP, chamGoiTraoThau, gieoGoiTraoThauDenDieuPhoi } from "./goi-trao-thau.js";
+import { khaiKhongXungDot } from "./khai-xung-dot.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -499,6 +500,9 @@ async function chinh(): Promise<void> {
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
     // [S1.190 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách năm lời mời vừa dựng ở DRAFT.
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
+    // [S1.282 / S3.5b — cầu tới S3.4b] K9 (`114`): cổng ở `rfq_approvals` là ENABLE ALWAYS, câu INSERT thẳng dưới đây cũng bị hỏi — hai
+    // người duyệt khai *không xung đột* trước, SAU khi năm lời mời đã dựng (lời khai ghim băm danh sách mời). Xem `khai-xung-dot.ts`.
+    if (S3) await khaiKhongXungDot(pool, org, rfq, nguoiDuyetGoi);
     // [S1.198 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
     // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
     for (const nm of nguoiDuyetGoi) {
@@ -618,6 +622,8 @@ async function chinh(): Promise<void> {
               "SELECT p.lan_nop AS n FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1",
               [id],
             )).n;
+            // [S1.282 / S3.5b — cầu tới S3.4b] K9: soan2 khai *không xung đột* trước chữ ký (`khai-xung-dot.ts`).
+            await khaiKhongXungDot(pool, org, id, [soan2]);
             await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId: id, sessionId: soan2.sessionId, lanNopDaXem: lanNop }, pool));
             if (i < 2) {
               await withTenant(pool, org, (c) =>
@@ -738,6 +744,8 @@ async function chinh(): Promise<void> {
             soan2: nguoi("soan2."),
             duyet1: nguoi("duyet1."),
             duyet2: nguoi("duyet2."),
+            taichinh1: nguoi("taichinh1."),
+            taichinh2: nguoi("taichinh2."),
             nhaCungCap: nhaCungCapGoiChinh.slice(0, 5),
             dong: baDong,
           });
@@ -836,6 +844,8 @@ async function chinh(): Promise<void> {
       ra.push("  ⑷ duyet1 «Phê duyệt» hai lần (lần đầu chỉ hiện đề xuất) — đã ký, «có 1 / cần 2», đề xuất vẫn PROPOSED;");
       ra.push("  ⑸ duyet2 «Phê duyệt» — APPROVED. Thử sai: taichinh1 ký ⇒ từ chối có tên (K7, người khai phiên bản chính sách); taichinh2 (đã xác minh");
       ra.push("  nhà cung cấp thắng) ký được nhưng không đếm là độc lập — gói có ngoại lệ nên một trong hai chữ ký phải của người ngoài tập (K5b).");
+      ra.push("  K9 (S3.4a): sáu người trên đã khai «không xung đột» trên gói này — công cụ khai thay, màn khai báo là S3.4b; soan3 chưa khai");
+      ra.push("  (và cũng không đề xuất được — J3).");
       ra.push("  Mỗi lần đổi người: đăng nhập bằng link của người ấy ở trên (hai người tài chính dùng link /mo-thau dưới đây), rồi mở /mo-thau.");
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);

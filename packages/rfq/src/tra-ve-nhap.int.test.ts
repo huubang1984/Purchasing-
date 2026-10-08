@@ -709,7 +709,9 @@ describe("S4.7a — L16: số ngày giao yêu cầu chỉ đổi ở DRAFT và n
     expect(await loi(mo(t, rfqId))).toBeNull();
   });
 
-  it("[INV-L16] ĐỘT BIẾN: bỏ vế số ngày giao khỏi `rfq_chu_ky_con_hieu_luc` thì chữ ký trên 30 ngày mở được gói đã đổi thành 7 — đúng lỗ vế ấy đóng", async () => {
+  // [S1.281 / S3.4a / K9] Năm vế *khớp băm* (kể cả vế số ngày giao) nay ở `rfq_chu_ky_khop_bam` (`114`); `rfq_chu_ky_con_hieu_luc` đọc nó
+  // rồi loại người có xung đột — đột biến áp ở hàm mang vế.
+  it("[INV-L16] ĐỘT BIẾN: bỏ vế số ngày giao khỏi `rfq_chu_ky_khop_bam` thì chữ ký trên 30 ngày mở được gói đã đổi thành 7 — đúng lỗ vế ấy đóng", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await datNgay(t, rfqId, 30);
@@ -719,14 +721,14 @@ describe("S4.7a — L16: số ngày giao yêu cầu chỉ đổi ở DRAFT và n
     await traVe(t, rfqId, t.pm);
     await datNgay(t, rfqId, 7);
     await nop(t, rfqId);
-    const goc = (await db.pool.query<{ src: string }>("SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.rfq_chu_ky_con_hieu_luc(uuid, uuid)'::regprocedure"))
+    const goc = (await db.pool.query<{ src: string }>("SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.rfq_chu_ky_khop_bam(uuid, uuid)'::regprocedure"))
       .rows[0]!.src;
     const ve = "\n     AND a.approved_delivery_hash = public.rfq_bam_giao_hang(p_rfq)";
     expect(goc, "tiền đề: thân hàm mang đúng vế số ngày giao").toContain(ve);
     const khiBo = await trongDotBien(
       t.org,
       [
-        "CREATE OR REPLACE FUNCTION public.rfq_chu_ky_con_hieu_luc(p_org uuid, p_rfq uuid) RETURNS SETOF uuid LANGUAGE sql STABLE " +
+        "CREATE OR REPLACE FUNCTION public.rfq_chu_ky_khop_bam(p_org uuid, p_rfq uuid) RETURNS SETOF uuid LANGUAGE sql STABLE " +
           `SET search_path = pg_catalog, public AS $f$${goc.replace(ve, "")}$f$`,
       ],
       (c) => loi(openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool)),

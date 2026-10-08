@@ -12,6 +12,7 @@
     "@trustprocure/du-lieu-nen": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/kiem-soat": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/supplier": "workspace:*",

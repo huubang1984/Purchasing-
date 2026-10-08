@@ -1732,17 +1732,23 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // [S1.196 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`082`) đặt hai tên K8a — phép so gom cả năm thân.
   // [S1.253 / S4.5a] Và trigger L14: `rfq_evaluations_kiem_phien_ban_ghim` (`102`) đặt một tên — phép so gom cả sáu thân.
   // [S1.265 / S3.3b] Và trigger K4a thứ hai: `ngoai_le_kiem` (`105`) đặt một tên — phép so gom cả bảy thân.
+  // [S1.281 / S3.4a / K9] Bảy trigger K9 đặt tên ĐỘNG — `CONSTRAINT = lower(ly_do)` từ mã ba hàm vị từ trả về (`coi_chot_hanh_dong`,
+  // `coi_chot_xac_minh`, `rfq_chot_chu_ky_xung_dot`); `coi_kiem_khai_bao` và `coi_kiem_trao_thau` đặt thêm một tên tĩnh. Phép so gom
+  // tên tĩnh ở mọi thân cộng mã `RETURN 'K9_…'` của ba hàm vị từ viết thường — một TẬP, vì một tên có thể đứng ở hai thân.
   // [S1.280 / S3.5a] Và ba trigger của award theo bậc (`113`): chúng đặt tên ràng buộc bằng `lower(ly_do)` — mã do bốn hàm vị từ trả —,
   // nên vế *tên trong thân* gom thêm mọi `RETURN 'K…'` của bốn hàm vị từ (viết thường); `ngoai_le_kiem` (thân `113`) đặt thêm một tên K2b.
-  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ) và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ), các trigger K9 (qua ba hàm vị từ) và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure, " +
         "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure, 'public.ngoai_le_kiem()'::regprocedure, " +
-        "'public.ncc_kiem_them_lien_he()'::regprocedure)",
+        "'public.ncc_kiem_them_lien_he()'::regprocedure, " +
+        "'public.coi_kiem_khai_bao()'::regprocedure, 'public.coi_kiem_trao_thau()'::regprocedure, " +
+        "'public.coi_chot_hanh_dong(uuid, uuid, uuid)'::regprocedure, 'public.coi_chot_xac_minh(uuid, uuid, uuid)'::regprocedure, " +
+        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure)",
     );
-    expect(rows).toHaveLength(8);
+    expect(rows).toHaveLength(13);
     const { rows: viTu } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_bac(uuid, uuid, uuid)'::regprocedure, " +
         "'public.award_chot_nguoi_ky(uuid, uuid, uuid)'::regprocedure, 'public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'::regprocedure, " +
@@ -1755,9 +1761,13 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
     );
     expect(triggerBac).toHaveLength(3);
     for (const r of triggerBac) expect(r.prosrc, "ba trigger đặt tên bằng chính mã viết thường").toMatch(/CONSTRAINT = lower\(ly_do\)/u);
+    // [S1.281 / S3.4a / K9] Ba hàm vị từ K9 nằm trong `rows`; `k9_chu_ky_co_xung_dot` đứng ở HAI thân (tên tĩnh của
+    // `coi_kiem_trao_thau` và `RETURN` của `rfq_chot_chu_ky_xung_dot`) nên phép so là một TẬP.
     const trongThan = [
-      ...rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])),
-      ...viTu.flatMap((r) => [...r.prosrc.matchAll(/RETURN '(K\w+)'/gu)].map((m) => m[1]!.toLowerCase())),
+      ...new Set([
+        ...rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1]!)),
+        ...[...rows, ...viTu].flatMap((r) => [...r.prosrc.matchAll(/RETURN '(K\w+)'/gu)].map((m) => m[1]!.toLowerCase())),
+      ]),
     ].sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });

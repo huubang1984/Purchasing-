@@ -20,6 +20,10 @@
 //   taichinh1 khai phiên bản chính sách (không ký trao thầu — K7), taichinh2 xác minh nhà cung cấp (trong tập K5b);
 //   nhapncc dựng hồ sơ nhà cung cấp (K2 đếm được).
 // Cửa sổ xoay vòng (K3, `108`) tính theo NGƯỜI CHỌN: soan3 chưa mở gói nào ⇒ không góp suất nào, năm nhà cung cấp cũ vẫn qua.
+// K9 (`114`, S3.4a — gộp vào giữa vòng này): bậc 2 mặc định bật `khai_xung_dot`, nên soan, soan2 (chữ ký duyệt gói; soan2 còn chấm và đề
+// xuất), duyet1, duyet2 (ký trao thầu trên màn) và hai người tài chính (lượt thử sai) khai *không xung đột* NGAY SAU khi năm lời mời
+// dựng xong — `khai-xung-dot.ts`. Ngoại lệ
+// hậu kiểm lập sau không đổi băm danh sách (ADR-154 ⑸), nên lời khai còn nguyên tới lúc ký.
 // ==============================================================================================
 
 import { randomBytes } from "node:crypto";
@@ -42,6 +46,7 @@ import { getRfqPublicKeys, sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, dispatchUnseal, requestUnseal } from "@trustprocure/unseal";
 import type { DongGieo, NguoiGieo, NhaCungCapGieo } from "./goi-da-mo.js";
+import { khaiKhongXungDot } from "./khai-xung-dot.js";
 
 export class GoiTraoThauError extends Error {
   constructor(message: string) {
@@ -66,6 +71,9 @@ export interface BoiCanhGoiTraoThau {
   /** Hai người duyệt yêu cầu mở thầu. */
   readonly duyet1: NguoiGieo;
   readonly duyet2: NguoiGieo;
+  /** Hai người tài chính — chỉ để lượt thử sai trên màn chạm K7/K5b (người khai chính sách, người xác minh) thay vì dừng ở K9. */
+  readonly taichinh1: NguoiGieo;
+  readonly taichinh2: NguoiGieo;
   /** ĐÚNG năm nhà cung cấp đếm được (K2 bậc 2). */
   readonly nhaCungCap: readonly NhaCungCapGieo[];
   readonly dong: readonly DongGieo[];
@@ -127,6 +135,9 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
     }
     return ids;
   });
+
+  // K9: danh sách mời đã đủ — bốn người sắp ký, chấm, đề xuất, duyệt khai trước (xem đầu tệp).
+  await khaiKhongXungDot(pool, org, rfqId, [b.soan, b.soan2, b.duyet1, b.duyet2, b.taichinh1, b.taichinh2]);
 
   await withTenant(pool, org, (c) => submitRfqForApproval(c, org, { rfqId, actorSessionId: b.soan3.sessionId }, pool));
   await withTenant(pool, org, (c) => chuanHoaSauNop(c, org, { rfqId, actorSessionId: b.soan3.sessionId }));

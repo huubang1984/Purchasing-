@@ -562,6 +562,9 @@ describe("hình dạng file migration", () => {
       // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
       "canonical_item_versions",
       "canonical_items",
+      // [S1.281 / S3.4a / `114_khai_bao_xung_dot`] Khai báo xung đột lợi ích (K9) — chỉ-ghi-thêm, khoá ngoại hợp thành
+      // `(org_id, rfq_id)`, `(org_id, user_id)`, `(org_id, supplier_id)`, policy khách ĐÓNG HẲN.
+      "coi_declarations",
       // [S1.272 / S4.6a / `109_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn nền L1, khoá ngoại hợp thành tới
       // `canonical_items`, khoá ngoại tự trỏ của hàng rút, policy khách đóng hẳn.
       "external_price_references",
