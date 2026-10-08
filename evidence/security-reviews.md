@@ -26379,7 +26379,7 @@ của nó — `pnpm t0` và `pnpm test` chạy lại trên HEAD sau lượt evid
 
 ---
 
-# §S1.9101 — S4.7b1: TCO PHÍA NGƯỜI MUA — `/chinh-sach` CHỌN MÃ VÀ KHAI THAM SỐ, `POST /policy` CHUYỂN `tco`; SỐ NGÀY GIAO YÊU CẦU CÓ ROUTE, Ô Ở `/tao-thau`, DÒNG Ở MÀN DUYỆT; CẢNH BÁO TRƯỚC KHI GÓI KẸT — ADR-9201
+# §S1.284 — S4.7b1: TCO PHÍA NGƯỜI MUA — `/chinh-sach` CHỌN MÃ VÀ KHAI THAM SỐ, `POST /policy` CHUYỂN `tco`; SỐ NGÀY GIAO YÊU CẦU CÓ ROUTE, Ô Ở `/tao-thau`, DÒNG Ở MÀN DUYỆT; CẢNH BÁO TRƯỚC KHI GÓI KẸT — ADR-156
 
 ## 1. Vòng này là gì
 
@@ -26388,7 +26388,7 @@ Phần đầu trong hai phần của S4.7b (spec S4 §9): phía NGƯỜI MUA c�
 
 ## 2. Quyết định của chủ dự án (2026-10-08)
 
-Bốn câu, cả bốn theo đề xuất (ADR-9201): ⑴ S4.7b tách HAI phần; ⑵ nhà cung cấp thấy tập mã, số ngày giao VÀ tham số quy đổi (b2 chụp
+Bốn câu, cả bốn theo đề xuất (ADR-156): ⑴ S4.7b tách HAI phần; ⑵ nhà cung cấp thấy tập mã, số ngày giao VÀ tham số quy đổi (b2 chụp
 tham số vào gói lúc mở); ⑶ ô khai BẮT BUỘC trên form (tuỳ chọn ở lượt chấm); ⑷ hạng giá chỉ trên báo giá có hạng.
 
 ## 3. Đo trước
@@ -26414,7 +26414,7 @@ tham số vào gói lúc mở); ⑶ ô khai BẮT BUỘC trên form (tuỳ chọ
   trễ; lõi `docSoNgayGiao`, `canhBaoSoNgayGiao`.
 - **Sổ**: `barrel-exports` (rfq hai symbol, danh-gia ba), `cong-quyen-route` (`datSoNgayGiao` ghi; `docNhomTco`, `kiemChinhSachTco` thuần),
   `ma-chep-api-worker` (một hàng `RIENG`), kịch bản 41 (`thanHopLe` cho route mới).
-- **Tài liệu**: ADR-9201; TEST-PLAN L8, L16; spec §9 (S4.7b, S4.7b1, S4.7b2); STATE; PRODUCT; Handoff (155 ADR).
+- **Tài liệu**: ADR-156; TEST-PLAN L8, L16; spec §9 (S4.7b, S4.7b1, S4.7b2); STATE; PRODUCT; Handoff (155 ADR).
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -26468,7 +26468,7 @@ rò rỉ hay sink HTML. Tám phát hiện:
 - **TRUNG-1** — *"chỉ còn lối huỷ"* sai ở hai chỗ. `/chinh-sach`: tổ chức chưa bật soạn từ mẫu (bốn bậc) và bật chi phí trễ — phiên bản
   có bậc chỉ hiệu lực khi được ký, và chữ ký bật S3 bị từ chối khi còn gói chờ duyệt (`097`), nên các gói ấy không rơi vào nó. `/tao-thau`:
   chỉ một phiên bản MỚI HƠN chưa ký tính chi phí trễ, gói chờ duyệt mở được NGAY, mà màn nói nó chỉ còn lối huỷ — lời có thể đẩy người
-  duyệt huỷ một gói lành, và huỷ không lùi được. ADR-9201 ⑸ ghi *"cùng lời của `openRfq`"* — sai với ca phiên bản mới hơn. Sửa:
+  duyệt huỷ một gói lành, và huỷ không lùi được. ADR-156 ⑸ ghi *"cùng lời của `openRfq`"* — sai với ca phiên bản mới hơn. Sửa:
   `canhBaoGoiThieuSoNgayGiao` nhận cờ có bậc và im ở ca ấy; `canhBaoSoNgayGiao` tách phiên bản hiệu lực (lời của `openRfq`) khỏi phiên
   bản mới hơn (lời có điều kiện; ở tổ chức chưa bật chỉ phiên bản không bậc còn là nguy cơ). Ca thành test (M17, M20, M21).
 - **TRUNG-2** — `/tao-thau` nói *"nhà cung cấp thấy con số này khi nộp báo giá"*; tới b2 danh sách trắng của `GET /guest/rfq` không có nó.

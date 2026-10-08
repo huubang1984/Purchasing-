@@ -12349,14 +12349,14 @@ spec §9 — bốn cổng ở `/mo-thau` không chỗ khai. Giữ nhánh `APPROV
 hàm vị từ *"K9 làm thiếu chữ ký trao thầu"* (khuôn `rfq_chot_chu_ky_xung_dot`) — ở trao thầu, chưa đủ chữ ký không là lần từ chối; lời
 nói nằm ở cờ của chữ ký.
 
-## ADR-9201 — S4.7b: route và màn của TCO — hai phần; nhà cung cấp thấy tập mã, số ngày giao và tham số quy đổi; ô khai bắt buộc trên form; hạng giá trên báo giá có hạng
+## ADR-156 — S4.7b: route và màn của TCO — hai phần; nhà cung cấp thấy tập mã, số ngày giao và tham số quy đổi; ô khai bắt buộc trên form; hạng giá trên báo giá có hạng
 
 **Ngày:** 2026-10-08 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu ngày 2026-10-08, cả bốn theo đề xuất, sau phép đo:
 ⑴ S4.7b tách HAI phần — S4.7b1 phía người mua (vòng này), S4.7b2 phía nhà cung cấp và kết quả; ⑵ nhà cung cấp thấy tập mã ghim, số
 ngày giao yêu cầu VÀ tham số quy đổi của phiên bản ghim; ⑶ ô khai TCO ở `/nop-thau` BẮT BUỘC trên form; ⑷ hạng giá ở `/mo-thau` chỉ
-tính trên báo giá CÓ hạng TCO · **[S1.9101]** · **Migration:** không (S4.7b1); S4.7b2 thêm một · **Liên quan:** ADR-153 (S4.7a),
+tính trên báo giá CÓ hạng TCO · **[S1.284]** · **Migration:** không (S4.7b1); S4.7b2 thêm một · **Liên quan:** ADR-153 (S4.7a),
 ADR-141 (phiên bản ghim lúc mở), ADR-053 ⑶ (không lấy `0`), khoản 329 (màn gửi trọng số) · **Spec:** S4 §4.8, §8.6, §8.13, §2.5 ㉒,
-§9 S4.7b · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§9 S4.7b · **Biên bản:** `evidence/security-reviews.md` §S1.284
 
 ### Bối cảnh — phép đo trước khi viết
 
@@ -12401,7 +12401,7 @@ ghi *"không hạng — thiếu: …"*, nên việc bị loại vì thiếu ô v
   số mình ký; cảnh báo khi gói chưa khai mà phiên bản HIỆU LỰC tính chi phí trễ (lời của `openRfq`), hay chỉ một phiên bản MỚI HƠN
   chưa hiệu lực tính nó (lời có điều kiện *"nếu nó có hiệu lực trước lúc gói mở"*).
 
-⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.284 mục 8):
 - **TRUNG-1** — câu *"chỉ còn lối huỷ"* sai ở hai chỗ. Ở tổ chức chưa bật, phiên bản CÓ bậc chỉ có hiệu lực khi được ký, và chữ ký ấy —
   chữ ký bật kiểm soát theo bậc — bị từ chối khi còn gói chờ duyệt (`097`): gói chờ duyệt không bao giờ rơi vào nó. Và ở `/tao-thau`,
   một phiên bản mới hơn chưa hiệu lực không chặn cạnh mở hôm nay — câu ấy đẩy người duyệt huỷ một gói lành. Sửa: `/chinh-sach` im khi

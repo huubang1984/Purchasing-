@@ -358,7 +358,7 @@ export interface DanhSachChinhSach {
   readonly phienBan: readonly PhienBanChinhSach[];
   /** `to_chuc_da_bat_s3(org)`. */
   readonly daBat: boolean;
-  /** [S1.9101 / S4.7b1] Số gói `PENDING_APPROVAL` của tổ chức chưa khai số ngày giao yêu cầu (`112_tco`). */
+  /** [S1.284 / S4.7b1] Số gói `PENDING_APPROVAL` của tổ chức chưa khai số ngày giao yêu cầu (`112_tco`). */
   readonly goiChoDuyetThieuSoNgayGiao: number;
 }
 
@@ -403,7 +403,7 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
     "SELECT public.to_chuc_da_bat_s3($1::pg_catalog.uuid) AS da_bat",
     [orgId],
   );
-  // [S1.9101 / S4.7b1] Gói chờ duyệt chưa khai số ngày giao — ở tổ chức chưa bật, một phiên bản tính chi phí trễ có hiệu lực
+  // [S1.284 / S4.7b1] Gói chờ duyệt chưa khai số ngày giao — ở tổ chức chưa bật, một phiên bản tính chi phí trễ có hiệu lực
   // trước lúc chúng mở thì chúng chỉ còn lối huỷ (ADR-153, giới hạn ⑴); ở tổ chức đã bật thì phải trả về soạn thảo. Màn nói trước.
   const { rows: thieu } = await client.query<{ n: number }>(
     `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n FROM public.rfq_packages

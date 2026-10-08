@@ -207,7 +207,7 @@ export interface RfqRecord {
    */
   readonly lanNop: number;
   /**
-   * [S1.9101 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — `null` khi gói chưa khai. Chỉ đổi ở DRAFT (trigger
+   * [S1.284 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — `null` khi gói chưa khai. Chỉ đổi ở DRAFT (trigger
    * `rfq_packages_so_ngay_giao`), và nằm trong chữ ký phê duyệt: người duyệt phải THẤY nó ở màn duyệt.
    */
   readonly soNgayGiao: number | null;

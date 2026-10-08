@@ -541,7 +541,7 @@ export function nhanXacMinhNgan(verification: unknown): string {
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.7b1] SỐ NGÀY GIAO YÊU CẦU CỦA GÓI (`112_tco`, ADR-153; L16)
+// [S1.284 / S4.7b1] SỐ NGÀY GIAO YÊU CẦU CỦA GÓI (`112_tco`, ADR-153; L16)
 // ----------------------------------------------------------------------------------------------
 // Con số là của GÓI, chỉ đổi ở DRAFT (trigger `rfq_packages_so_ngay_giao`) và nằm trong chữ ký phê duyệt (`approved_delivery_hash`):
 // người duyệt phải thấy nó ở chính màn duyệt. Nó là cơ sở của chi phí trễ giao — phiên bản ghim lúc mở tính `chi_phi_tre` mà gói không
@@ -579,7 +579,7 @@ const coChiPhiTre = (p: unknown): boolean =>
  * Câu cảnh báo khi gói chưa khai số ngày giao mà phiên bản đang hiệu lực — hay một phiên bản MỚI HƠN, chưa có hiệu lực, có thể có hiệu
  * lực trước lúc gói mở — tính chi phí trễ. `body` là thân `GET /policy/versions`. `null`: không có gì để nói.
  *
- * [rà soát §S1.9101 — TRUNG-1] Bản đầu nói *"chỉ còn lối huỷ"* cả khi chỉ một phiên bản mới hơn tính chi phí trễ — sai: gói mở được
+ * [rà soát §S1.284 — TRUNG-1] Bản đầu nói *"chỉ còn lối huỷ"* cả khi chỉ một phiên bản mới hơn tính chi phí trễ — sai: gói mở được
  * ngay (cạnh mở chỉ đọc phiên bản hiệu lực), và một lời nói sai đẩy người duyệt huỷ một gói lành. Nay hai ca tách nhau:
  * - phiên bản HIỆU LỰC tính chi phí trễ: đúng lời của `openRfq` — gói chờ duyệt ở tổ chức chưa bật chỉ còn lối huỷ;
  * - chỉ một phiên bản MỚI HƠN tính nó: lời có điều kiện *"nếu nó có hiệu lực trước lúc gói mở"*. Ở tổ chức chưa bật, phiên bản có bậc chỉ

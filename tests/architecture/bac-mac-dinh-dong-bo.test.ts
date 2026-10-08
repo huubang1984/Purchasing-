@@ -66,10 +66,10 @@ describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:dem
   });
 });
 
-// [S1.9101 / S4.7b1] Màn `/chinh-sach` chép luật L8 của lượt chấm (`kiemChinhSachTco`, S4.7a) — trừ vế số ngày giao, là của gói. Hai
+// [S1.284 / S4.7b1] Màn `/chinh-sach` chép luật L8 của lượt chấm (`kiemChinhSachTco`, S4.7a) — trừ vế số ngày giao, là của gói. Hai
 // bản phải ra CÙNG phán quyết và CÙNG câu trên mọi ca: một bản chép không được đối chiếu thì trôi (ADR-029), và màn sẽ im trước một
 // phiên bản mà lượt chấm từ chối — đúng kiểm soát giả §2.5 ㉒ muốn nói ra.
-describe("[S1.9101 / S4.7b1] [INV-L8] luật L8 của màn /chinh-sach là bản chép của lượt chấm", () => {
+describe("[S1.284 / S4.7b1] [INV-L8] luật L8 của màn /chinh-sach là bản chép của lượt chấm", () => {
   const g = (ma: string, don_vi = "TIEN", he_so = "1.0000"): ThanhPhanTrongSo => ({ ma, don_vi, he_so });
   const CA: readonly (readonly [string, readonly ThanhPhanTrongSo[], NhomTco | null])[] = [
     ["mẫu", TRONG_SO_MAC_DINH, null],
@@ -106,9 +106,9 @@ describe("[S1.9101 / S4.7b1] [INV-L8] luật L8 của màn /chinh-sach là bản
   });
 });
 
-// [rà soát §S1.9101 — THẤP-2] Miền ba tham số của màn là bản chép của `CHECK` `org_procurement_policies_tco_hinh_dang`: mỗi mẫu có mặt
+// [rà soát §S1.284 — THẤP-2] Miền ba tham số của màn là bản chép của `CHECK` `org_procurement_policies_tco_hinh_dang`: mỗi mẫu có mặt
 // NGUYÊN VĂN trong `112_tco.sql`, đúng khoá của nó. Đổi mẫu ở một bên thì đỏ ở đây.
-describe("[S1.9101 / S4.7b1] miền tham số TCO của màn là bản chép của CHECK `112`", () => {
+describe("[S1.284 / S4.7b1] miền tham số TCO của màn là bản chép của CHECK `112`", () => {
   it("ba mẫu like_regex có mặt nguyên văn, mỗi mẫu ở đúng khoá", async () => {
     const { readFileSync } = await import("node:fs");
     const sql = readFileSync(new URL("../../db/migrations/112_tco.sql", import.meta.url), "utf8");

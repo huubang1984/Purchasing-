@@ -3429,9 +3429,9 @@ describe("bề mặt tệp", () => {
       expect(await guiQ()).toMatchObject({ evalComponents: LA, bafoTopN: 3 });
     });
 
-    // [S1.9101 / S4.7b1] TCO ở `/chinh-sach`: bốn ô mã (giá luôn tính), ba ô tham số chỉ hiện khi mã cần chúng bật, thân gửi tập chuẩn
+    // [S1.284 / S4.7b1] TCO ở `/chinh-sach`: bốn ô mã (giá luôn tính), ba ô tham số chỉ hiện khi mã cần chúng bật, thân gửi tập chuẩn
     // và chỉ khoá của mã đang bật; chép mang tham số; bảng phiên bản có cột tham số; gói chờ duyệt thiếu số ngày giao được cảnh báo.
-    it("[S1.9101 / S4.7b1] [INV-L8] chinh-sach: chọn mã TCO ⇒ thân gửi tập chuẩn (giá đầu, hệ số 1) và nhóm khoá tco chỉ của mã đang bật", async () => {
+    it("[S1.284 / S4.7b1] [INV-L8] chinh-sach: chọn mã TCO ⇒ thân gửi tập chuẩn (giá đầu, hệ số 1) và nhóm khoá tco chỉ của mã đang bật", async () => {
       const { p, gui, doiO } = await moChinhSach([]);
       expect(p.el("khoi-tco-thanh-toan").hidden).toBe(true);
       expect(p.el("khoi-tco-tre").hidden).toBe(true);
@@ -3459,7 +3459,7 @@ describe("bề mặt tệp", () => {
       expect(await gui()).toMatchObject({ evalComponents: null, bafoTopN: null, tco: null });
     });
 
-    it("[S1.9101 / S4.7b1] chinh-sach: chép mang mã và tham số TCO; bảng phiên bản hiện tham số; gói chờ duyệt thiếu số ngày giao ⇒ cảnh báo theo loại tổ chức", async () => {
+    it("[S1.284 / S4.7b1] chinh-sach: chép mang mã và tham số TCO; bảng phiên bản hiện tham số; gói chờ duyệt thiếu số ngày giao ⇒ cảnh báo theo loại tổ chức", async () => {
       const TCO = { chi_phi_von_nam: "0.1", ngay_thanh_toan_chuan: "45", ty_le_tre_ngay: "0.0005" };
       const NAM_MA = ["gia", "van_chuyen", "nhap_khau", "chi_phi_thanh_toan", "chi_phi_tre"].map((ma) => ({ ma, don_vi: "TIEN", he_so: "1.0000" }));
       const { p, gui } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: NAM_MA, tco: TCO }]);
@@ -3469,7 +3469,7 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-chep");
       expect(["ma-van-chuyen", "ma-nhap-khau", "ma-chi-phi-thanh-toan", "ma-chi-phi-tre"].map((id) => p.el(id).checked)).toEqual([true, true, true, true]);
       expect(await gui()).toMatchObject({ evalComponents: NAM_MA, tco: TCO });
-      // [rà soát §S1.9101 — TRUNG-1] Bản chép không bậc (`tiers: null`) ở tổ chức chưa bật ⇒ *chỉ còn lối huỷ*; đã bật ⇒ trả về soạn thảo.
+      // [rà soát §S1.284 — TRUNG-1] Bản chép không bậc (`tiers: null`) ở tổ chức chưa bật ⇒ *chỉ còn lối huỷ*; đã bật ⇒ trả về soạn thảo.
       for (const [daBat, cau] of [[false, "chỉ còn lối huỷ"], [true, "trả gói về soạn thảo"]] as const) {
         const q = await dungTrang("chinh-sach", {
           hash: "", cookie: A,
@@ -3484,7 +3484,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.9101 / S4.7b1 — rà soát TRUNG-1, THẤP-2] chinh-sach: mẫu có bậc ở tổ chức chưa bật ⇒ không cảnh báo gói chờ duyệt; tham số sai miền ⇒ lỗi gọi tên ô, không gửi", async () => {
+    it("[S1.284 / S4.7b1 — rà soát TRUNG-1, THẤP-2] chinh-sach: mẫu có bậc ở tổ chức chưa bật ⇒ không cảnh báo gói chờ duyệt; tham số sai miền ⇒ lỗi gọi tên ô, không gửi", async () => {
       const q = await dungTrang("chinh-sach", {
         hash: "", cookie: A,
         thay: (l) => (l === "GET /policy/versions"
@@ -3502,7 +3502,7 @@ describe("bề mặt tệp", () => {
       expect(q.trangThai.goi).not.toContain("POST /policy");
     });
 
-    // [S1.9101 / S4.7b1 / L16] Số ngày giao yêu cầu ở `/tao-thau`: ô và nút chỉ ở DRAFT; dòng của bảng gói ở mọi trạng thái (người duyệt
+    // [S1.284 / S4.7b1 / L16] Số ngày giao yêu cầu ở `/tao-thau`: ô và nút chỉ ở DRAFT; dòng của bảng gói ở mọi trạng thái (người duyệt
     // ký lên nó); để trống ⇒ `null`; ngoài miền ⇒ trang nói, không gọi; cảnh báo khi chính sách hiệu lực tính chi phí trễ.
     const moTaoThauNgay = async (trangThaiGoi: string, soNgayGiao: number | null, phienBan: unknown[] = [], daBat = false) => {
       const p = await dungTrang("tao-thau", {
@@ -3521,7 +3521,7 @@ describe("bề mặt tệp", () => {
     };
     const dongBangGoi = (p: Awaited<ReturnType<typeof moTaoThauNgay>>) => p.el("tt-rfq").con.map((x) => x.textContent);
 
-    it("[S1.9101 / S4.7b1] [INV-L16] tao-thau: số ngày giao — ô ở DRAFT, dòng ở mọi trạng thái; lưu gửi PUT …/delivery-days; trống ⇒ null; ngoài miền ⇒ không gọi", async () => {
+    it("[S1.284 / S4.7b1] [INV-L16] tao-thau: số ngày giao — ô ở DRAFT, dòng ở mọi trạng thái; lưu gửi PUT …/delivery-days; trống ⇒ null; ngoài miền ⇒ không gọi", async () => {
       const p = await moTaoThauNgay("DRAFT", null);
       expect(p.el("khoi-so-ngay-giao").hidden).toBe(false);
       expect(dongBangGoi(p)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "chưa khai"]));
@@ -3544,7 +3544,7 @@ describe("bề mặt tệp", () => {
       expect(dongBangGoi(cho)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "45 ngày"]));
     });
 
-    it("[S1.9101 / S4.7b1] tao-thau: chính sách hiệu lực (hay mới hơn) tính chi phí trễ mà gói chưa khai số ngày giao ⇒ cảnh báo theo trạng thái và loại tổ chức", async () => {
+    it("[S1.284 / S4.7b1] tao-thau: chính sách hiệu lực (hay mới hơn) tính chi phí trễ mà gói chưa khai số ngày giao ⇒ cảnh báo theo trạng thái và loại tổ chức", async () => {
       const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
       expect((await moTaoThauNgay("DRAFT", null, [TRE])).el("canh-bao-so-ngay").textContent).toContain("Khai số ngày giao ở ô dưới");
       expect((await moTaoThauNgay("DRAFT", 30, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
@@ -3558,7 +3558,7 @@ describe("bề mặt tệp", () => {
       expect((await moTaoThauNgay("OPEN", null, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
     });
 
-    it("[S1.9101 / S4.7b1 — rà soát THẤP-3] tao-thau: đổi người (hashchange) hay đăng xuất ⇒ cảnh báo số ngày giao của tổ chức trước biến mất", async () => {
+    it("[S1.284 / S4.7b1 — rà soát THẤP-3] tao-thau: đổi người (hashchange) hay đăng xuất ⇒ cảnh báo số ngày giao của tổ chức trước biến mất", async () => {
       const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
       const p = await moTaoThauNgay("DRAFT", null, [TRE]);
       expect(p.el("canh-bao-so-ngay").hidden).toBe(false);

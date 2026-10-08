@@ -154,7 +154,7 @@ describe("[S1.258 / khoản 329] trọng số chấm — vế hẹp, cảnh báo
     expect(c[0]).toContain("bị từ chối khi chấm");
   });
 
-  // [S1.9101 / S4.7b1 — CA LẬT] ~~hệ số khác 1 vẫn là vế hẹp — lượt chấm không đọc hệ số để chọn vế~~ Từ S4.7a (L8, ADR-153) lượt
+  // [S1.284 / S4.7b1 — CA LẬT] ~~hệ số khác 1 vẫn là vế hẹp — lượt chấm không đọc hệ số để chọn vế~~ Từ S4.7a (L8, ADR-153) lượt
   // chấm từ chối mã tiền có hệ số khác 1 (`CHINH_SACH_TCO_SAI`): tiền cộng với tiền. Ca cũ khẳng định một phiên bản màn để im mà máy
   // chủ đã từ chối từ `112_tco`.
   it("[INV-L8] hệ số khác 1 của một mã tiền ⇒ bị từ chối khi chấm (L8)", () => {
@@ -169,7 +169,7 @@ describe("[S1.258 / khoản 329] trọng số chấm — vế hẹp, cảnh báo
   });
 });
 
-describe("[S1.9101 / S4.7b1] TCO — năm mã có nguồn, tham số, cảnh báo (ADR-153)", () => {
+describe("[S1.284 / S4.7b1] TCO — năm mã có nguồn, tham số, cảnh báo (ADR-153)", () => {
   it("[INV-L8] thanhPhanTuMa: giá luôn có, thứ tự chính sách, hệ số 1, mã lạ bị bỏ", () => {
     expect(thanhPhanTuMa([])).toEqual([{ ma: "gia", don_vi: "TIEN", he_so: HE_SO_TIEN }]);
     expect(thanhPhanTuMa(["chi_phi_tre", "van_chuyen", "chat_luong"]).map((t) => t.ma)).toEqual(["gia", "van_chuyen", "chi_phi_tre"]);
@@ -210,12 +210,12 @@ describe("[S1.9101 / S4.7b1] TCO — năm mã có nguồn, tham số, cảnh bá
     expect(canhBaoGoiThieuSoNgayGiao(tre, 2, false, false)).toEqual([expect.stringContaining("chỉ còn lối huỷ")]);
     expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true, false)).toEqual([expect.stringContaining("trả gói về soạn thảo")]);
     expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true, true)[0]).toMatch(/^2 gói đang chờ duyệt/u);
-    // [rà soát §S1.9101 — TRUNG-1] Phiên bản CÓ bậc ở tổ chức chưa bật: chữ ký bật S3 bị từ chối khi còn gói chờ duyệt (`097`) — các gói
+    // [rà soát §S1.284 — TRUNG-1] Phiên bản CÓ bậc ở tổ chức chưa bật: chữ ký bật S3 bị từ chối khi còn gói chờ duyệt (`097`) — các gói
     // ấy không rơi vào nó khi còn chờ; bản đầu nói *"chỉ còn lối huỷ"* ở đây, và đó là lời sai.
     expect(canhBaoGoiThieuSoNgayGiao(tre, 2, false, true)).toEqual([]);
   });
 
-  // [rà soát §S1.9101 — THẤP-2] Miền của ba tham số — bản chép của `CHECK` `112`; thân sai miền bị từ chối bằng 422 chung không gọi tên ô.
+  // [rà soát §S1.284 — THẤP-2] Miền của ba tham số — bản chép của `CHECK` `112`; thân sai miền bị từ chối bằng 422 chung không gọi tên ô.
   it.each([
     [{ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" }, null],
     [{ chi_phi_von_nam: "1", ngay_thanh_toan_chuan: "0" }, null],

@@ -570,7 +570,7 @@ describe("[S1.273 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
   });
 });
 
-describe("[S1.9101 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau", () => {
+describe("[S1.284 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau", () => {
   it("biên của màn là biên của gói (CHECK `112`)", () => {
     expect(SO_NGAY_GIAO_TOI_DA).toBe(SO_NGAY_GIAO_TOI_DA_GOI);
   });
@@ -612,7 +612,7 @@ describe("[S1.9101 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau"
   });
 });
 
-describe("[S1.9101 / S4.7b1 — rà soát TRUNG-1] cảnh báo số ngày giao: phiên bản HIỆU LỰC khác phiên bản MỚI HƠN chưa hiệu lực", () => {
+describe("[S1.284 / S4.7b1 — rà soát TRUNG-1] cảnh báo số ngày giao: phiên bản HIỆU LỰC khác phiên bản MỚI HƠN chưa hiệu lực", () => {
   const GIA = { hieuLuc: true, tiers: null, evalComponents: [{ ma: "gia" }] };
   const moiCoBac = { hieuLuc: false, tiers: [{}], evalComponents: [{ ma: "chi_phi_tre" }] };
   const moiKhongBac = { hieuLuc: false, tiers: null, evalComponents: [{ ma: "chi_phi_tre" }] };

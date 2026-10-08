@@ -29,7 +29,7 @@ export {
   type TaoLuotDanhGiaInput,
 } from "./luot-danh-gia.js";
 
-// [S1.9101 / S4.7b1] Luật L8 của phiên bản ghim (S4.7a, `tco.ts`) ra cửa — màn `/chinh-sach` chép nó (không import được gói), và
+// [S1.284 / S4.7b1] Luật L8 của phiên bản ghim (S4.7a, `tco.ts`) ra cửa — màn `/chinh-sach` chép nó (không import được gói), và
 // `tests/architecture/bac-mac-dinh-dong-bo.test.ts` đối chiếu bản chép với bản này trên một bảng ca. Thuần, không kết nối.
 export { MA_CO_NGUON, docNhomTco, kiemChinhSachTco, type LoiChinhSachTco, type ThamSoTco } from "./tco.js";
 

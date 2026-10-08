@@ -946,7 +946,7 @@ const BANG_MAU: readonly HangMau[] = [
     lyDo: "Trang tạo thầu nhóm số cho người đọc; bộ giả lập nhóm số \"chỉ cho báo cáo\" (`dinhDangVnd`) — không bên nào so chuỗi hiển " +
       "thị với bên kia; phép tính tiền thật nằm ở `thanhTien` (hàng GIU TEP_TEST).",
   },
-  // [S1.9101 / S4.7b1] Số nguyên dương tối đa bốn chữ số, không số 0 đầu — hai việc khác nhau.
+  // [S1.284 / S4.7b1] Số nguyên dương tối đa bốn chữ số, không số 0 đầu — hai việc khác nhau.
   {
     mau: "/^[1-9][0-9]{0,3}$/u",
     ten: "số nguyên dương ≤ 4 chữ số",

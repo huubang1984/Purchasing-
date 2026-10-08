@@ -188,7 +188,7 @@ function soNguyenTuyChon(body: unknown, ten: string): number | undefined {
   return v;
 }
 /**
- * [S1.9101 / S4.7b1] Số nguyên hay `null`, BẮT BUỘC có mặt — `null` là một giá trị có nghĩa (xoá số ngày giao), không phải
+ * [S1.284 / S4.7b1] Số nguyên hay `null`, BẮT BUỘC có mặt — `null` là một giá trị có nghĩa (xoá số ngày giao), không phải
  * "không gửi". Vắng trường là 422: một thân rỗng không được lặng lẽ xoá con số người duyệt sẽ ký.
  */
 function soNguyenHoacNull(body: unknown, ten: string): number | null {
@@ -340,7 +340,7 @@ const doc: readonly BuyerReadRoute[] = [
     handler: async (ctx) => {
       const ds = await lietKePhienBanChinhSach(ctx.client, ctx.orgId);
       // `choKy` để màn biết nút ký có mở không — chính cửa vẫn là route ký, đọc cùng cờ ấy.
-      // [S1.9101 / S4.7b1] `goiChoDuyetThieuSoNgayGiao` để màn cảnh báo TRƯỚC khi khai một phiên bản tính chi phí trễ (ADR-153,
+      // [S1.284 / S4.7b1] `goiChoDuyetThieuSoNgayGiao` để màn cảnh báo TRƯỚC khi khai một phiên bản tính chi phí trễ (ADR-153,
       // giới hạn ⑴): gói đang chờ duyệt mà chưa khai số ngày giao sẽ không mở được dưới phiên bản ấy.
       return {
         status: 200,
@@ -987,7 +987,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         thamDinhHieuLucThang: soNguyenTuyChon(ctx.req.body, "thamDinhHieuLucThang"),
         // [S1.256 / S4.5b] Nhóm khoá `benchmark` — cửa này kiểm hình dạng ngoài, `CHECK` của `103` phán phần còn lại.
         benchmark: objectChuoiTuyChon(ctx.req.body, "benchmark"),
-        // [S1.9101 / S4.7b1] Nhóm khoá `tco` (ADR-153) — cùng khuôn `benchmark`: cửa này kiểm hình dạng ngoài, `CHECK`
+        // [S1.284 / S4.7b1] Nhóm khoá `tco` (ADR-153) — cùng khuôn `benchmark`: cửa này kiểm hình dạng ngoài, `CHECK`
         // `org_procurement_policies_tco_hinh_dang` của `112` phán tập khoá, biên và cặp hai khoá thanh toán. Trước vòng này gói nhận
         // nhóm khoá mà route không chuyển, nên không đường HTTP nào khai được nó.
         tco: objectChuoiTuyChon(ctx.req.body, "tco"),
@@ -1214,7 +1214,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/rfqs/:rfqId/delivery-days",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S4.7b1 / L16] Cùng cổng với nhóm hàng: số ngày giao yêu cầu là một phần của gói đang soạn (`112_tco`) — cơ sở
+    // [S1.284 / S4.7b1 / L16] Cùng cổng với nhóm hàng: số ngày giao yêu cầu là một phần của gói đang soạn (`112_tco`) — cơ sở
     // của chi phí trễ giao, và nằm trong chữ ký phê duyệt. `null` xoá con số. Chỉ ở DRAFT: hàm hỏi `status = 'DRAFT'`, trigger
     // `rfq_packages_so_ngay_giao` chặn mọi đường khác.
     permission: PERMISSIONS.RFQ_CREATE,

@@ -39,7 +39,7 @@ let trangThai = { phienBan: [], daBat: false, choKy: false, goiThieuSoNgay: 0 };
 let bac = [];
 // [S1.258 / khoản 329] Thành phần trọng số sẽ gửi khi ô "Khai trọng số" được chọn — không có ô sửa: mẫu, hoặc nguyên văn của
 // phiên bản vừa chép (kể cả khi nó ngoài vế hẹp — màn hiện và cảnh báo, không tự đổi).
-// [S1.9101 / S4.7b1] ~~không có ô sửa~~ Bốn ô mã TCO (`O_MA_TCO`): bấm một ô thì trọng số thành tập chuẩn của các ô đang chọn
+// [S1.284 / S4.7b1] ~~không có ô sửa~~ Bốn ô mã TCO (`O_MA_TCO`): bấm một ô thì trọng số thành tập chuẩn của các ô đang chọn
 // (`thanhPhanTuMa` — giá luôn có, hệ số 1, thứ tự chính sách); chưa bấm thì bản chép đi nguyên văn, như trước.
 let trongSo = TRONG_SO_MAC_DINH;
 
@@ -210,7 +210,7 @@ async function napPhienBan() {
     phienBan: r.body?.phienBan ?? [],
     daBat: r.body?.daBat === true,
     choKy: r.body?.choKy === true,
-    // [S1.9101 / S4.7b1] Gói chờ duyệt chưa khai số ngày giao — cảnh báo khi phiên bản đang soạn bật chi phí trễ (ADR-153 ⑴).
+    // [S1.284 / S4.7b1] Gói chờ duyệt chưa khai số ngày giao — cảnh báo khi phiên bản đang soạn bật chi phí trễ (ADR-153 ⑴).
     goiThieuSoNgay: typeof r.body?.goiChoDuyetThieuSoNgayGiao === "number" ? r.body.goiChoDuyetThieuSoNgayGiao : 0,
   };
   dienDl($("tt-to-chuc"), [
@@ -300,7 +300,7 @@ function benchmarkGuiLen() {
   return ra;
 }
 
-// [S1.9101 / S4.7b1] Bốn ô mã TCO — `gia` không có ô: luôn tính.
+// [S1.284 / S4.7b1] Bốn ô mã TCO — `gia` không có ô: luôn tính.
 const O_MA_TCO = [
   ["ma-van-chuyen", "van_chuyen"],
   ["ma-nhap-khau", "nhap_khau"],
@@ -324,7 +324,7 @@ function datTrongSo(thanhPhan, topN) {
   veTrongSo();
 }
 
-/** [S1.9101 / S4.7b1] Ba ô tham số: giá trị của phiên bản (chép) hay rỗng (mẫu) — không mặc định nào: tổ chức tự khai (spec §4.8). */
+/** [S1.284 / S4.7b1] Ba ô tham số: giá trị của phiên bản (chép) hay rỗng (mẫu) — không mặc định nào: tổ chức tự khai (spec §4.8). */
 function datTco(tco) {
   for (const [id, khoa] of O_THAM_SO_TCO) $(id).value = tco === null || tco === undefined ? "" : (tco[khoa] ?? "");
 }
@@ -339,7 +339,7 @@ function veTrongSo() {
 }
 
 /**
- * [S1.9101 / S4.7b1] Nhóm khoá `tco` gửi lên: chỉ khoá của mã ĐANG BẬT, giá trị là chuỗi như người gõ (cắt khoảng trắng) — `CHECK`
+ * [S1.284 / S4.7b1] Nhóm khoá `tco` gửi lên: chỉ khoá của mã ĐANG BẬT, giá trị là chuỗi như người gõ (cắt khoảng trắng) — `CHECK`
  * của `112` phán miền và cặp hai khoá thanh toán. Không khoá nào ⇒ `null` (`CHECK` từ chối object rỗng).
  */
 function tcoGuiLen() {
@@ -504,7 +504,7 @@ $("co-trong-so").addEventListener("change", () => {
   veTrongSo();
   tinhLai();
 });
-// [S1.9101 / S4.7b1] Bấm một ô mã ⇒ trọng số thành tập chuẩn của các ô đang chọn.
+// [S1.284 / S4.7b1] Bấm một ô mã ⇒ trọng số thành tập chuẩn của các ô đang chọn.
 for (const [id] of O_MA_TCO) {
   $(id).addEventListener("change", () => {
     trongSo = thanhPhanTuMa(O_MA_TCO.filter(([i]) => $(i).checked).map(([, ma]) => ma));
@@ -518,7 +518,7 @@ for (const [id] of O_BENCHMARK) $(id).addEventListener("input", () => tinhLai())
 
 $("nut-tao-pb").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
-  // [rà soát §S1.9101 — THẤP-2] Tham số sai miền: `CHECK` sẽ từ chối bằng một 422 không gọi tên ô — nói trước, không gửi.
+  // [rà soát §S1.284 — THẤP-2] Tham số sai miền: `CHECK` sẽ từ chối bằng một 422 không gọi tên ô — nói trước, không gửi.
   const loiTco = loiThamSoTco(tcoGuiLen());
   if (loiTco !== null) { bao($("loi3"), loiTco); return; }
   const moiNhat = trangThai.phienBan[0];
@@ -531,7 +531,7 @@ $("nut-tao-pb").addEventListener("click", async () => {
     chiaNhoCuaSoNgay: soNguyenHoacNull($("chia-nho").value),
     thamDinhHieuLucThang: soNguyenHoacNull($("tham-dinh").value),
     ...trongSoGuiLen(),
-    // [S1.9101 / S4.7b1] Nhóm khoá `tco` — `null` khi không mã quy đổi nào bật hay không ô nào điền.
+    // [S1.284 / S4.7b1] Nhóm khoá `tco` — `null` khi không mã quy đổi nào bật hay không ô nào điền.
     tco: tcoGuiLen(),
     benchmark: benchmarkGuiLen(),
   };

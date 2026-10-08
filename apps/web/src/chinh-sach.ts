@@ -240,7 +240,7 @@ export const TRONG_SO_MAC_DINH: readonly ThanhPhanTrongSo[] = [{ ma: "gia", don_
 export const BAFO_TOP_N_MAC_DINH = 2;
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.7b1] TCO — NĂM MÃ CÓ NGUỒN VÀ NHÓM KHOÁ `tco` (spec S4 §4.8, §2.5 ㉒; ADR-153)
+// [S1.284 / S4.7b1] TCO — NĂM MÃ CÓ NGUỒN VÀ NHÓM KHOÁ `tco` (spec S4 §4.8, §2.5 ㉒; ADR-153)
 // ----------------------------------------------------------------------------------------------
 // Từ S4.7a (`112_tco`) lượt chấm đọc được năm mã tiền, mỗi mã đúng một nguồn; trước vòng này màn chỉ khai được `gia` (vế hẹp của
 // khoản 329). Màn cho chọn mã — mỗi mã một ô, `gia` luôn bật, đơn vị `TIEN`, hệ số 1 — và khai ba tham số quy đổi. Phép kiểm dưới là
@@ -325,7 +325,7 @@ export function loiTrongSo(thanhPhan: readonly ThanhPhanTrongSo[], tco: NhomTco 
   return null;
 }
 
-/** [S1.258 / khoản 329] ~~Vế hẹp một thành phần `gia`~~ [S1.9101 / S4.7b1] Lượt chấm đọc được trọng số này (`loiTrongSo` im). */
+/** [S1.258 / khoản 329] ~~Vế hẹp một thành phần `gia`~~ [S1.284 / S4.7b1] Lượt chấm đọc được trọng số này (`loiTrongSo` im). */
 export function trongSoChamDuoc(thanhPhan: readonly ThanhPhanTrongSo[], tco: NhomTco | null = null): boolean {
   return loiTrongSo(thanhPhan, tco) === null;
 }
@@ -343,8 +343,8 @@ export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tc
     return [`Trọng số này bị từ chối khi chấm — ${loi} — nên gói mở dưới phiên bản này không chấm được.`];
   }
   const ra: string[] = [];
-  // [S1.9101 / S4.7b1 — TẠM, gỡ ở S4.7b2] Màn nộp báo giá chưa có ô khai TCO: nhà cung cấp chưa khai được mã nào ngoài giá, nên mọi báo
-  // giá của gói mở dưới phiên bản ấy không có hạng (`ma_thieu`). Câu nói thật điều đó cho tới khi `/nop-thau` có ô (ADR-9201 ⑴).
+  // [S1.284 / S4.7b1 — TẠM, gỡ ở S4.7b2] Màn nộp báo giá chưa có ô khai TCO: nhà cung cấp chưa khai được mã nào ngoài giá, nên mọi báo
+  // giá của gói mở dưới phiên bản ấy không có hạng (`ma_thieu`). Câu nói thật điều đó cho tới khi `/nop-thau` có ô (ADR-156 ⑴).
   if (thanhPhan.some((t) => t.ma !== "gia")) {
     ra.push(
       "Màn nộp báo giá CHƯA có ô khai cho các thành phần ngoài giá (tới S4.7b2): nhà cung cấp chưa khai được chúng, nên mọi báo giá " +
@@ -365,7 +365,7 @@ export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tc
  * thì chúng không mở được. Ở tổ chức đã bật, lối ra là trả gói về soạn thảo. Ở tổ chức chưa bật:
  * - phiên bản KHÔNG bậc có hiệu lực ngay lúc tạo, và gói đã nộp không trả về soạn thảo được — chỉ còn lối huỷ;
  * - phiên bản CÓ bậc chỉ có hiệu lực khi được ký, và chữ ký ấy — chữ ký bật kiểm soát theo bậc — bị từ chối khi tổ chức còn gói chờ duyệt
- *   (`097`): các gói ấy không bao giờ rơi vào phiên bản này khi còn chờ, nên không có gì để nói (rà soát §S1.9101 — TRUNG-1).
+ *   (`097`): các gói ấy không bao giờ rơi vào phiên bản này khi còn chờ, nên không có gì để nói (rà soát §S1.284 — TRUNG-1).
  */
 export function canhBaoGoiThieuSoNgayGiao(
   thanhPhan: readonly ThanhPhanTrongSo[] | null,
@@ -385,7 +385,7 @@ export function canhBaoGoiThieuSoNgayGiao(
   ];
 }
 
-// [rà soát §S1.9101 — THẤP-2] Miền của ba tham số — BẢN CHÉP của `CHECK` `org_procurement_policies_tco_hinh_dang` (`112_tco`): mẫu
+// [rà soát §S1.284 — THẤP-2] Miền của ba tham số — BẢN CHÉP của `CHECK` `org_procurement_policies_tco_hinh_dang` (`112_tco`): mẫu
 // `like_regex` y nguyên văn, biên kiểm bằng số nguyên ở tỉ lệ cố định (không `double`). `bac-mac-dinh-dong-bo.test.ts` đòi ba mẫu có mặt
 // nguyên văn trong `112`. Thân sai miền thì `CHECK` từ chối bằng một 422 chung không gọi tên ô — màn nói trước, và không gửi.
 export const MAU_CHI_PHI_VON = "^[01]([.][0-9]{1,4})?$";
