@@ -1665,7 +1665,7 @@ describe("bề mặt tệp", () => {
         expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
       });
 
-      // [S1.9101 / S3.6d / K10b] Khối «Tín hiệu khai thấp» ở bước 7: đọc cùng đề xuất, ẩn khi không tín hiệu, ô ghi nhận chỉ
+      // [S1.285 / S3.6d / K10b] Khối «Tín hiệu khai thấp» ở bước 7: đọc cùng đề xuất, ẩn khi không tín hiệu, ô ghi nhận chỉ
       // khi máy chủ nói người xem ghi nhận được; lời từ chối K10b ở chữ ký kèm chỉ dẫn trỏ khối.
       const BC_KT = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: [RFQ] };
       const thanTinHieu = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({
@@ -1693,7 +1693,7 @@ describe("bề mặt tệp", () => {
         return p;
       };
 
-      it("[S1.9101 / S3.6d / K10b] đọc đề xuất ⇒ đọc tín hiệu; không tín hiệu (hay đọc hỏng) ⇒ khối ẩn; có tín hiệu chờ đọc ⇒ khối hiện, câu CSDL + «chữ ký đang bị chặn», ô lý do chỉ khi máy chủ cho ghi nhận", async () => {
+      it("[S1.285 / S3.6d / K10b] đọc đề xuất ⇒ đọc tín hiệu; không tín hiệu (hay đọc hỏng) ⇒ khối ẩn; có tín hiệu chờ đọc ⇒ khối hiện, câu CSDL + «chữ ký đang bị chặn», ô lý do chỉ khi máy chủ cho ghi nhận", async () => {
         const an = await dungKt({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null });
         expect(an.trangThai.goi).toContain(`GET /rfqs/${RFQ}/signals`);
         expect(an.el("khoi-tin-hieu-kt").hidden).toBe(true);
@@ -1709,7 +1709,7 @@ describe("bề mặt tệp", () => {
         expect(khong.el("loi-thkt").textContent).toBe("Người đề xuất trao thầu của gói không ghi nhận được.");
       });
 
-      it("[S1.9101 / S3.6d / K10b] ghi nhận: thiếu lý do không gửi; gửi đúng thân tới route trao thầu; 201 ⇒ câu *đã ghi nhận* và đọc lại; đã có người đọc ⇒ lịch sử một dòng, ô ẩn", async () => {
+      it("[S1.285 / S3.6d / K10b] ghi nhận: thiếu lý do không gửi; gửi đúng thân tới route trao thầu; 201 ⇒ câu *đã ghi nhận* và đọc lại; đã có người đọc ⇒ lịch sử một dòng, ô ẩn", async () => {
         const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
         const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]);
         await p.bam("nut-ghi-nhan-kt");
@@ -1728,7 +1728,7 @@ describe("bề mặt tệp", () => {
         expect(daDoc.el("khoi-ghi-nhan-kt").hidden).toBe(true);
       });
 
-      it("[S1.9101 / S3.6d / K10b] ký khi chưa ai ghi nhận ⇒ câu máy chủ rồi chỉ dẫn trỏ khối «Tín hiệu khai thấp»; ghi nhận bị K10B_TU_GHI_NHAN ⇒ chỉ dẫn đổi người", async () => {
+      it("[S1.285 / S3.6d / K10b] ký khi chưa ai ghi nhận ⇒ câu máy chủ rồi chỉ dẫn trỏ khối «Tín hiệu khai thấp»; ghi nhận bị K10B_TU_GHI_NHAN ⇒ chỉ dẫn đổi người", async () => {
         const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "x", ghiNhan: [] };
         const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang],
           { status: 422, body: { error: "Người đề xuất không ghi nhận được tín hiệu khai thấp.", ma: "K10B_TU_GHI_NHAN" } },

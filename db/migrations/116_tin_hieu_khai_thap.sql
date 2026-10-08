@@ -1,10 +1,10 @@
 -- ==============================================================================================
--- [S1.9101 / S3.6d · K10b] TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) VÀ K10 Ở CHỮ KÝ TRAO THẦU
+-- [S1.285 / S3.6d · K10b] TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) VÀ K10 Ở CHỮ KÝ TRAO THẦU
 --
 -- Spec S3 §4.6 bảng tín hiệu (dòng `ESTIMATE_UNDERSTATED`: tính ở đề xuất award, bằng chứng là *bậc của số tiền trao cao hơn bậc của ước
 -- lượng*), §2.5 ⒁ và ADR-082 ⒁ (MỘT điều kiện fail-closed; bằng chứng KHÔNG mang số tiền; tín hiệu bắn cả khi số tiền trao vượt ngưỡng
 -- phê duyệt kép mà ước lượng thì không — lỗ `014` §(4)), §8.4 (khai thấp chỉ bị bắt ở award), ADR-120 (khuôn K10a: tín hiệu không chặn
--- cạnh nào, nó chặn việc KHÔNG AI ĐỌC nó; người ghi nhận giữ quyền của cạnh bị chặn và nằm ngoài {người tạo gói, người gây ra}). ADR-9201.
+-- cạnh nào, nó chặn việc KHÔNG AI ĐỌC nó; người ghi nhận giữ quyền của cạnh bị chặn và nằm ngoài {người tạo gói, người gây ra}). ADR-157.
 --
 -- Trước vòng này mọi thứ của tín hiệu (`088`) khoá cứng vào `PURCHASE_SPLITTING` ở PENDING_APPROVAL với `rfq.approve`: CHECK `loai`,
 -- trigger tính bằng chứng, luật người ghi nhận, trigger kiểm lần ghi nhận. Vòng này mở chúng theo `loai` — thân cũ của loại chia nhỏ giữ

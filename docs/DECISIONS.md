@@ -12349,12 +12349,12 @@ spec §9 — bốn cổng ở `/mo-thau` không chỗ khai. Giữ nhánh `APPROV
 hàm vị từ *"K9 làm thiếu chữ ký trao thầu"* (khuôn `rfq_chot_chu_ky_xung_dot`) — ở trao thầu, chưa đủ chữ ký không là lần từ chối; lời
 nói nằm ở cờ của chữ ký.
 
-## ADR-9201 — S3.6d: K10b — tín hiệu khai thấp ước lượng (`ESTIMATE_UNDERSTATED`) tính ở đề xuất, chặn CHỮ KÝ duyệt trao thầu cho tới khi một người giữ `po.approve` ngoài gói ghi nhận; hai bảng tín hiệu của `088` mở theo loại
+## ADR-157 — S3.6d: K10b — tín hiệu khai thấp ước lượng (`ESTIMATE_UNDERSTATED`) tính ở đề xuất, chặn CHỮ KÝ duyệt trao thầu cho tới khi một người giữ `po.approve` ngoài gói ghi nhận; hai bảng tín hiệu của `088` mở theo loại
 
 **Ngày:** 2026-10-08 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-08: *"Tiếp bước S3.6d"*, *"Chốt câu hỏi theo đề xuất rồi
-làm luôn"*: các quyết định hình dạng dưới đây là đề xuất của vòng, chủ dự án uỷ quyền chốt · **[S1.9101]** · **Liên quan:** ADR-054,
+làm luôn"*: các quyết định hình dạng dưới đây là đề xuất của vòng, chủ dự án uỷ quyền chốt · **[S1.285]** · **Liên quan:** ADR-054,
 ADR-082 ⒁, ADR-084 ⑵, ADR-108, ADR-120, ADR-154 ⑹ ⑻, ADR-155 ⑷ · **Spec:** S3 §4.6, §4.7, §5 K10, §5.1 K10, §8.4, §9 S3.6 ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+**Biên bản:** `evidence/security-reviews.md` §S1.285
 
 ### Bối cảnh
 
@@ -12393,7 +12393,7 @@ vai và K9) hỏi lại cho câu đi tắt với tên `k10b_tin_hieu_chua_ghi_nh
 `DE_XUAT`; `tin_hieu_kiem_ghi` rẽ theo `NEW.loai` (khai thấp đòi gói `AWARDED`, `tin_hieu_goi_khong_trao`); `tin_hieu_chot_nguoi_ghi_nhan`
 rẽ theo `bang_chung->>'loai'`; `tin_hieu_kiem_ghi_nhan` rẽ theo loại của tín hiệu (trạng thái, quyền `rfq.approve`/`po.approve`, bốn mã,
 bằng chứng so với `tin_hieu_hien_tai(org, gói, loại)`). Hàm `tin_hieu_hien_tai` là MỘT chỗ cho gói lẫn trigger đọc tín hiệu hiện tại theo
-loại. Ba khối ghim của `088` ghi lại với thân mới (`hardening.always.sql`, *thân từ 9501*).
+loại. Ba khối ghim của `088` ghi lại với thân mới (`hardening.always.sql`, *thân từ 116*).
 
 ⑹ **Tầng gói `kiem-soat` nhận loại:** `ghiNhanTinHieu({ loai })` (mặc định `PURCHASE_SPLITTING` — mọi người gọi cũ không đổi), quyền và
 trạng thái theo loại; `lietKeTinHieu` thêm `khaiThap { hienTai, canGhiNhan, nguoiXem, soNguoiGhiNhanDuoc }`, `tinHieu[]` mang cả hai loại.

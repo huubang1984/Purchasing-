@@ -26379,15 +26379,15 @@ của nó — `pnpm t0` và `pnpm test` chạy lại trên HEAD sau lượt evid
 
 ---
 
-# §S1.9101 — S3.6d: K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) TÍNH Ở ĐỀ XUẤT, CHẶN CHỮ KÝ DUYỆT TRAO THẦU CHO TỚI KHI NGƯỜI GIỮ `po.approve` NGOÀI GÓI GHI NHẬN; HAI BẢNG TÍN HIỆU CỦA `088` MỞ THEO LOẠI — ADR-9201, MIGRATION `9501_tin_hieu_khai_thap`
+# §S1.285 — S3.6d: K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) TÍNH Ở ĐỀ XUẤT, CHẶN CHỮ KÝ DUYỆT TRAO THẦU CHO TỚI KHI NGƯỜI GIỮ `po.approve` NGOÀI GÓI GHI NHẬN; HAI BẢNG TÍN HIỆU CỦA `088` MỞ THEO LOẠI — ADR-157, MIGRATION `116_tin_hieu_khai_thap`
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — tổ chức chưa bật S3 chạy nguyên MVP1 (`tin_hieu_khai_thap` trả
 NULL, không hàng, một chữ ký như trước). Đổi ở tổ chức đã bật: một đề xuất khai thấp để lại một hàng tín hiệu và chữ ký đầu đòi một lần
-đọc. Migration `9501_tin_hieu_khai_thap`, ADR-9201, K10b vào sổ (90 bất biến). Không khoản mới.
+đọc. Migration `116_tin_hieu_khai_thap`, ADR-157, K10b vào sổ (90 bất biến). Không khoản mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-08: *"Tiếp bước S3.6d"*, rồi *"Chốt câu hỏi theo đề xuất rồi làm luôn"* — vòng tự chốt hình dạng theo đề xuất và ghi ở
-ADR-9201. Phạm vi theo spec §9 dòng S3.6: `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu, làm riêng (không gộp vào S3.5).
+ADR-157. Phạm vi theo spec §9 dòng S3.6: `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu, làm riêng (không gộp vào S3.5).
 
 ## 2. Đo trước (đọc mã trên `5ae1393a`)
 - `088` khoá cứng mọi thứ của tín hiệu vào `PURCHASE_SPLITTING`: CHECK `loai`/`nguon`, trigger `governance_signals_tinh` đòi PENDING_APPROVAL
@@ -26399,7 +26399,7 @@ ADR-9201. Phạm vi theo spec §9 dòng S3.6: `ESTIMATE_UNDERSTATED` và K10 ở
 - Điểm spec chưa định: *người gây ra* của `ESTIMATE_UNDERSTATED` — chốt: người tạo, người nộp, người đặt ngân sách (người khai ước lượng),
   người đề xuất; cộng người khai phiên bản ghim như K10a.
 
-## 3. Hình dạng (ADR-9201, tự chốt theo đề xuất)
+## 3. Hình dạng (ADR-157, tự chốt theo đề xuất)
 Một hàm `tin_hieu_khai_thap`; bằng chứng mang hai mốc bậc, id đề xuất và phiên bản báo giá (đề xuất lại là bằng chứng khác — fail-closed);
 hàng ghi ở cạnh đề xuất (`DE_XUAT`) sau câu chèn và trước mọi hàng sổ; không chặn đề xuất; K10b ở TỪNG chữ ký duyệt (hàm vị từ hỏi ở tầng
 gói trước câu chèn, trigger riêng hỏi lại, tên `k10b_*` không qua bảng tên → mã như ADR-120); người ghi nhận `po.approve` ngoài gói;
@@ -26407,11 +26407,11 @@ hai bảng của `088` rẽ theo loại với thân cũ nguyên văn; `tin_hieu_
 định chia nhỏ — người gọi cũ không đổi), `lietKeTinHieu` thêm `khaiThap`; route riêng dưới `po.approve`; khối ở bước 7 `/mo-thau`.
 
 ## 4. Thay đổi
-- `db/migrations/9501_tin_hieu_khai_thap.sql`: hai CHECK mở; `tin_hieu_khai_thap`, `tin_hieu_hien_tai`, `award_chot_tin_hieu`,
+- `db/migrations/116_tin_hieu_khai_thap.sql`: hai CHECK mở; `tin_hieu_khai_thap`, `tin_hieu_hien_tai`, `award_chot_tin_hieu`,
   `award_kiem_tin_hieu_khai_thap` + trigger `rfq_award_approvals_kiem_tin_hieu_khai_thap`; ba hàm của `088` định nghĩa lại theo loại.
-  `hardening.always.sql`: bốn khối ghim mới, ba khối của `088` ghi lại (*thân từ 9501*), tổng điều tra trigger `rfq_award_approvals` thêm
+  `hardening.always.sql`: bốn khối ghim mới, ba khối của `088` ghi lại (*thân từ 116*), tổng điều tra trigger `rfq_award_approvals` thêm
   một tên — vân tay tính từ văn bản migration và phán xét bằng `migrate()` hai lần trên cụm dùng một lần. `db/danh-sach-ham-canh.ts`,
-  `db/migrations.int.test.ts` (ba danh sách, con trỏ ba hàm dời về `9501`).
+  `db/migrations.int.test.ts` (ba danh sách, con trỏ ba hàm dời về `116`).
 - `packages/identity`: ba mã `K10B_*` (`CHOT_VAO_SO`, `DANH_MUC_VE_CONG`). `packages/kiem-soat`: `LoaiTinHieu`, `ghiTinHieuKhiDeXuat`,
   `ghiNhanTinHieu({ loai })`, `lietKeTinHieu.khaiThap`, câu SQL qua `tin_hieu_hien_tai`. `packages/danh-gia/src/trao-thau.ts`: ghi tín hiệu
   sau cạnh `EVALUATING→AWARDED`, `CAU_CHOT_TIN_HIEU_KHAI_THAP` trước câu chèn chữ ký; `danh-gia` khai phụ thuộc `kiem-soat`.
@@ -26419,7 +26419,7 @@ hai bảng của `088` rẽ theo loại với thân cũ nguyên văn; `tin_hieu_
   `khungTinHieuKhaiThap`, ba chỉ dẫn `K10B_*`.
 - Test: `trao-thau-theo-bac.int` khối `[INV-K10b]` (8 ca); hai ca KHAI THẤP của K7/K5b ghi nhận trước chữ ký; kịch bản 41 HTTP thân quét cho
   route mới; `tao-thau.test`, `phuc-vu.test` cho khung và khối. Sổ: TEST-PLAN hàng K10b (90), sổ khai nhãn, `MOC_GHIM` 90, STATE, spec
-  §5.1 K10 và §9 S3.6, ADR-9201, Handoff (lời khai đếm).
+  §5.1 K10 và §9 S3.6, ADR-157, Handoff (lời khai đếm).
 
 ## 5. Điểm phát hiện lúc đo
 - **Lượt sửa của hardening gỡ trigger mới chưa ghim** (ADR-122): lần đo vân tay đầu trên cụm dùng một lần thấy trigger

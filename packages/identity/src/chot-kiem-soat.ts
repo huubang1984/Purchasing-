@@ -311,8 +311,8 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "nhận một tập gói nằm ngay dưới cận của chính mình",
     thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu của gói.",
   },
-  // [S1.9101 / S3.6d / ADR-9201] Ba dòng K10b — tín hiệu khai thấp ước lượng (`ESTIMATE_UNDERSTATED`) và K10 ở chữ ký trao thầu
-  // (`9501`). Như K10a: tên ràng buộc `k10b_*` KHÔNG vào `CHOT_THEO_RANG_BUOC` — tầng gói hỏi `award_chot_tin_hieu` trước câu chèn
+  // [S1.285 / S3.6d / ADR-157] Ba dòng K10b — tín hiệu khai thấp ước lượng (`ESTIMATE_UNDERSTATED`) và K10 ở chữ ký trao thầu
+  // (`116`). Như K10a: tên ràng buộc `k10b_*` KHÔNG vào `CHOT_THEO_RANG_BUOC` — tầng gói hỏi `award_chot_tin_hieu` trước câu chèn
   // chữ ký và luật người trước lần ghi nhận; trigger là lớp chặn cuối cho câu đi tắt (ADR-120).
   K10B_TIN_HIEU_CHUA_GHI_NHAN: {
     chot: "K10b",

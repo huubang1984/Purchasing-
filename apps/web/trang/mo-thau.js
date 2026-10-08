@@ -914,13 +914,13 @@ async function veTraoThau() {
       : ` — ${a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
-  // [S1.9101 / S3.6d / K10b] Có đề xuất thì đọc tín hiệu khai thấp của nó — khối chỉ hiện khi có tín hiệu; đọc hỏng thì khối ẩn.
+  // [S1.285 / S3.6d / K10b] Có đề xuất thì đọc tín hiệu khai thấp của nó — khối chỉ hiện khi có tín hiệu; đọc hỏng thì khối ẩn.
   await napTinHieuKt();
   return a;
 }
 
 /**
- * [S1.9101 / S3.6d / K10b] Khối «Tín hiệu khai thấp ước lượng»: `GET /rfqs/:rfqId/signals` (cùng route của tín hiệu chia nhỏ ở `/tao-thau`;
+ * [S1.285 / S3.6d / K10b] Khối «Tín hiệu khai thấp ước lượng»: `GET /rfqs/:rfqId/signals` (cùng route của tín hiệu chia nhỏ ở `/tao-thau`;
  * phần `khaiThap`). Trang không tự quyết ai ghi nhận được — máy chủ nói (`nguoiXem`), và nói vì sao không.
  */
 async function napTinHieuKt() {

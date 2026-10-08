@@ -95,7 +95,7 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.203 / S3.6b1] Ảnh chụp tín hiệu lúc nộp duyệt — người gọi duy nhất là `submitRfqForApproval`, sau cổng `rfq.create`
   // của route nộp; một module `apps/` gọi thẳng nó mà không nhắc quyền là đúng thứ lớp này bắt.
   "ghiTinHieuKhiNop",
-  // [S1.9101 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc đề xuất trao thầu — người gọi duy nhất là `deXuatTraoThau`,
+  // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc đề xuất trao thầu — người gọi duy nhất là `deXuatTraoThau`,
   // sau cổng `award.recommend` của route đề xuất; cùng khuôn `ghiTinHieuKhiNop`.
   "ghiTinHieuKhiDeXuat",
   "issueMagicLinkToken",

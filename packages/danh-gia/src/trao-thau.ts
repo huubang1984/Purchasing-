@@ -63,7 +63,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, laMaChot, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
-// [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng ghi ở cạnh đề xuất — gói `kiem-soat` giữ lớp có trạng thái của tín hiệu (§3.2).
+// [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng ghi ở cạnh đề xuất — gói `kiem-soat` giữ lớp có trạng thái của tín hiệu (§3.2).
 import { ghiTinHieuKhiDeXuat } from "@trustprocure/kiem-soat";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
@@ -92,7 +92,7 @@ const CAU_CHOT_NGUOI_KY =
 /** Chốt chữ ký độc lập K5b — `$1` tổ chức, `$2` đề xuất. */
 const CAU_CHOT_DOC_LAP =
   "SELECT public.award_chot_doc_lap($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
-/** [S1.9101 / S3.6d] Chốt K10b ở chữ ký — `$1` tổ chức, `$2` gói: tín hiệu khai thấp hiện tại chưa ai ghi nhận. */
+/** [S1.285 / S3.6d] Chốt K10b ở chữ ký — `$1` tổ chức, `$2` gói: tín hiệu khai thấp hiện tại chưa ai ghi nhận. */
 const CAU_CHOT_TIN_HIEU_KHAI_THAP =
   "SELECT public.award_chot_tin_hieu($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
 /** Số chữ ký cần và đủ chưa — `$1` tổ chức, `$2` đề xuất. Một phép tính ở CSDL, không bản đếm nào ở lớp này. */
@@ -454,7 +454,7 @@ export async function deXuatTraoThau(
     );
   }
 
-  // [S1.9101 / S3.6d / K10b] Ảnh chụp tín hiệu KHAI THẤP ƯỚC LƯỢNG của đề xuất này (spec §4.6: tính ở đề xuất award) — gói đã AWARDED,
+  // [S1.285 / S3.6d / K10b] Ảnh chụp tín hiệu KHAI THẤP ƯỚC LƯỢNG của đề xuất này (spec §4.6: tính ở đề xuất award) — gói đã AWARDED,
   // hàng PROPOSED đã có; `tin_hieu_khai_thap` trả NULL thì không hàng nào. Trước mọi hàng sổ của đường đề xuất.
   await ghiTinHieuKhiDeXuat(client, orgId, input.rfqId, { type: "USER", id: actor.id, sessionId: input.actorSessionId });
 
@@ -608,7 +608,7 @@ export async function duyetTraoThau(
   // không là tác giả phiên bản chính sách ghim (K7). Một mã ⇒ `CONTROL_DENIED` trước mọi câu ghi.
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, dx.rfq_id, dx.bid_version_id]);
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGUOI_KY, [orgId, dx.id, actor.id]);
-  // [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp tính NGAY LÚC NÀY chưa ai ghi nhận ⇒ `K10B_TIN_HIEU_CHUA_GHI_NHAN`, `CONTROL_DENIED`
+  // [S1.285 / S3.6d / K10b] Tín hiệu khai thấp tính NGAY LÚC NÀY chưa ai ghi nhận ⇒ `K10B_TIN_HIEU_CHUA_GHI_NHAN`, `CONTROL_DENIED`
   // trước câu chèn chữ ký; trigger `rfq_award_approvals_kiem_tin_hieu_khai_thap` hỏi lại cho câu đi tắt (ADR-120: không qua bảng tên → mã).
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_TIN_HIEU_KHAI_THAP, [orgId, dx.rfq_id]);
 

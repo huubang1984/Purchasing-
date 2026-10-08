@@ -362,7 +362,7 @@ export interface MocGhim {
 // [S1.279 / S4.7a] 83 -> 85: L8 (TCO có nguồn) và L16 (thước TCO cố định trước khi giá lộ — vế TCO và form của L14) vào sổ đăng ký.
 // [S1.280 / S3.5a] 85 -> 88: K7, K2b, K5b vào sổ đăng ký — award theo bậc (`113_trao_thau_theo_bac`).
 // [S1.281 / S3.4a] 88 -> 89: K9 vào sổ đăng ký (khai báo xung đột lợi ích, cổng ở bảy chỗ, chữ ký của người có xung đột không đếm).
-// [S1.9101 / S3.6d] 89 -> 90: K10b (tín hiệu khai thấp ước lượng ở chữ ký trao thầu, `9501_tin_hieu_khai_thap`) vào sổ đăng ký.
+// [S1.285 / S3.6d] 89 -> 90: K10b (tín hiệu khai thấp ước lượng ở chữ ký trao thầu, `116_tin_hieu_khai_thap`) vào sổ đăng ký.
 export const MOC_GHIM: MocGhim = { soPhuToiThieu: 90, coDanhSachToiDa: 0 };
 
 /**

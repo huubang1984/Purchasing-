@@ -491,8 +491,8 @@ describe("[S1.273 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫ
     "K7_KHONG_BAC_GHIM", "K7_LECH_TIEN_TE", "K7_DAU_THAU_CHINH_THUC", "K7_SAI_VAI", "K7_TAC_GIA_CHINH_SACH",
     "K2B_THIEU_CANH_TRANH_THUC", "K2B_NGOAI_LE_SAI_TRANG_THAI", "K5B_THIEU_CHU_KY_DOC_LAP",
   ] as const;
-  // [S1.9101 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
-  it("[S1.9101 / S3.6d] ba mã K10b có câu, không nhắc lại câu máy chủ, không phụ thuộc quyền mời; K10b chưa ghi nhận trỏ khối «Tín hiệu khai thấp»", () => {
+  // [S1.285 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
+  it("[S1.285 / S3.6d] ba mã K10b có câu, không nhắc lại câu máy chủ, không phụ thuộc quyền mời; K10b chưa ghi nhận trỏ khối «Tín hiệu khai thấp»", () => {
     for (const ma of ["K10B_TIN_HIEU_CHUA_GHI_NHAN", "K10B_TU_GHI_NHAN", "K10B_TAC_GIA_CHINH_SACH"] as const) {
       expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
       expect(chiDanChot(ma, true), ma).not.toBeNull();
@@ -579,7 +579,7 @@ describe("[S1.273 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
   });
 });
 
-describe("[S1.9101 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng — thân `GET /rfqs/:rfqId/signals` phần `khaiThap`", () => {
+describe("[S1.285 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng — thân `GET /rfqs/:rfqId/signals` phần `khaiThap`", () => {
   const BC = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: ["r-1"] };
   const than = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({ tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap } });
 

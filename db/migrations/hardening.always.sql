@@ -14632,10 +14632,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm tin_hieu_chia_nho(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6d / K10a K10b] Than tu 9501_tin_hieu_khai_thap.sql: bang chung cua hang tin hieu do CSDL tinh THEO LOAI — PURCHASE_SPLITTING o PENDING_APPROVAL (nhanh cu nguyen van), ESTIMATE_UNDERSTATED o AWARDED (tin_hieu_khai_thap, nguon DE_XUAT hay GHI_NHAN). Than `RETURN NEW` cho nguoi goi khai bang chung; mot nhanh khai thap doc tin_hieu_chia_nho thi K10b ghi nhan mot bang chung sai.
+    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: bang chung cua hang tin hieu do CSDL tinh THEO LOAI — PURCHASE_SPLITTING o PENDING_APPROVAL (nhanh cu nguyen van), ESTIMATE_UNDERSTATED o AWARDED (tin_hieu_khai_thap, nguon DE_XUAT hay GHI_NHAN). Than `RETURN NEW` cho nguoi goi khai bang chung; mot nhanh khai thap doc tin_hieu_chia_nho thi K10b ghi nhan mot bang chung sai.
     ARRAY[
-      $q$hàm + trigger tin_hieu_kiem_ghi (088_tin_hieu_chia_nho, thân từ 9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger tin_hieu_kiem_ghi (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -14742,10 +14742,10 @@ $ham$;
       $q$quyền sở hữu hàm public.tin_hieu_kiem_ghi() và bảng public.governance_signals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6d / K10a K10b] Than tu 9501_tin_hieu_khai_thap.sql: luat nguoi ghi nhan THEO LOAI cua bang chung — khai thap: nguoi tao, nguoi nop, nguoi dat ngan sach (nguoi khai uoc luong) hay nguoi de xuat => K10B_TU_GHI_NHAN, tac gia phien ban chinh sach => K10B_TAC_GIA_CHINH_SACH; chia nho: nhanh cu nguyen van. Mot than RETURN NULL cho nguoi khai thap tu ghi nhan tin hieu soi minh.
+    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: luat nguoi ghi nhan THEO LOAI cua bang chung — khai thap: nguoi tao, nguoi nop, nguoi dat ngan sach (nguoi khai uoc luong) hay nguoi de xuat => K10B_TU_GHI_NHAN, tac gia phien ban chinh sach => K10B_TAC_GIA_CHINH_SACH; chia nho: nhanh cu nguyen van. Mot than RETURN NULL cho nguoi khai thap tu ghi nhan tin hieu soi minh.
     ARRAY[
-      $q$định nghĩa hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) (088_tin_hieu_chia_nho, thân từ 9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.tin_hieu_chot_nguoi_ghi_nhan(p_org uuid, p_bang_chung jsonb, p_nguoi uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -14818,10 +14818,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6d / K10a K10b] Than tu 9501_tin_hieu_khai_thap.sql: lan ghi nhan kiem THEO LOAI — trang thai goi (PENDING_APPROVAL / AWARDED), quyen cua canh bi chan (rfq.approve / po.approve, ADR-084), luat nguoi (bon ma), bang chung bang tin_hieu_hien_tai. Than `RETURN NEW` cho nguoi gay ra tu ghi nhan hay ghi nhan mot bang chung da doi.
+    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: lan ghi nhan kiem THEO LOAI — trang thai goi (PENDING_APPROVAL / AWARDED), quyen cua canh bi chan (rfq.approve / po.approve, ADR-084), luat nguoi (bon ma), bang chung bang tin_hieu_hien_tai. Than `RETURN NEW` cho nguoi gay ra tu ghi nhan hay ghi nhan mot bang chung da doi.
     ARRAY[
-      $q$hàm + trigger tin_hieu_kiem_ghi_nhan (088_tin_hieu_chia_nho, thân từ 9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger tin_hieu_kiem_ghi_nhan (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -15049,10 +15049,10 @@ $ham$;
                   'hàm public.rfq_kiem_tin_hieu_khi_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_tin_hieu_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.6d / K10b] Tin hieu khai thap uoc luong — MOT ham, hai nguoi doc (tang goi luc de xuat, trigger chu ky): NULL khi to chuc chua bat, khi hang award moi nhat khong PROPOSED, hay khi bac trao khong cao hon bac uoc luong VA so tien trao khong vuot nguong kep ma uoc luong thi khong (spec S3 §4.6, §8.4). Bang chung mang moc bac, id de xuat va bao gia — KHONG so tien (ADR-054). Mot than tra NULL khi bac trao cao hon thi K10b khong bao gio hoi.
+    -- [S1.285 / S3.6d / K10b] Tin hieu khai thap uoc luong — MOT ham, hai nguoi doc (tang goi luc de xuat, trigger chu ky): NULL khi to chuc chua bat, khi hang award moi nhat khong PROPOSED, hay khi bac trao khong cao hon bac uoc luong VA so tien trao khong vuot nguong kep ma uoc luong thi khong (spec S3 §4.6, §8.4). Bang chung mang moc bac, id de xuat va bao gia — KHONG so tien (ADR-054). Mot than tra NULL khi bac trao cao hon thi K10b khong bao gio hoi.
     ARRAY[
-      $q$định nghĩa hàm tin_hieu_khai_thap(uuid, uuid) (9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm tin_hieu_khai_thap(uuid, uuid) (116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.tin_hieu_khai_thap(p_org uuid, p_rfq uuid) RETURNS jsonb
   LANGUAGE plpgsql
   STABLE
@@ -15130,10 +15130,10 @@ $ham$$q$,
                   'hàm public.tin_hieu_khai_thap(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm tin_hieu_khai_thap(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.6d / K10a K10b] Tin hieu HIEN TAI cua goi theo loai — mot cho, hai nguoi doc (tang goi kiem-soat va trigger ghi nhan). Mot than tra tin_hieu_chia_nho cho moi loai thi lan ghi nhan tin hieu khai thap so voi bang chung sai loai.
+    -- [S1.285 / S3.6d / K10a K10b] Tin hieu HIEN TAI cua goi theo loai — mot cho, hai nguoi doc (tang goi kiem-soat va trigger ghi nhan). Mot than tra tin_hieu_chia_nho cho moi loai thi lan ghi nhan tin hieu khai thap so voi bang chung sai loai.
     ARRAY[
-      $q$định nghĩa hàm tin_hieu_hien_tai(uuid, uuid, text) (9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm tin_hieu_hien_tai(uuid, uuid, text) (116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.tin_hieu_hien_tai(p_org uuid, p_rfq uuid, p_loai text) RETURNS jsonb
   LANGUAGE plpgsql
   STABLE
@@ -15167,10 +15167,10 @@ $ham$$q$,
                   'hàm public.tin_hieu_hien_tai(uuid, uuid, text) không tồn tại')$q$,
       $q$quyền sở hữu hàm tin_hieu_hien_tai(uuid, uuid, text) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.6d / K10b] Ham vi tu K10b o chu ky duyet trao thau: tin hieu khai thap tinh NGAY LUC AY chua co lan ghi nhan nao tren mot tin hieu co bang chung BANG no => K10B_TIN_HIEU_CHUA_GHI_NHAN (mot dieu kien, fail-closed — ADR-082 (14)). Mot than RETURN NULL cho trao thau khai thap di qua ma khong ai doc tin hieu.
+    -- [S1.285 / S3.6d / K10b] Ham vi tu K10b o chu ky duyet trao thau: tin hieu khai thap tinh NGAY LUC AY chua co lan ghi nhan nao tren mot tin hieu co bang chung BANG no => K10B_TIN_HIEU_CHUA_GHI_NHAN (mot dieu kien, fail-closed — ADR-082 (14)). Mot than RETURN NULL cho trao thau khai thap di qua ma khong ai doc tin hieu.
     ARRAY[
-      $q$định nghĩa hàm award_chot_tin_hieu(uuid, uuid) (9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm award_chot_tin_hieu(uuid, uuid) (116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_tin_hieu(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -15210,10 +15210,10 @@ $ham$$q$,
                   'hàm public.award_chot_tin_hieu(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_tin_hieu(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.6d / K10b] Trigger rieng tren chu ky trao thau, xep sau J3 va truoc K7 vai, K9: hoi award_chot_tin_hieu va tu choi voi ten k10b_tin_hieu_chua_ghi_nhan (khong qua bang ten -> ma, ADR-120). Than `RETURN NEW` cho mot chu ky di tat qua tin hieu khai thap chua ai ghi nhan.
+    -- [S1.285 / S3.6d / K10b] Trigger rieng tren chu ky trao thau, xep sau J3 va truoc K7 vai, K9: hoi award_chot_tin_hieu va tu choi voi ten k10b_tin_hieu_chua_ghi_nhan (khong qua bang ten -> ma, ADR-120). Than `RETURN NEW` cho mot chu ky di tat qua tin hieu khai thap chua ai ghi nhan.
     ARRAY[
-      $q$hàm + trigger award_kiem_tin_hieu_khai_thap (9501_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger award_kiem_tin_hieu_khai_thap (116_tin_hieu_khai_thap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

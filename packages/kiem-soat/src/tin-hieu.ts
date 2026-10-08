@@ -74,10 +74,10 @@ export interface NguoiXemTinHieu {
   readonly lyDo: string | null;
 }
 
-/** [S1.9101 / S3.6d] Loại tín hiệu — hai loại, hai cạnh bị chặn, hai quyền của cạnh (ADR-084 ⑵). */
+/** [S1.285 / S3.6d] Loại tín hiệu — hai loại, hai cạnh bị chặn, hai quyền của cạnh (ADR-084 ⑵). */
 export type LoaiTinHieu = "PURCHASE_SPLITTING" | "ESTIMATE_UNDERSTATED";
 
-/** [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng của gói — phần `/mo-thau` cần, cùng hình dạng với phần chia nhỏ. */
+/** [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng của gói — phần `/mo-thau` cần, cùng hình dạng với phần chia nhỏ. */
 export interface TinHieuKhaiThap {
   /** Tín hiệu tính NGAY LÚC ĐỌC — `null` khi gói không có đề xuất đang sống hay số tiền trao không khai thấp. */
   readonly hienTai: unknown;
@@ -102,7 +102,7 @@ export interface TinHieuCuaGoi {
    * `null` khi không có gì cần ghi nhận.
    */
   readonly soNguoiGhiNhanDuoc: number | null;
-  /** [S1.9101 / S3.6d / K10b] Tín hiệu khai thấp ước lượng — loại thứ hai, chặn chữ ký trao thầu thay vì cạnh mở gói. */
+  /** [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng — loại thứ hai, chặn chữ ký trao thầu thay vì cạnh mở gói. */
   readonly khaiThap: TinHieuKhaiThap;
 }
 
@@ -122,7 +122,7 @@ export interface KetQuaGhiNhan {
   readonly tinHieuMoi: boolean;
 }
 
-// [S1.9101 / S3.6d] `$6` là LOẠI; tín hiệu hiện tại theo loại đọc qua `tin_hieu_hien_tai` (`9501`) — một chỗ cho cả gói lẫn trigger.
+// [S1.285 / S3.6d] `$6` là LOẠI; tín hiệu hiện tại theo loại đọc qua `tin_hieu_hien_tai` (`116`) — một chỗ cho cả gói lẫn trigger.
 const CAU_GHI_TIN_HIEU =
   "INSERT INTO public.governance_signals (org_id, rfq_id, loai, nguon, created_by, created_by_session_id) " +
   "SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, $6::pg_catalog.text, $3::pg_catalog.text, $4::pg_catalog.uuid, $5::pg_catalog.uuid " +
@@ -244,7 +244,7 @@ export async function ghiTinHieuKhiNop(
 }
 
 /**
- * [S1.9101 / S3.6d / K10b] ⑴b Ảnh chụp tín hiệu KHAI THẤP lúc vừa đề xuất trao thầu — gọi SAU câu chèn đề xuất và sau cạnh
+ * [S1.285 / S3.6d / K10b] ⑴b Ảnh chụp tín hiệu KHAI THẤP lúc vừa đề xuất trao thầu — gọi SAU câu chèn đề xuất và sau cạnh
  * `EVALUATING->AWARDED`, trong cùng giao dịch, TRƯỚC mọi hàng sổ của đường đề xuất (hàng sổ giữ khoá chuỗi tới commit). Gói không
  * khai thấp (hay tổ chức chưa bật) thì không ghi gì và trả `null`. Không chặn gì: tín hiệu chặn CHỮ KÝ duyệt trao thầu khi chưa ai ghi
  * nhận nó (`award_chot_tin_hieu`).
@@ -283,7 +283,7 @@ export async function ghiNhanTinHieu(
   auditPool: pg.Pool,
 ): Promise<KetQuaGhiNhan> {
   await assertTenantBound(client, orgId, "ghiNhanTinHieu");
-  // [S1.9101 / S3.6d] Hai loại, hai cạnh bị chặn: chia nhỏ — gói chờ duyệt, `rfq.approve`; khai thấp — gói có đề xuất, `po.approve`.
+  // [S1.285 / S3.6d] Hai loại, hai cạnh bị chặn: chia nhỏ — gói chờ duyệt, `rfq.approve`; khai thấp — gói có đề xuất, `po.approve`.
   const loai: LoaiTinHieu = input.loai ?? "PURCHASE_SPLITTING";
   const khaiThap = loai === "ESTIMATE_UNDERSTATED";
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
@@ -453,7 +453,7 @@ export async function lietKeTinHieu(
       : (await client.query<{ id: string; title: string; status: string }>(CAU_DOC_GOI_BANG_CHUNG, [orgId, idGoi])).rows;
   const canGhiNhan = goi.status === "PENDING_APPROVAL" && goi.ly_do !== null;
   const xem = canGhiNhan ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id) : null;
-  // [S1.9101 / S3.6d / K10b] Phần khai thấp: cùng khuôn, cạnh bị chặn là chữ ký trao thầu, quyền `po.approve`.
+  // [S1.285 / S3.6d / K10b] Phần khai thấp: cùng khuôn, cạnh bị chặn là chữ ký trao thầu, quyền `po.approve`.
   const canGhiNhanKt = goi.status === "AWARDED" && goi.ly_do_kt !== null;
   const xemKt = canGhiNhanKt ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id, "ESTIMATE_UNDERSTATED") : null;
   return {

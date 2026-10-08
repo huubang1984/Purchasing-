@@ -474,7 +474,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/rfq/src/tin-hieu-chia-nho.int.test.ts",
   ],
-  // K10b — [S1.9101 / S3.6d] tín hiệu khai thấp ước lượng ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: đề xuất ghi hàng
+  // K10b — [S1.285 / S3.6d] tín hiệu khai thấp ước lượng ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: đề xuất ghi hàng
   // ESTIMATE_UNDERSTATED mang hai mốc bậc (không số tiền), chữ ký bị chặn tới khi người giữ po.approve ngoài gói ghi nhận, luật người
   // (người đề xuất, tác giả chính sách), fail-closed khi rút rồi đề xuất báo giá khác, vế vượt ngưỡng kép, đối chứng âm, tổ chức chưa
   // bật, lớp chặn cuối (chữ ký thô), và mỗi vế một đột biến; tập mã = bảng (K12).

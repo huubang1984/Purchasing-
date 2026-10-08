@@ -345,7 +345,7 @@ async function trangThai(rfqId: string): Promise<string> {
 const deXuat = (t: ToChuc, rfqId: string, bidVersionId: string, ai: NguoiPhien = t.pm2) =>
   withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId, bidVersionId, reason: "gia thap nhat", actorSessionId: ai.s }, apiPool));
 /**
- * [S1.9101 / S3.6d / K10b] Ghi nhận tín hiệu khai thấp của gói — một người giữ `po.approve` ngoài gói. Các ca KHAI THẤP của K7/K5b (ước
+ * [S1.285 / S3.6d / K10b] Ghi nhận tín hiệu khai thấp của gói — một người giữ `po.approve` ngoài gói. Các ca KHAI THẤP của K7/K5b (ước
  * lượng bậc 0, giá trúng bậc 1) nay có tín hiệu `ESTIMATE_UNDERSTATED` chặn chữ ký cho tới khi nó được đọc: gọi trước chữ ký đầu.
  */
 const ghiNhanKhaiThap = (t: ToChuc, rfqId: string, ai: NguoiPhien) =>
@@ -456,7 +456,7 @@ describe("[S1.280 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ ký
     const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
     const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
     expect((await doc(t, g.rfqId))?.chuKyCan, "bậc cao hơn là bậc của số tiền trao").toBe(2);
-    // [S1.9101 / S3.6d] Khai thấp ⇒ tín hiệu K10b: gd2 đọc trước khi ai ký.
+    // [S1.285 / S3.6d] Khai thấp ⇒ tín hiệu K10b: gd2 đọc trước khi ai ký.
     await ghiNhanKhaiThap(t, g.rfqId, t.gd2);
 
     const mot = await duyet(t, g.rfqId, dx.awardId, t.gd1);
@@ -745,7 +745,7 @@ describe("[S1.280 / S3.5a / K5b] chữ ký trao thầu của người ngoài t�
       [g.rfqId, t.gd2.u, t.gd2.s],
     );
     const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
-    // [S1.9101 / S3.6d] Khai thấp ⇒ tín hiệu K10b: tc3 (ngoài gói) đọc trước khi ai ký.
+    // [S1.285 / S3.6d] Khai thấp ⇒ tín hiệu K10b: tc3 (ngoài gói) đọc trước khi ai ký.
     await ghiNhanKhaiThap(t, g.rfqId, t.tc3);
     expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
     expect((await loi(duyet(t, g.rfqId, dx.awardId, t.gd2)))?.lyDo).toBe("K5B_THIEU_CHU_KY_DOC_LAP");
@@ -769,9 +769,9 @@ describe("[S1.280 / S3.5a / K5b] chữ ký trao thầu của người ngoài t�
 });
 
 // =============================================================================================
-// ⑶b K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6d, `9501`)
+// ⑶b K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6d, `116`)
 // =============================================================================================
-describe("[S1.9101 / S3.6d / K10b] tín hiệu khai thấp ước lượng — ghi ở đề xuất, chặn chữ ký cho tới khi người độc lập ghi nhận", { timeout: 300000 }, () => {
+describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — ghi ở đề xuất, chặn chữ ký cho tới khi người độc lập ghi nhận", { timeout: 300000 }, () => {
   const tinHieuCua = async (rfqId: string) =>
     (
       await db.pool.query<{ loai: string; nguon: string; bang_chung: Record<string, unknown>; giai_thich: string }>(

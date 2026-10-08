@@ -320,7 +320,7 @@ export function khungTinHieu(body: unknown, rfqId: string): KhungTinHieu {
 }
 
 /**
- * [S1.9101 / S3.6d / K10b] Khung tín hiệu KHAI THẤP ƯỚC LƯỢNG ở bước 7 của `/mo-thau` — thân `GET /rfqs/:rfqId/signals`, phần
+ * [S1.285 / S3.6d / K10b] Khung tín hiệu KHAI THẤP ƯỚC LƯỢNG ở bước 7 của `/mo-thau` — thân `GET /rfqs/:rfqId/signals`, phần
  * `tinHieu.khaiThap` cộng các hàng `ESTIMATE_UNDERSTATED` đã lưu. Tóm tắt là câu `giaiThich` CSDL viết cho hàng có bằng chứng BẰNG
  * tín hiệu hiện tại (không số tiền nào — bằng chứng chỉ mang hai mốc bậc); không hàng nào thì nói bằng hai mốc bậc của bằng chứng.
  * Lịch sử: các lần ghi nhận của hàng ấy. Ô lý do và nút chỉ khi còn chờ ghi nhận VÀ người đang xem ghi nhận được.
@@ -495,7 +495,7 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
     case "K7_KHONG_BAC_GHIM":
     case "K7_LECH_TIEN_TE":
       return "Huỷ gói và lập lại với ngân sách ghim bậc, cùng tiền tệ với chính sách.";
-    // [S1.9101 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
+    // [S1.285 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
     case "K10B_TIN_HIEU_CHUA_GHI_NHAN":
       return "Trên màn: khối «Tín hiệu khai thấp» ở bước 7 — ai đứng ngoài gói mà giữ quyền ký đọc tín hiệu, ghi lý do rồi bấm " +
         "«Ghi nhận», sau đó mới ký.";
