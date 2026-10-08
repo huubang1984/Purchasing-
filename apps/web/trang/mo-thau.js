@@ -15,7 +15,7 @@ import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
-import { chiDanK9, ganKhaiBao, nhaCungCapTuSoSanh } from "/lib/xung-dot.js";
+import { chiDanK9, ganKhaiBao, gopNhaCungCap, nhaCungCapTuSoSanh, nhaCungCapTuXepHang } from "/lib/xung-dot.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -37,8 +37,10 @@ const khaiBao = ganKhaiBao({
   goi,
   loiCua,
   rfqId: () => phien.rfqId,
-  nhaCungCap: () => nhaCungCapTuSoSanh(phien.soSanh),
-  khiKhongCoDanhSach: "Khai «có xung đột» cần chọn nhà cung cấp: đọc bảng so sánh ở bước 4 (sau mở thầu), rồi ô chọn hiện ở đây.",
+  // [lượt đi thử T4] …và bảng xếp hạng: ở AWARDED bảng so sánh đã đóng, mà đó là lúc người duyệt trao thầu ký.
+  nhaCungCap: () => gopNhaCungCap(nhaCungCapTuSoSanh(phien.soSanh), nhaCungCapTuXepHang(phien.xepHang)),
+  khiKhongCoDanhSach: "Khai «có xung đột» cần chọn nhà cung cấp: đọc bảng so sánh ở bước 4 (sau mở thầu) hay bảng xếp hạng ở bước 5, " +
+    "rồi ô chọn hiện ở đây.",
 });
 /** [S1.9101 / S3.4b · K9] Câu từ chối của máy chủ cộng câu chỉ chỗ khai, và khối khai báo đọc lại khi mã là của K9. */
 async function loiK9(r, macDinh) {
@@ -733,6 +735,8 @@ async function veXepHang() {
     return;
   }
   phien = { ...phien, xepHang: Array.isArray(b.rows) ? b.rows : [], xepHangLuot: b.evaluationId };
+  // [S1.9101 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
+  khaiBao.veNhaCungCap();
   dienDl($("tt-luot"), [
     ["Mã lượt chấm", b.evaluationId],
     ["Chính sách phiên bản", b.policyVersion],

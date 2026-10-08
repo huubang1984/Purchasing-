@@ -670,6 +670,10 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
     expect((await khongXungDot(g.rfqId, t.pm3)).status).toBe(201);
     await withTenant(apiPool, t.org, (c) => taoLuotDanhGia(c, t.org, { rfqId: g.rfqId, actorSessionId: t.pm3.s }, auditPool));
     expect(await trangThai(g.rfqId)).toBe("EVALUATING");
+    // [S1.9101 / S3.4b · lượt đi thử T4] Hàng xếp hạng mang mã nhà cung cấp — khối khai báo ở `/mo-thau` chọn *có xung đột với* từ đó
+    // khi bảng so sánh đã đóng (AWARDED, lúc người duyệt trao thầu ký).
+    const bxh = await goi("GET", `/rfqs/${g.rfqId}/ranking`, t.pm3.cookie);
+    expect((bxh.body.ranking as { rows: { supplierId: unknown }[] }).rows.map((h) => h.supplierId)).toEqual([g.ncc.ncc]);
     // ⑵ đề xuất — pm2 đã khai từ lúc ký; khai CÓ xung đột (sau khi ký) thì không đề xuất được; pm3 đề xuất thay.
     expect((await khai(g.rfqId, t.pm2, { trangThai: "CO_XUNG_DOT", supplierId: g.ncc.ncc })).status).toBe(201);
     const e2 = await loi(withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId: g.rfqId, bidVersionId: g.bidVersionId, reason: "gia tot", actorSessionId: t.pm2.s }, auditPool)));

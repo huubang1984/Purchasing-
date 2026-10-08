@@ -23,7 +23,9 @@ import {
   khungKhaiBao,
   loiGhiChuKhai,
   nhaCungCapTuLoiMoi,
+  gopNhaCungCap,
   nhaCungCapTuSoSanh,
+  nhaCungCapTuXepHang,
   thanKhaiBao,
   type KhaiBaoCuaToiMan,
 } from "./xung-dot.js";
@@ -136,6 +138,18 @@ describe("[S1.9101 / S3.4b · K9] danh sách nhà cung cấp — từ thứ tran
       ]).map((n) => n.supplierId),
     ).toEqual(["n-1", "n-2"]);
     expect(nhaCungCapTuSoSanh(undefined)).toEqual([]);
+  });
+
+  it("[lượt đi thử T4] bảng xếp hạng — ở AWARDED bảng so sánh đã đóng; gộp hai nguồn mỗi nhà cung cấp một lần", () => {
+    const xh = nhaCungCapTuXepHang([
+      { supplierId: "n-2", supplierName: "Công ty Xi măng", rank: 1 },
+      { supplierId: "n-1", supplierName: "Công ty Thép", rank: 2 },
+      { supplierName: "thiếu mã", rank: 3 },
+    ]);
+    expect(xh.map((n) => [n.supplierId, n.ten])).toEqual([["n-2", "Công ty Xi măng"], ["n-1", "Công ty Thép"]]);
+    const gop = gopNhaCungCap(nhaCungCapTuSoSanh([{ supplierId: "n-1", supplierLegalName: "Công ty Thép" }]), xh);
+    expect(gop.map((n) => n.supplierId)).toEqual(["n-1", "n-2"]);
+    expect(nhaCungCapTuXepHang(null)).toEqual([]);
   });
 });
 

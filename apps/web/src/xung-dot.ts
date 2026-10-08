@@ -248,6 +248,33 @@ export function nhaCungCapTuSoSanh(rows: unknown): NhaCungCapKhai[] {
   return [...theoId.values()];
 }
 
+/**
+ * [lượt đi thử T4] Nhà cung cấp từ `GET /rfqs/:rfqId/ranking` (`ranking.rows[]`, mang `supplierId` từ S3.4b). Ở `AWARDED` bảng so sánh
+ * đã đóng — đúng lúc người duyệt trao thầu ký —, còn bảng xếp hạng thì đọc được.
+ */
+export function nhaCungCapTuXepHang(rows: unknown): NhaCungCapKhai[] {
+  if (!Array.isArray(rows)) return [];
+  const theoId = new Map<string, NhaCungCapKhai>();
+  for (const h of rows as unknown[]) {
+    if (h === null || typeof h !== "object") continue;
+    const x = h as Record<string, unknown>;
+    const id = chuoiKb(x.supplierId);
+    if (id === null || theoId.has(id)) continue;
+    theoId.set(id, { supplierId: id, ten: chuoiKb(x.supplierName) ?? id, conSong: true });
+  }
+  return [...theoId.values()];
+}
+
+/** Gộp nhiều danh sách, mỗi nhà cung cấp một lần — còn sống nếu một nguồn nói còn sống. */
+export function gopNhaCungCap(...ds: readonly (readonly NhaCungCapKhai[])[]): NhaCungCapKhai[] {
+  const theoId = new Map<string, NhaCungCapKhai>();
+  for (const n of ds.flat()) {
+    const truoc = theoId.get(n.supplierId);
+    theoId.set(n.supplierId, truoc === undefined ? n : { ...truoc, conSong: truoc.conSong || n.conSong });
+  }
+  return [...theoId.values()];
+}
+
 // ---------------------------------------------------------------------------------------------
 // Gắn vào DOM của trang
 // ---------------------------------------------------------------------------------------------
