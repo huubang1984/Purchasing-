@@ -361,22 +361,62 @@ export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tc
 }
 
 /**
- * [ADR-153, giới hạn ⑴] Gói ĐANG CHỜ DUYỆT chưa khai số ngày giao: nếu phiên bản tính chi phí trễ có hiệu lực trước lúc chúng mở,
- * chúng không mở được. Ở tổ chức đã bật, lối ra là trả gói về soạn thảo; ở tổ chức chưa bật không có cạnh ấy — chỉ còn huỷ.
+ * [ADR-153, giới hạn ⑴] Gói ĐANG CHỜ DUYỆT chưa khai số ngày giao: phiên bản đang soạn tính chi phí trễ và có hiệu lực trước lúc chúng mở
+ * thì chúng không mở được. Ở tổ chức đã bật, lối ra là trả gói về soạn thảo. Ở tổ chức chưa bật:
+ * - phiên bản KHÔNG bậc có hiệu lực ngay lúc tạo, và gói đã nộp không trả về soạn thảo được — chỉ còn lối huỷ;
+ * - phiên bản CÓ bậc chỉ có hiệu lực khi được ký, và chữ ký ấy — chữ ký bật kiểm soát theo bậc — bị từ chối khi tổ chức còn gói chờ duyệt
+ *   (`097`): các gói ấy không bao giờ rơi vào phiên bản này khi còn chờ, nên không có gì để nói (rà soát §S1.9101 — TRUNG-1).
  */
 export function canhBaoGoiThieuSoNgayGiao(
   thanhPhan: readonly ThanhPhanTrongSo[] | null,
   soGoi: number,
   daBat: boolean,
+  coBac: boolean,
 ): readonly string[] {
   if (thanhPhan === null || soGoi === 0 || !thanhPhan.some((t) => t.ma === "chi_phi_tre")) return [];
-  const loiRa = daBat
-    ? "người tạo gói hay người duyệt trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại"
-    : "tổ chức chưa bật kiểm soát theo bậc nên gói đã nộp không trả về soạn thảo được — các gói ấy chỉ còn lối huỷ";
+  if (!daBat && coBac) return [];
+  const dau = `${String(soGoi)} gói đang chờ duyệt chưa khai số ngày giao yêu cầu`;
   return [
-    `${String(soGoi)} gói đang chờ duyệt chưa khai số ngày giao yêu cầu: nếu phiên bản này có hiệu lực trước lúc chúng mở, chúng không ` +
-      `mở được — ${loiRa}.`,
+    daBat
+      ? `${dau}: nếu phiên bản này có hiệu lực trước lúc chúng mở, chúng không mở được — trả gói về soạn thảo để khai số ngày giao, ` +
+        "rồi nộp duyệt lại."
+      : `${dau}: phiên bản này không có bậc nên có hiệu lực ngay khi tạo, và chúng sẽ không mở được — tổ chức chưa bật kiểm soát theo ` +
+        "bậc nên gói đã nộp không trả về soạn thảo được, các gói ấy chỉ còn lối huỷ. Mở hay xử lý chúng trước khi tạo phiên bản này.",
   ];
+}
+
+// [rà soát §S1.9101 — THẤP-2] Miền của ba tham số — BẢN CHÉP của `CHECK` `org_procurement_policies_tco_hinh_dang` (`112_tco`): mẫu
+// `like_regex` y nguyên văn, biên kiểm bằng số nguyên ở tỉ lệ cố định (không `double`). `bac-mac-dinh-dong-bo.test.ts` đòi ba mẫu có mặt
+// nguyên văn trong `112`. Thân sai miền thì `CHECK` từ chối bằng một 422 chung không gọi tên ô — màn nói trước, và không gửi.
+export const MAU_CHI_PHI_VON = "^[01]([.][0-9]{1,4})?$";
+export const MAU_NGAY_THANH_TOAN = "^(0|[1-9][0-9]{0,2})$";
+export const MAU_TY_LE_TRE = "^0([.][0-9]{1,6})?$";
+
+/** Lỗi đầu tiên của nhóm khoá `tco` sắp gửi mà `CHECK` sẽ từ chối; `null` khi hợp lệ hay không có nhóm khoá. */
+export function loiThamSoTco(tco: NhomTco | null): string | null {
+  if (tco === null) return null;
+  const von = tco.chi_phi_von_nam;
+  const ngay = tco.ngay_thanh_toan_chuan;
+  if ((von === undefined) !== (ngay === undefined)) {
+    return "Chi phí thanh toán cần CẢ chi phí vốn một năm lẫn kỳ thanh toán chuẩn — điền đủ hai ô, hay bỏ chọn mã ấy.";
+  }
+  if (von !== undefined) {
+    const v = new RegExp(MAU_CHI_PHI_VON, "u").test(von) ? sangNguyen(von, 4) : null;
+    if (v === null || v <= 0n || v > 10_000n) {
+      return "Chi phí vốn một năm phải là tỉ lệ trong khoảng (0, 1], viết bằng dấu chấm, tối đa 4 chữ số lẻ — 0.12 là 12% một năm.";
+    }
+  }
+  if (ngay !== undefined && (!new RegExp(MAU_NGAY_THANH_TOAN, "u").test(ngay) || Number(ngay) > 365)) {
+    return "Kỳ thanh toán chuẩn phải là số ngày nguyên từ 0 đến 365.";
+  }
+  const tre = tco.ty_le_tre_ngay;
+  if (tre !== undefined) {
+    const v = new RegExp(MAU_TY_LE_TRE, "u").test(tre) ? sangNguyen(tre, 6) : null;
+    if (v === null || v <= 0n || v > 100_000n) {
+      return "Chi phí trễ mỗi ngày phải là tỉ lệ trong khoảng (0, 0.1], viết bằng dấu chấm, tối đa 6 chữ số lẻ — 0.001 là 0,1% một ngày.";
+    }
+  }
+  return null;
 }
 
 /** Một dòng cho nhóm khoá `tco` của một phiên bản — bảng phiên bản. */

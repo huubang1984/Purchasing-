@@ -12397,15 +12397,30 @@ ghi *"không hạng — thiếu: …"*, nên việc bị loại vì thiếu ô v
   CHÉP của `kiemChinhSachTco` trừ vế số ngày giao; `tests/architecture/bac-mac-dinh-dong-bo.test.ts` đòi hai bản cùng phán quyết và
   CÙNG câu trên mười tám ca. Cảnh báo không chặn (§2.5 ㉒); bảng phiên bản có cột tham số.
 - `PUT /rfqs/:rfqId/delivery-days` (`rfq.create`, khuôn route nhóm hàng; `null` xoá, vắng trường là 422). `RfqRecord` mang
-  `soNgayGiao`. `/tao-thau`: ô và nút ở DRAFT; dòng *"Số ngày giao yêu cầu"* ở MỌI trạng thái — người duyệt thấy con số mình ký; cảnh
-  báo khi phiên bản hiệu lực, hay một phiên bản mới hơn chờ ký, tính chi phí trễ mà gói chưa khai — lời ra theo trạng thái và loại tổ
-  chức, cùng lời của `openRfq`.
+  `soNgayGiao`. `/tao-thau`: ô và nút ở DRAFT, đứng sau bảng gói; dòng *"Số ngày giao yêu cầu"* ở MỌI trạng thái — người duyệt thấy con
+  số mình ký; cảnh báo khi gói chưa khai mà phiên bản HIỆU LỰC tính chi phí trễ (lời của `openRfq`), hay chỉ một phiên bản MỚI HƠN
+  chưa hiệu lực tính nó (lời có điều kiện *"nếu nó có hiệu lực trước lúc gói mở"*).
+
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
+- **TRUNG-1** — câu *"chỉ còn lối huỷ"* sai ở hai chỗ. Ở tổ chức chưa bật, phiên bản CÓ bậc chỉ có hiệu lực khi được ký, và chữ ký ấy —
+  chữ ký bật kiểm soát theo bậc — bị từ chối khi còn gói chờ duyệt (`097`): gói chờ duyệt không bao giờ rơi vào nó. Và ở `/tao-thau`,
+  một phiên bản mới hơn chưa hiệu lực không chặn cạnh mở hôm nay — câu ấy đẩy người duyệt huỷ một gói lành. Sửa: `/chinh-sach` im khi
+  phiên bản đang soạn có bậc ở tổ chức chưa bật; `/tao-thau` tách phiên bản hiệu lực khỏi phiên bản mới hơn, và ở tổ chức chưa bật chỉ
+  phiên bản mới hơn KHÔNG bậc còn là nguy cơ cho gói chờ duyệt.
+- **TRUNG-2** — `/tao-thau` nói *"nhà cung cấp thấy con số này khi nộp"*, mà tới S4.7b2 họ không thấy. Sửa: câu TẠM nói điều ấy, gỡ ở b2.
+- **THẤP** — ô số ngày giao đứng trong khối TẠO gói (con số gõ trước lúc tạo rơi mất): dời xuống sau bảng gói; tham số sai miền bị
+  `CHECK` từ chối bằng 422 chung không gọi tên ô: màn chép ba mẫu `like_regex` của `112` (khoá nguyên văn ở `bac-mac-dinh-dong-bo`) và
+  không gửi; thân chính sách của người trước còn trong bộ nhớ sau khi đổi người: quên khi đổi người, đăng xuất, và trước mỗi lần đọc;
+  hai câu chú thích sai về hằng biên; thêm ca xuyên tổ chức và thân 422 của `CHECK`.
 
 ### Giới hạn nói ra
 
 - **Cảnh báo ở `/tao-thau` đọc chính sách lúc đăng nhập** (lần đọc `GET /policy/versions` sẵn có của màn) — cũ trong phiên; cạnh mở
   gói mới là chốt (`tco_thieu_so_ngay_giao`).
-- **Giữa S4.7b1 và S4.7b2** nhà cung cấp chưa khai được ô nào ngoài giá (⑴). Hôm nay không tổ chức thật nào (PRODUCT §10).
+- **Giữa S4.7b1 và S4.7b2** nhà cung cấp chưa khai được ô nào ngoài giá, và chưa thấy số ngày giao (⑴) — hai câu TẠM ở `/chinh-sach`
+  và `/tao-thau` nói điều ấy. Hôm nay không tổ chức thật nào (PRODUCT §10).
+- **Nút *"Lưu số ngày giao"* ghi vào gói đang đọc** (`phien.rfqId`) — một lần đọc mã khác bị hỏng để nguyên gói trước, cùng khuôn nút nhóm
+  hàng có từ S3.6a.
 - **Không chặn lúc nộp duyệt.** Gói thiếu số ngày giao vẫn nộp được dưới phiên bản tính chi phí trễ — ADR-153 ⑶ chốt chặn ở cạnh mở;
   màn cảnh báo trước.
 

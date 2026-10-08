@@ -599,7 +599,7 @@ describe("[S1.9101 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau"
 
   it("cảnh báo chỉ khi gói chưa khai, ở DRAFT hay chờ duyệt, và một phiên bản hiệu lực hay mới hơn tính chi phí trễ", () => {
     const tre = { phienBan: [{ hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] }], daBat: false };
-    expect(canhBaoSoNgayGiao(tre, null, "DRAFT")).toContain("Khai số ngày giao ở ô trên");
+    expect(canhBaoSoNgayGiao(tre, null, "DRAFT")).toContain("Khai số ngày giao ở ô dưới");
     expect(canhBaoSoNgayGiao(tre, 30, "DRAFT")).toBeNull();
     expect(canhBaoSoNgayGiao(tre, undefined, "DRAFT")).toBeNull();
     expect(canhBaoSoNgayGiao(tre, null, "OPEN")).toBeNull();
@@ -611,3 +611,27 @@ describe("[S1.9101 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau"
     expect(canhBaoSoNgayGiao({ phienBan: [{ hieuLuc: false, evalComponents: [{ ma: "chi_phi_tre" }] }] }, null, "DRAFT")).not.toBeNull();
   });
 });
+
+describe("[S1.9101 / S4.7b1 — rà soát TRUNG-1] cảnh báo số ngày giao: phiên bản HIỆU LỰC khác phiên bản MỚI HƠN chưa hiệu lực", () => {
+  const GIA = { hieuLuc: true, tiers: null, evalComponents: [{ ma: "gia" }] };
+  const moiCoBac = { hieuLuc: false, tiers: [{}], evalComponents: [{ ma: "chi_phi_tre" }] };
+  const moiKhongBac = { hieuLuc: false, tiers: null, evalComponents: [{ ma: "chi_phi_tre" }] };
+
+  it("bản hiệu lực tính chi phí trễ ⇒ lời của openRfq; chỉ bản mới hơn ⇒ lời có điều kiện, không bao giờ *chỉ còn lối huỷ*", () => {
+    expect(canhBaoSoNgayGiao({ phienBan: [{ ...GIA, evalComponents: [{ ma: "chi_phi_tre" }] }], daBat: false }, null, "PENDING_APPROVAL")).toContain(
+      "Chính sách đang hiệu lực",
+    );
+    const draft = canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: false }, null, "DRAFT");
+    expect(draft).toContain("nếu nó có hiệu lực trước lúc gói mở");
+    expect(draft).not.toContain("lối huỷ");
+    expect(canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: true }, null, "PENDING_APPROVAL")).toContain("khi ấy trả gói về soạn thảo");
+  });
+
+  it("tổ chức chưa bật, gói chờ duyệt: bản mới hơn CÓ bậc không chạm được gói (`097`) ⇒ im; bản KHÔNG bậc ⇒ *mở gói trước lúc ấy*", () => {
+    expect(canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: false }, null, "PENDING_APPROVAL")).toBeNull();
+    const kb = canhBaoSoNgayGiao({ phienBan: [moiKhongBac, GIA], daBat: false }, null, "PENDING_APPROVAL");
+    expect(kb).toContain("mở gói trước lúc ấy");
+    expect(kb).not.toContain("lối huỷ");
+  });
+});
+

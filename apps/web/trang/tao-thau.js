@@ -136,6 +136,7 @@ window.addEventListener("hashchange", () => {
   khaiBao.an();
   xoaDanhSach();
   xoaNhaCungCap();
+  quenChinhSach();
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh", "loi5", "ok5", "loi-nl", "ok-nl"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
@@ -180,14 +181,30 @@ function moSauDangNhap(me, dungLai) {
  * máy chủ hỏi (ADR-080). Đọc hỏng thì màn ở luồng MVP1: máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ nói kém đi.
  */
 // [S1.9101 / S4.7b1] Thân của lần đọc ấy — cảnh báo số ngày giao đọc phiên bản đang hiệu lực từ đây, không gọi lần thứ hai. Cũ tới lần
-// đăng nhập sau: cảnh báo là lời nói trước, cạnh mở gói mới là chốt (`tco_thieu_so_ngay_giao`).
+// đăng nhập sau: cảnh báo là lời nói trước, cạnh mở gói mới là chốt (`tco_thieu_so_ngay_giao`). `goiDangDoc` là số ngày giao và trạng
+// thái của lần đọc gói gần nhất — để vẽ lại cảnh báo khi lần đọc chính sách về SAU lần đọc gói.
 let chinhSach = null;
+let goiDangDoc = null;
+
+function veCanhBaoSoNgay() {
+  bao($("canh-bao-so-ngay"), goiDangDoc === null ? "" : (canhBaoSoNgayGiao(chinhSach, goiDangDoc.soNgayGiao, goiDangDoc.status) ?? ""));
+}
+
+/** [rà soát §S1.9101 — THẤP-3] Đổi người hay đăng xuất: quên chính sách của tổ chức trước và cảnh báo vẽ từ nó. */
+function quenChinhSach() {
+  chinhSach = null;
+  goiDangDoc = null;
+  veCanhBaoSoNgay();
+}
 
 async function napLuong() {
+  // [rà soát §S1.9101 — THẤP-3] Quên TRƯỚC lần chờ: một lần đọc hỏng không để lại thân của người trước.
+  chinhSach = null;
   try {
     const r = await goi("GET", "/policy/versions");
     chinhSach = r.status === 200 ? r.body : null;
     datLuong({ ...luong, daBat: r.status === 200 && r.body?.daBat === true });
+    veCanhBaoSoNgay();
     if (luong.daBat) await napNhomHang(null);
   } catch { /* mất mạng: giữ luồng MVP1 */ }
   // [S1.273 / S3.3e1] Ô chọn nhà cung cấp có sẵn — `GET /suppliers` không cổng, không sinh lời từ chối nào.
@@ -303,6 +320,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     khaiBao.an();
     xoaDanhSach();
     xoaNhaCungCap();
+    quenChinhSach();
     dongCacBuoc();
     dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
@@ -351,7 +369,8 @@ async function napRfq(rfqId, lanThu = 0) {
     ["Số ngày giao yêu cầu", nhanSoNgayGiao(g.soNgayGiao)],
   ];
   $("so-ngay-giao").value = typeof g.soNgayGiao === "number" ? String(g.soNgayGiao) : "";
-  bao($("canh-bao-so-ngay"), canhBaoSoNgayGiao(chinhSach, g.soNgayGiao, typeof g.status === "string" ? g.status : "") ?? "");
+  goiDangDoc = { soNgayGiao: g.soNgayGiao, status: typeof g.status === "string" ? g.status : "" };
+  veCanhBaoSoNgay();
   // [S1.201 / S3.6a] Nhóm hàng của gói — chỉ ở tổ chức đã bật; ô chọn nhảy về đúng nhóm gói đang giữ.
   if (luong.daBat) {
     hang.push(["Nhóm hàng", nhanNhomHangCuaGoi(nhomHang, g.categoryId)]);

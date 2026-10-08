@@ -576,20 +576,40 @@ const coChiPhiTre = (p: unknown): boolean =>
   ((p as { evalComponents: unknown[] }).evalComponents).some((t) => (t as { ma?: unknown } | null)?.ma === "chi_phi_tre");
 
 /**
- * Câu cảnh báo khi gói chưa khai số ngày giao mà phiên bản đang hiệu lực — hay một phiên bản MỚI HƠN, chờ ký, có thể có hiệu lực trước
- * lúc gói mở — tính chi phí trễ. `body` là thân `GET /policy/versions`. `null`: không có gì để nói.
+ * Câu cảnh báo khi gói chưa khai số ngày giao mà phiên bản đang hiệu lực — hay một phiên bản MỚI HƠN, chưa có hiệu lực, có thể có hiệu
+ * lực trước lúc gói mở — tính chi phí trễ. `body` là thân `GET /policy/versions`. `null`: không có gì để nói.
+ *
+ * [rà soát §S1.9101 — TRUNG-1] Bản đầu nói *"chỉ còn lối huỷ"* cả khi chỉ một phiên bản mới hơn tính chi phí trễ — sai: gói mở được
+ * ngay (cạnh mở chỉ đọc phiên bản hiệu lực), và một lời nói sai đẩy người duyệt huỷ một gói lành. Nay hai ca tách nhau:
+ * - phiên bản HIỆU LỰC tính chi phí trễ: đúng lời của `openRfq` — gói chờ duyệt ở tổ chức chưa bật chỉ còn lối huỷ;
+ * - chỉ một phiên bản MỚI HƠN tính nó: lời có điều kiện *"nếu nó có hiệu lực trước lúc gói mở"*. Ở tổ chức chưa bật, phiên bản có bậc chỉ
+ *   có hiệu lực khi được ký, và chữ ký ấy bị từ chối khi còn gói chờ duyệt (`097`) — gói chờ duyệt không rơi vào nó; chỉ phiên bản
+ *   không bậc (hiệu lực theo `effective_from`) còn là nguy cơ.
  */
 export function canhBaoSoNgayGiao(body: unknown, soNgayGiao: unknown, trangThaiGoi: string): string | null {
   if (soNgayGiao !== null) return null;
   if (trangThaiGoi !== "DRAFT" && trangThaiGoi !== "PENDING_APPROVAL") return null;
   const b = body as { phienBan?: unknown; daBat?: unknown } | null;
-  const ds = Array.isArray(b?.phienBan) ? b.phienBan : [];
+  const ds: readonly unknown[] = Array.isArray(b?.phienBan) ? (b.phienBan as unknown[]) : [];
+  const daBat = b?.daBat === true;
   const iHieuLuc = ds.findIndex((p) => (p as { hieuLuc?: unknown } | null)?.hieuLuc === true);
-  const xet = iHieuLuc < 0 ? ds : ds.slice(0, iHieuLuc + 1);
-  if (!xet.some(coChiPhiTre)) return null;
-  const dau = "Chính sách đang hiệu lực, hay một phiên bản mới hơn, tính chi phí trễ giao: gói chưa khai số ngày giao yêu cầu không mở được";
-  if (trangThaiGoi === "DRAFT") return `${dau}. Khai số ngày giao ở ô trên trước khi nộp duyệt.`;
-  return b?.daBat === true
-    ? `${dau} — trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại.`
-    : `${dau} — gói đã nộp duyệt không trả về soạn thảo được ở tổ chức chưa bật kiểm soát theo bậc, nên gói này chỉ còn lối huỷ.`;
+  const hieuLuc = iHieuLuc < 0 ? null : ds[iHieuLuc];
+  const moiHon = (iHieuLuc < 0 ? ds : ds.slice(0, iHieuLuc)).filter(coChiPhiTre);
+  if (hieuLuc !== null && coChiPhiTre(hieuLuc)) {
+    const dau = "Chính sách đang hiệu lực tính chi phí trễ giao: gói chưa khai số ngày giao yêu cầu không mở được";
+    if (trangThaiGoi === "DRAFT") return `${dau}. Khai số ngày giao ở ô dưới trước khi nộp duyệt.`;
+    return daBat
+      ? `${dau} — trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại.`
+      : `${dau} — gói đã nộp duyệt không trả về soạn thảo được ở tổ chức chưa bật kiểm soát theo bậc, nên gói này chỉ còn lối huỷ.`;
+  }
+  if (moiHon.length === 0) return null;
+  const dau =
+    "Một phiên bản chính sách mới hơn, chưa có hiệu lực, tính chi phí trễ giao: nếu nó có hiệu lực trước lúc gói mở, gói chưa khai số " +
+    "ngày giao yêu cầu không mở được";
+  if (trangThaiGoi === "DRAFT") return `${dau}. Khai số ngày giao ở ô dưới trước khi nộp duyệt.`;
+  if (daBat) return `${dau} — khi ấy trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại.`;
+  const khongBac = moiHon.some((p) => (p as { tiers?: unknown } | null)?.tiers === null);
+  return khongBac
+    ? `${dau}, và ở tổ chức chưa bật kiểm soát theo bậc gói đã nộp không trả về soạn thảo được — mở gói trước lúc ấy.`
+    : null;
 }

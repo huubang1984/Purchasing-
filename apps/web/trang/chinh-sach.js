@@ -20,6 +20,7 @@ import {
   canhBaoChinhSach,
   canhBaoGoiThieuSoNgayGiao,
   canhBaoTrongSo,
+  loiThamSoTco,
   moTaTco,
   moTaTrongSo,
   soNguoiToiThieu,
@@ -466,7 +467,7 @@ function tinhLai() {
   const cb = [
     ...canhBaoChinhSach(bac),
     ...canhBaoTrongSo(tp, tcoGuiLen()),
-    ...canhBaoGoiThieuSoNgayGiao(tp, trangThai.goiThieuSoNgay, trangThai.daBat),
+    ...canhBaoGoiThieuSoNgayGiao(tp, trangThai.goiThieuSoNgay, trangThai.daBat, bac.length > 0),
     ...canhBaoBenchmark(benchmarkGuiLen()),
   ];
   bao($("canh-bao"), cb.length === 0 ? "" : `Cảnh báo (không chặn): ${cb.join(" ")}`);
@@ -517,6 +518,9 @@ for (const [id] of O_BENCHMARK) $(id).addEventListener("input", () => tinhLai())
 
 $("nut-tao-pb").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
+  // [rà soát §S1.9101 — THẤP-2] Tham số sai miền: `CHECK` sẽ từ chối bằng một 422 không gọi tên ô — nói trước, không gửi.
+  const loiTco = loiThamSoTco(tcoGuiLen());
+  if (loiTco !== null) { bao($("loi3"), loiTco); return; }
   const moiNhat = trangThai.phienBan[0];
   const soNguyenHoacNull = (v) => (v.trim() === "" ? null : Number(v));
   const than = {

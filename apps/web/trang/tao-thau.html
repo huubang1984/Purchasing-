@@ -64,21 +64,22 @@
       <p class="ghi">Tổ chức đã bật kiểm soát theo bậc: gói phải có nhóm hàng trước khi nộp duyệt, và nhóm hàng chỉ đổi được
         khi gói còn đang soạn. Danh sách nhóm hàng do người tài chính quản lý ở màn <a href="/nhom-hang">Nhóm hàng</a>.</p>
     </div>
-    <!-- [S1.9101 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — mọi tổ chức, chỉ khi gói đang soạn; nằm trong chữ ký phê duyệt. -->
-    <div id="khoi-so-ngay-giao" hidden>
-      <label for="so-ngay-giao">Số ngày giao yêu cầu (1–3650; để trống là không khai)</label>
-      <input id="so-ngay-giao" inputmode="numeric" autocomplete="off">
-      <p class="ghi">Nhà cung cấp thấy con số này khi nộp báo giá. Nếu chính sách tính chi phí trễ giao, số ngày họ khai vượt con số
-        này được quy thành tiền. Người duyệt ký lên con số này; nó chỉ đổi được khi gói còn đang soạn.</p>
-      <button id="nut-so-ngay-giao" class="phu">Lưu số ngày giao</button>
-    </div>
-    <div class="bao luu" id="canh-bao-so-ngay" hidden></div>
     <button id="nut-tao">Tạo gói thầu</button>
     <label for="rfq">hoặc dán mã gói thầu đã có</label>
     <input id="rfq" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <button id="nut-doc" class="phu">Đọc</button>
     <button id="nut-nhom-hang" class="phu" hidden>Đặt nhóm hàng cho gói này</button>
     <dl class="tt" id="tt-rfq"></dl>
+    <!-- [S1.9101 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — mọi tổ chức, chỉ khi gói ĐANG ĐỌC còn soạn; nằm trong chữ ký phê duyệt.
+         [rà soát §S1.9101 — THẤP-1] Đứng SAU bảng gói, không trong khối tạo: con số là của gói đang đọc, không đi cùng lần tạo. -->
+    <div class="bao luu" id="canh-bao-so-ngay" hidden></div>
+    <div id="khoi-so-ngay-giao" hidden>
+      <label for="so-ngay-giao">Số ngày giao yêu cầu của gói này (1–3650; để trống là không khai)</label>
+      <input id="so-ngay-giao" inputmode="numeric" autocomplete="off">
+      <p class="ghi">Nếu chính sách tính chi phí trễ giao, số ngày nhà cung cấp khai vượt con số này được quy thành tiền. Người duyệt
+        ký lên con số này; nó chỉ đổi được khi gói còn đang soạn. Tới S4.7b2, màn nộp báo giá CHƯA hiện con số này cho nhà cung cấp.</p>
+      <button id="nut-so-ngay-giao" class="phu">Lưu số ngày giao</button>
+    </div>
     <div class="bao loi" id="loi2" hidden></div>
     <div class="bao ok" id="ok2" hidden></div>
   </section>

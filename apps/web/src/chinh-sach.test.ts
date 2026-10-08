@@ -18,6 +18,7 @@ import {
   MA_TCO,
   canhBaoGoiThieuSoNgayGiao,
   canhBaoTrongSo,
+  loiThamSoTco,
   loiTrongSo,
   moTaTco,
   moTaTrongSo,
@@ -200,14 +201,50 @@ describe("[S1.9101 / S4.7b1] TCO — năm mã có nguồn, tham số, cảnh bá
     expect(loiTrongSo([g, { ma: "constructor", don_vi: "TIEN", he_so: "1" }], null)).toContain("không có nguồn dữ liệu");
   });
 
-  it("gói chờ duyệt thiếu số ngày giao: chỉ khi chi phí trễ bật và có gói; lối ra theo loại tổ chức", () => {
+  it("gói chờ duyệt thiếu số ngày giao: chỉ khi chi phí trễ bật và có gói; lối ra theo loại tổ chức và bậc của phiên bản", () => {
     const tre = thanhPhanTuMa(["chi_phi_tre"]);
-    expect(canhBaoGoiThieuSoNgayGiao(tre, 0, false)).toEqual([]);
-    expect(canhBaoGoiThieuSoNgayGiao(thanhPhanTuMa(["van_chuyen"]), 3, false)).toEqual([]);
-    expect(canhBaoGoiThieuSoNgayGiao(null, 3, false)).toEqual([]);
-    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, false)).toEqual([expect.stringContaining("chỉ còn lối huỷ")]);
-    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true)).toEqual([expect.stringContaining("trả gói về soạn thảo")]);
-    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true)[0]).toMatch(/^2 gói đang chờ duyệt/u);
+    expect(canhBaoGoiThieuSoNgayGiao(tre, 0, false, false)).toEqual([]);
+    expect(canhBaoGoiThieuSoNgayGiao(thanhPhanTuMa(["van_chuyen"]), 3, false, false)).toEqual([]);
+    expect(canhBaoGoiThieuSoNgayGiao(null, 3, false, false)).toEqual([]);
+    // Phiên bản không bậc ở tổ chức chưa bật: hiệu lực ngay khi tạo, gói đã nộp không trả về được.
+    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, false, false)).toEqual([expect.stringContaining("chỉ còn lối huỷ")]);
+    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true, false)).toEqual([expect.stringContaining("trả gói về soạn thảo")]);
+    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, true, true)[0]).toMatch(/^2 gói đang chờ duyệt/u);
+    // [rà soát §S1.9101 — TRUNG-1] Phiên bản CÓ bậc ở tổ chức chưa bật: chữ ký bật S3 bị từ chối khi còn gói chờ duyệt (`097`) — các gói
+    // ấy không rơi vào nó khi còn chờ; bản đầu nói *"chỉ còn lối huỷ"* ở đây, và đó là lời sai.
+    expect(canhBaoGoiThieuSoNgayGiao(tre, 2, false, true)).toEqual([]);
+  });
+
+  // [rà soát §S1.9101 — THẤP-2] Miền của ba tham số — bản chép của `CHECK` `112`; thân sai miền bị từ chối bằng 422 chung không gọi tên ô.
+  it.each([
+    [{ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" }, null],
+    [{ chi_phi_von_nam: "1", ngay_thanh_toan_chuan: "0" }, null],
+    [{ chi_phi_von_nam: "1.0000", ngay_thanh_toan_chuan: "365" }, null],
+    [{ ty_le_tre_ngay: "0.1" }, null],
+    [{ ty_le_tre_ngay: "0.000001" }, null],
+    [{ chi_phi_von_nam: "0.12" }, "CẢ chi phí vốn"],
+    [{ ngay_thanh_toan_chuan: "60" }, "CẢ chi phí vốn"],
+    [{ chi_phi_von_nam: "0,12", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: "12%", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: ".12", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: "0", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: "1.0001", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: "0.12345", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    // [đột biến M18 sống ở lượt đầu] Hai chuỗi mà bộ đọc số nhận còn mẫu của `CHECK` thì không: số 0 đầu thừa.
+    [{ chi_phi_von_nam: "00.5", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ chi_phi_von_nam: "01", ngay_thanh_toan_chuan: "60" }, "Chi phí vốn một năm"],
+    [{ ty_le_tre_ngay: "00.01" }, "Chi phí trễ mỗi ngày"],
+    [{ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "060" }, "Kỳ thanh toán chuẩn"],
+    [{ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "366" }, "Kỳ thanh toán chuẩn"],
+    [{ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "-1" }, "Kỳ thanh toán chuẩn"],
+    [{ ty_le_tre_ngay: "0" }, "Chi phí trễ mỗi ngày"],
+    [{ ty_le_tre_ngay: "0.1000001" }, "Chi phí trễ mỗi ngày"],
+    [{ ty_le_tre_ngay: "0.2" }, "Chi phí trễ mỗi ngày"],
+    [{ ty_le_tre_ngay: "1" }, "Chi phí trễ mỗi ngày"],
+  ] as const)("tham số %j ⇒ %s", (tco, mong) => {
+    const loi = loiThamSoTco(tco);
+    if (mong === null) expect(loi).toBeNull();
+    else expect(loi).toContain(mong);
   });
 
   it("mô tả tham số: rỗng khi chưa khai, mỗi khoá một vế", () => {

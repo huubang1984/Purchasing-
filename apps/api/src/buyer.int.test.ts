@@ -1955,6 +1955,21 @@ describe("[S1.9101 / S4.7b1] TCO qua HTTP — số ngày giao của gói, nhóm 
       JSON.stringify({ error: "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo" }),
     ]);
     expect(((await goi("GET", "/policy/versions", pm)).body as { goiChoDuyetThieuSoNgayGiao: number }).goiChoDuyetThieuSoNgayGiao).toBe(1);
+
+    // [rà soát §S1.9101 — THẤP-5] Xuyên tổ chức: PM của tổ chức khác giữ `rfq.create` của CHÍNH họ — RLS cắt hàng, lời từ chối là câu
+    // *"không tìm thấy"* có tên (không phân biệt *không có* với *không thấy*), gói không đổi, không hàng sổ nào ở tổ chức kia.
+    const { org: orgKhac, pm: pmKhac } = await goiDaNop("ngay-giao-http-khac", false);
+    const xuyen = await goi("PUT", duong, pmKhac, { soNgayGiao: 7 });
+    expect([xuyen.status, xuyen.text]).toEqual([
+      422,
+      JSON.stringify({ error: "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo" }),
+    ]);
+    expect(((await goi("GET", `/rfqs/${rfqId}`, pm)).body as { rfq: { soNgayGiao: unknown } }).rfq.soNgayGiao).toBeNull();
+    const { rows: soKhac } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE org_id = $1 AND action = 'RFQ_DELIVERY_DAYS_SET'",
+      [orgKhac],
+    );
+    expect(soKhac).toHaveLength(0);
   });
 
   it("[INV-L8] POST /policy chuyển nhóm khoá `tco`: phiên bản năm mã có tham số ⇒ 201 và /policy/versions trả nguyên văn; hình dạng ngoài sai ⇒ 422 của cửa; cặp thanh toán thiếu một khoá ⇒ 422 của `CHECK`", async () => {
@@ -1969,7 +1984,12 @@ describe("[S1.9101 / S4.7b1] TCO qua HTTP — số ngày giao của gói, nhóm 
       status: 422,
       text: JSON.stringify({ error: 'mọi giá trị của trường "tco" phải là chuỗi' }),
     });
-    expect((await goi("POST", "/policy", tc, than({ chi_phi_von_nam: "0.12" }))).status).toBe(422);
+    // [rà soát §S1.9101 — THẤP-5] Thân của 422 `CHECK`: câu chung, không tên bảng, không tên ràng buộc — màn `/chinh-sach` nói trước
+    // bằng câu gọi tên ô (`loiThamSoTco`), vì câu này không gọi tên gì.
+    expect(await goi("POST", "/policy", tc, than({ chi_phi_von_nam: "0.12" }))).toMatchObject({
+      status: 422,
+      text: JSON.stringify({ error: "du lieu vi pham rang buoc" }),
+    });
     const tao = await goi("POST", "/policy", tc, than(TCO));
     expect(tao.status, tao.text).toBe(201);
     const ds = await goi("GET", "/policy/versions", pm);

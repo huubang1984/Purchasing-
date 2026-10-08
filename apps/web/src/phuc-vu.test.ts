@@ -3469,6 +3469,7 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-chep");
       expect(["ma-van-chuyen", "ma-nhap-khau", "ma-chi-phi-thanh-toan", "ma-chi-phi-tre"].map((id) => p.el(id).checked)).toEqual([true, true, true, true]);
       expect(await gui()).toMatchObject({ evalComponents: NAM_MA, tco: TCO });
+      // [rà soát §S1.9101 — TRUNG-1] Bản chép không bậc (`tiers: null`) ở tổ chức chưa bật ⇒ *chỉ còn lối huỷ*; đã bật ⇒ trả về soạn thảo.
       for (const [daBat, cau] of [[false, "chỉ còn lối huỷ"], [true, "trả gói về soạn thảo"]] as const) {
         const q = await dungTrang("chinh-sach", {
           hash: "", cookie: A,
@@ -3481,6 +3482,24 @@ describe("bề mặt tệp", () => {
         expect(q.el("canh-bao").textContent).toContain("2 gói đang chờ duyệt chưa khai số ngày giao");
         expect(q.el("canh-bao").textContent).toContain(cau);
       }
+    });
+
+    it("[S1.9101 / S4.7b1 — rà soát TRUNG-1, THẤP-2] chinh-sach: mẫu có bậc ở tổ chức chưa bật ⇒ không cảnh báo gói chờ duyệt; tham số sai miền ⇒ lỗi gọi tên ô, không gửi", async () => {
+      const q = await dungTrang("chinh-sach", {
+        hash: "", cookie: A,
+        thay: (l) => (l === "GET /policy/versions"
+          ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: false, choKy: false, goiChoDuyetThieuSoNgayGiao: 2 } })
+          : undefined),
+      });
+      await q.bam("nut-dung-phien");
+      q.el("ma-chi-phi-tre").checked = true;
+      for (const f of q.el("ma-chi-phi-tre").nghe["change"] ?? []) await f();
+      // Mẫu điền sẵn có bốn bậc: phiên bản chỉ có hiệu lực khi được ký, và chữ ký ấy bị từ chối khi còn gói chờ duyệt (`097`).
+      expect(q.el("canh-bao").textContent).not.toContain("gói đang chờ duyệt");
+      q.el("tco-tre").value = "0,001";
+      await q.bam("nut-tao-pb");
+      expect(q.el("loi3").textContent).toContain("Chi phí trễ mỗi ngày phải là tỉ lệ");
+      expect(q.trangThai.goi).not.toContain("POST /policy");
     });
 
     // [S1.9101 / S4.7b1 / L16] Số ngày giao yêu cầu ở `/tao-thau`: ô và nút chỉ ở DRAFT; dòng của bảng gói ở mọi trạng thái (người duyệt
@@ -3527,7 +3546,7 @@ describe("bề mặt tệp", () => {
 
     it("[S1.9101 / S4.7b1] tao-thau: chính sách hiệu lực (hay mới hơn) tính chi phí trễ mà gói chưa khai số ngày giao ⇒ cảnh báo theo trạng thái và loại tổ chức", async () => {
       const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
-      expect((await moTaoThauNgay("DRAFT", null, [TRE])).el("canh-bao-so-ngay").textContent).toContain("Khai số ngày giao ở ô trên");
+      expect((await moTaoThauNgay("DRAFT", null, [TRE])).el("canh-bao-so-ngay").textContent).toContain("Khai số ngày giao ở ô dưới");
       expect((await moTaoThauNgay("DRAFT", 30, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
       expect((await moTaoThauNgay("DRAFT", null, [{ hieuLuc: true, evalComponents: [{ ma: "gia" }] }])).el("canh-bao-so-ngay").hidden).toBe(true);
       // Phiên bản MỚI HƠN chờ ký tính chi phí trễ ⇒ cũng nói; phiên bản CŨ hơn bản hiệu lực thì không.
@@ -3537,6 +3556,17 @@ describe("bề mặt tệp", () => {
       expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], false)).el("canh-bao-so-ngay").textContent).toContain("chỉ còn lối huỷ");
       expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], true)).el("canh-bao-so-ngay").textContent).toContain("trả gói về soạn thảo");
       expect((await moTaoThauNgay("OPEN", null, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
+    });
+
+    it("[S1.9101 / S4.7b1 — rà soát THẤP-3] tao-thau: đổi người (hashchange) hay đăng xuất ⇒ cảnh báo số ngày giao của tổ chức trước biến mất", async () => {
+      const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
+      const p = await moTaoThauNgay("DRAFT", null, [TRE]);
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(false);
+      await p.doiFragment("khac:123456");
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(true);
+      const q = await moTaoThauNgay("DRAFT", null, [TRE]);
+      await q.bam("nut-dang-xuat");
+      expect(q.el("canh-bao-so-ngay").hidden).toBe(true);
     });
 
     it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {

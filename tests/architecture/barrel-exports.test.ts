@@ -529,7 +529,7 @@ const DANH_SACH_TRANG_RFQ = [
   "RFQ_STATUSES",
   "RFQ_TRANSITIONS",
   "RfqError",
-  // [S1.9101 / S4.7b1] Biên số ngày giao yêu cầu (`CHECK` của `112`) — cửa HTTP nói miền bằng chính hằng này.
+  // [S1.9101 / S4.7b1] Biên số ngày giao yêu cầu (`CHECK` của `112`) — `tao-thau.test` khoá bản chép của màn với hằng này.
   "SO_NGAY_GIAO_TOI_DA",
   "addRfqItem",
   "approveRfq",

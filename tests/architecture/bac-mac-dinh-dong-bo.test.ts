@@ -14,6 +14,9 @@ import {
   BENCHMARK_MAC_DINH,
   MUC_MAC_DINH,
   NGUONG_KEP_MAC_DINH,
+  MAU_CHI_PHI_VON,
+  MAU_NGAY_THANH_TOAN,
+  MAU_TY_LE_TRE,
   MA_TCO,
   TRONG_SO_MAC_DINH,
   loiTrongSo,
@@ -102,3 +105,20 @@ describe("[S1.9101 / S4.7b1] [INV-L8] luật L8 của màn /chinh-sach là bản
     expect(MA_TCO.map((m) => m.ma)).toEqual([...MA_CO_NGUON]);
   });
 });
+
+// [rà soát §S1.9101 — THẤP-2] Miền ba tham số của màn là bản chép của `CHECK` `org_procurement_policies_tco_hinh_dang`: mỗi mẫu có mặt
+// NGUYÊN VĂN trong `112_tco.sql`, đúng khoá của nó. Đổi mẫu ở một bên thì đỏ ở đây.
+describe("[S1.9101 / S4.7b1] miền tham số TCO của màn là bản chép của CHECK `112`", () => {
+  it("ba mẫu like_regex có mặt nguyên văn, mỗi mẫu ở đúng khoá", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(new URL("../../db/migrations/112_tco.sql", import.meta.url), "utf8");
+    for (const [khoa, mau] of [
+      ["chi_phi_von_nam", MAU_CHI_PHI_VON],
+      ["ngay_thanh_toan_chuan", MAU_NGAY_THANH_TOAN],
+      ["ty_le_tre_ngay", MAU_TY_LE_TRE],
+    ] as const) {
+      expect(sql).toContain(`'$.${khoa} ? (!(@ like_regex "${mau}")`);
+    }
+  });
+});
+
