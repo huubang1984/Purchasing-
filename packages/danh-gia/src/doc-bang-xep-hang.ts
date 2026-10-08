@@ -36,7 +36,7 @@ export interface ThanhPhanHien {
 export interface HangBangXepHang {
   readonly bidVersionId: string;
   /**
-   * [S1.9101 / S3.4b · K9] Mã nhà cung cấp của báo giá — khối khai báo xung đột lợi ích ở `/mo-thau` chọn *có xung đột với* từ đây.
+   * [S1.283 / S3.4b · K9] Mã nhà cung cấp của báo giá — khối khai báo xung đột lợi ích ở `/mo-thau` chọn *có xung đột với* từ đây.
    * Ở `AWARDED` bảng so sánh đã đóng (`COMPARISON_ALLOWED_STATUSES`), mà đó là lúc người duyệt trao thầu ký (lượt đi thử T4 đo ra).
    * Người đọc bảng này giữ `bid.view` và đã thấy tên nhà cung cấp — mã không nới gì.
    */

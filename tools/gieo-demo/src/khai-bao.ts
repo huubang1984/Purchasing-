@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.4b · K9] LỜI KHAI *KHÔNG XUNG ĐỘT* CHO NHỮNG CHỮ KÝ CÔNG CỤ GHI THAY
+// [S1.283 / S3.4b · K9] LỜI KHAI *KHÔNG XUNG ĐỘT* CHO NHỮNG CHỮ KÝ CÔNG CỤ GHI THAY
 //
 // Bậc demo (`BAC_DEMO`, như bậc mặc định của màn `/chinh-sach`) bật `khai_xung_dot` ở mọi bậc thường, nên từ S3.4a (`114`) một chữ ký
 // duyệt gói, một lượt chấm hay một chữ ký trao thầu của người CHƯA khai *không xung đột* với danh sách mời hiện tại bị trigger chặn

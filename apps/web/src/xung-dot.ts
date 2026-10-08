@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.4b] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — MỘT KHỐI, HAI TRANG (`/tao-thau`, `/mo-thau`)
+// [S1.283 / S3.4b] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — MỘT KHỐI, HAI TRANG (`/tao-thau`, `/mo-thau`)
 //
 // Spec S3 §4.5, §5.1 K9, §8.7; ADR-155. K9 (S3.4a, `114`) chặn người sắp ký duyệt gói, ghi nhận tín hiệu (`/tao-thau`), chấm, đề xuất,
 // duyệt hay huỷ trao thầu (`/mo-thau`) khi họ chưa khai *không xung đột* với danh sách mời HIỆN TẠI — ở bậc đòi khai —, hay đã khai

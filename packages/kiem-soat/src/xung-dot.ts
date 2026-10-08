@@ -46,7 +46,7 @@ export interface KhaiBaoXungDotCuaToi {
   /** Mã của `coi_chot_hanh_dong` cho người gọi lúc đọc — `null` là đi qua được mọi cổng K9. */
   readonly chot: string | null;
   /**
-   * [S1.9101 / S3.4b] Tổ chức đã bật S3 chưa (`to_chuc_da_bat_s3`). Chưa bật thì không khai được (trigger từ chối) và không cổng K9
+   * [S1.283 / S3.4b] Tổ chức đã bật S3 chưa (`to_chuc_da_bat_s3`). Chưa bật thì không khai được (trigger từ chối) và không cổng K9
    * nào sống — màn ẩn khối khai báo. `/mo-thau` không tự biết luồng của tổ chức (`/tao-thau` hỏi `GET /policy/versions`), nên lời
    * đọc này nói thay; không phải cổng.
    */

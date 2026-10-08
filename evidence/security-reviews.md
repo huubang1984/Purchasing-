@@ -26142,11 +26142,11 @@ commit cuối: xem PR.
 
 ---
 
-# §S1.9101 — S3.4b: MÀN KHAI BÁO XUNG ĐỘT LỢI ÍCH Ở `/tao-thau` VÀ `/mo-thau`; CHỮ KÝ TRAO THẦU CỦA NGƯỜI ĐÃ KHAI *CÓ XUNG ĐỘT* KHÔNG ĐẾM Ở K7 LẪN K5b; `gieo:demo --s3` KHAI THAY; S3.4 KHÉP — ADR-155 ⑼–⒀
+# §S1.283 — S3.4b: MÀN KHAI BÁO XUNG ĐỘT LỢI ÍCH Ở `/tao-thau` VÀ `/mo-thau`; CHỮ KÝ TRAO THẦU CỦA NGƯỜI ĐÃ KHAI *CÓ XUNG ĐỘT* KHÔNG ĐẾM Ở K7 LẪN K5b; `gieo:demo --s3` KHAI THAY; S3.4 KHÉP — ADR-155 ⑼–⒀
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105). Một thay đổi chạm mọi
 tổ chức: `award_du_chu_ky` và `award_chot_doc_lap` đọc một hàm mới; tổ chức chưa bật không khai được nên tập ấy là mọi chữ ký — hành vi y
-như trước (cụm test hiện có là đối chứng). Migration `9501`, không ADR mới (ADR-155 phần hai), không khoản nợ mới.
+như trước (cụm test hiện có là đối chứng). Migration `115`, không ADR mới (ADR-155 phần hai), không khoản nợ mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-08: *"Làm S3.4b đi, gộp luôn mục 2"*. S3.4b là nửa sau của S3.4 theo ADR-155 ⑻ — màn khai báo, `gieo:demo --s3`, lượt
@@ -26178,7 +26178,7 @@ Năm câu hỏi đặt cho hình dạng, mỗi câu một lựa chọn (ADR-155 
 - *Chưa đủ chữ ký vì K9 có phải một lần từ chối?* Không — khuôn S3.5a: chưa đủ là chờ. Dấu vết là hàng `CO_XUNG_DOT` và cờ `conHieuLuc`.
 
 ## 4. Thay đổi
-- Migration `9501_xung_dot_chu_ky_trao_thau`: `award_chu_ky_con_hieu_luc(org, đề xuất) RETURNS TABLE (nguoi uuid, vai text[])`;
+- Migration `115_xung_dot_chu_ky_trao_thau`: `award_chu_ky_con_hieu_luc(org, đề xuất) RETURNS TABLE (nguoi uuid, vai text[])`;
   `award_du_chu_ky`, `award_chot_doc_lap` đọc nó; `coi_kiem_trao_thau` bỏ nhánh `APPROVED`. Hardening: một khối mới (kèm
   `pg_get_function_result`), ba khối đổi thân và tiền đề migration — sinh từ catalog của một cụm `postgres:16-alpine` dùng một lần đã áp cả
   112 migration bằng `psql`; hardening chạy trọn `day_du` trên cụm ấy không mục đỏ; `migrate()` hai lần trên CSDL mới, lần hai 0 tệp, thân

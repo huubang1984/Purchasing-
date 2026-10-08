@@ -104,7 +104,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.273 / S3.3e1] `nha-cung-cap` — trạng thái xác minh, người liên hệ và nút của màn xác minh nhà cung cấp (`/nha-cung-cap`).
  *
- * [S1.9101 / S3.4b] `xung-dot` — khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` (K9); chạm DOM qua `document` mà
+ * [S1.283 / S3.4b] `xung-dot` — khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` (K9); chạm DOM qua `document` mà
  * trang trao vào, khuôn `dang-nhap`.
  */
 export const MODULE_WEB = [

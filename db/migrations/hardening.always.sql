@@ -11078,10 +11078,10 @@ $ham$$q$,
                   'hàm public.award_vai_cua_nguoi(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_vai_cua_nguoi(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.4b / K9] Chu ky trao thau con hieu luc: chu ky cua de xuat TRU nguoi da khai CO_XUNG_DOT tren goi — K7 (du chu ky, hai vai) va K5b (doc lap) cung doc. Mot than bo ve loai tru thi chu ky cua nguoi khai xung dot sau khi ky van dem.
+    -- [S1.283 / S3.4b / K9] Chu ky trao thau con hieu luc: chu ky cua de xuat TRU nguoi da khai CO_XUNG_DOT tren goi — K7 (du chu ky, hai vai) va K5b (doc lap) cung doc. Mot than bo ve loai tru thi chu ky cua nguoi khai xung dot sau khi ky van dem.
     ARRAY[
-      $q$định nghĩa hàm award_chu_ky_con_hieu_luc(uuid, uuid) (9501_xung_dot_chu_ky_trao_thau)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xung_dot_chu_ky_trao_thau.sql')$q$,
+      $q$định nghĩa hàm award_chu_ky_con_hieu_luc(uuid, uuid) (115_xung_dot_chu_ky_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '115_xung_dot_chu_ky_trao_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chu_ky_con_hieu_luc(p_org uuid, p_award uuid) RETURNS TABLE (nguoi uuid, vai text[])
   LANGUAGE sql
   STABLE
@@ -11116,10 +11116,10 @@ $ham$$q$,
                   'hàm public.award_chu_ky_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chu_ky_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.280 / S3.5a / K7] [S1.9101 / S3.4b / K9] Du chu ky chua: so nguoi ky KHONG XUNG DOT khac nhau >= can, va khi bac bat award_vai_khac_nhau phai rut duoc hai vai khac nhau cho hai nguoi ky ay — ca hai phep dem doc award_chu_ky_con_hieu_luc. Mot than dem rfq_award_approvals tho thi chu ky cua nguoi da khai CO_XUNG_DOT sau khi ky van du so.
+    -- [S1.280 / S3.5a / K7] [S1.283 / S3.4b / K9] Du chu ky chua: so nguoi ky KHONG XUNG DOT khac nhau >= can, va khi bac bat award_vai_khac_nhau phai rut duoc hai vai khac nhau cho hai nguoi ky ay — ca hai phep dem doc award_chu_ky_con_hieu_luc. Mot than dem rfq_award_approvals tho thi chu ky cua nguoi da khai CO_XUNG_DOT sau khi ky van du so.
     ARRAY[
-      $q$định nghĩa hàm award_du_chu_ky(uuid, uuid) (9501_xung_dot_chu_ky_trao_thau)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xung_dot_chu_ky_trao_thau.sql')$q$,
+      $q$định nghĩa hàm award_du_chu_ky(uuid, uuid) (115_xung_dot_chu_ky_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '115_xung_dot_chu_ky_trao_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_du_chu_ky(p_org uuid, p_award uuid) RETURNS boolean
   LANGUAGE plpgsql
   STABLE
@@ -11494,10 +11494,10 @@ $ham$$q$,
                   'hàm public.award_chot_hau_kiem(uuid, uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_hau_kiem(uuid, uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.280 / S3.5a / K5b] [S1.9101 / S3.4b / K9] Chu ky doc lap: khi bac cao hon ky danh sach, gia tri trao vuot bac uoc luong, hay goi co ngoai le song, phai co mot chu ky KHONG XUNG DOT ngoai tap loai tru. Mot than doc rfq_award_approvals tho thi nguoi ngoai tap da khai CO_XUNG_DOT van la chu ky doc lap.
+    -- [S1.280 / S3.5a / K5b] [S1.283 / S3.4b / K9] Chu ky doc lap: khi bac cao hon ky danh sach, gia tri trao vuot bac uoc luong, hay goi co ngoai le song, phai co mot chu ky KHONG XUNG DOT ngoai tap loai tru. Mot than doc rfq_award_approvals tho thi nguoi ngoai tap da khai CO_XUNG_DOT van la chu ky doc lap.
     ARRAY[
-      $q$định nghĩa hàm award_chot_doc_lap(uuid, uuid) (9501_xung_dot_chu_ky_trao_thau)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xung_dot_chu_ky_trao_thau.sql')$q$,
+      $q$định nghĩa hàm award_chot_doc_lap(uuid, uuid) (115_xung_dot_chu_ky_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '115_xung_dot_chu_ky_trao_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_doc_lap(p_org uuid, p_award uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -12147,10 +12147,10 @@ $ham$;
                   'hàm public.coi_kiem_luot_cham() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_luot_cham() và bảng public.rfq_evaluations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.281 / S3.4a / K9] Cong de xuat va huy trao thau. [S1.9101 / S3.4b] Nhanh APPROVED bo: award_du_chu_ky (K7, trigger xep truoc) nay doi du chu ky KHONG xung dot.
+    -- [S1.281 / S3.4a / K9] Cong de xuat va huy trao thau. [S1.283 / S3.4b] Nhanh APPROVED bo: award_du_chu_ky (K7, trigger xep truoc) nay doi du chu ky KHONG xung dot.
     ARRAY[
-      $q$hàm + trigger coi_kiem_trao_thau (9501_xung_dot_chu_ky_trao_thau)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xung_dot_chu_ky_trao_thau.sql')$q$,
+      $q$hàm + trigger coi_kiem_trao_thau (115_xung_dot_chu_ky_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '115_xung_dot_chu_ky_trao_thau.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

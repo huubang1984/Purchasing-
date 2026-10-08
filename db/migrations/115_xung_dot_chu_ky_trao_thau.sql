@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_xung_dot_chu_ky_trao_thau — [S1.9101 / S3.4b của spec S3] K9 Ở PHÉP ĐẾM CHỮ KÝ TRAO THẦU: CHỮ KÝ CỦA NGƯỜI ĐÃ KHAI
+-- 115_xung_dot_chu_ky_trao_thau — [S1.283 / S3.4b của spec S3] K9 Ở PHÉP ĐẾM CHỮ KÝ TRAO THẦU: CHỮ KÝ CỦA NGƯỜI ĐÃ KHAI
 -- `CO_XUNG_DOT` KHÔNG ĐẾM Ở K7 (ĐỦ CHỮ KÝ, HAI VAI KHÁC NHAU) LẪN K5b (CHỮ KÝ ĐỘC LẬP)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.5 ⒄, §4.5, §4.7, §5.1 (K9, K7, K5b), §9 (S3.4).

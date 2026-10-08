@@ -181,8 +181,8 @@ export interface ChuKyDuyet {
   readonly approverUserId: string;
   readonly approvedAt: Date;
   /**
-   * [S1.9101 / S3.4b / K9] Chữ ký này có đếm ở K7 (đủ chữ ký, hai vai) và K5b (độc lập) không — `false` khi người ký đã khai
-   * `CO_XUNG_DOT` trên gói (kể cả SAU khi ký). Đọc từ CHÍNH hàm mà hai chốt đếm (`award_chu_ky_con_hieu_luc`, `9501`), không đếm
+   * [S1.283 / S3.4b / K9] Chữ ký này có đếm ở K7 (đủ chữ ký, hai vai) và K5b (độc lập) không — `false` khi người ký đã khai
+   * `CO_XUNG_DOT` trên gói (kể cả SAU khi ký). Đọc từ CHÍNH hàm mà hai chốt đếm (`award_chu_ky_con_hieu_luc`, `115`), không đếm
    * lại ở lớp này: màn nói *có M / cần N* trên chữ ký còn hiệu lực, và chỉ ra chữ ký nào không đếm.
    */
   readonly conHieuLuc: boolean;
@@ -678,7 +678,7 @@ export async function duyetTraoThau(
   } catch (loi) {
     // Lớp chặn cuối của cạnh APPROVED (`113`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
     // ~~[S1.281 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
-    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`.~~ [S1.9101 / S3.4b] Nhánh ấy bỏ ở `9501`: `award_du_chu_ky`
+    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`.~~ [S1.283 / S3.4b] Nhánh ấy bỏ ở `115`: `award_du_chu_ky`
     // (hỏi ở trên, và lại ở trigger K7 của cạnh này) nay đếm chữ ký KHÔNG xung đột, nên một chữ ký của người khai `CO_XUNG_DOT` sau
     // khi ký đơn giản là không đếm — đề xuất đứng yên ở `PROPOSED`, lời trả về đánh dấu chữ ký ấy (`conHieuLuc`).
     const ma = maChotTuLoi(loi);

@@ -29,7 +29,7 @@ let phien = { rfqId: "", unsealRequestId: "" };
  * bước đi qua `moSauDangNhap`, nơi nó được đặt lại.
  */
 let nguoiDangVao = null;
-// [S1.9101 / S3.4b · K9] Khối khai báo xung đột lợi ích ở bước 2 — trước Chấm thầu, Đề xuất, Phê duyệt và Huỷ trao thầu. Tự đọc khi
+// [S1.283 / S3.4b · K9] Khối khai báo xung đột lợi ích ở bước 2 — trước Chấm thầu, Đề xuất, Phê duyệt và Huỷ trao thầu. Tự đọc khi
 // người xem giữ `coi.declare` (cờ của `GET /rfqs/:id`); khối tự ẩn ở tổ chức chưa bật (`toChucDaBat` của lời đọc). Danh sách nhà
 // cung cấp là bảng so sánh mà trang đã đọc được (`bid.view`, sau mở thầu) — không đọc thêm.
 const khaiBao = ganKhaiBao({
@@ -42,7 +42,7 @@ const khaiBao = ganKhaiBao({
   khiKhongCoDanhSach: "Khai «có xung đột» cần chọn nhà cung cấp: đọc bảng so sánh ở bước 4 (sau mở thầu) hay bảng xếp hạng ở bước 5, " +
     "rồi ô chọn hiện ở đây.",
 });
-/** [S1.9101 / S3.4b · K9] Câu từ chối của máy chủ cộng câu chỉ chỗ khai, và khối khai báo đọc lại khi mã là của K9. */
+/** [S1.283 / S3.4b · K9] Câu từ chối của máy chủ cộng câu chỉ chỗ khai, và khối khai báo đọc lại khi mã là của K9. */
 async function loiK9(r, macDinh) {
   const chiDan = chiDanK9(r.body?.ma);
   if (chiDan !== null) await khaiBao.nap();
@@ -203,7 +203,7 @@ function dongCacBuoc() {
   hien($("nut-dang-xuat"), false);
   // [S1.216 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
   dangNhap.anLinkGanDay();
-  // [S1.9101 / S3.4b] Khai báo của người trước cũng đi.
+  // [S1.283 / S3.4b] Khai báo của người trước cũng đi.
   khaiBao.an();
 }
 
@@ -322,7 +322,7 @@ $("nut-doc").addEventListener("click", async () => {
   const id = $("rfq").value.trim();
   if (id === "") { bao($("loi2"), "Cần mã gói thầu."); return; }
   phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "", soSanh: undefined };
-  // [S1.9101 / S3.4b] Khai báo của gói TRƯỚC không sống sang gói này.
+  // [S1.283 / S3.4b] Khai báo của gói TRƯỚC không sống sang gói này.
   khaiBao.an();
   // [rà soát S4.5c1] Benchmark của gói TRƯỚC không được sống sang gói này: cột Benchmark của bảng xếp hạng đọc `benchmarkHien`.
   datLaiBenchmark();
@@ -336,7 +336,7 @@ $("nut-doc").addEventListener("click", async () => {
     ["Cần hai người duyệt", rfq.requiresDualApproval === true ? "có" : "không"],
     ...(rfq.status === "CANCELLED" ? [["Lý do huỷ", rfq.cancelReason ?? "(gói huỷ trước khi hệ thống lưu lý do)"]] : []),
   ]);
-  // [S1.9101 / S3.4b · K9] Khai báo của chính người xem trên gói vừa đọc.
+  // [S1.283 / S3.4b · K9] Khai báo của chính người xem trên gói vừa đọc.
   if (r.body?.coQuyenKhai === true) await khaiBao.nap();
   const d = await goi("GET", `/rfqs/${id}/bid-count`);
   if (d.status === 200) {
@@ -488,7 +488,7 @@ async function docBangSoSanh() {
   }
   const c = r.body.comparison;
   phien = { ...phien, soSanh: Array.isArray(c.rows) ? c.rows : [] };
-  // [S1.9101 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
+  // [S1.283 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
   khaiBao.veNhaCungCap();
   const tbody = $("bang").querySelector("tbody");
   tbody.replaceChildren();
@@ -735,7 +735,7 @@ async function veXepHang() {
     return;
   }
   phien = { ...phien, xepHang: Array.isArray(b.rows) ? b.rows : [], xepHangLuot: b.evaluationId };
-  // [S1.9101 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
+  // [S1.283 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
   khaiBao.veNhaCungCap();
   dienDl($("tt-luot"), [
     ["Mã lượt chấm", b.evaluationId],
@@ -884,7 +884,7 @@ async function veTraoThau() {
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
     ["Chữ ký duyệt", `${a.approvals.length === 0
       ? "chưa có"
-      // [S1.9101 / S3.4b · K9] Chữ ký của người đã khai xung đột sau khi ký còn đó nhưng không đếm — máy chủ đánh dấu (`conHieuLuc`).
+      // [S1.283 / S3.4b · K9] Chữ ký của người đã khai xung đột sau khi ký còn đó nhưng không đếm — máy chủ đánh dấu (`conHieuLuc`).
       : a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}${a.chuKyCan == null ? "" : ` (cần ${String(a.chuKyCan)})`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };

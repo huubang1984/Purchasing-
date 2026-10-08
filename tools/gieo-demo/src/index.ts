@@ -501,7 +501,7 @@ async function chinh(): Promise<void> {
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
     // [S1.198 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
     // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
-    // [S1.9101 / S3.4b · K9] `--s3`: bậc demo đòi khai báo xung đột lợi ích — hai người ký khai *không xung đột* với danh sách vừa dựng,
+    // [S1.283 / S3.4b · K9] `--s3`: bậc demo đòi khai báo xung đột lợi ích — hai người ký khai *không xung đột* với danh sách vừa dựng,
     // bằng hàm gói, TRƯỚC chữ ký công cụ ghi thay họ (trigger `rfq_approvals_kiem_xung_dot` chặn chữ ký của người chưa khai).
     if (S3) for (const nm of nguoiDuyetGoi) await khaiKhongXungDot(pool, org, rfq, nm);
     for (const nm of nguoiDuyetGoi) {
@@ -621,7 +621,7 @@ async function chinh(): Promise<void> {
               "SELECT p.lan_nop AS n FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1",
               [id],
             )).n;
-            // [S1.9101 / S3.4b · K9] soan2 khai *không xung đột* trước chữ ký công cụ ghi thay (bậc demo đòi khai).
+            // [S1.283 / S3.4b · K9] soan2 khai *không xung đột* trước chữ ký công cụ ghi thay (bậc demo đòi khai).
             await khaiKhongXungDot(pool, org, id, soan2);
             await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId: id, sessionId: soan2.sessionId, lanNopDaXem: lanNop }, pool));
             if (i < 2) {
@@ -807,7 +807,7 @@ async function chinh(): Promise<void> {
     ra.push("");
     ra.push("Người SOẠN tạo yêu cầu mở thầu; HAI người DUYỆT phê duyệt. Người yêu cầu KHÔNG tự duyệt được.");
     if (S3) {
-      // [S1.9101 / S3.4b · K9] Bậc demo đòi khai báo xung đột lợi ích trước mọi bước quyết.
+      // [S1.283 / S3.4b · K9] Bậc demo đòi khai báo xung đột lợi ích trước mọi bước quyết.
       ra.push("");
       ra.push("XUNG ĐỘT LỢI ÍCH (K9) — bậc demo đòi khai báo: trước «Phê duyệt», «Ghi nhận tín hiệu» (/tao-thau), «Chấm thầu»,");
       ra.push("  «Đề xuất», «Phê duyệt» hay «Huỷ trao thầu» (/mo-thau), mỗi người khai «không xung đột» ở khối «Khai báo xung đột lợi ích»");

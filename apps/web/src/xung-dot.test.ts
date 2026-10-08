@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.4b · K9] PHÉP ĐO CHO KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
+// [S1.283 / S3.4b · K9] PHÉP ĐO CHO KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
 //
 // Hành vi trên DOM (khối hiện ở tổ chức đã bật, bấm khai gửi gì, câu chỉ dẫn K9 ở nút bị chặn) đo ở `phuc-vu.test.ts`, trên hai trang
 // thật chạy trong `node:vm`. Tệp này đo:
@@ -49,7 +49,7 @@ const loiDoc = (k: Partial<KhaiBaoCuaToiMan>): KhaiBaoCuaToiMan => ({
 });
 const ten = (id: string): string | null => (id === "n-1" ? "Công ty Thép" : null);
 
-describe("[S1.9101 / S3.4b · K9] khung của khối khai báo từ lời đọc của máy chủ", () => {
+describe("[S1.283 / S3.4b · K9] khung của khối khai báo từ lời đọc của máy chủ", () => {
   it("tổ chức chưa bật, hay thân lạ ⇒ ẩn; chưa khai ⇒ CAN_KHAI, nút không xung đột hiện", () => {
     expect(khungKhaiBao(loiDoc({ toChucDaBat: false, chot: null, bacDoiKhai: false }), ten).loai).toBe("AN");
     expect(khungKhaiBao(null, ten).loai).toBe("AN");
@@ -94,7 +94,7 @@ describe("[S1.9101 / S3.4b · K9] khung của khối khai báo từ lời đọc
   });
 });
 
-describe("[S1.9101 / S3.4b · K9] thân lời khai", () => {
+describe("[S1.283 / S3.4b · K9] thân lời khai", () => {
   it("`supplierId` chỉ đi với CO_XUNG_DOT; ghi chú cắt, rỗng thì bỏ trường", () => {
     expect(thanKhaiBao("KHONG_XUNG_DOT", "n-1", "   ")).toEqual({ trangThai: "KHONG_XUNG_DOT" });
     expect(thanKhaiBao("KHONG_XUNG_DOT", null, "  khong quen ai  ")).toEqual({ trangThai: "KHONG_XUNG_DOT", ghiChu: "khong quen ai" });
@@ -114,7 +114,7 @@ describe("[S1.9101 / S3.4b · K9] thân lời khai", () => {
   });
 });
 
-describe("[S1.9101 / S3.4b · K9] danh sách nhà cung cấp — từ thứ trang đã được phép đọc", () => {
+describe("[S1.283 / S3.4b · K9] danh sách nhà cung cấp — từ thứ trang đã được phép đọc", () => {
   it("bảng lời mời: mỗi nhà cung cấp một dòng; còn sống nếu còn một lời mời chưa thu hồi; dòng thiếu id bỏ", () => {
     const ds = nhaCungCapTuLoiMoi([
       { supplierId: "n-1", supplierName: "Công ty Thép", revokedAt: "2026-10-01T00:00:00Z" },
@@ -153,7 +153,7 @@ describe("[S1.9101 / S3.4b · K9] danh sách nhà cung cấp — từ thứ tran
   });
 });
 
-describe("[S1.9101 / S3.4b · K9] câu chỉ dẫn K9 BỔ SUNG câu của máy chủ", () => {
+describe("[S1.283 / S3.4b · K9] câu chỉ dẫn K9 BỔ SUNG câu của máy chủ", () => {
   it("bốn mã có câu; mã khác ⇒ null; câu không nhắc lại câu của `CHOT_VAO_SO`", () => {
     // Câu của máy chủ, đọc VĂN BẢN nguồn — một cạnh `apps/web` → gói máy chủ là cạnh depcruise phải bless.
     const bang = readFileSync(new URL("../../../packages/identity/src/chot-kiem-soat.ts", import.meta.url), "utf8");
@@ -168,7 +168,7 @@ describe("[S1.9101 / S3.4b · K9] câu chỉ dẫn K9 BỔ SUNG câu của máy 
   });
 });
 
-describe("[S1.9101 / S3.4b · K9] hai trang khai ĐỦ bộ id mà khối khai báo gắn vào", () => {
+describe("[S1.283 / S3.4b · K9] hai trang khai ĐỦ bộ id mà khối khai báo gắn vào", () => {
   for (const trang of ["tao-thau", "mo-thau"] as const) {
     it(`${trang}.html: mỗi id của ID_KHAI_BAO đúng một lần; phần tử ẩn lúc tải đúng như khai; ô chọn và nút có xung đột nằm trong kb-co`, () => {
       const html = readFileSync(new URL(`../trang/${trang}.html`, import.meta.url), "utf8");

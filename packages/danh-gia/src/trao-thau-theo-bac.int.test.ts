@@ -13,8 +13,8 @@
 //      (người xác minh nhà cung cấp thắng, người điều phối mở thầu) ⇒ từ chối; đối chứng âm khi không vế nào đòi;
 //   ⑷ K12 — mỗi lần từ chối một hàng `CONTROL_DENIED` mang mã, đúng người; tập mã của các hàm vị từ BẰNG các dòng K7/K2b/K5b
 //      của `CHOT_VAO_SO`.
-//   ⑸ [S1.9101 / S3.4b · K9] chữ ký của người đã khai `CO_XUNG_DOT` trên gói — kể cả SAU khi ký — không đếm ở K7 (đủ chữ ký, hai
-//      vai) lẫn K5b (chữ ký độc lập): `9501` đặt ba phép ấy trên `award_chu_ky_con_hieu_luc`; lời trả về đánh dấu chữ ký ấy.
+//   ⑸ [S1.283 / S3.4b · K9] chữ ký của người đã khai `CO_XUNG_DOT` trên gói — kể cả SAU khi ký — không đếm ở K7 (đủ chữ ký, hai
+//      vai) lẫn K5b (chữ ký độc lập): `115` đặt ba phép ấy trên `award_chu_ky_con_hieu_luc`; lời trả về đánh dấu chữ ký ấy.
 // Mỗi vế có một ĐỘT BIẾN trong chính tệp này (định nghĩa lại hàm lúc chạy, khôi phục bằng `pg_get_functiondef` và tự kiểm sha256).
 // Gói đi DRAFT→OPEN bằng câu thô dưới chủ cụm cộng `approveRfq` (mọi trigger của cạnh vẫn chạy — ENABLE ALWAYS), báo giá và mở
 // niêm phong chèn thẳng (khuôn `luot-danh-gia.int.test.ts`), chấm bằng `taoLuotDanhGia`, trao thầu bằng hàm gói.
@@ -779,9 +779,9 @@ describe("[S1.280 / S3.5a / K12] tập mã của các hàm vị từ BẰNG các
 });
 
 // =============================================================================================
-// ⑸ [S1.9101 / S3.4b · K9] CHỮ KÝ CỦA NGƯỜI ĐÃ KHAI XUNG ĐỘT KHÔNG ĐẾM Ở K7 LẪN K5b
+// ⑸ [S1.283 / S3.4b · K9] CHỮ KÝ CỦA NGƯỜI ĐÃ KHAI XUNG ĐỘT KHÔNG ĐẾM Ở K7 LẪN K5b
 // =============================================================================================
-describe("[S1.9101 / S3.4b / K9] chữ ký trao thầu của người đã khai CO_XUNG_DOT không đếm — K7 và K5b đọc `award_chu_ky_con_hieu_luc`", { timeout: 300000 }, () => {
+describe("[S1.283 / S3.4b / K9] chữ ký trao thầu của người đã khai CO_XUNG_DOT không đếm — K7 và K5b đọc `award_chu_ky_con_hieu_luc`", { timeout: 300000 }, () => {
   /**
    * Lời khai `CO_XUNG_DOT` của `ai` với nhà cung cấp của lời mời đầu — câu chèn của `khaiBaoXungDot` (`@trustprocure/kiem-soat`; gói
    * này không phụ thuộc nó), dưới `app_api`: trigger `coi_kiem_khai_bao` đặt băm và đòi nhà cung cấp có lời mời. Các bậc của tệp này

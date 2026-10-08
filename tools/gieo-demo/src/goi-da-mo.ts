@@ -175,7 +175,7 @@ export async function gieoBaGoiDaDieuPhoi(b: BoiCanhGoiDaMo): Promise<readonly G
       if (n === undefined) throw new GoiDaMoError(`gói ${tieuDe} không đọc được lần nộp`);
       return n;
     });
-    // [S1.9101 / S3.4b · K9] `--s3`: soan2 khai *không xung đột* trước chữ ký công cụ ghi thay (bậc demo đòi khai).
+    // [S1.283 / S3.4b · K9] `--s3`: soan2 khai *không xung đột* trước chữ ký công cụ ghi thay (bậc demo đòi khai).
     if (b.s3) await khaiKhongXungDot(pool, org, rfqId, b.soan2);
     await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId, sessionId: b.soan2.sessionId, lanNopDaXem: lanNop }, pool));
 

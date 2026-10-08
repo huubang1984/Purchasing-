@@ -293,7 +293,7 @@ describe("bề mặt tệp", () => {
       ...nhaCungCap,
       // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
       ...benchmarkWeb,
-      // [S1.9101 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
+      // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
       ...xungDot,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
@@ -2445,7 +2445,7 @@ describe("bề mặt tệp", () => {
     };
 
     // ==========================================================================================
-    // [S1.9101 / S3.4b · K9] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — `/tao-thau` bước 4, `/mo-thau` bước 2. Tự đọc khi tổ chức đã bật và người
+    // [S1.283 / S3.4b · K9] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — `/tao-thau` bước 4, `/mo-thau` bước 2. Tự đọc khi tổ chức đã bật và người
     // xem giữ `coi.declare` (`coQuyenKhai` của `GET /rfqs/:id`); bấm khai gửi đúng thân; lời từ chối K9 ở nút bị chặn mang câu chỉ chỗ khai.
     // ==========================================================================================
     const okKb = (body: unknown) => Promise.resolve({ status: 200, body });
@@ -2467,7 +2467,7 @@ describe("bề mặt tệp", () => {
     const thanKhai = (p: Awaited<ReturnType<typeof moTaoThau>>["p"]) =>
       p.trangThai.than.filter((x) => x.lenh === "POST /rfqs/r-1/coi-declarations").map((x) => x.than);
 
-    it("[S1.9101 / S3.4b · K9] tao-thau: người giữ `coi.declare` ⇒ khối hiện, nói *chưa khai*, ô chọn có nhà cung cấp của bảng lời mời; «không xung đột» ⇒ POST thân đúng, đọc lại, nút ẩn", async () => {
+    it("[S1.283 / S3.4b · K9] tao-thau: người giữ `coi.declare` ⇒ khối hiện, nói *chưa khai*, ô chọn có nhà cung cấp của bảng lời mời; «không xung đột» ⇒ POST thân đúng, đọc lại, nút ẩn", async () => {
       let daKhai = false;
       const { p } = await moKhaiTaoThau(true, () => (daKhai ? DA_KHAI : LOI_DOC_KB({})));
       expect(p.trangThai.goi).toContain("GET /rfqs/r-1/coi-declarations");
@@ -2485,7 +2485,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("kb-tom-tat").textContent).toMatch(/đã khai không xung đột với danh sách mời hiện tại/u);
     });
 
-    it("[S1.9101 / S3.4b · K9] tao-thau: «có xung đột» đòi chọn nhà cung cấp VÀ ô xác nhận — thiếu ô ⇒ không gửi; đủ ⇒ thân mang supplierId", async () => {
+    it("[S1.283 / S3.4b · K9] tao-thau: «có xung đột» đòi chọn nhà cung cấp VÀ ô xác nhận — thiếu ô ⇒ không gửi; đủ ⇒ thân mang supplierId", async () => {
       const { p } = await moKhaiTaoThau(true, () => LOI_DOC_KB({}));
       p.el("kb-ncc").value = "n-1";
       await p.bam("nut-kb-co");
@@ -2496,7 +2496,7 @@ describe("bề mặt tệp", () => {
       expect(thanKhai(p)).toEqual([{ trangThai: "CO_XUNG_DOT", supplierId: "n-1" }]);
     });
 
-    it("[S1.9101 / S3.4b · K9] tao-thau: người KHÔNG giữ `coi.declare` ⇒ không đọc khai báo (không 403, không hàng sổ), khối ẩn; tổ chức chưa bật ⇒ cũng vậy", async () => {
+    it("[S1.283 / S3.4b · K9] tao-thau: người KHÔNG giữ `coi.declare` ⇒ không đọc khai báo (không 403, không hàng sổ), khối ẩn; tổ chức chưa bật ⇒ cũng vậy", async () => {
       const { p } = await moKhaiTaoThau(false, () => LOI_DOC_KB({}));
       expect(p.trangThai.goi).not.toContain("GET /rfqs/r-1/coi-declarations");
       expect(p.el("khoi-khai-bao").hidden).toBe(true);
@@ -2506,7 +2506,7 @@ describe("bề mặt tệp", () => {
       expect(chua.p.el("khoi-khai-bao").hidden).toBe(true);
     });
 
-    it("[S1.9101 / S3.4b · K9] tao-thau: «Phê duyệt» bị K9 chặn ⇒ câu của máy chủ rồi câu chỉ khối khai báo; khối đọc lại", async () => {
+    it("[S1.283 / S3.4b · K9] tao-thau: «Phê duyệt» bị K9 chặn ⇒ câu của máy chủ rồi câu chỉ khối khai báo; khối đọc lại", async () => {
       const { p } = await moKhaiTaoThau(true, () => LOI_DOC_KB({}));
       const truoc = p.trangThai.goi.filter((l) => l === "GET /rfqs/r-1/coi-declarations").length;
       await p.bam("nut-duyet");
@@ -2514,7 +2514,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi.filter((l) => l === "GET /rfqs/r-1/coi-declarations").length, "khối đọc lại sau lời từ chối").toBeGreaterThan(truoc);
     });
 
-    it("[S1.9101 / S3.4b · K9] mo-thau: Đọc gói ⇒ khối hiện khi người xem giữ `coi.declare` và tổ chức đã bật; chưa đọc bảng so sánh ⇒ câu chỉ đường thay ô chọn; «Chấm thầu» bị K9 chặn ⇒ câu chỉ khối", async () => {
+    it("[S1.283 / S3.4b · K9] mo-thau: Đọc gói ⇒ khối hiện khi người xem giữ `coi.declare` và tổ chức đã bật; chưa đọc bảng so sánh ⇒ câu chỉ đường thay ô chọn; «Chấm thầu» bị K9 chặn ⇒ câu chỉ khối", async () => {
       const R = "r-1";
       const dungMo = async (coQuyenKhai: boolean, toChucDaBat: boolean) => {
         const p = await dungTrang("mo-thau", {
