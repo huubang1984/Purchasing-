@@ -197,7 +197,10 @@
       (<code>award.recommend</code>), một người <strong>khác</strong> <em>phê duyệt</em>
       (<code>po.approve</code>). Hai mã quyền khác nhau, và ba trigger của tầng CSDL canh tiếp
       theo <strong>hành vi đã xảy ra</strong> trên chính gói thầu này — người tạo gói và người
-      điều phối mở thầu <em>không</em> đề xuất được, và người đề xuất <em>không</em> tự duyệt được.</p>
+      điều phối mở thầu <em>không</em> đề xuất được, và người đề xuất <em>không</em> tự duyệt được.
+      Ở tổ chức đã bật kiểm soát theo bậc, <strong>bậc</strong> của gói nói cần <strong>bao nhiêu</strong>
+      chữ ký và <strong>vai</strong> nào ký được: bảng dưới hiện <em>có M / cần N</em>, chữ ký đã ký
+      ở lại kể cả khi chưa đủ.</p>
     <p class="ghi">Lượt chấm mà đề xuất dựa trên <strong>không gõ tay</strong>: nó là lượt
       <strong>mới nhất</strong>, nên sau một chu kỳ BAFO thì award nói về bảng xếp hạng SAU BAFO.
       Báo giá được chọn phải có <strong>chi phí hiệu dụng đọc được</strong> ở đúng lượt ấy.</p>
@@ -214,6 +217,31 @@
       <button id="nut-huy-award" class="phu">Huỷ trao thầu</button>
     </div>
     <dl class="tt" id="tt-award"></dl>
+    <!-- [S1.282 / S3.5b / K2b] Ngoại lệ HẬU KIỂM (spec S3 §4.7, ADR-154 ⑸): `LOW_ACTUAL_COMPETITION` lập và rút chỉ khi gói ở EVALUATING,
+         trước đề xuất; không vào băm danh sách mời; tác giả vào tập loại trừ của K5b. Khối chỉ hiện cho người giữ quyền mời
+         (`coQuyenMoi`, khoản 340) — hai route là của `/tao-thau`, cổng `rfq.invite` nằm trong thân route. -->
+    <div id="khoi-ngoai-le-hk" hidden>
+      <h3>Ngoại lệ hậu kiểm</h3>
+      <p class="ghi">Số <strong>nhóm</strong> nhà cung cấp có báo giá hợp lệ dưới ngưỡng của bậc thì đề xuất bị
+        chặn (K2b). Người giữ quyền mời lập «Cạnh tranh thực tế thấp» khi gói còn ở lượt chấm, <strong>trước</strong>
+        lần đề xuất; người lập không còn là người ký độc lập của gói (K5b). Mỗi lần lập hay rút đều vào sổ kiểm toán.</p>
+      <button id="nut-xem-ngoai-le-hk" class="phu">Xem ngoại lệ</button>
+      <table class="xep" id="bang-ngoai-le-hk">
+        <thead><tr><th>Loại</th><th>Lý do</th><th>Giải trình</th><th>Lập lúc</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="khoi-lap-ngoai-le-hk" hidden>
+        <label for="ma-ly-do-hk">Mã lý do</label>
+        <select id="ma-ly-do-hk"></select>
+        <label for="giai-trinh-hk">Giải trình</label>
+        <textarea id="giai-trinh-hk" rows="3" autocomplete="off" placeholder="Mời năm nhà cung cấp, bốn nộp báo giá hợp lệ"></textarea>
+        <button id="nut-lap-ngoai-le-hk" class="phu">Lập ngoại lệ hậu kiểm</button>
+        <label for="ly-do-rut-hk">Lý do rút (cho nút «Rút» trên bảng)</label>
+        <input id="ly-do-rut-hk" autocomplete="off" placeholder="Nhà cung cấp thứ năm đã nộp bổ sung">
+      </div>
+      <div class="bao loi" id="loi-nlhk" hidden></div>
+      <div class="bao ok" id="ok-nlhk" hidden></div>
+    </div>
     <p class="ghi">Huỷ là một <strong>hàng trạng thái mới</strong>, không một lần sửa: lịch sử ở
       lại nguyên vẹn và câu <em>ai huỷ, lúc nào, vì sao</em> trả lời được từ chính bảng. Gói thầu
       quay về <code>EVALUATING</code> để chấm lại — và cổng huỷ là cổng của người

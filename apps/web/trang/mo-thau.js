@@ -15,6 +15,9 @@ import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
+// [S1.282 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
+// ghim nó với gói.
+import { MA_LY_DO_NGOAI_LE, chiDanChot, loiGiaiTrinh, loiLyDo, nhanLoaiNgoaiLe, nhanMaLyDo, vanBanAnToan } from "/lib/tao-thau.js";
 import { chiDanK9, ganKhaiBao, gopNhaCungCap, nhaCungCapTuSoSanh, nhaCungCapTuXepHang } from "/lib/xung-dot.js";
 
 const $ = (id) => document.getElementById(id);
@@ -23,7 +26,8 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 // [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây: mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js` (bước 1 chung của bốn trang người mua). Phiên của trang chỉ còn hai con trỏ của các bước sau.
-let phien = { rfqId: "", unsealRequestId: "" };
+// [S1.282 / S3.5b] `trangThaiGoi` và `coQuyenMoi` đọc ở bước 2 (và đọc lại ở «Xem ngoại lệ»): khối ngoại lệ hậu kiểm hiện theo chúng.
+let phien = { rfqId: "", unsealRequestId: "", trangThaiGoi: "", coQuyenMoi: false };
 /**
  * [S1.255 / khoản 327] Người đang vào (`/me`.userId): nút «Rút đề xuất» chỉ hiện cho CHÍNH người đề xuất. Mọi lối mở các
  * bước đi qua `moSauDangNhap`, nơi nó được đặt lại.
@@ -329,6 +333,7 @@ $("nut-doc").addEventListener("click", async () => {
   const r = await goi("GET", `/rfqs/${id}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return; }
   const rfq = r.body.rfq;
+  ghiTrangThaiGoi(r.body);
   dienDl($("tt-rfq"), [
     ["Tên", rfq.title],
     ["Trạng thái", rfq.status],
@@ -350,6 +355,21 @@ $("nut-doc").addEventListener("click", async () => {
   // [S1.90 / khoản 190] Bấm Đọc là lúc người duyệt thứ hai lấy được yêu cầu đang treo.
   await napYeuCau(id);
 });
+
+/** [S1.282 / S3.5b] Trạng thái gói và cờ quyền mời từ thân `GET /rfqs/:id`; khối ngoại lệ hậu kiểm hiện cho người giữ quyền mời. */
+function datTrangThaiGoi(than) {
+  const tt = than?.rfq?.status;
+  phien = { ...phien, trangThaiGoi: typeof tt === "string" ? tt : "", coQuyenMoi: than?.coQuyenMoi === true };
+  hien($("khoi-ngoai-le-hk"), phien.coQuyenMoi);
+}
+
+/** Lần đọc gói ở bước 2: đặt trạng thái và xoá bảng, ô lập, câu báo của khối ngoại lệ hậu kiểm — gói khác, người khác. */
+function ghiTrangThaiGoi(than) {
+  datTrangThaiGoi(than);
+  hien($("khoi-lap-ngoai-le-hk"), false);
+  $("bang-ngoai-le-hk").querySelector("tbody").replaceChildren();
+  bao($("loi-nlhk"), ""); bao($("ok-nlhk"), "");
+}
 
 // [S1.165 / khoản 225] Huỷ gói thầu. Trước vòng ấy, gói đã đóng hay đã mở thầu KHÔNG huỷ được bằng
 // bất kỳ đường nào — và một lượt chấm bị từ chối vì lệch tiền tệ để gói đứng yên ở `UNSEALED` mãi.
@@ -850,13 +870,13 @@ $("nut-dong-bafo").addEventListener("click", async () => {
 
 async function veTraoThau() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/award`);
-  if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return; }
+  if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return null; }
   const a = r.body.award ?? null;
   if (a === null) {
     phien = { ...phien, awardDaDoc: "" };
     dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
     hien($("nut-rut-de-xuat"), false);
-    return;
+    return null;
   }
   // Cùng cổng `bid.view` với lời đọc vừa qua, nên bảng xếp hạng đọc được; hỏng thì bước 5 nói lý do, đề xuất vẫn hiện id.
   const timHang = () => (phien.xepHangLuot === a.evaluationId
@@ -882,12 +902,26 @@ async function veTraoThau() {
     ["Dựa trên lượt chấm", a.evaluationId],
     ["Lý do", a.reason],
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
-    ["Chữ ký duyệt", `${a.approvals.length === 0
-      ? "chưa có"
-      // [S1.283 / S3.4b · K9] Chữ ký của người đã khai xung đột sau khi ký còn đó nhưng không đếm — máy chủ đánh dấu (`conHieuLuc`).
-      : a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}${a.chuKyCan == null ? "" : ` (cần ${String(a.chuKyCan)})`}`],
+    // [S1.282 / S3.5b] *có M / cần N*: số cần là của bậc CAO HƠN trong hai bậc, máy chủ tính (`award_so_chu_ky_can`) — trang chỉ hiện; thân
+    // không mang số cần (tổ chức chưa bật, hay hàng đã duyệt của luồng cũ) thì chỉ *có M*. Mốc giờ từng chữ ký theo sau.
+    // [S1.283 / S3.4b · K9] Chữ ký của người đã khai xung đột sau khi ký còn đó nhưng không đếm — máy chủ đánh dấu (`conHieuLuc`): M đếm
+    // như máy chủ đếm (`award_chu_ky_con_hieu_luc`, `115`), danh sách mốc giờ vẫn hiện chữ ký ấy kèm dấu. (Lượt soi của phiên S3.4b.)
+    ["Chữ ký duyệt", `có ${String(a.approvals.filter((c) => c.conHieuLuc !== false).length)}${a.chuKyCan == null ? "" : ` / cần ${String(a.chuKyCan)}`}${a.approvals.length === 0
+      ? ""
+      : ` — ${a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
+  return a;
+}
+
+/**
+ * [S1.282 / S3.5b] Câu máy chủ rồi MỘT câu chỉ dẫn theo mã chốt — K9 qua `loiK9` (nạp lại khối khai báo, S3.4b), K7/K2b/K5b qua
+ * `chiDanChot` (khuôn `/tao-thau`); một mã chỉ rơi vào một trong hai; không mã thì chỉ câu máy chủ.
+ */
+async function loiChot(r, macDinh) {
+  const cau = await loiK9(r, macDinh);
+  const chiDan = chiDanChot(r.body?.ma, phien.coQuyenMoi);
+  return chiDan === null ? cau : `${cau} ${chiDan}`;
 }
 
 $("nut-de-xuat").addEventListener("click", async () => {
@@ -899,9 +933,12 @@ $("nut-de-xuat").addEventListener("click", async () => {
   // Bốn lối từ chối có tên của lớp trao thầu đi ra dưới 422 với câu của lớp gói; ba trigger của
   // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
   // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
-  if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không đề xuất được")); return; }
-  bao($("ok7"), "Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần MỘT người KHÁC phê duyệt.");
-  await veTraoThau();
+  if (r.status !== 201) { bao($("loi7"), await loiChot(r, "Không đề xuất được")); return; }
+  // [S1.282 / S3.5b] Thân của lần đề xuất không mang số chữ ký cần; đọc lại rồi mới nói — trước vòng này câu luôn nói *MỘT người*.
+  const a = await veTraoThau();
+  const can = a?.chuKyCan;
+  bao($("ok7"), `Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần ${typeof can === "number" ? String(can) : "một"} chữ ký phê duyệt của ` +
+    `người KHÁC người đề xuất${typeof can === "number" && can > 1 ? ", mỗi người một vai mà bậc của gói cho ký" : ""}.`);
 });
 
 // [S1.254 / khoản 321] Đọc đề xuất mà không ký — cùng khuôn «Đọc bảng xếp hạng» của bước 5.
@@ -931,10 +968,10 @@ $("nut-duyet-award").addEventListener("click", async () => {
     return;
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
-  if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không duyệt được")); return; }
+  if (r.status !== 201) { bao($("loi7"), await loiChot(r, "Không duyệt được")); return; }
   // [S1.280 / S3.5a] Từ S3.5 chữ ký sống độc lập với hàng APPROVED: bậc cần hai chữ ký thì lần ký đầu trả về đề xuất còn
-  // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. Phần màn còn lại (cần N, còn M; ngoại lệ hậu
-  // kiểm) là S3.5b.
+  // `PROPOSED` kèm số cần — lời ở đây đọc trạng thái máy chủ trả, không tự đoán. ~~Phần màn còn lại (cần N, còn M; ngoại lệ hậu
+  // kiểm) là S3.5b.~~ [S1.282 / S3.5b] Bảng nói *có M / cần N*, khối ngoại lệ hậu kiểm ở dưới.
   const sau = r.body.award ?? {};
   bao($("ok7"), sau.status === "APPROVED"
     ? "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất."
@@ -978,6 +1015,122 @@ $("nut-huy-award").addEventListener("click", async () => {
   if (r.status !== 201) { bao($("loi7"), await loiK9(r, "Không huỷ được")); return; }
   bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
   await veTraoThau();
+});
+
+// ---------------------------------------------------------------------------------------------
+// [S1.282 / S3.5b / K2b] Ngoại lệ HẬU KIỂM — `LOW_ACTUAL_COMPETITION`, chỉ khi gói ở EVALUATING và trước đề xuất (ADR-154 ⑸,
+// `113` (11)). Khối dùng chính hai route của `/tao-thau`: cổng `rfq.invite` nằm trong thân route, trạng thái và loại ràng ở trigger
+// `ngoai_le_kiem` — màn chỉ hiện ô lập khi gói đang EVALUATING, và đọc LẠI trạng thái lúc bấm «Xem» vì bước 2 có thể đã đọc trước
+// lượt chấm. Ba loại của danh sách mời hiện trong bảng (đọc được) nhưng không rút được ở đây: chúng chỉ rút ở DRAFT, trên `/tao-thau`.
+// ---------------------------------------------------------------------------------------------
+
+const LOAI_HAU_KIEM = "LOW_ACTUAL_COMPETITION";
+const NHAN_COT_NGOAI_LE_HK = ["Loại", "Lý do", "Giải trình", "Lập lúc", "Trạng thái"];
+let daVeMaLyDoHk = false;
+function veMaLyDoHk() {
+  if (daVeMaLyDoHk) return;
+  daVeMaLyDoHk = true;
+  const ma = $("ma-ly-do-hk");
+  for (const m of MA_LY_DO_NGOAI_LE) {
+    const o = document.createElement("option");
+    o.value = m;
+    o.textContent = nhanMaLyDo(m);
+    ma.append(o);
+  }
+}
+
+/** Đọc lại trạng thái gói rồi `GET /rfqs/:rfqId/exceptions`; vẽ bảng; ô lập chỉ hiện khi gói đang EVALUATING. */
+async function napNgoaiLeHk() {
+  const id = phien.rfqId;
+  if (id === "") return;
+  const g = await goi("GET", `/rfqs/${id}`);
+  if (phien.rfqId !== id) return;
+  // Đọc lại mà KHÔNG xoá câu báo: «Xem» chạy ngay sau lần lập hay rút, câu *đã lập* / *đã rút* phải còn.
+  if (g.status === 200) datTrangThaiGoi(g.body);
+  const r = await goi("GET", `/rfqs/${id}/exceptions`);
+  if (phien.rfqId !== id) return;
+  const tb = $("bang-ngoai-le-hk").querySelector("tbody");
+  tb.replaceChildren();
+  if (r.status !== 200) { hien($("khoi-lap-ngoai-le-hk"), false); bao($("loi-nlhk"), loiCua(r, "Không đọc được danh sách ngoại lệ")); return; }
+  const dangCham = phien.trangThaiGoi === "EVALUATING";
+  veMaLyDoHk();
+  hien($("khoi-lap-ngoai-le-hk"), dangCham);
+  for (const e of Array.isArray(r.body?.exceptions) ? r.body.exceptions : []) {
+    const tr = document.createElement("tr");
+    const lap = typeof e.lapLuc === "string" ? new Date(e.lapLuc).toLocaleString("vi-VN") : "—";
+    const trangThai = e.rut === null ? "còn hiệu lực" : `đã rút — ${vanBanAnToan(e.rut?.lyDo)}`;
+    [nhanLoaiNgoaiLe(e.loai), nhanMaLyDo(e.maLyDo), vanBanAnToan(e.giaiTrinh), lap, trangThai].forEach((v, i) => {
+      const td = document.createElement("td");
+      td.textContent = v;
+      td.dataset.nhan = NHAN_COT_NGOAI_LE_HK[i];
+      tr.append(td);
+    });
+    const td = document.createElement("td");
+    if (e.rut === null && e.loai === LOAI_HAU_KIEM && dangCham) {
+      const nut = document.createElement("button");
+      nut.className = "phu";
+      nut.textContent = "Rút";
+      nut.addEventListener("click", () => rutNgoaiLeHk(e.id, nut));
+      td.append(nut);
+    }
+    tr.append(td);
+    tb.append(tr);
+  }
+  if (!dangCham) {
+    bao($("ok-nlhk"), `Gói đang ở ${phien.trangThaiGoi === "" ? "trạng thái chưa đọc được" : phien.trangThaiGoi} — ngoại lệ hậu kiểm chỉ lập ` +
+      "hay rút khi gói ở EVALUATING, trước đề xuất trao thầu.");
+  }
+}
+
+async function rutNgoaiLeHk(exceptionId, nut) {
+  bao($("loi-nlhk"), ""); bao($("ok-nlhk"), "");
+  const lyDo = $("ly-do-rut-hk").value;
+  const sai = loiLyDo(lyDo);
+  if (sai !== null) { bao($("loi-nlhk"), sai); return; }
+  const id = phien.rfqId;
+  nut.disabled = true;
+  try {
+    const r = await goi("POST", `/rfqs/${id}/exceptions/${exceptionId}/withdraw`, { reason: lyDo.trim() });
+    if (phien.rfqId !== id) return;
+    if (r.status !== 200) { bao($("loi-nlhk"), await loiChot(r, "Không rút được ngoại lệ")); return; }
+    $("ly-do-rut-hk").value = "";
+    bao($("ok-nlhk"), "Đã rút ngoại lệ hậu kiểm. Đề xuất trao thầu sẽ bị chặn lại nếu số nhóm có báo giá hợp lệ vẫn dưới ngưỡng của bậc.");
+    await napNgoaiLeHk();
+  } catch {
+    bao($("loi-nlhk"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    nut.disabled = false;
+  }
+}
+
+$("nut-xem-ngoai-le-hk").addEventListener("click", async () => {
+  bao($("loi-nlhk"), ""); bao($("ok-nlhk"), "");
+  if (phien.rfqId === "") { bao($("loi-nlhk"), "Đọc gói thầu ở bước 2 trước."); return; }
+  await napNgoaiLeHk();
+});
+
+$("nut-lap-ngoai-le-hk").addEventListener("click", async () => {
+  bao($("loi-nlhk"), ""); bao($("ok-nlhk"), "");
+  if (phien.rfqId === "") { bao($("loi-nlhk"), "Đọc gói thầu ở bước 2 trước."); return; }
+  const maLyDo = $("ma-ly-do-hk").value;
+  const giaiTrinh = $("giai-trinh-hk").value;
+  const sai = loiGiaiTrinh(maLyDo, giaiTrinh);
+  if (sai !== null) { bao($("loi-nlhk"), sai); return; }
+  const id = phien.rfqId;
+  $("nut-lap-ngoai-le-hk").disabled = true;
+  try {
+    const r = await goi("POST", `/rfqs/${id}/exceptions`, { loai: LOAI_HAU_KIEM, maLyDo, giaiTrinh: giaiTrinh.trim() });
+    if (phien.rfqId !== id) return;
+    if (r.status !== 201) { bao($("loi-nlhk"), await loiChot(r, "Không lập được ngoại lệ hậu kiểm")); return; }
+    $("giai-trinh-hk").value = "";
+    bao($("ok-nlhk"), `Đã lập ngoại lệ «${nhanLoaiNgoaiLe(LOAI_HAU_KIEM)}». Bạn không còn là người ký độc lập của gói này; đề xuất trao thầu ` +
+      "nay đi qua K2b, và hàng duyệt cần một chữ ký của người ngoài tập loại trừ (K5b).");
+    await napNgoaiLeHk();
+  } catch {
+    bao($("loi-nlhk"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    $("nut-lap-ngoai-le-hk").disabled = false;
+  }
 });
 
 // ---------------------------------------------------------------------------------------------

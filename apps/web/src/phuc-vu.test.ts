@@ -1612,6 +1612,148 @@ describe("bề mặt tệp", () => {
         expect(p.el("ok7").textContent).toMatch(/^Đã ký\. Đề xuất còn chờ thêm chữ ký \(cần 2, đã có 1\)/u);
       });
 
+      // [S1.282 / S3.5b] Nửa màn của S3.5: bảng *có M / cần N*, lời sau Đề xuất đọc lại số cần, câu chỉ dẫn theo mã chốt, khối ngoại lệ
+      // hậu kiểm (K2b) cho người giữ quyền mời. Thân `GET /rfqs/:id` mang `coQuyenMoi` (khoản 340) — trang đọc nó từ vòng này.
+      const dungS35b = async (tuyChon: {
+        trangThai?: string; coQuyenMoi?: boolean; award?: () => unknown; deXuat?: { status: number; body: unknown };
+        ngoaiLe?: () => unknown; lap?: { status: number; body: unknown };
+      }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) {
+              return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: tuyChon.trangThai ?? "EVALUATING", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: tuyChon.coQuyenMoi ?? true } });
+            }
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: tuyChon.award?.() ?? null } });
+            if (l === `POST /rfqs/${RFQ}/award`) return Promise.resolve(tuyChon.deXuat ?? { status: 201, body: { award: deXuat("aw-1") } });
+            if (l === `GET /rfqs/${RFQ}/exceptions`) return Promise.resolve({ status: 200, body: { exceptions: tuyChon.ngoaiLe?.() ?? [], lanNop: 1, trangThai: tuyChon.trangThai ?? "EVALUATING" } });
+            if (l === `POST /rfqs/${RFQ}/exceptions`) return Promise.resolve(tuyChon.lap ?? { status: 201, body: { exception: {} } });
+            if (l === `POST /rfqs/${RFQ}/exceptions/e-1/withdraw`) return Promise.resolve({ status: 200, body: { exception: {} } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        return p;
+      };
+      const thanCua = (p: Awaited<ReturnType<typeof dungS35b>>, lenh: string) => p.trangThai.than.filter((t) => t.lenh === lenh).at(-1)?.than;
+      const deXuatVoi = async (p: Awaited<ReturnType<typeof dungS35b>>) => {
+        p.el("bao-gia-thang").value = "bv-1";
+        p.el("ly-do-award").value = "rẻ nhất";
+        await p.bam("nut-de-xuat");
+      };
+
+      it("[S1.282 / S3.5b] bảng nói *có M / cần N* kèm mốc giờ; thân không số cần thì chỉ *có M*; Đề xuất đọc lại rồi mới nói số cần", async () => {
+        const mot = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [{ approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z" }] };
+        const p = await dungS35b({ award: () => mot });
+        await p.bam("nut-doc-award");
+        expect(ttAward(p)).toMatch(/Chữ ký duyệt\|có 1 \/ cần 2 — /u);
+        const khong = await dungS35b({ award: () => deXuat("aw-1") });
+        await khong.bam("nut-doc-award");
+        expect(ttAward(khong)).toMatch(/Chữ ký duyệt\|có 0$/u);
+        // Thân 201 của lần đề xuất không mang số cần — trang đọc lại đúng một lần rồi mới nói; trước vòng này câu luôn nói *MỘT người*.
+        const dx = await dungS35b({ award: () => ({ ...deXuat("aw-1"), chuKyCan: 2 }) });
+        await deXuatVoi(dx);
+        expect(dx.trangThai.goi.filter((l) => l === `GET /rfqs/${RFQ}/award`)).toHaveLength(1);
+        expect(dx.el("ok7").textContent).toMatch(/nay cần 2 chữ ký phê duyệt của người KHÁC người đề xuất, mỗi người một vai mà bậc của gói cho ký\.$/u);
+        const mvp1 = await dungS35b({ award: () => deXuat("aw-1") });
+        await deXuatVoi(mvp1);
+        expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
+      });
+
+      it("[S1.282 / S3.5b · S1.283 K9] M đếm như máy chủ: chữ ký `conHieuLuc: false` không vào *có M* nhưng vẫn hiện trong danh sách kèm dấu *không đếm*", async () => {
+        const haiMotKhongDem = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [
+          { approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z", conHieuLuc: true },
+          { approverUserId: "u-gd2", approvedAt: "2026-10-01T03:00:00Z", conHieuLuc: false },
+        ] };
+        const p = await dungS35b({ award: () => haiMotKhongDem });
+        await p.bam("nut-doc-award");
+        expect(ttAward(p)).toMatch(/Chữ ký duyệt\|có 1 \/ cần 2 — .*\(không đếm — người ký đã khai có xung đột\)/u);
+        expect(ttAward(p)).not.toMatch(/có 2 \/ cần 2/u);
+      });
+
+      it("[S1.282 / S3.5b] lời từ chối có mã K2b ⇒ câu máy chủ rồi câu chỉ dẫn trỏ khối ngoại lệ hậu kiểm (nhờ người mời khi không giữ quyền); không mã ⇒ chỉ câu máy chủ", async () => {
+        const K2B = { status: 422, body: { error: "Gói chưa đủ cạnh tranh thực tế.", ma: "K2B_THIEU_CANH_TRANH_THUC" } };
+        const p = await dungS35b({ deXuat: K2B });
+        await deXuatVoi(p);
+        expect(p.el("loi7").textContent).toMatch(/^Gói chưa đủ cạnh tranh thực tế\. Trên màn: khối «Ngoại lệ hậu kiểm» ở bước 7/u);
+        expect(p.el("loi7").textContent).not.toMatch(/nhờ người tạo gói/u);
+        const khongQuyen = await dungS35b({ coQuyenMoi: false, deXuat: K2B });
+        await deXuatVoi(khongQuyen);
+        expect(khongQuyen.el("loi7").textContent).toMatch(/nhờ người tạo gói hay người giữ quyền mời/u);
+        const khongMa = await dungS35b({ deXuat: { status: 422, body: { error: "Báo giá không có chi phí hiệu dụng." } } });
+        await deXuatVoi(khongMa);
+        expect(khongMa.el("loi7").textContent).toBe("Báo giá không có chi phí hiệu dụng.");
+      });
+
+      it("[S1.282 / S3.5b / K2b] khối ngoại lệ hậu kiểm: hiện cho người giữ quyền mời, ẩn với người khác; «Xem» đọc lại gói rồi danh sách; ô lập chỉ khi EVALUATING", async () => {
+        const an = await dungS35b({ coQuyenMoi: false });
+        expect(an.el("khoi-ngoai-le-hk").hidden).toBe(true);
+        expect(an.trangThai.goi, "không tự đọc danh sách ngoại lệ khi nạp gói").not.toContain(`GET /rfqs/${RFQ}/exceptions`);
+        const p = await dungS35b({});
+        expect(p.el("khoi-ngoai-le-hk").hidden).toBe(false);
+        expect(p.el("khoi-lap-ngoai-le-hk").hidden, "chưa bấm Xem thì chưa đọc lại trạng thái").toBe(true);
+        expect(p.trangThai.goi).not.toContain(`GET /rfqs/${RFQ}/exceptions`);
+        await p.bam("nut-xem-ngoai-le-hk");
+        expect(p.trangThai.goi.filter((l) => l === `GET /rfqs/${RFQ}`), "đọc lại gói trước danh sách — bước 2 có thể đã đọc trước lượt chấm").toHaveLength(2);
+        expect(p.trangThai.goi).toContain(`GET /rfqs/${RFQ}/exceptions`);
+        expect(p.el("khoi-lap-ngoai-le-hk").hidden).toBe(false);
+        expect(p.el("ma-ly-do-hk").con.map((o) => o.value)).toEqual([...taoThau.MA_LY_DO_NGOAI_LE]);
+        const daTrao = await dungS35b({ trangThai: "AWARDED" });
+        await daTrao.bam("nut-xem-ngoai-le-hk");
+        expect(daTrao.el("khoi-lap-ngoai-le-hk").hidden).toBe(true);
+        expect(daTrao.el("ok-nlhk").textContent).toMatch(/^Gói đang ở AWARDED — ngoại lệ hậu kiểm chỉ lập hay rút khi gói ở EVALUATING/u);
+      });
+
+      it("[S1.282 / S3.5b / K2b] lập ngoại lệ hậu kiểm gửi đúng ba trường với loại LOW_ACTUAL_COMPETITION; OTHER dưới sàn không gửi; từ chối có mã K2b sai trạng thái kèm chỉ dẫn", async () => {
+        const p = await dungS35b({});
+        await p.bam("nut-xem-ngoai-le-hk");
+        p.el("ma-ly-do-hk").value = "OTHER";
+        p.el("giai-trinh-hk").value = "ngắn quá";
+        await p.bam("nut-lap-ngoai-le-hk");
+        expect(p.trangThai.goi).not.toContain(`POST /rfqs/${RFQ}/exceptions`);
+        expect(p.el("loi-nlhk").textContent).toMatch(/từ 100 byte/u);
+        p.el("ma-ly-do-hk").value = "NO_ALTERNATIVE";
+        p.el("giai-trinh-hk").value = "  Mời năm, bốn nộp hợp lệ  ";
+        await p.bam("nut-lap-ngoai-le-hk");
+        expect(thanCua(p, `POST /rfqs/${RFQ}/exceptions`)).toEqual({ loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "Mời năm, bốn nộp hợp lệ" });
+        expect(p.el("ok-nlhk").textContent).toMatch(/^Đã lập ngoại lệ «Cạnh tranh thực tế thấp \(hậu kiểm\)»\. Bạn không còn là người ký độc lập/u);
+        const sai = await dungS35b({ lap: { status: 422, body: { error: "Ngoại lệ hậu kiểm chỉ lập hay rút khi gói ở EVALUATING.", ma: "K2B_NGOAI_LE_SAI_TRANG_THAI" } } });
+        await sai.bam("nut-xem-ngoai-le-hk");
+        sai.el("ma-ly-do-hk").value = "NO_ALTERNATIVE";
+        sai.el("giai-trinh-hk").value = "Mời năm, bốn nộp hợp lệ";
+        await sai.bam("nut-lap-ngoai-le-hk");
+        expect(sai.el("loi-nlhk").textContent).toMatch(/^Ngoại lệ hậu kiểm chỉ lập hay rút khi gói ở EVALUATING\. Rút đề xuất đang có/u);
+      });
+
+      it("[S1.282 / S3.5b / K2b] bảng: loại hậu kiểm còn sống ở EVALUATING có nút Rút (đòi lý do, gửi đúng thân); loại của danh sách mời và hàng đã rút thì không", async () => {
+        const NL = [
+          { id: "e-1", loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "Bốn nộp", lapLuc: "2026-10-07T00:00:00Z", rut: null },
+          { id: "e-2", loai: "LIMITED_COMPETITION", maLyDo: "EMERGENCY", giaiTrinh: "Vỡ ống", lapLuc: "2026-10-06T00:00:00Z", rut: null },
+          { id: "e-3", loai: "LOW_ACTUAL_COMPETITION", maLyDo: "NO_ALTERNATIVE", giaiTrinh: "Nhầm", lapLuc: "2026-10-06T00:00:00Z", rut: { lyDo: "Người thứ năm đã nộp" } },
+        ];
+        const p = await dungS35b({ ngoaiLe: () => NL });
+        await p.bam("nut-xem-ngoai-le-hk");
+        const dong = p.el("bang-ngoai-le-hk").querySelector("tbody").con;
+        expect(dong).toHaveLength(3);
+        expect(dong[0]?.con.slice(0, 5).map((x) => x.textContent)).toEqual(["Cạnh tranh thực tế thấp (hậu kiểm)", "Không có lựa chọn khác", "Bốn nộp", expect.any(String), "còn hiệu lực"]);
+        expect(dong[1]?.con[5]?.con, "loại của danh sách mời chỉ rút ở DRAFT, trên /tao-thau").toEqual([]);
+        expect(dong[2]?.con[4]?.textContent).toBe("đã rút — Người thứ năm đã nộp");
+        expect(dong[2]?.con[5]?.con).toEqual([]);
+        const rut = dong[0]?.con[5]?.con[0];
+        expect(rut?.textContent).toBe("Rút");
+        for (const f of rut?.nghe["click"] ?? []) await f();
+        expect(p.trangThai.goi).not.toContain(`POST /rfqs/${RFQ}/exceptions/e-1/withdraw`);
+        p.el("ly-do-rut-hk").value = "Nhà cung cấp thứ năm đã nộp bổ sung";
+        for (const f of rut?.nghe["click"] ?? []) await f();
+        expect(thanCua(p, `POST /rfqs/${RFQ}/exceptions/e-1/withdraw`)).toEqual({ reason: "Nhà cung cấp thứ năm đã nộp bổ sung" });
+        expect(p.el("ok-nlhk").textContent).toMatch(/^Đã rút ngoại lệ hậu kiểm/u);
+      });
+
       it("khoản 321: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {
         let lan = 0;
         // Lần đọc thứ nhất (nút Đọc đề xuất) thấy aw-1; từ lần thứ hai máy chủ đã có aw-2.

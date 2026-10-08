@@ -7,7 +7,8 @@
 // án cần một cách (a) cho mọi tính năng của kịch bản `docs/PRODUCT.md` §11 chạy trọn trên một cụm có
 // đủ bốn tiến trình, bằng nhiều gói thầu, nhiều vai, nhiều nhánh, và (b) để lại một bộ dữ liệu demo
 // mà một người trình diễn đi tiếp được trên màn hình. `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL
-// thô — gói ấy không có hàng sổ cho các bước tạo/duyệt/mở, và tổ chức của nó không đi tới trao thầu.
+// thô — gói ấy không có hàng sổ cho các bước tạo/duyệt/mở, ~~và tổ chức của nó không đi tới trao thầu~~ [S1.282 / S3.5b] từ S3.5b
+// `gieo:demo --s3` gieo thêm một gói một tỷ tới lượt chấm (`goi-trao-thau.ts`) để người demo đi tay trao thầu theo bậc trên `/mo-thau`.
 //
 // CÔNG CỤ NÀY KHÔNG PHẢI PILOT VÀ KHÔNG THAY PILOT. Báo cáo của nó mở đầu bằng đúng câu ấy
 // (`bao-cao.ts`). Ranh giới an toàn, và mỗi điều có một chỗ cưỡng chế:

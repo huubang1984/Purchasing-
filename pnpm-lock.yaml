@@ -421,6 +421,9 @@ importers:
       '@trustprocure/crypto-keys':
         specifier: workspace:*
         version: link:../../packages/crypto-keys
+      '@trustprocure/danh-gia':
+        specifier: workspace:*
+        version: link:../../packages/danh-gia
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db

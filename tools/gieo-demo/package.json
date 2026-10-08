@@ -7,6 +7,7 @@
   "dependencies": {
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
+    "@trustprocure/danh-gia": "workspace:*",
     "@trustprocure/db": "workspace:*",
     "@trustprocure/du-lieu-nen": "workspace:*",
     "@trustprocure/identity": "workspace:*",

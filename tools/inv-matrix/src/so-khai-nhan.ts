@@ -432,7 +432,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // chứng âm (K5b); tập mã của năm hàm = bảng — mỗi vế một đột biến. `luot-danh-gia` lật khối đo khoản 242 ⑴ ở tổ chức chưa bật
   // (đột biến `award_so_chu_ky_can` trả 2 ⇒ chữ ký đầu sống).
   K7: ["packages/danh-gia/src/luot-danh-gia.int.test.ts", "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
-  K2b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
+  // [S1.282 / S3.5b] …và kịch bản 41 HTTP: ngoại lệ hậu kiểm đi qua ROUTE ở EVALUATING (lập, đọc, rút; 403 không quyền; 422 có mã sau đề xuất).
+  K2b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts", "apps/unseal-worker/src/kich-ban-41-http.int.test.ts"],
   K5b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
   // K3 — [S1.270 / S3.3d] xoay vòng nhà cung cấp ở cạnh nộp duyệt và cạnh mở gói. `xoay-vong` đo qua HTTP và dưới `app_api`: cửa sổ
   // (N suất, chỉ gói đã mở, gói bậc nhỏ và gói huỷ không chiếm suất nhưng góp nhà cung cấp cũ, lời mời sau khi ký, thu hồi trước mở),
