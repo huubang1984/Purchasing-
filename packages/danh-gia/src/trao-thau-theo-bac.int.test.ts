@@ -13,6 +13,8 @@
 //      (người xác minh nhà cung cấp thắng, người điều phối mở thầu) ⇒ từ chối; đối chứng âm khi không vế nào đòi;
 //   ⑷ K12 — mỗi lần từ chối một hàng `CONTROL_DENIED` mang mã, đúng người; tập mã của các hàm vị từ BẰNG các dòng K7/K2b/K5b
 //      của `CHOT_VAO_SO`.
+//   ⑸ [S1.283 / S3.4b · K9] chữ ký của người đã khai `CO_XUNG_DOT` trên gói — kể cả SAU khi ký — không đếm ở K7 (đủ chữ ký, hai
+//      vai) lẫn K5b (chữ ký độc lập): `115` đặt ba phép ấy trên `award_chu_ky_con_hieu_luc`; lời trả về đánh dấu chữ ký ấy.
 // Mỗi vế có một ĐỘT BIẾN trong chính tệp này (định nghĩa lại hàm lúc chạy, khôi phục bằng `pg_get_functiondef` và tự kiểm sha256).
 // Gói đi DRAFT→OPEN bằng câu thô dưới chủ cụm cộng `approveRfq` (mọi trigger của cạnh vẫn chạy — ENABLE ALWAYS), báo giá và mở
 // niêm phong chèn thẳng (khuôn `luot-danh-gia.int.test.ts`), chấm bằng `taoLuotDanhGia`, trao thầu bằng hàm gói.
@@ -773,5 +775,121 @@ describe("[S1.280 / S3.5a / K12] tập mã của các hàm vị từ BẰNG các
     const trongBang = new Set(Object.entries(CHOT_VAO_SO).filter(([, d]) => d.chot === "K7" || d.chot === "K2b" || d.chot === "K5b").map(([k]) => k));
     expect([...trongHam].sort()).toEqual([...trongBang].sort());
     expect(trongBang.size).toBe(8);
+  });
+});
+
+// =============================================================================================
+// ⑸ [S1.283 / S3.4b · K9] CHỮ KÝ CỦA NGƯỜI ĐÃ KHAI XUNG ĐỘT KHÔNG ĐẾM Ở K7 LẪN K5b
+// =============================================================================================
+describe("[S1.283 / S3.4b / K9] chữ ký trao thầu của người đã khai CO_XUNG_DOT không đếm — K7 và K5b đọc `award_chu_ky_con_hieu_luc`", { timeout: 300000 }, () => {
+  /**
+   * Lời khai `CO_XUNG_DOT` của `ai` với nhà cung cấp của lời mời đầu — câu chèn của `khaiBaoXungDot` (`@trustprocure/kiem-soat`; gói
+   * này không phụ thuộc nó), dưới `app_api`: trigger `coi_kiem_khai_bao` đặt băm và đòi nhà cung cấp có lời mời. Các bậc của tệp này
+   * KHÔNG đòi khai (`khai_xung_dot: false`), nên người chưa khai vẫn ký được; người đã khai có xung đột thì không ký thêm được (K9).
+   */
+  const khaiCo = (t: ToChuc, g: GoiDaCham, ai: NguoiPhien): Promise<unknown> =>
+    withTenant(apiPool, t.org, (c) =>
+      c.query(
+        "INSERT INTO public.coi_declarations (org_id, rfq_id, user_id, session_id, trang_thai, supplier_id) VALUES ($1, $2, $3, $4, 'CO_XUNG_DOT', $5)",
+        [t.org, g.rfqId, ai.u, ai.s, g.loiMoi[0]!.ncc],
+      ),
+    );
+  /** `gd1` là người ĐÃ TỪNG điều phối mở gói (khuôn khối K5b ở trên). */
+  async function gd1DieuPhoi(t: ToChuc, rfqId: string): Promise<void> {
+    const yc = (await db.pool.query<{ id: string }>("SELECT id FROM unseal_requests WHERE rfq_id = $1", [rfqId])).rows[0]!.id;
+    await db.pool.query(
+      "INSERT INTO unseal_dispatch_history (org_id, unseal_request_id, rfq_id, dispatched_by, dispatched_by_session_id) VALUES ($1, $2, $3, $4, $5)",
+      [t.org, yc, rfqId, t.gd1.u, t.gd1.s],
+    );
+  }
+
+  it("[INV-K9] K7 bậc 1 (hai DIRECTOR): gd1 ký rồi khai CO_XUNG_DOT ⇒ gd2 ký mà đề xuất vẫn PROPOSED — chữ ký gd1 đánh dấu không đếm, không lần từ chối nào; DIRECTOR thứ ba ⇒ APPROVED; ĐỘT BIẾN bỏ vế loại trừ ⇒ gd2 duyệt xong", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC1, GIA_BAC1);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
+    await khaiCo(t, g, t.gd1);
+    const hai = await duyet(t, g.rfqId, dx.awardId, t.gd2);
+    expect([hai.status, hai.chuKyCan, hai.approvals.map((c) => [c.approverUserId, c.conHieuLuc])], "chữ ký của người khai xung đột còn đó nhưng không đếm").toEqual([
+      "PROPOSED",
+      2,
+      [
+        [t.gd1.u, false],
+        [t.gd2.u, true],
+      ],
+    ]);
+    expect((await doc(t, g.rfqId))?.approvals.map((c) => c.conHieuLuc), "lời đọc trao thầu đánh dấu cùng cách").toEqual([false, true]);
+    expect(await hangAward(g.rfqId)).toEqual(["PROPOSED"]);
+    expect(await tuChoiChot(t.org, g.rfqId), "chưa đủ chữ ký không phải một lần từ chối").toEqual([]);
+    const gd3 = await nguoi(t.org, "DIRECTOR");
+    expect((await duyet(t, g.rfqId, dx.awardId, gd3)).status).toBe("APPROVED");
+
+    // ĐỘT BIẾN: hàm chữ ký còn hiệu lực bỏ vế loại trừ ⇒ chữ ký gd1 đếm, gd2 duyệt xong. Tổ chức MỚI (K10a — khuôn khối K7 ở trên).
+    const t2 = await taoToChuc();
+    const g2 = await goiDaCham(t2, UL_BAC1, GIA_BAC1);
+    const dx2 = await deXuat(t2, g2.rfqId, g2.banRo[0]!);
+    await duyet(t2, g2.rfqId, dx2.awardId, t2.gd1);
+    await khaiCo(t2, g2, t2.gd1);
+    await voiDotBien("public.award_chu_ky_con_hieu_luc(uuid, uuid)", "d.trang_thai = 'CO_XUNG_DOT'", "d.trang_thai = 'KHONG_PHAI_MA'", async () => {
+      const r = await duyet(t2, g2.rfqId, dx2.awardId, t2.gd2);
+      expect([r.status, r.approvals.map((c) => c.conHieuLuc)], "đột biến: chữ ký của người khai xung đột đếm").toEqual(["APPROVED", [true, true]]);
+    });
+  });
+
+  it("[INV-K9] K7 hai vai (bậc 2): DIRECTOR ký rồi khai CO_XUNG_DOT ⇒ hai FINANCE còn hiệu lực đủ số mà KHÔNG rút được hai vai khác nhau ⇒ PROPOSED; ĐỘT BIẾN vế hai vai đọc chữ ký thô ⇒ APPROVED", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd2)).status).toBe("PROPOSED");
+    await khaiCo(t, g, t.gd2);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.tc3)).status).toBe("PROPOSED");
+    const r = await duyet(t, g.rfqId, dx.awardId, t.tc2);
+    expect([r.status, r.approvals.map((c) => c.conHieuLuc)], "hai chữ ký FINANCE còn hiệu lực: đủ số, chưa đủ vai").toEqual(["PROPOSED", [false, true, true]]);
+    expect(await hangAward(g.rfqId)).toEqual(["PROPOSED"]);
+
+    const g2 = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const dx2 = await deXuat(t, g2.rfqId, g2.banRo[0]!);
+    await duyet(t, g2.rfqId, dx2.awardId, t.gd2);
+    await khaiCo(t, g2, t.gd2);
+    await duyet(t, g2.rfqId, dx2.awardId, t.tc3);
+    // Vế hai vai đọc chữ ký THÔ (vế đếm vẫn đọc hàm): vai DIRECTOR của người đã khai xung đột rút được ⇒ qua.
+    await voiDotBien(
+      "public.award_du_chu_ky(uuid, uuid)",
+      "                   FROM public.award_chu_ky_con_hieu_luc(p_org, p_award) x\n                   JOIN public.award_chu_ky_con_hieu_luc(p_org, p_award) y ON y.nguoi <> x.nguoi,",
+      "                   FROM (SELECT ap.approver_user_id AS nguoi, ap.vai_luc_ky AS vai FROM public.rfq_award_approvals ap WHERE ap.org_id = p_org AND ap.award_id = p_award) x\n" +
+        "                   JOIN (SELECT ap.approver_user_id AS nguoi, ap.vai_luc_ky AS vai FROM public.rfq_award_approvals ap WHERE ap.org_id = p_org AND ap.award_id = p_award) y ON y.nguoi <> x.nguoi,",
+      async () => {
+        expect((await duyet(t, g2.rfqId, dx2.awardId, t.tc2)).status, "đột biến: vai của người khai xung đột rút được").toBe("APPROVED");
+      },
+    );
+  });
+
+  it("[INV-K9] K5b bậc 2: người độc lập duy nhất (gd2) ký rồi khai CO_XUNG_DOT ⇒ tc2 (xác minh) + gd1 (điều phối) đủ số và đủ vai nhưng không ai độc lập ⇒ K5B_THIEU_CHU_KY_DOC_LAP; ĐỘT BIẾN K5b đọc chữ ký thô ⇒ APPROVED", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    await gd1DieuPhoi(t, g.rfqId);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd2)).status).toBe("PROPOSED");
+    await khaiCo(t, g, t.gd2);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.tc2)).status, "một chữ ký còn hiệu lực trên hai").toBe("PROPOSED");
+    const e = await loi(duyet(t, g.rfqId, dx.awardId, t.gd1));
+    expect([e?.lyDo, e?.message]).toEqual(["K5B_THIEU_CHU_KY_DOC_LAP", CHOT_VAO_SO.K5B_THIEU_CHU_KY_DOC_LAP.thongDiep]);
+    expect(await tuChoiChot(t.org, g.rfqId)).toEqual([{ ma: "K5B_THIEU_CHU_KY_DOC_LAP", actorId: t.gd1.u }]);
+    expect(await hangAward(g.rfqId)).toEqual(["PROPOSED"]);
+
+    const g2 = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    await gd1DieuPhoi(t, g2.rfqId);
+    const dx2 = await deXuat(t, g2.rfqId, g2.banRo[0]!);
+    await duyet(t, g2.rfqId, dx2.awardId, t.gd2);
+    await khaiCo(t, g2, t.gd2);
+    await duyet(t, g2.rfqId, dx2.awardId, t.tc2);
+    await voiDotBien(
+      "public.award_chot_doc_lap(uuid, uuid)",
+      "FROM public.award_chu_ky_con_hieu_luc(p_org, p_award) k",
+      "FROM (SELECT ap.approver_user_id AS nguoi FROM public.rfq_award_approvals ap WHERE ap.org_id = p_org AND ap.award_id = p_award) k",
+      async () => {
+        expect((await duyet(t, g2.rfqId, dx2.awardId, t.gd1)).status, "đột biến: người khai xung đột là chữ ký độc lập").toBe("APPROVED");
+      },
+    );
   });
 });

@@ -35,6 +35,12 @@ export interface ThanhPhanHien {
 
 export interface HangBangXepHang {
   readonly bidVersionId: string;
+  /**
+   * [S1.283 / S3.4b · K9] Mã nhà cung cấp của báo giá — khối khai báo xung đột lợi ích ở `/mo-thau` chọn *có xung đột với* từ đây.
+   * Ở `AWARDED` bảng so sánh đã đóng (`COMPARISON_ALLOWED_STATUSES`), mà đó là lúc người duyệt trao thầu ký (lượt đi thử T4 đo ra).
+   * Người đọc bảng này giữ `bid.view` và đã thấy tên nhà cung cấp — mã không nới gì.
+   */
+  readonly supplierId: string;
   readonly supplierName: string;
   readonly effectiveCost: string | null;
   readonly rank: number | null;
@@ -51,6 +57,7 @@ export interface BangXepHang {
 
 interface HangTho {
   readonly bid_version_id: string;
+  readonly supplier_id: string;
   readonly supplier_name: string;
   readonly effective_cost: string | null;
   readonly rank: number | null;
@@ -129,6 +136,7 @@ export async function docBangXepHang(
   // của Postgres đặt `NULL` LỚN NHẤT theo mặc định ASC, nhưng viết ra thay vì dựa vào mặc định.
   const { rows } = await client.query<HangTho>(
     `SELECT l.bid_version_id,
+            s.id AS supplier_id,
             s.legal_name AS supplier_name,
             l.effective_cost::pg_catalog.text AS effective_cost,
             l.rank,
@@ -170,6 +178,7 @@ export async function docBangXepHang(
     evaluatedAt: l.created_at,
     rows: rows.map((r) => ({
       bidVersionId: r.bid_version_id,
+      supplierId: r.supplier_id,
       supplierName: r.supplier_name,
       effectiveCost: r.effective_cost,
       rank: r.rank,

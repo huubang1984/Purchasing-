@@ -22,7 +22,7 @@
 // Cửa sổ xoay vòng (K3, `108`) tính theo NGƯỜI CHỌN: soan3 chưa mở gói nào ⇒ không góp suất nào, năm nhà cung cấp cũ vẫn qua.
 // K9 (`114`, S3.4a — gộp vào giữa vòng này): bậc 2 mặc định bật `khai_xung_dot`, nên soan, soan2 (chữ ký duyệt gói; soan2 còn chấm và đề
 // xuất), duyet1, duyet2 (ký trao thầu trên màn) và hai người tài chính (lượt thử sai) khai *không xung đột* NGAY SAU khi năm lời mời
-// dựng xong — `khai-xung-dot.ts`. Ngoại lệ
+// dựng xong — `khai-bao.ts` (S3.4b). Ngoại lệ
 // hậu kiểm lập sau không đổi băm danh sách (ADR-154 ⑸), nên lời khai còn nguyên tới lúc ký.
 // ==============================================================================================
 
@@ -46,7 +46,7 @@ import { getRfqPublicKeys, sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, dispatchUnseal, requestUnseal } from "@trustprocure/unseal";
 import type { DongGieo, NguoiGieo, NhaCungCapGieo } from "./goi-da-mo.js";
-import { khaiKhongXungDot } from "./khai-xung-dot.js";
+import { khaiKhongXungDot } from "./khai-bao.js";
 
 export class GoiTraoThauError extends Error {
   constructor(message: string) {
@@ -136,8 +136,8 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
     return ids;
   });
 
-  // K9: danh sách mời đã đủ — bốn người sắp ký, chấm, đề xuất, duyệt khai trước (xem đầu tệp).
-  await khaiKhongXungDot(pool, org, rfqId, [b.soan, b.soan2, b.duyet1, b.duyet2, b.taichinh1, b.taichinh2]);
+  // K9: danh sách mời đã đủ — sáu người sắp ký, chấm, đề xuất, duyệt (và hai người của lượt thử sai) khai trước (xem đầu tệp).
+  for (const n of [b.soan, b.soan2, b.duyet1, b.duyet2, b.taichinh1, b.taichinh2]) await khaiKhongXungDot(pool, org, rfqId, n);
 
   await withTenant(pool, org, (c) => submitRfqForApproval(c, org, { rfqId, actorSessionId: b.soan3.sessionId }, pool));
   await withTenant(pool, org, (c) => chuanHoaSauNop(c, org, { rfqId, actorSessionId: b.soan3.sessionId }));

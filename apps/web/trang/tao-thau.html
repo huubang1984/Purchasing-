@@ -109,6 +109,26 @@
     <!-- [S1.200 / khoản 258] Người tạo gói thấy ngân sách ở lần đọc gói; người khác đọc bằng nút này (cổng `rfq.approve`). -->
     <button id="nut-xem-ns" class="phu" hidden>Xem ngân sách</button>
     <dl class="tt" id="tt-ns"></dl>
+    <!-- [S1.283 / S3.4b · K9] Khai báo xung đột lợi ích của CHÍNH người đang xem trên gói này — trước ô Phê duyệt và Ghi nhận tín hiệu. Khối
+         chỉ hiện ở tổ chức đã bật S3, cho người giữ `coi.declare`; module `/lib/xung-dot.js`, cùng bộ id ở `/tao-thau` và `/mo-thau`. -->
+    <div id="khoi-khai-bao" hidden>
+      <h3>Khai báo xung đột lợi ích</h3>
+      <p class="ghi" id="kb-tom-tat"></p>
+      <ul id="kb-lich-su"></ul>
+      <label for="kb-ghi-chu">Ghi chú (tuỳ chọn) — lưu cùng lời khai, không vào sổ kiểm toán</label>
+      <input id="kb-ghi-chu" autocomplete="off" placeholder="Không quen biết nhà cung cấp nào trong danh sách">
+      <button id="nut-kb-khong" class="phu" hidden>Tôi không có xung đột lợi ích với danh sách mời hiện tại</button>
+      <div id="kb-co" hidden>
+        <label for="kb-ncc">Hoặc: tôi có quan hệ với nhà cung cấp</label>
+        <select id="kb-ncc"></select>
+        <label><input type="checkbox" id="kb-xac-nhan"> Tôi hiểu: lời khai có xung đột là vĩnh viễn cho gói này — từ đó tôi không
+          ký, chấm, đề xuất, duyệt hay huỷ trao thầu, hay ghi nhận tín hiệu của gói.</label>
+        <button id="nut-kb-co" class="phu">Khai có xung đột</button>
+      </div>
+      <p class="ghi" id="kb-khong-ds" hidden></p>
+      <div class="bao loi" id="kb-loi" hidden></div>
+      <div class="bao ok" id="kb-ok" hidden></div>
+    </div>
     <div class="doi">
       <button id="nut-nop-duyet" class="phu">Nộp duyệt</button>
       <button id="nut-duyet" class="phu">Phê duyệt</button>

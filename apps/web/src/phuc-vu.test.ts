@@ -33,6 +33,7 @@ import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
 import * as nhomHang from "./nhom-hang.js";
 import * as nhaCungCap from "./nha-cung-cap.js";
+import * as xungDot from "./xung-dot.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -292,6 +293,8 @@ describe("bề mặt tệp", () => {
       ...nhaCungCap,
       // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
       ...benchmarkWeb,
+      // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
+      ...xungDot,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
@@ -1662,6 +1665,17 @@ describe("bề mặt tệp", () => {
         expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
       });
 
+      it("[S1.282 / S3.5b · S1.283 K9] M đếm như máy chủ: chữ ký `conHieuLuc: false` không vào *có M* nhưng vẫn hiện trong danh sách kèm dấu *không đếm*", async () => {
+        const haiMotKhongDem = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [
+          { approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z", conHieuLuc: true },
+          { approverUserId: "u-gd2", approvedAt: "2026-10-01T03:00:00Z", conHieuLuc: false },
+        ] };
+        const p = await dungS35b({ award: () => haiMotKhongDem });
+        await p.bam("nut-doc-award");
+        expect(ttAward(p)).toMatch(/Chữ ký duyệt\|có 1 \/ cần 2 — .*\(không đếm — người ký đã khai có xung đột\)/u);
+        expect(ttAward(p)).not.toMatch(/có 2 \/ cần 2/u);
+      });
+
       it("[S1.282 / S3.5b] lời từ chối có mã K2b ⇒ câu máy chủ rồi câu chỉ dẫn trỏ khối ngoại lệ hậu kiểm (nhờ người mời khi không giữ quyền); không mã ⇒ chỉ câu máy chủ", async () => {
         const K2B = { status: 422, body: { error: "Gói chưa đủ cạnh tranh thực tế.", ma: "K2B_THIEU_CANH_TRANH_THUC" } };
         const p = await dungS35b({ deXuat: K2B });
@@ -2571,6 +2585,109 @@ describe("bề mặt tệp", () => {
       const dongMoi = () => p.el("bang-moi").querySelector("tbody").con[0];
       return { p, dongMoi };
     };
+
+    // ==========================================================================================
+    // [S1.283 / S3.4b · K9] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — `/tao-thau` bước 4, `/mo-thau` bước 2. Tự đọc khi tổ chức đã bật và người
+    // xem giữ `coi.declare` (`coQuyenKhai` của `GET /rfqs/:id`); bấm khai gửi đúng thân; lời từ chối K9 ở nút bị chặn mang câu chỉ chỗ khai.
+    // ==========================================================================================
+    const okKb = (body: unknown) => Promise.resolve({ status: 200, body });
+    const LOI_DOC_KB = (k: Record<string, unknown>) => ({
+      khaiBao: { rfqId: "r-1", khaiBao: [], danhSachBamHienTai: "ab", bacDoiKhai: true, chot: "K9_CHUA_KHAI_XUNG_DOT", toChucDaBat: true, ...k },
+    });
+    const DA_KHAI = LOI_DOC_KB({ chot: null, khaiBao: [{ trangThai: "KHONG_XUNG_DOT", supplierId: null, ghiChu: null, danhSachBam: "ab", luc: "2026-10-08T01:00:00Z" }] });
+    /** `/tao-thau` ở tổ chức đã bật, gói chờ duyệt; `coQuyenKhai` của lần đọc gói; lời đọc khai báo theo lượt; POST trả `traPost`. */
+    const moKhaiTaoThau = async (coQuyenKhai: boolean, docKb: () => unknown, traPost = { status: 201, body: { khaiBao: {} } }) =>
+      moTaoThau(true, "PENDING_APPROVAL", (l) =>
+        l === "GET /rfqs/r-1" ? okKb({ rfq: { id: "r-1", title: "Gói", status: "PENDING_APPROVAL", lanNop: 1 }, coQuyenMoi: true, coQuyenKhai })
+        : l === "GET /rfqs/r-1/invitations"
+          ? okKb({ invitations: [{ id: "i-1", supplierId: "n-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", status: "UNSENT", revokedAt: null }], lanNop: 1, trangThai: "PENDING_APPROVAL" })
+        : l === "GET /rfqs/r-1/coi-declarations" ? okKb(docKb())
+        : l === "POST /rfqs/r-1/coi-declarations" ? Promise.resolve(traPost)
+        : l === "POST /rfqs/r-1/approve"
+          ? Promise.resolve({ status: 422, body: { error: "Gói thầu ở bậc đòi khai báo xung đột lợi ích: khai trước khi ký (K9).", ma: "K9_CHUA_KHAI_XUNG_DOT" } })
+        : undefined);
+    const thanKhai = (p: Awaited<ReturnType<typeof moTaoThau>>["p"]) =>
+      p.trangThai.than.filter((x) => x.lenh === "POST /rfqs/r-1/coi-declarations").map((x) => x.than);
+
+    it("[S1.283 / S3.4b · K9] tao-thau: người giữ `coi.declare` ⇒ khối hiện, nói *chưa khai*, ô chọn có nhà cung cấp của bảng lời mời; «không xung đột» ⇒ POST thân đúng, đọc lại, nút ẩn", async () => {
+      let daKhai = false;
+      const { p } = await moKhaiTaoThau(true, () => (daKhai ? DA_KHAI : LOI_DOC_KB({})));
+      expect(p.trangThai.goi).toContain("GET /rfqs/r-1/coi-declarations");
+      expect(p.el("khoi-khai-bao").hidden).toBe(false);
+      expect(p.el("kb-tom-tat").textContent).toMatch(/bậc đòi khai báo/u);
+      expect(p.el("nut-kb-khong").hidden).toBe(false);
+      expect(p.el("kb-ncc").con.map((o) => [o.value, o.textContent])).toEqual([["n-1", "Công ty Thép"]]);
+      expect([p.el("kb-co").hidden, p.el("kb-khong-ds").hidden]).toEqual([false, true]);
+      p.el("kb-ghi-chu").value = "  khong quen ai  ";
+      daKhai = true;
+      await p.bam("nut-kb-khong");
+      expect(thanKhai(p)).toEqual([{ trangThai: "KHONG_XUNG_DOT", ghiChu: "khong quen ai" }]);
+      expect(p.el("kb-ok").textContent).toMatch(/^Đã khai không xung đột/u);
+      expect(p.el("nut-kb-khong").hidden, "lời khai hiệu lực ⇒ nút ẩn").toBe(true);
+      expect(p.el("kb-tom-tat").textContent).toMatch(/đã khai không xung đột với danh sách mời hiện tại/u);
+    });
+
+    it("[S1.283 / S3.4b · K9] tao-thau: «có xung đột» đòi chọn nhà cung cấp VÀ ô xác nhận — thiếu ô ⇒ không gửi; đủ ⇒ thân mang supplierId", async () => {
+      const { p } = await moKhaiTaoThau(true, () => LOI_DOC_KB({}));
+      p.el("kb-ncc").value = "n-1";
+      await p.bam("nut-kb-co");
+      expect(thanKhai(p), "chưa xác nhận ⇒ không gửi").toEqual([]);
+      expect(p.el("kb-loi").textContent).toMatch(/ô xác nhận/u);
+      p.el("kb-xac-nhan").checked = true;
+      await p.bam("nut-kb-co");
+      expect(thanKhai(p)).toEqual([{ trangThai: "CO_XUNG_DOT", supplierId: "n-1" }]);
+    });
+
+    it("[S1.283 / S3.4b · K9] tao-thau: người KHÔNG giữ `coi.declare` ⇒ không đọc khai báo (không 403, không hàng sổ), khối ẩn; tổ chức chưa bật ⇒ cũng vậy", async () => {
+      const { p } = await moKhaiTaoThau(false, () => LOI_DOC_KB({}));
+      expect(p.trangThai.goi).not.toContain("GET /rfqs/r-1/coi-declarations");
+      expect(p.el("khoi-khai-bao").hidden).toBe(true);
+      const chua = await moTaoThau(false, "PENDING_APPROVAL", (l) =>
+        l === "GET /rfqs/r-1" ? okKb({ rfq: { id: "r-1", title: "Gói", status: "PENDING_APPROVAL", lanNop: 1 }, coQuyenMoi: true, coQuyenKhai: true }) : undefined);
+      expect(chua.p.trangThai.goi, "tổ chức chưa bật").not.toContain("GET /rfqs/r-1/coi-declarations");
+      expect(chua.p.el("khoi-khai-bao").hidden).toBe(true);
+    });
+
+    it("[S1.283 / S3.4b · K9] tao-thau: «Phê duyệt» bị K9 chặn ⇒ câu của máy chủ rồi câu chỉ khối khai báo; khối đọc lại", async () => {
+      const { p } = await moKhaiTaoThau(true, () => LOI_DOC_KB({}));
+      const truoc = p.trangThai.goi.filter((l) => l === "GET /rfqs/r-1/coi-declarations").length;
+      await p.bam("nut-duyet");
+      expect(p.el("loi4").textContent).toMatch(/^Gói thầu ở bậc đòi khai báo .*\(K9\)\. Trên màn: khối «Khai báo xung đột lợi ích»/u);
+      expect(p.trangThai.goi.filter((l) => l === "GET /rfqs/r-1/coi-declarations").length, "khối đọc lại sau lời từ chối").toBeGreaterThan(truoc);
+    });
+
+    it("[S1.283 / S3.4b · K9] mo-thau: Đọc gói ⇒ khối hiện khi người xem giữ `coi.declare` và tổ chức đã bật; chưa đọc bảng so sánh ⇒ câu chỉ đường thay ô chọn; «Chấm thầu» bị K9 chặn ⇒ câu chỉ khối", async () => {
+      const R = "r-1";
+      const dungMo = async (coQuyenKhai: boolean, toChucDaBat: boolean) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: A,
+          thay: (l) =>
+            l === `GET /rfqs/${R}` ? okKb({ rfq: { title: "Mua thép", status: "UNSEALED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false, coQuyenKhai })
+            : l === `GET /rfqs/${R}/bid-count` ? okKb({ bidCount: { disclosed: true, count: 2 } })
+            : l === `GET /rfqs/${R}/unseal` ? okKb({ unsealRequest: null })
+            : l === `GET /rfqs/${R}/coi-declarations` ? okKb(LOI_DOC_KB({ toChucDaBat, ...(toChucDaBat ? {} : { chot: null, bacDoiKhai: false }) }))
+            : l === `POST /rfqs/${R}/evaluate`
+              ? Promise.resolve({ status: 422, body: { error: "Gói thầu ở bậc đòi khai báo xung đột lợi ích (K9).", ma: "K9_CHUA_KHAI_XUNG_DOT" } })
+            : undefined,
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = R;
+        await p.bam("nut-doc");
+        return p;
+      };
+      const p = await dungMo(true, true);
+      expect(p.el("khoi-khai-bao").hidden).toBe(false);
+      expect([p.el("kb-co").hidden, p.el("kb-khong-ds").hidden]).toEqual([true, false]);
+      expect(p.el("kb-khong-ds").textContent).toMatch(/bảng so sánh ở bước 4/u);
+      await p.bam("nut-cham");
+      expect(p.el("loi5").textContent).toMatch(/\(K9\)\. Trên màn: khối «Khai báo xung đột lợi ích»/u);
+      const chuaBat = await dungMo(true, false);
+      expect(chuaBat.trangThai.goi).toContain(`GET /rfqs/${R}/coi-declarations`);
+      expect(chuaBat.el("khoi-khai-bao").hidden, "tổ chức chưa bật ⇒ khối ẩn").toBe(true);
+      const khongQuyen = await dungMo(false, true);
+      expect(khongQuyen.trangThai.goi).not.toContain(`GET /rfqs/${R}/coi-declarations`);
+      expect(khongQuyen.el("khoi-khai-bao").hidden).toBe(true);
+    });
 
     it("[S1.234 / S4.3b] tao-thau: gói đã nộp ⇒ đọc trạng thái ánh xạ và vẽ cột hàng chuẩn; gói còn soạn ⇒ không đọc", async () => {
       const MOT_DONG = (coHangChuan: boolean, trangThai: string) => (l: string) =>

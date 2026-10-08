@@ -12167,7 +12167,8 @@ câu thô cũng vào sổ. Tám mã, cả tám vào sổ. Lời *chưa đủ ch�
 nhận dưới READ COMMITTED ở MỌI tổ chức (khuôn `107` (4)).
 
 ⑻ **`tham_dinh_truoc_trao` chưa cưỡng chế** (chủ dự án chốt): K8b và `supplier_qualifications` là S3.7; cưỡng chế ngay thì bậc 2 của ma trận
-demo (cờ TRUE) không trao được. Tín hiệu `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu — S3.6d; K9 ở chữ ký trao thầu — S3.4.
+demo (cờ TRUE) không trao được. Tín hiệu `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu — S3.6d; K9 ở chữ ký trao thầu — S3.4 (**[S1.283 / S3.4b]** đã làm: ADR-155
+⑿).
 
 ⑼ **S3.5 chia hai PR:** S3.5a (vòng này) — `113`, tầng gói, thân route (hình dạng trả về), kịch bản 41 luồng S3 hai chữ ký, khối đo khoản
 242 ⑴, lời sau khi bấm *Phê duyệt* ở `/mo-thau` đọc trạng thái máy chủ trả; S3.5b — màn (cần N, có M; khối lập ngoại lệ hậu kiểm ở
@@ -12206,7 +12207,8 @@ gieo một gói một tỷ bậc 2 (năm mời, bốn nộp) tới EVALUATING; k
 
 ### Điều ADR này KHÔNG nói
 
-~~Màn, `gieo:demo`, T4 (S3.5b)~~ **[S1.282]** S3.5b xong; K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); K9 ở chữ ký trao thầu (S3.4); bộ bằng
+~~Màn, `gieo:demo`, T4 (S3.5b)~~ **[S1.282]** S3.5b xong; K8b (S3.7); `ESTIMATE_UNDERSTATED`, K10 ở chữ ký trao thầu (S3.6d); ~~K9 ở chữ ký trao thầu (S3.4)~~
+**[S1.283]** ADR-155 ⑿; bộ bằng
 chứng mang số tiền trao và bậc (S3.9).
 
 ---
@@ -12216,7 +12218,8 @@ chứng mang số tiền trao và bậc (S3.9).
 **Ngày:** 2026-10-07 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-07: *"triển khai luôn hạng mục S3.4"*; vòng chia hai
 phần theo khuôn S3.6b (⑻), các quyết định hình dạng dưới đây theo đề xuất và chờ chủ dự án xác nhận lại ở lượt soi · **[S1.281]** ·
 **Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, ADR-082 ⒄, ADR-084 ⑴ ⑷, ADR-108, ADR-114, ADR-145, ADR-147 ⑺ · **Spec:** S3 §4.5,
-§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.281
+§5 K9, §5.1 K9, §8.7, §9 S3.4 · **Biên bản:** `evidence/security-reviews.md` §S1.281 · **[S1.283 / S3.4b]** phần hai ⑼–⒀ (màn khai
+báo, `gieo:demo --s3`, K9 ở phép đếm chữ ký trao thầu) — chủ dự án ngày 2026-10-08: *"Làm S3.4b đi, gộp luôn mục 2"*; biên bản §S1.283
 
 ### Bối cảnh
 
@@ -12256,7 +12259,7 @@ mở thầu chỉ giải mã (§4.5). Lượt chấm giữ cổng mà không ch�
 hàm ấy. Cạnh mở gói thêm vị từ `rfq_chot_chu_ky_xung_dot` (khuôn K1: `openRfq` hỏi trước, trigger xếp TRƯỚC K4b hỏi lại) nói lời có
 tên `K9_CHU_KY_CO_XUNG_DOT` CHỈ KHI K9 làm thiếu chữ ký — thiếu vì lý do khác thì K4b nói, không hàng sổ. Ở trao thầu, hàng `APPROVED`
 đòi ít nhất một chữ ký duyệt của người không có `CO_XUNG_DOT` — độc lập với `CHU_KY_CAN` của `061`/`094`; S3.5 gộp vào
-`award_so_chu_ky_can`.
+`award_so_chu_ky_can`. **[S1.283 / S3.4b]** Gộp ở ⑿: K7 và K5b đếm trên `award_chu_ky_con_hieu_luc`, nhánh `APPROVED` riêng bỏ.
 
 ⑹ **Mã quyền `coi.declare`** cho mọi vai giữ một mã mà K9 chặn — tức mọi vai trừ `DATA_STEWARD`. Khai báo không tách người (ADR-084 ⑴)
 nhưng không mã nào sẵn có mà mọi người sắp quyết đều giữ; route khai và route đọc khai báo của CHÍNH mình cùng hỏi mã ấy. Khai báo của
@@ -12267,7 +12270,7 @@ người khác không ra ngoài route (K11); lớp bằng chứng đọc bảng 
 
 ⑻ **S3.4 chia hai PR** (khuôn S3.6b1/S3.6b2): **S3.4a** — migration, hàm, trigger, mã, gói `kiem-soat`, hai route, K9 vào sổ đăng ký;
 **S3.4b** — màn khai báo ở `/tao-thau` (trước ô ký, chấm, duyệt), `gieo:demo --s3` khai cho những người nó ký thay, lượt đi thử T4.
-**[S1.282 / S3.5b]** Phần *gieo:demo --s3 khai thay* làm TỐI THIỂU ở S1.282 (`tools/gieo-demo/src/khai-xung-dot.ts`): người công cụ ký thay (soan2, soan3 ở gói chính; soan2 ở ba gói đã mở và ba gói chia nhỏ; soan, soan2, duyet1, duyet2, hai người tài chính ở gói trao thầu) khai qua hàm gói ngay sau khi danh sách mời đủ — không gói nào của tổ chức demo duyệt, chấm hay trao được nếu không; màn khai báo và các người đi tay còn lại (gói một nguồn: soan2, soan3 duyệt trên `/tao-thau`) vẫn là S3.4b. Kịch bản 41 (hai bản) đã về S3.4a: lượt evidence đầu đỏ ở chúng, nên người ký, chấm, đề xuất, duyệt, ghi nhận của luồng S3 nay khai
+**[S1.282 / S3.5b]** Gói trao thầu của `gieo:demo --s3` (S3.5b, gộp sau S3.4b) khai thay sáu người — soan, soan2, duyet1, duyet2 và hai người tài chính — qua `khai-bao.ts` của S3.4b ngay sau khi năm lời mời đủ; ngoại lệ hậu kiểm lập sau không đổi băm (ADR-154 ⑸). Kịch bản 41 (hai bản) đã về S3.4a: lượt evidence đầu đỏ ở chúng, nên người ký, chấm, đề xuất, duyệt, ghi nhận của luồng S3 nay khai
 *không xung đột* ngay trước mỗi cổng, qua chính route khai báo (biên bản §7). Giữa hai PR, tổ chức demo dùng bậc mặc định `khai_xung_dot: true` nên người đi trên màn bị K9 chặn ở nút ký cho tới
 S3.4b — cùng khoảng trống S3.6b1 đã để giữa K10a và màn ghi nhận.
 
@@ -12291,6 +12294,57 @@ S3.4b — cùng khoảng trống S3.6b1 đã để giữa K10a và màn ghi nh�
 
 ### Điều ADR này KHÔNG nói
 
-Màn, `gieo:demo`, lượt đi thử T4 (S3.4b); cổng ở THẨM ĐỊNH đầy đủ (K8b, S3.7); khai báo theo từng nhà cung cấp lúc mời
-(spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5 — đã vào ở S1.280, nhưng `award_du_chu_ky` CHƯA loại người có `CO_XUNG_DOT`
-khỏi phép đếm: việc của S3.4b hoặc S3.5b); lớp bằng chứng (S3.9).
+~~Màn, `gieo:demo`, lượt đi thử T4 (S3.4b)~~ **[S1.283] làm ở ⑼–⒀**; cổng ở THẨM ĐỊNH đầy đủ (K8b, S3.7); khai báo theo từng nhà
+cung cấp lúc mời (spec §10); `award_so_chu_ky_can` và vai theo bậc (S3.5 — đã vào ở S1.280, ~~nhưng `award_du_chu_ky` CHƯA loại người
+có `CO_XUNG_DOT` khỏi phép đếm: việc của S3.4b hoặc S3.5b~~ **[S1.283] loại ở ⑿**); lớp bằng chứng (S3.9).
+
+### [S1.283 / S3.4b] Phần hai — màn khai báo, `gieo:demo --s3`, K9 ở phép đếm chữ ký trao thầu
+
+Chủ dự án ngày 2026-10-08: *"Làm S3.4b đi, gộp luôn mục 2"* — mục 2 là giới hạn ở phần *không nói* dưới đây: `award_du_chu_ky` (`113`,
+S3.5a ra đời song song với `114`) đếm người ký trao thầu mà không loại người có `CO_XUNG_DOT`. Các chốt hình dạng ⑼–⒀ theo đề xuất của
+vòng, chờ chủ dự án xác nhận lại.
+
+⑼ **Khối khai báo ở HAI trang, một module.** `/tao-thau` bước 4 (trước «Phê duyệt», «Ghi nhận tín hiệu») và `/mo-thau` bước 2 (trước
+«Chấm thầu», «Đề xuất», «Phê duyệt», «Huỷ trao thầu») gắn cùng `/lib/xung-dot.js` với cùng bộ id (khuôn `dang-nhap`, ADR-107). Khối đọc
+lời khai của CHÍNH người xem kèm câu trả lời của `coi_chot_hanh_dong` — cùng hàm bảy cổng hỏi — và nói TRƯỚC: chưa khai, đã khai còn
+hiệu lực, lời khai lỗi thời vì danh sách đổi, bậc không đòi khai, đã khai có xung đột (vĩnh viễn). Khai *có xung đột* đòi chọn nhà cung
+cấp VÀ một ô xác nhận. Lời từ chối K9 ở nút bị chặn mang câu của máy chủ cộng một câu chỉ khối ấy, và khối đọc lại. Spec §9 đặt màn ở
+`/tao-thau`; bốn trong bảy cổng có nút ở `/mo-thau`, và một khối chỉ ở một trang để người chấm và người duyệt trao thầu bị chặn mà không
+chỗ khai.
+
+⑽ **Danh sách nhà cung cấp lấy từ thứ trang ĐÃ được đọc — không route nào nới.** Khai *không xung đột* là khai về một danh sách, nên
+người khai phải thấy nó. Danh sách mời của một gói chỉ đọc được qua `rfq.invite` (`listInvitations`), và sau mở thầu qua bảng so sánh
+(`bid.view`); route đọc khai báo trả tên nhà cung cấp cho mọi người giữ `coi.declare` là nới quyền đọc *"ai đang dự gói này"* tới người
+yêu cầu mua và kỹ thuật TRƯỚC khi đóng thầu. Khối lấy danh sách từ bảng lời mời (`/tao-thau`) hay bảng so sánh (`/mo-thau`) mà trang đã
+đọc, và nói thẳng khi chưa có. **Lượt đi thử T4 đo ra:** ở `AWARDED` — đúng lúc người duyệt trao thầu ký — bảng so sánh đã đóng
+(`COMPARISON_ALLOWED_STATUSES`), nên `/mo-thau` gộp thêm bảng xếp hạng, và hàng xếp hạng mang `supplierId` (người đọc nó giữ `bid.view`
+và đã thấy tên — mã không nới gì). Người ký duyệt gói và người ghi nhận tín hiệu (PROCUREMENT_MANAGER, giữ `rfq.invite`), người duyệt trao
+thầu (FINANCE, DIRECTOR — `bid.view` sau mở thầu) đều thấy; người chấm REQUESTER, TECHNICAL khai *không xung đột* được nhưng không chọn
+được nhà cung cấp — cổng chấm giữ mà không chịu lực (J1/J2, ⑷).
+
+⑾ **Hai cờ và một đánh dấu, không cổng nào.** `GET /rfqs/:id` thêm `coQuyenKhai` (khuôn `coQuyenMoi`, khoản 340): người xem giữ
+`coi.declare`; hai trang chỉ tự đọc khai báo khi cờ bật, nên `DATA_STEWARD` không để lại một 403 và một hàng `PERMISSION_DENIED` ở mỗi
+lần đọc gói; phiên agent luôn `false`. Lời đọc khai báo thêm `toChucDaBat` — `/mo-thau` không tự biết luồng của tổ chức. Chữ ký trong lời
+đọc trao thầu thêm `conHieuLuc`, đọc từ CHÍNH hàm hai chốt đếm (⑿), không đếm lại ở TypeScript.
+
+⑿ **K9 ở phép đếm chữ ký trao thầu (`115_xung_dot_chu_ky_trao_thau`).** `award_chu_ky_con_hieu_luc(org, đề xuất)` = chữ ký của đề xuất
+TRỪ người đã khai `CO_XUNG_DOT` trên gói (khuôn `rfq_chu_ky_con_hieu_luc` của ⑸); `award_du_chu_ky` (đếm người ký, rút hai vai khác nhau)
+và `award_chot_doc_lap` (K5b) đọc nó. Khai *có xung đột* SAU khi ký thì chữ ký ấy thôi đếm: đề xuất đứng yên ở `PROPOSED`, lời trả về
+đánh dấu nó — không phải một lần từ chối (khuôn S3.5a: chưa đủ chữ ký là chờ, không là chặn). Nhánh `APPROVED` của `coi_kiem_trao_thau`
+(⑸ — *ít nhất một chữ ký không xung đột*) BỎ: trigger K7 của cạnh ấy (`rfq_awards_kiem_theo_bac_khi_duyet`) xếp TRƯỚC theo tên, chạy ở
+mọi hàng `APPROVED` của tổ chức đã bật, và nay đòi đủ `award_so_chu_ky_can` (≥ 1) chữ ký không xung đột — nhánh cũ không còn ca nào tới
+được, và mã chết trong một trigger an ninh là mã không phép đo nào giữ. Câu chèn thô thiếu chữ ký hợp lệ nay nhận `k7_thieu_chu_ky`
+(không qua bảng tên → mã, `113` (10)).
+
+⒀ **`gieo:demo --s3` khai thay ĐÚNG những chữ ký nó ghi thay** (gói chính, ba gói tín hiệu chia nhỏ, ba gói đã mở) bằng hàm gói thật,
+trước chữ ký; mọi bước người demo tự đi trên màn — ghi nhận tín hiệu, gói một nguồn, chấm, đề xuất, duyệt — để họ khai ở khối.
+`tools/gieo-demo` khai thêm `@trustprocure/kiem-soat`.
+
+**Cái giá, nói thẳng (phần hai).** Người chấm REQUESTER, TECHNICAL khai mà không thấy danh sách (⑽). K9 làm thiếu chữ ký trao thầu thì
+không có hàng `CONTROL_DENIED` nào — khác cạnh mở gói, nơi `K9_CHU_KY_CO_XUNG_DOT` vào sổ; dấu vết là chính hàng `CO_XUNG_DOT` và chữ
+ký mang cờ. Lượt đi thử T4 là một lần, script ngoài kho.
+
+**Phương án đã loại (phần hai).** Route đọc khai báo trả tên nhà cung cấp — nới đọc danh sách mời (⑽). Khối chỉ ở `/tao-thau`, đúng chữ
+spec §9 — bốn cổng ở `/mo-thau` không chỗ khai. Giữ nhánh `APPROVED` của K9 làm lớp thứ hai — mã chết, không phép đo nào giữ được. Một
+hàm vị từ *"K9 làm thiếu chữ ký trao thầu"* (khuôn `rfq_chot_chu_ky_xung_dot`) — ở trao thầu, chưa đủ chữ ký không là lần từ chối; lời
+nói nằm ở cờ của chữ ký.
