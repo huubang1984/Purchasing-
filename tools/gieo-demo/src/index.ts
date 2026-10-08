@@ -63,6 +63,7 @@ import {
   approveRfq,
   createProcurementPolicy,
   createRfq,
+  datSoNgayGiao,
   kyPhienBanChinhSach,
   openRfq,
   setRfqBudget,
@@ -595,6 +596,9 @@ async function chinh(): Promise<void> {
                 categoryId: nhom,
               });
               await setRfqBudget(c, org, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: soan.sessionId });
+              // [S1.9101 / S4.7b2] Gói thứ ba chờ người demo ghi nhận tín hiệu rồi MỞ — lúc ấy phiên bản 2 (tính chi phí trễ) đã hiệu lực,
+              // và cạnh mở đòi số ngày giao (ADR-153 ⑶). Khai ở DRAFT, trước lần nộp: chữ ký của soan2 phủ nó.
+              if (i === 2) await datSoNgayGiao(c, org, { rfqId: r.id, soNgayGiao: 30, actorSessionId: soan.sessionId });
               await addRfqItem(c, org, {
                 rfqId: r.id,
                 lineNo: 1,
@@ -669,6 +673,8 @@ async function chinh(): Promise<void> {
               categoryId: nhom,
             });
             await setRfqBudget(c, org, { rfqId: r.id, estimatedValue: "200000000.00", currency: "VND", actorSessionId: soan.sessionId });
+            // [S1.9101 / S4.7b2] Người demo nộp và mở gói này SAU khi phiên bản 2 hiệu lực — cùng lý do với gói chia nhỏ thứ ba.
+            await datSoNgayGiao(c, org, { rfqId: r.id, soNgayGiao: 30, actorSessionId: soan.sessionId });
             await addRfqItem(c, org, {
               rfqId: r.id,
               lineNo: 1,
