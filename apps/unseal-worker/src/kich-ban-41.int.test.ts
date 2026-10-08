@@ -80,7 +80,7 @@ import {
   dispatchUnseal,
   requestUnseal,
 } from "@trustprocure/unseal";
-import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
+import { ghiNhanTinHieu, khaiBaoXungDot, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import { CHOT_VAO_SO, ChotKiemSoatError } from "@trustprocure/identity";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
@@ -267,6 +267,15 @@ let soMst = 0;
  * mà ngân sách ghim (`tc1` khai), không giữ `rfq.invite`, không dựng hồ sơ. Người liên hệ có TRƯỚC lần xác minh (băm hồ sơ phủ nó),
  * với email và số điện thoại suy từ id hồ sơ như luồng MVP1 — khác nhau giữa các nhà cung cấp, nên K2 đếm đủ đích.
  */
+/**
+ * [S1.281 / S3.4a / K9] Luồng S3: người sắp ký hay ghi nhận khai *không xung đột* trên gói — K9 đòi lời khai với đúng danh sách mời
+ * hiện tại (bậc mặc định `khai_xung_dot: true`), và danh sách của luồng S3 đứng yên từ DRAFT. Giao dịch riêng, trước lần ký: hàng sổ
+ * `COI_DECLARED` không chen vào giao dịch của chữ ký. Luồng MVP1 không gọi — tổ chức chưa bật, K9 không sống.
+ */
+async function khaiKhongXungDot(rfqId: string, phien: string): Promise<void> {
+  await withTenant(apiPool, orgA, (c) => khaiBaoXungDot(c, orgA, { rfqId, trangThai: "KHONG_XUNG_DOT", actorSessionId: phien }, apiPool));
+}
+
 async function dungNccDemDuoc(c: pg.PoolClient, ten: string): Promise<{ supplierId: string; contactId: string }> {
   soMst += 1;
   const s = await createSupplier(c, orgA, {
@@ -419,6 +428,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         [trangThai.rfqId],
       );
       expect(token, "luồng S3: không token nào trước lần mở gói").toHaveLength(0);
+    }
+    // [S1.281 / S3.4a / K9] Luồng S3: hai giám đốc khai *không xung đột* trước khi ký.
+    if (batS3) {
+      for (const phien of [sGd1, sGd2]) await khaiKhongXungDot(trangThai.rfqId, phien);
     }
     await withTenant(apiPool, orgA, async (c) => {
       const nop = await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
@@ -865,6 +878,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         return r.id;
       });
       const nop = await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId: id, actorSessionId: sMua }, apiPool));
+      if (batS3) await khaiKhongXungDot(id, sGd1);
       await withTenant(apiPool, orgA, (c) =>
         approveRfq(c, orgA, { rfqId: id, sessionId: sGd1, ...(batS3 ? { lanNopDaXem: nop.lanNop } : {}) }, apiPool),
       );
@@ -929,6 +943,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     expect((tuGhi as Error).message).toBe(CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep);
 
     const LY_DO = "Ba cong trinh khac nhau, ba hop dong khung rieng";
+    if (batS3) await khaiKhongXungDot(g3, sPmDl);
     const kq = await withTenant(apiPool, orgA, (c) => ghiNhanTinHieu(c, orgA, { rfqId: g3, lyDo: LY_DO, actorSessionId: sPmDl }, apiPool));
     expect(kq.tinHieuMoi, "tập gói không đổi từ lúc nộp — ghi nhận đúng tín hiệu đã ghi").toBe(false);
     expect(await moGoi(g3), "ghi nhận độc lập xong thì gói mở").toBeNull();
@@ -983,6 +998,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       (await db.pool.query<{ n: number }>("SELECT lan_nop AS n FROM rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n ?? -1;
     const ky = async (rfqId: string, phien: string): Promise<void> => {
       const moc = batS3 ? { lanNopDaXem: await lanNop(rfqId) } : {};
+      if (batS3) await khaiKhongXungDot(rfqId, phien);
       await withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: phien, ...moc }, apiPool));
     };
     const moGoi = (rfqId: string): Promise<unknown> =>

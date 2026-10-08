@@ -91,6 +91,19 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // [S1.265 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh. Chỉ gắn INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua nó —
   // `dungKichBan()` lập một ngoại lệ trên gói vừa trả về DRAFT.
   "public.ngoai_le_kiem",
+  // [S1.281 / S3.4a / K9 / `114_khai_bao_xung_dot`] TÁM hàm INSERT của khai báo xung đột lợi ích: luật ghi khai báo
+  // (`coi_kiem_khai_bao`) và bảy cổng — chữ ký mở gói, lượt chấm, đề xuất/huỷ trao thầu, chữ ký duyệt trao thầu, xác minh nhà cung
+  // cấp, ghi nhận tín hiệu, cùng vế đếm chữ ký ở cạnh mở gói. Chỉ gắn INSERT hay UPDATE một cạnh ⇒ không thể là hàm canh; từ chối CÓ
+  // ĐIỀU KIỆN (tổ chức đã bật, bậc đòi khai, người có `CO_XUNG_DOT`). Nhân chứng: `dungKichBan()` khai *không xung đột* trên gói vừa
+  // trả về DRAFT của tổ chức đã bật, và mọi câu ghi của kịch bản trên bảy bảng ấy — ở tổ chức chưa bật, cổng trả `NEW` ngay.
+  "public.coi_kiem_khai_bao",
+  "public.coi_kiem_chu_ky_mo_goi",
+  "public.coi_kiem_luot_cham",
+  "public.coi_kiem_trao_thau",
+  "public.coi_kiem_duyet_trao_thau",
+  "public.coi_kiem_xac_minh",
+  "public.coi_kiem_ghi_nhan",
+  "public.rfq_kiem_chu_ky_xung_dot_khi_mo",
   // [S1.201 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",

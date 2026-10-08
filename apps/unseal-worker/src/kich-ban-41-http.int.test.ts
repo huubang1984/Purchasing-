@@ -146,6 +146,16 @@ function base32Decode(s: string): Buffer {
   return Buffer.from(ra);
 }
 
+/**
+ * [S1.281 / S3.4a / K9] Luồng S3: người sắp ký, chấm, đề xuất hay duyệt trao thầu, ghi nhận tín hiệu khai *không xung đột* trên gói
+ * qua chính route của màn — K9 đòi lời khai với đúng danh sách mời hiện tại (bậc mặc định `khai_xung_dot: true`), và danh sách của
+ * luồng S3 đứng yên từ DRAFT nên một lời khai sống trọn kịch bản. Luồng MVP1 không gọi — tổ chức chưa bật, K9 không sống.
+ */
+async function khaiKhongXungDot(rfqId: string, cookie: string): Promise<void> {
+  const r = await goi("POST", `/rfqs/${rfqId}/coi-declarations`, cookie, { trangThai: "KHONG_XUNG_DOT" });
+  expect(r.status, r.text).toBe(201);
+}
+
 async function goi(method: string, path: string, cookie?: string, body?: unknown): Promise<PhanHoi> {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = cookie;
@@ -693,6 +703,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       [trangThai.rfqId],
     );
     expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
+    // [S1.281 / S3.4a / K9] Luồng S3: hai người ký khai *không xung đột* trước — lời khai sống tới lần đề xuất trao thầu của `pm2`.
+    if (batS3) {
+      for (const ai of [trangThai.pm2, trangThai.pm3]) await khaiKhongXungDot(trangThai.rfqId, ai.cookie);
+    }
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie, moc)).status).toBe(200);
     const guiTruocMo = dv.loiMoiDaGui.length;
@@ -858,6 +872,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const nopHyA = await goi("POST", `/rfqs/${hyA}/submit`, m);
     expect(nopHyA.status).toBe(200);
     const mocHyA = batS3 ? { lanNop: (nopHyA.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+    if (batS3) await khaiKhongXungDot(hyA, trangThai.pm2.cookie);
     expect((await goi("POST", `/rfqs/${hyA}/approve`, trangThai.pm2.cookie, mocHyA)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${hyA}/open`, m)).status).toBe(200);
     const nccHy = await goi("POST", "/suppliers", m, { legalName: "Cong ty Hy Sinh", taxCode: "0399999999" });
@@ -1003,12 +1018,22 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
             },
           };
         // [S1.198 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
+        // [S1.281 / S3.4a / K9] Luồng S3: `pm2` khai *không xung đột* trên gói hy sinh B ngay trước khi ký — thân là một lời hứa, như
+        // ca xác minh; lời khai ấy đi qua chính route khai báo (201).
         case "POST /rfqs/:rfqId/approve":
-          return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
+          return {
+            path: r.path.replace(":rfqId", hyB),
+            body: batS3 ? khaiKhongXungDot(hyB, trangThai.pm2.cookie).then(() => ({ lanNop: hy.lanNopB })) : {},
+            cookie: trangThai.pm2.cookie,
+          };
         // [S1.203 / S3.6b1 · K10a] Người duyệt thứ hai ghi nhận tín hiệu của gói hy sinh B — gói nhỏ, không tín hiệu nào ở cả hai
         // luồng, nên lời gọi qua cổng `rfq.approve`, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên của `KiemSoatError`.
         case "POST /rfqs/:rfqId/signals/acknowledge":
           return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan de quet" }, cookie: trangThai.pm2.cookie };
+        // [S1.281 / S3.4a / K9] Khai báo xung đột trên gói hy sinh B bằng `pm3` (không ký gói ấy): luồng S3 đi trọn tới 201; luồng
+        // MVP1 dừng ở lời từ chối *tổ chức chưa bật* của trigger `coi_kiem_khai_bao` — 422 nghiệp vụ có tên, không 422 hình dạng.
+        case "POST /rfqs/:rfqId/coi-declarations":
+          return { path: r.path.replace(":rfqId", hyB), body: { trangThai: "KHONG_XUNG_DOT" }, cookie: trangThai.pm3.cookie };
         case "POST /rfqs/:rfqId/open":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/extend":
@@ -1450,6 +1475,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // của `rfq_evaluation_lines` mà ADR-054 không khai. Bảng xếp hạng đọc qua `GET /ranking` dưới
     // `m` (PROCUREMENT_MANAGER, giữ `bid.view`).
     trangThai.cham = await dangNhap("cham-khong-xem@vidu.vn", "BUYER");
+    // [S1.281 / S3.4a / K9] Luồng S3: người bấm chấm khai *không xung đột* trước lượt chấm — lời khai sống tới lượt chấm lại (12g).
+    if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.cham.cookie);
     const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, trangThai.cham.cookie, {});
     expect(r.status, r.text).toBe(201);
     const ld = (r.body as { evaluation: { evaluationId: string; currency: string } }).evaluation;
@@ -2058,6 +2085,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const chan = await goi("POST", duong, trangThai.pm2.cookie);
     expect(chan.status, chan.text).toBe(403);
 
+    // [S1.281 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
+    if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
     const sauMot = (ok.body as { award: { status: string; chuKyCan: number; approvals: unknown[] } }).award;
@@ -2068,6 +2097,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Cùng người ký lại ⇒ 422 có tên (`DA_KY_DE_XUAT_NAY`), chữ ký không nhân đôi; giám đốc THỨ HAI hoàn tất.
       const lapLai = await goi("POST", duong, trangThai.gd1.cookie);
       expect(lapLai.status, lapLai.text).toBe(422);
+      // [S1.281 / S3.4a / K9] Giám đốc thứ hai cũng khai *không xung đột* trước khi ký.
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
       const hai = await goi("POST", duong, trangThai.gd2.cookie);
       expect(hai.status, hai.text).toBe(201);
       expect((hai.body as { award: { status: string } }).award.status).toBe("APPROVED");
@@ -2381,6 +2412,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       const nop = await goi("POST", `/rfqs/${id}/submit`, m);
       expect(nop.status, nop.text).toBe(200);
       const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+      if (batS3) await khaiKhongXungDot(id, trangThai.pm2.cookie);
       expect((await goi("POST", `/rfqs/${id}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
       goiCon.push(id);
       // Hai gói đầu: tổng 950 triệu chưa chạm cận — mở như mọi gói, ở cả hai luồng.
@@ -2446,6 +2478,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(tuGhi.text).toContain(CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep);
 
     const LY_DO = "Ba cong trinh khac nhau, ba hop dong khung rieng";
+    if (batS3) await khaiKhongXungDot(g3, trangThai.pm3.cookie);
     const ghi = await goi("POST", `/rfqs/${g3}/signals/acknowledge`, trangThai.pm3.cookie, { lyDo: LY_DO });
     expect(ghi.status, ghi.text).toBe(201);
     expect((ghi.body as { ghiNhan: { tinHieuMoi: boolean } }).ghiNhan.tinHieuMoi, "tập gói không đổi từ lúc nộp").toBe(false);
@@ -2592,6 +2625,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const nopA = await goi("POST", `/rfqs/${a}/submit`, m);
     expect(nopA.status, nopA.text).toBe(200);
     const mocA = { lanNop: (nopA.body as { rfq: { lanNop: number } }).rfq.lanNop };
+    await khaiKhongXungDot(a, trangThai.pm2.cookie);
     expect((await goi("POST", `/rfqs/${a}/approve`, trangThai.pm2.cookie, mocA)).status).toBe(200);
 
     // ⑷ K5: đủ số chữ ký (gói dưới ngưỡng kép — một), nhưng người ký duy nhất là người lập ngoại lệ — một ngoại lệ không bao giờ tự
@@ -2607,6 +2641,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // ⑸ Người ký độc lập: pm4 — không tạo, không mời, không dựng hồ sơ, không lập ngoại lệ. Gói mở; link đi tới đúng một lời mời.
     const pm4 = await dangNhap("pm4@vidu.vn", "PROCUREMENT_MANAGER");
     tenNguoi.set(pm4.id, "pm4");
+    await khaiKhongXungDot(a, pm4.cookie);
     expect((await goi("POST", `/rfqs/${a}/approve`, pm4.cookie, mocA)).status).toBe(200);
     const moA = await goi("POST", `/rfqs/${a}/open`, m);
     expect(moA.status, moA.text).toBe(200);
@@ -2639,6 +2674,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(lapB.status, lapB.text).toBe(201);
     const nopB = await goi("POST", `/rfqs/${b}/submit`, m);
     expect(nopB.status, nopB.text).toBe(200);
+    await khaiKhongXungDot(b, pm4.cookie);
     expect((await goi("POST", `/rfqs/${b}/approve`, pm4.cookie, { lanNop: (nopB.body as { rfq: { lanNop: number } }).rfq.lanNop })).status).toBe(200);
     const moB = await goi("POST", `/rfqs/${b}/open`, m);
     expect(moB.status, moB.text).toBe(200);

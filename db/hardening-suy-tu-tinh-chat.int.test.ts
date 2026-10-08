@@ -118,6 +118,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
+  // [S1.281 / S3.4a / K9] Khai báo xung đột lợi ích — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
+  // Một lời khai sửa được là một lời khai không có chủ thể; một CO_XUNG_DOT xoá được là một khai báo gỡ được (spec §4.5).
+  "coi_declarations",
   // [S1.272 / S4.6a / `109_du_lieu_ngoai`] Mốc ngoài và lịch sử ngoài hệ thống — khuôn `079`: sửa bằng hàng rút, không UPDATE.
   "external_price_references",
   "external_purchase_history",
@@ -1788,6 +1791,22 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_sourcing_exceptions",
+  );
+  // [S1.281 / S3.4a / K9] Tổ chức đã bật, gói `rfqVe` ở DRAFT: `pm` khai *không xung đột* với danh sách mời hiện tại — nhân chứng
+  // của `coi_kiem_khai_bao` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI). Băm do trigger đặt nên không ở RETURNING.
+  doiSoHang(
+    await so.chung(
+      "public.coi_declarations",
+      "INSERT",
+      api(
+        "INSERT INTO coi_declarations (org_id, rfq_id, user_id, session_id, trang_thai) VALUES ($1, $2, $3, $4, 'KHONG_XUNG_DOT') " +
+          "RETURNING org_id, rfq_id, user_id, session_id, trang_thai",
+        [org, rfqVe, pm.u, pm.s],
+        { org_id: org, rfq_id: rfqVe, user_id: pm.u, session_id: pm.s, trang_thai: "KHONG_XUNG_DOT" },
+      ),
+    ),
+    1,
+    "coi_declarations",
   );
   // [S1.196 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
   // `rfq.invite`, không dựng hồ sơ) xác minh — nhân chứng của `ncc_kiem_xac_minh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).

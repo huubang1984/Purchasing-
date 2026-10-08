@@ -671,6 +671,9 @@ export async function duyetTraoThau(
     ));
   } catch (loi) {
     // Lớp chặn cuối của cạnh APPROVED (`113`): mã chốt ⇒ hàng sổ ở giao dịch độc lập, cùng lối với chữ ký ở trên.
+    // [S1.281 / S3.4a / K9] Hàng `APPROVED` đòi ít nhất một chữ ký duyệt của người KHÔNG khai có xung đột — trigger
+    // `rfq_awards_kiem_xung_dot` (`114`) đặt tên `k9_chu_ky_co_xung_dot`. Tới được khi người ký vừa khai `CO_XUNG_DOT` SAU chữ
+    // ký của mình, trước câu này: một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối có tên (ADR-114).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
@@ -808,24 +811,33 @@ export async function huyTraoThau(
     );
   }
 
-  const { rows: award } = await client.query<HangAward>(
-    `INSERT INTO public.rfq_awards
-       (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
-        acted_by, acted_by_session_id)
-     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
-             $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
-    [
-      orgId,
-      input.rfqId,
-      truoc.evaluation_id,
-      truoc.bid_version_id,
-      "CANCELLED",
-      input.reason,
-      actor.id,
-      input.actorSessionId,
-    ],
-  );
+  let award: HangAward[];
+  try {
+    ({ rows: award } = await client.query<HangAward>(
+      `INSERT INTO public.rfq_awards
+         (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
+          acted_by, acted_by_session_id)
+       VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
+               $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+      [
+        orgId,
+        input.rfqId,
+        truoc.evaluation_id,
+        truoc.bid_version_id,
+        "CANCELLED",
+        input.reason,
+        actor.id,
+        input.actorSessionId,
+      ],
+    ));
+  } catch (loi) {
+    // [S1.281 / S3.4a / K9] Huỷ trao thầu là một cổng K9 (ADR-082 ⒄): trigger `rfq_awards_kiem_xung_dot` (`114`) hỏi
+    // `coi_chot_hanh_dong` cho người huỷ và từ chối có tên — một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi lời từ chối (ADR-114).
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
+    throw loi;
+  }
   const a = award[0];
   if (a === undefined) throw new Error("Không ghi được lần huỷ trao thầu.");
 

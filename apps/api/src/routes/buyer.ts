@@ -29,7 +29,7 @@ import {
 } from "@trustprocure/danh-gia";
 import { chuanHoaGoi, coHangChuanDangDung } from "@trustprocure/du-lieu-nen";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, listUserIdsWithPermission, requestMfaReset } from "@trustprocure/identity";
-import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
+import { docKhaiBaoXungDot, ghiNhanTinHieu, khaiBaoXungDot, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import {
   clearOtpLockout,
   createInvitation,
@@ -458,6 +458,22 @@ const doc: readonly BuyerReadRoute[] = [
       status: 200,
       body: {
         tinHieu: await lietKeTinHieu(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }),
+      },
+    }),
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/coi-declarations",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.281 / S3.4a · K9] Khai báo xung đột lợi ích của CHÍNH người đang xem trên một gói, băm danh sách mời hiện tại, bậc có đòi
+    // khai không, và chốt K9 đang nói gì về họ — cùng hàm vị từ bảy cổng hỏi, để màn nói trước thay vì để một cú bấm sai vào sổ.
+    // Cổng `coi.declare` đứng trong `docKhaiBaoXungDot`. KHÔNG cho agent: lời khai của một con người trước khi quyết (`cong-cu.ts`).
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        khaiBao: await docKhaiBaoXungDot(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool),
       },
     }),
   },
@@ -1224,6 +1240,35 @@ const ghi: readonly BuyerWriteRoute[] = [
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/coi-declarations",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.281 / S3.4a · K9] Khai báo xung đột lợi ích trên một gói — `KHONG_XUNG_DOT` với danh sách mời hiện tại, hay `CO_XUNG_DOT`
+    // với một nhà cung cấp có lời mời. Chỉ ghi thêm; một `CO_XUNG_DOT` là vĩnh viễn cho gói — lần khai lại *không xung đột* sau đó
+    // vào sổ `CONTROL_DENIED`. Bảy cổng K9 đọc bảng này ở trigger của chúng.
+    permission: PERMISSIONS.COI_DECLARE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        khaiBao: await khaiBaoXungDot(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            trangThai: chuoiBatBuoc(ctx.req.body, "trangThai"),
+            supplierId: uuidTuyChon(ctx.req.body, "supplierId"),
+            ghiChu: chuoiTuyChon(ctx.req.body, "ghiChu"),
+            actorSessionId: ctx.actor.sessionId,
+          },
           ctx.auditPool,
         ),
       },

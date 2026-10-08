@@ -88,6 +88,14 @@ export const CAU_CHOT_XOAY_VONG_MO =
   "AND r.status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL'";
 
 /**
+ * [S1.281 / S3.4a / K9] Câu hỏi chốt *chữ ký của người có xung đột không đếm* ở cạnh mở gói (`114_khai_bao_xung_dot`): `$1` tổ
+ * chức, `$2` gói. Hàm vị từ tự cho qua khi gói không ở PENDING_APPROVAL, khi tổ chức chưa bật, khi đủ chữ ký còn hiệu lực (đã loại
+ * người có `CO_XUNG_DOT`), hay khi thiếu chữ ký vì lý do khác — lời ấy là của K4b ở trigger, không phải lần lách chốt (ADR-060).
+ */
+export const CAU_CHOT_CHU_KY_XUNG_DOT_MO =
+  "SELECT public.rfq_chot_chu_ky_xung_dot($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
+
+/**
  * Hỏi một hàm vị từ của chốt rồi ném theo bảng. Gọi TRƯỚC mọi tác dụng phụ của thao tác.
  *
  * `cau` là một câu SQL trả đúng một cột `ly_do` — NULL khi cho qua. Mã lạ ⇒ lỗi KHÔNG tên: hàm SQL và

@@ -171,6 +171,12 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH MỤC ĐƠN VỊ và bí danh đơn vị của tổ chức, kèm họ tên người khai — cùng lý do với `/items/:itemId`. Danh mục toàn " +
     "cục thì vô hại, nhưng bí danh của tổ chức là thước quy đổi của mọi gói (*\"MT\"* là tấn hay mét), và màn của người " +
     "quản lý dữ liệu là nơi duy nhất cần đọc nó hôm nay. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  // [S1.281 / S3.4a · spec S3 §4.5]
+  "/rfqs/:rfqId/coi-declarations":
+    "KHAI BÁO XUNG ĐỘT LỢI ÍCH của CHÍNH người đang xem trên một gói thầu — đã khai gì, với danh sách mời nào, còn hiệu lực không, " +
+    "và chốt K9 đang nói gì về họ. Nó là lời khai của một con người trước khi ký, chấm hay duyệt; một tác tử chỉ-đọc không ký, " +
+    "không chấm, không duyệt, nên không có việc gì cần nó. Khai báo của người khác không ra ngoài route này (K11). Mở sau là một " +
+    "quyết định có tên.",
   // [S1.203 / S3.6b1]
   "/rfqs/:rfqId/signals":
     "TÍN HIỆU CHIA NHỎ của một gói thầu — những gói nào bị gộp với nó, dưới cận bậc nào của phiên bản chính sách nào, ai đã " +
