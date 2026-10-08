@@ -1551,6 +1551,17 @@ describe("bề mặt tệp", () => {
         expect(thanhPhan(2)).toEqual(["không hạng — thiếu: Chi phí trễ giao (chi_phi_tre)"]);
         expect(ttChu(p, "tt-luot")).toContain("Chi phí hiệu dụng|tổng chi phí theo LỜI KHAI của nhà cung cấp — chưa đối chiếu với hoá đơn hay phiếu nhập kho");
 
+        // [rà soát §S1.9101 — THẤP-5] Đọc lại khi gói chưa chấm (`ranking: null`) ⇒ bảng rỗng và đầu cột hạng giá ẩn theo.
+        // Thân giả được `JSON.stringify` ở MỖI lần gọi, nên `toJSON` cho cùng trang hai câu trả lời: bảng TCO, rồi `null`.
+        let bangHienTai: unknown = XEP_TCO;
+        const r = await dung(BM_CO, SO_SANH, DAI, { toJSON: () => bangHienTai });
+        await r.bam("nut-xep-hang");
+        expect(r.el("th-hang-gia").hidden).toBe(false);
+        bangHienTai = null;
+        await r.bam("nut-xep-hang");
+        expect(r.el("bang-hang").querySelector("tbody").con).toEqual([]);
+        expect(r.el("th-hang-gia").hidden, "chưa chấm ⇒ bảng rỗng ⇒ đầu cột hạng giá ẩn").toBe(true);
+
         // Bảng chỉ giá (cùng trang, lượt chấm cũ): cột ẩn, không ô thêm, không câu theo lời khai.
         const q = await dung(BM_CO);
         await q.bam("nut-xep-hang");
@@ -2456,6 +2467,36 @@ describe("bề mặt tệp", () => {
       expect(banRoDaNiem).toHaveLength(1);
       expect(banRoDaNiem[0]).toMatchObject({ freight: "1500000", paymentDays: "30", leadTimeDays: "45" });
       expect(Object.keys(banRoDaNiem[0] ?? {}), "không khoá `importCost` — mã nhập khẩu không bật").not.toContain("importCost");
+    });
+
+    // [rà soát §S1.9101 — TRUNG-1] Bốn ô TCO là phần tử TĨNH của trang (ô đơn giá thì dựng lại mỗi lần nạp): trước bản sửa, A thoát rồi B
+    // mở link của mình trên cùng thẻ thì B thấy nguyên lời khai của A, câu ô thiếu im, và nút nộp niêm phong lời khai ấy vào báo giá của B.
+    it("[INV-L16] [S1.9101 / S4.7b2] nop-thau: A thoát, B mở link của mình trên cùng thẻ ⇒ bốn ô TCO rỗng, khối ẩn tới lần nạp mới, câu ô thiếu nói lại, không niêm phong lời khai của A", async () => {
+      banRoDaNiem.length = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_TCO }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : REDEEM(l)),
+      });
+      await p.bam("nut-dung-phien");
+      await goTco(p, "tco-van-chuyen", "1.500.000");
+      await goTco(p, "tco-ngay-thanh-toan", "30");
+      await goTco(p, "tco-ngay-giao", "45");
+      expect(p.el("tco-thieu").hidden, "đối chứng: A đủ ô").toBe(true);
+      await p.bam("nut-thoat-khach");
+      expect(["tco-van-chuyen", "tco-nhap-khau", "tco-ngay-thanh-toan", "tco-ngay-giao"].map((id) => p.el(id).value)).toEqual(["", "", "", ""]);
+      expect([p.el("khoi-tco").hidden, p.el("tco-thieu").hidden, p.el("ghi-tco").con.length]).toEqual([true, true, 0]);
+
+      await p.doiFragment(`#${ORG}:maCuaB`);
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(moBuoc3(p)).toBe(true);
+      expect(p.el("khoi-tco").hidden).toBe(false);
+      expect(p.el("tco-thieu").textContent).toMatch(/^Phí vận chuyển là ô bắt buộc/u);
+      expect(p.el("nut-nop").disabled).toBe(true);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi).not.toContain("POST /guest/bids");
+      expect(banRoDaNiem, "không phong bì nào mang lời khai của A").toEqual([]);
     });
 
     it("[S1.9101 / S4.7b2] nop-thau: gói chỉ chấm theo giá (hay gói mở trước S4.7b2, `tco` null) ⇒ khối TCO ẩn, không ô nào chặn, phong bì không mang trường TCO", async () => {

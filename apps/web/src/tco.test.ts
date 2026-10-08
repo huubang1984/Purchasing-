@@ -182,11 +182,15 @@ describe("`/mo-thau` — phép tính cạnh con số, mã thiếu, cột hạng 
     expect(moTaMaThieu(["TONG_VUOT_MIEN"])).toBe("không hạng — thiếu: tổng vượt miền tiền");
   });
 
-  it("coThuocTco: một mã ngoài giá, hay một hàng thiếu ô ⇒ có; bảng chỉ giá ⇒ không", () => {
+  it("coThuocTco: một mã ngoài giá, hay một hàng thiếu ô của mã ngoài giá ⇒ có; bảng chỉ giá — kể cả báo giá thiếu `gia` — ⇒ không", () => {
     expect(coThuocTco([{ components: [{ ma: "gia" }], maThieu: null }])).toBe(false);
     expect(coThuocTco([{ components: [{ ma: "gia" }] }, { components: [{ ma: "gia" }, { ma: "van_chuyen" }] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: ["chi_phi_tre"] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: [] }])).toBe(false);
+    // [rà soát §S1.9101 — THẤP-4] Phiên bản chỉ giá: báo giá không đọc được tổng mang `["gia"]` — bảng vẫn sáu cột.
+    expect(coThuocTco([{ components: [{ ma: "gia" }], maThieu: null }, { components: [], maThieu: ["gia"] }])).toBe(false);
+    expect(coThuocTco([{ components: [], maThieu: ["gia", "chi_phi_tre"] }])).toBe(true);
+    expect(coThuocTco([{ components: [], maThieu: ["TONG_VUOT_MIEN"] }])).toBe(true);
     expect(coThuocTco([])).toBe(false);
   });
 });

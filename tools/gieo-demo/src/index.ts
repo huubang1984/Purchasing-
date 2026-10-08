@@ -867,7 +867,7 @@ async function chinh(): Promise<void> {
       ra.push("TÀI CHÍNH — taichinh1 đã khai, taichinh2 đã ký phiên bản 1 (bốn bậc mặc định §4.1, ngưỡng kép 1 tỷ): S3 ĐÃ BẬT.");
       // [S1.9101 / S4.7b2] Phiên bản 2 — TCO — là phiên bản hiệu lực sau lần gieo: gói mới tạo ở /tao-thau phải khai số ngày giao.
       ra.push("  Rồi phiên bản 2 (cùng bậc, cộng vận chuyển, chi phí thanh toán, chi phí trễ — tham số giả định) — bản hiệu lực: gói mới");
-      ra.push("  tạo ở /tao-thau phải khai số ngày giao yêu cầu trước khi nộp duyệt. «Goi TCO» đã chấm dưới nó: /mo-thau hiện hai hạng.");
+      ra.push("  tạo ở /tao-thau phải khai số ngày giao yêu cầu trước khi nộp duyệt. «Goi TCO» đã chấm dưới nó (khối TCO dưới đây).");
       ra.push("  Màn /chinh-sach đọc trọn ma trận và số người tối thiểu mỗi bậc. Ký một phiên bản MỚI ở màn ấy cần `api` chạy");
       ra.push("  với TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat (ADR-105) — cờ ấy mặc định tắt, và không mở trên máy chủ thật.");
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
@@ -883,6 +883,8 @@ async function chinh(): Promise<void> {
     ra.push("  GET /items/<hàng chuẩn>/price-history; người quản lý dữ liệu không giữ bid.view nên bị từ chối (L3).");
     for (const g of daMo) ra.push(`  ${g.tieuDe.padEnd(24)} ${g.rfqId}`);
     for (const [ma, id] of hangChuanTheoMa) ra.push(`  ${ma.padEnd(24)} ${id}`);
+    // [rà soát §S1.9101 — THẤP-8] `--s3`: gói trao thầu và gói TCO đi cùng lượt worker trên ba dòng ấy — lịch sử đếm cả chúng.
+    if (S3) ra.push("  Với --s3, gói trao thầu và gói TCO (dưới đây) cũng đã mở niêm phong trên ba hàng chuẩn ấy — lịch sử và benchmark đếm cả hai.");
     // [S1.260 / S4.5c1] Benchmark ở màn /mo-thau (spec S4 §4.6): ba gói trên là lịch sử của gói chính — đúng sàn 3 gói × 3 nhà cung
     // cấp của mẫu `NHOM_BENCHMARK_MAU` mà phiên bản 1 khai.
     ra.push("");
@@ -926,6 +928,15 @@ async function chinh(): Promise<void> {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
       }
       ra.push(`  ${"gói trao thầu".padEnd(24)} ${traoThau.rfqId}`);
+    }
+    // [rà soát §S1.9101 — TRUNG-2] `/mo-thau` đọc gói theo mã dán vào — không mã thì người demo không tới được bảng hai hạng.
+    if (goiTco !== null) {
+      ra.push("");
+      ra.push("TCO (S4.7) — gói 60 triệu, nhóm hàng TCO, dưới phiên bản 2: số ngày giao yêu cầu 30, bốn nhà cung cấp khai phí vận chuyển,");
+      ra.push("  số ngày thanh toán và số ngày giao; worker đã mở; soan2 đã chấm — gói ở EVALUATING. Ở /mo-thau: dán mã gói vào bước 2,");
+      ra.push("  «Đọc»; bước 5 «Đọc bảng xếp hạng» — cột «Hạng giá» cạnh «Hạng», phép tính chi phí thanh toán và chi phí trễ cạnh con số,");
+      ra.push("  câu «theo lời khai». Báo giá rẻ nhất theo giá đứng hạng 3 theo chi phí.");
+      ra.push(`  ${"gói TCO".padEnd(24)} ${goiTco.rfqId}`);
     }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);

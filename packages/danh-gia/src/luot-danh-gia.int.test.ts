@@ -4426,6 +4426,24 @@ describe("[S1.9101 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá c�
     expect(Object.keys(c?.components[1] ?? {}), "mã khai thẳng KHÔNG mang khoá `nguon` — kể cả `undefined`").not.toContain("nguon");
   });
 
+  it("[rà soát §S1.9101 — THẤP-7] một `tien` khác dạng hai chữ số lẻ (đường ghi thứ hai) ⇒ hàng ấy không có hạng giá; lần đọc KHÔNG ném", async () => {
+    const { rfqId, banRo } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"], ["80.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    // Vai chủ cụm — `057` chỉ đòi `tien` là chuỗi; lượt chấm luôn ghi `vietSo` hai chữ số lẻ, nên dạng này chỉ đến từ một đường ghi khác.
+    await db.pool.query(
+      `UPDATE rfq_evaluation_lines SET components = jsonb_set(components, '{0,tien}', '"80.5"') WHERE bid_version_id = $1`,
+      [banRo[2]],
+    );
+    const bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    if (bang === null) throw new Error("gói đã chấm mà không có bảng xếp hạng");
+    const theoBan = new Map(bang.rows.map((r) => [r.bidVersionId, r]));
+    expect(banRo.map((v) => [theoBan.get(v)?.rank, theoBan.get(v)?.hangGia])).toEqual([
+      [3, 2],
+      [2, 1],
+      [1, null],
+    ]);
+  });
+
   it("luồng MVP1 KHÔNG ĐỔI thứ tự: phiên bản chỉ `gia` ⇒ hạng giá bằng hạng chi phí ở mọi hàng, mã thiếu `null`", async () => {
     const { rfqId } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"], ["90.00", "VND"]]);
     await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));

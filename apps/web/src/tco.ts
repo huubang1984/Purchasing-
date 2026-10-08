@@ -179,9 +179,12 @@ export function moTaMaThieu(maThieu: readonly string[]): string {
   return `không hạng — thiếu: ${ten.join(", ")}`;
 }
 
-/** Bảng có thước TCO (một mã ngoài giá, hay một hàng thiếu ô) ⇒ màn hiện cột hạng giá và câu *"theo lời khai"*. */
+/**
+ * Bảng có thước TCO (một mã ngoài giá, hay một hàng thiếu ô của mã NGOÀI giá) ⇒ màn hiện cột hạng giá và câu *"theo lời khai"*.
+ * [rà soát §S1.9101 — THẤP-4] Phiên bản chỉ giá cũng ghi `ma_thieu` `["gia"]` cho báo giá không đọc được tổng — bảng ấy vẫn là bảng chỉ giá.
+ */
 export function coThuocTco(rows: readonly { readonly components?: readonly { readonly ma: string }[]; readonly maThieu?: unknown }[]): boolean {
   return rows.some(
-    (r) => (r.components ?? []).some((c) => c.ma !== "gia") || (Array.isArray(r.maThieu) && r.maThieu.length > 0),
+    (r) => (r.components ?? []).some((c) => c.ma !== "gia") || (Array.isArray(r.maThieu) && r.maThieu.some((m) => m !== "gia")),
   );
 }

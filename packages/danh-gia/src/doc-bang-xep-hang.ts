@@ -189,7 +189,13 @@ export async function docBangXepHang(
   });
 
   // [S1.9101 / S4.7b2] Hạng giá: tiền của thành phần `gia` ở các hàng CÓ hạng, xếp bằng `xepHang` — đúng hàm lượt chấm dùng cho `rank`.
-  const giaCuaHang = rows.map((r) => (r.rank === null ? null : (r.components.find((c) => c.ma === MA_GIA)?.tien ?? null)));
+  // [rà soát §S1.9101 — THẤP-7] `xepHang` đọc chuỗi bằng `BigInt` sau khi bỏ dấu chấm: nó chỉ đúng trên dạng `vietSo` hai chữ số lẻ mà
+  // lượt chấm ghi. `CHECK` của `057` chỉ đòi `tien` là chuỗi, nên một hàng dạng khác (một đường ghi thứ hai) không có hạng giá — thay vì
+  // làm cả lần đọc bảng xếp hạng ném.
+  const giaCuaHang = rows.map((r) => {
+    const tien = r.rank === null ? null : (r.components.find((c) => c.ma === MA_GIA)?.tien ?? null);
+    return tien !== null && /^\d{1,16}\.\d{2}$/u.test(tien) ? tien : null;
+  });
   const hangGia = xepHang(giaCuaHang);
 
   return {

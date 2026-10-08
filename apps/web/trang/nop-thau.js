@@ -322,8 +322,8 @@ function donGiaKhongDocDuoc() {
   return null;
 }
 
-// [S1.9101 / S4.7b2 / L16] Ô khai TCO — chỉ ô của mã bật; lời quy đổi với chính tham số của thước. Giá trị ô GIỮ qua lần nạp lại
-// (bản sửa đổi của cùng báo giá), như ô đơn giá.
+// [S1.9101 / S4.7b2 / L16] Ô khai TCO — chỉ ô của mã bật; lời quy đổi với chính tham số của thước. Ô là phần tử TĨNH của trang (ô đơn
+// giá thì dựng lại mỗi lần nạp), nên `dongCacBuoc` xoá chúng cùng ô OTP và dòng tổng: lời khai của phiên trước không sang phiên sau.
 const O_TCO = { vanChuyen: "tco-van-chuyen", nhapKhau: "tco-nhap-khau", ngayThanhToan: "tco-ngay-thanh-toan", ngayGiao: "tco-ngay-giao" };
 const canKhai = () => oCanKhai(phien?.thuocTco ?? null);
 const oKhai = () => ({
@@ -598,6 +598,12 @@ function dongCacBuoc() {
   $("tong").textContent = "";
   $("ma").value = "";
   $("tien-te").value = "VND";
+  // [rà soát §S1.9101 — TRUNG-1] Bốn ô khai TCO mang lời khai thương mại của người trước — đổi link hay thoát trên máy dùng chung mà
+  // giữ chúng thì người sau niêm phong lời khai ấy vào báo giá của mình, và câu ô thiếu im vì ô không trống.
+  for (const id of Object.values(O_TCO)) $(id).value = "";
+  bao($("tco-thieu"), "");
+  $("ghi-tco").replaceChildren();
+  hien($("khoi-tco"), false);
   bao($("dem-nguoc"), "");
   for (const id of ["loi3", "loi4"]) bao($(id), "");
   boHoiPhien();

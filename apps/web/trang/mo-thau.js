@@ -756,6 +756,8 @@ async function veXepHang() {
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
   if (b === null) {
     phien = { ...phien, xepHang: [], xepHangLuot: "" };
+    // [rà soát §S1.9101 — THẤP-5] Bảng vừa xoá: đầu cột hạng giá của gói đọc trước không ở lại trên một bảng rỗng.
+    hien($("th-hang-gia"), false);
     dienDl($("tt-luot"), [["Lượt chấm", "chưa chấm lần nào — bấm Chấm thầu"]]);
     return;
   }

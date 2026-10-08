@@ -3181,6 +3181,11 @@ describe("[S1.9101 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước v�
       tco_ma_ghim: [...MA],
       tco_tham_so_ghim: THAM_SO,
     });
+    // [rà soát §S1.9101 — THẤP-3] Ảnh chụp không nằm trong `RfqRecord`: `GET /rfqs/:rfqId` (route agent — công cụ MCP `get_rfq`) không
+    // mang tham số quy đổi; chỉ route khách mang, lọc theo mã bật.
+    const doc = await goi("GET", `/rfqs/${st.rfqId}`, m);
+    expect(doc.status, doc.text).toBe(200);
+    for (const lo of ["tcoThamSoGhim", "tcoMaGhim", "chi_phi_von_nam", "ty_le_tre_ngay"]) expect(doc.text, lo).not.toContain(lo);
   });
 
   it("nhà cung cấp mở phiên và đọc ở `GET /guest/rfq`: số ngày giao yêu cầu, tập mã, tham số của mã bật — không gì khác của chính sách", async () => {
