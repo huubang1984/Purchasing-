@@ -586,5 +586,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // dương ở bảy cổng (khai rồi ký, chấm, đề xuất, duyệt, huỷ, xác minh, ghi nhận đi qua), mỗi cổng một ca chưa khai / đã khai có xung
   // đột kèm hàng `CONTROL_DENIED`, băm danh sách đổi thì khai báo lỗi thời (không hàng sổ), `CO_XUNG_DOT` vĩnh viễn, chữ ký của
   // người có xung đột không đếm ở cạnh mở gói và ở hàng duyệt trao thầu, tổ chức chưa bật chạy như MVP1, và đột biến từng vế.
-  K9: ["apps/api/src/xung-dot-loi-ich.int.test.ts"],
+  // [S1.283 / S3.4b] `trao-thau-theo-bac` ⑸ đo K9 ở phép đếm chữ ký trao thầu: chữ ký của người khai `CO_XUNG_DOT` sau khi ký không
+  // đếm ở K7 (đủ số, hai vai) lẫn K5b (độc lập), lời trả về đánh dấu nó, và đột biến từng vế.
+  K9: ["apps/api/src/xung-dot-loi-ich.int.test.ts", "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
 };

@@ -74,6 +74,7 @@ import { docHoSoXacMinh, xacMinhNhaCungCap } from "@trustprocure/supplier";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
+import { khaiKhongXungDot } from "./khai-bao.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -500,6 +501,9 @@ async function chinh(): Promise<void> {
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
     // [S1.198 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
     // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
+    // [S1.283 / S3.4b · K9] `--s3`: bậc demo đòi khai báo xung đột lợi ích — hai người ký khai *không xung đột* với danh sách vừa dựng,
+    // bằng hàm gói, TRƯỚC chữ ký công cụ ghi thay họ (trigger `rfq_approvals_kiem_xung_dot` chặn chữ ký của người chưa khai).
+    if (S3) for (const nm of nguoiDuyetGoi) await khaiKhongXungDot(pool, org, rfq, nm);
     for (const nm of nguoiDuyetGoi) {
       await pool.query(
         "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id, lan_nop_da_xem) " +
@@ -617,6 +621,8 @@ async function chinh(): Promise<void> {
               "SELECT p.lan_nop AS n FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1",
               [id],
             )).n;
+            // [S1.283 / S3.4b · K9] soan2 khai *không xung đột* trước chữ ký công cụ ghi thay (bậc demo đòi khai).
+            await khaiKhongXungDot(pool, org, id, soan2);
             await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId: id, sessionId: soan2.sessionId, lanNopDaXem: lanNop }, pool));
             if (i < 2) {
               await withTenant(pool, org, (c) =>
@@ -800,6 +806,14 @@ async function chinh(): Promise<void> {
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);
     ra.push("");
     ra.push("Người SOẠN tạo yêu cầu mở thầu; HAI người DUYỆT phê duyệt. Người yêu cầu KHÔNG tự duyệt được.");
+    if (S3) {
+      // [S1.283 / S3.4b · K9] Bậc demo đòi khai báo xung đột lợi ích trước mọi bước quyết.
+      ra.push("");
+      ra.push("XUNG ĐỘT LỢI ÍCH (K9) — bậc demo đòi khai báo: trước «Phê duyệt», «Ghi nhận tín hiệu» (/tao-thau), «Chấm thầu»,");
+      ra.push("  «Đề xuất», «Phê duyệt» hay «Huỷ trao thầu» (/mo-thau), mỗi người khai «không xung đột» ở khối «Khai báo xung đột lợi ích»");
+      ra.push("  của gói — bấm trước thì máy chủ chặn (K9) và màn chỉ khối ấy. Công cụ đã khai thay đúng những chữ ký nó ghi thay: soan2,");
+      ra.push("  soan3 ở gói chính; soan2 ở ba gói tín hiệu và ba gói đã mở. Danh sách mời đổi thì lời khai lỗi thời — khai lại.");
+    }
     ra.push("Mã OTP của nhà cung cấp đi tới hộp thư dev (TRUSTPROCURE_DEV_MAILBOX_DIR của apps/api).");
     // `console.error` là dòng ra DUY NHẤT dự án cho phép (eslint `no-console`), và ở một công cụ
     // dev thì stderr cũng đúng chỗ: nó không lẫn vào thứ ai đó đem đi pipe.
