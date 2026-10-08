@@ -26241,4 +26241,9 @@ Năm câu hỏi đặt cho hình dạng, mỗi câu một lựa chọn (ADR-155 
 - Lượt đi thử T4 là một lần, script ngoài kho. Các chốt hình dạng ⑼–⒀ theo đề xuất của vòng, chờ chủ dự án xác nhận lại.
 
 ## 8. Số đo
-SO_DO
+Nhánh dựng từ `master` `d2062fd` (PR #257, S1.281); `master` không tiến trong vòng. Trên `e2f1e4e`: `pnpm t0` xanh (563 mô-đun, không vi phạm);
+`pnpm test` 154 tệp (2 bỏ qua), 2686 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 252 tệp, 5004 khẳng định (4981 đạt, 23 bỏ
+qua, 0 đỏ), 89/89 bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*, 2271 s; `evidence/INV-matrix.md` đổi đúng một con
+số — K9 11 → 14 ca (ba ca ⑸ của `trao-thau-theo-bac.int`). Trong lượt ấy: hai kịch bản 41 34/34 + 87/87, `xung-dot-loi-ich` 13/13,
+`trao-thau-theo-bac` 18/18, `phuc-vu` 310/310, `xung-dot` 14/14. Trước đó trên mã chưa commit: ba tệp int chạm tới 46/46, bốn tệp web 337/337,
+cụm dùng một lần `migrate()` hai lần (112 tệp, lần hai 0), hardening `day_du` không mục đỏ.
