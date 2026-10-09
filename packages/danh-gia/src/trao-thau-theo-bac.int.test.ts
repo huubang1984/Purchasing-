@@ -276,7 +276,7 @@ async function nopBaoGia(t: ToChuc, rfqId: string, lm: LoiMoi): Promise<string> 
 
 /**
  * Đóng sớm, yêu cầu mở thầu (`pm`), duyệt (`gd1`), chèn bản rõ dưới `app_unseal` — khuôn `moThau` của `luot-danh-gia.int.test.ts`.
- * [S1.9101 / S3.6c] `dongQuaGoi`: đóng bằng `closeRfq` dưới phiên người ấy (hàng tín hiệu ĐÓNG SỚM ghi ở cạnh đóng) thay cho câu thô.
+ * [S1.289 / S3.6c] `dongQuaGoi`: đóng bằng `closeRfq` dưới phiên người ấy (hàng tín hiệu ĐÓNG SỚM ghi ở cạnh đóng) thay cho câu thô.
  */
 async function moThau(t: ToChuc, rfqId: string, banRo: readonly (readonly [string, unknown])[], tuyChon: { readonly dongQuaGoi?: NguoiPhien } = {}): Promise<void> {
   if (tuyChon.dongQuaGoi !== undefined) {
@@ -326,7 +326,7 @@ async function goiDaCham(
     readonly themMoi?: (rfqId: string) => Promise<LoiMoi[]>;
     /** Chỉ số lời mời (trong `loiMoi`) nộp từng giá — mặc định theo thứ tự. */
     readonly chon?: readonly number[];
-    /** [S1.9101 / S3.6c] Đóng bằng `closeRfq` dưới phiên người này thay cho câu thô. */
+    /** [S1.289 / S3.6c] Đóng bằng `closeRfq` dưới phiên người này thay cho câu thô. */
     readonly dongQuaGoi?: NguoiPhien;
   } = {},
 ): Promise<GoiDaCham> {
@@ -362,14 +362,14 @@ const ghiNhanKhaiThap = (t: ToChuc, rfqId: string, ai: NguoiPhien) =>
   withTenant(apiPool, t.org, (c) =>
     ghiNhanTinHieu(c, t.org, { rfqId, lyDo: "Da doc: gia thi truong tang sau khi uoc luong; trao dung bao gia thap nhat.", actorSessionId: ai.s, loai: "ESTIMATE_UNDERSTATED" }, apiPool),
   );
-/** [S1.9101 / S3.6c / K10c] Ghi nhận một tín hiệu của lượt mời thầu (thu hẹp danh sách / đóng sớm) — người giữ `po.approve` ngoài gói. */
+/** [S1.289 / S3.6c / K10c] Ghi nhận một tín hiệu của lượt mời thầu (thu hẹp danh sách / đóng sớm) — người giữ `po.approve` ngoài gói. */
 const ghiNhanTT = (t: ToChuc, rfqId: string, ai: NguoiPhien, loai: "INVITE_LIST_NARROWED" | "EARLY_CLOSE") =>
   withTenant(apiPool, t.org, (c) => ghiNhanTinHieu(c, t.org, { rfqId, lyDo: "Da doc tin hieu cua luot moi thau.", actorSessionId: ai.s, loai }, apiPool));
 /** Chữ ký duyệt trao thầu THÔ của tầng gói — không ghi nhận gì trước. */
 const duyetTho = (t: ToChuc, rfqId: string, awardId: string, ai: NguoiPhien) =>
   withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId, awardId, actorSessionId: ai.s }, apiPool));
 /**
- * [S1.9101 / S3.6c / K10c] Mọi fixture của tệp đóng gói SỚM khi đã có báo giá (`moThau`), nên ở tổ chức đã bật mọi chữ ký trao thầu nay
+ * [S1.289 / S3.6c / K10c] Mọi fixture của tệp đóng gói SỚM khi đã có báo giá (`moThau`), nên ở tổ chức đã bật mọi chữ ký trao thầu nay
  * đi qua K10c: trước khi ký, `gd2` (giữ `po.approve`, ngoài gói — không tạo, không nộp, không đóng) ghi nhận tín hiệu ĐÓNG SỚM nếu nó
  * còn chờ. Ghi nhận là đọc, không phải ký thay; nó không để hàng `CONTROL_DENIED` nào. K10c tự đo ở khối ⑶c bằng `duyetTho`.
  */
@@ -686,7 +686,7 @@ describe("[S1.280 / S3.5a / K2b] hậu kiểm: số nhóm có báo giá hợp l�
     try {
       await c.query("BEGIN");
       await c.query("ALTER TABLE public.rfq_awards DISABLE TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat");
-      // [S1.9101 / S3.6c / K10c] Fixture đóng gói SỚM khi đã có báo giá ⇒ chữ ký thô dưới đây bị K10c chặn trước khi tới hàng APPROVED; vế
+      // [S1.289 / S3.6c / K10c] Fixture đóng gói SỚM khi đã có báo giá ⇒ chữ ký thô dưới đây bị K10c chặn trước khi tới hàng APPROVED; vế
       // đo ở ca này là `k2b_thieu_canh_tranh_thuc` trên hàng APPROVED, nên tắt trigger K10c trong cùng giao dịch (K10c đo ở khối ⑶c).
       await c.query("ALTER TABLE public.rfq_award_approvals DISABLE TRIGGER rfq_award_approvals_kiem_tin_hieu_khai_thap");
       const dxId = (
@@ -827,7 +827,7 @@ describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — gh
     expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_RECORDED", g.rfqId)).toBe(1);
 
     // Chữ ký đầu bị chặn ở tầng gói: một hàng CONTROL_DENIED đúng người, không chữ ký, đề xuất đứng yên.
-    // [S1.9101 / S3.6c] `duyetTho`: khai thấp hỏi TRƯỚC đóng sớm trong `award_chot_tin_hieu`, nên chữ ký thô bị K10b mà không cần ghi nhận đóng sớm —
+    // [S1.289 / S3.6c] `duyetTho`: khai thấp hỏi TRƯỚC đóng sớm trong `award_chot_tin_hieu`, nên chữ ký thô bị K10b mà không cần ghi nhận đóng sớm —
     // và số lần ghi nhận bên dưới đếm đúng một.
     expect((await loi(duyetTho(t, g.rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
     expect(await tuChoiChot(t.org, g.rfqId)).toEqual([{ ma: "K10B_TIN_HIEU_CHUA_GHI_NHAN", actorId: t.gd1.u }]);
@@ -960,9 +960,9 @@ describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — gh
 
 
 // =============================================================================================
-// ⑶c K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (THU HẸP DANH SÁCH MỜI, ĐÓNG SỚM) VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6c, `9501`)
+// ⑶c K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (THU HẸP DANH SÁCH MỜI, ĐÓNG SỚM) VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6c, `120`)
 // =============================================================================================
-describe("[S1.9101 / S3.6c / K10c] tín hiệu của lượt mời thầu — thu hồi ở OPEN có lý do và qua ngưỡng, đóng sớm khi đã có báo giá; chữ ký trao thầu bị chặn tới khi người độc lập ghi nhận từng tín hiệu", { timeout: 300000 }, () => {
+describe("[S1.289 / S3.6c / K10c] tín hiệu của lượt mời thầu — thu hồi ở OPEN có lý do và qua ngưỡng, đóng sớm khi đã có báo giá; chữ ký trao thầu bị chặn tới khi người độc lập ghi nhận từng tín hiệu", { timeout: 300000 }, () => {
   const tinHieuCua = async (rfqId: string) =>
     (
       await db.pool.query<{ loai: string; nguon: string; bang_chung: Record<string, unknown>; giai_thich: string }>(

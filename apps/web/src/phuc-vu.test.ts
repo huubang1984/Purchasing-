@@ -1800,7 +1800,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("loi-thkt").textContent).toMatch(/^Người đề xuất không ghi nhận được tín hiệu khai thấp\. Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này\.$/u);
       });
 
-      // [S1.9101 / S3.6c / K10c] Hai khối nữa trong «Tín hiệu trước chữ ký trao thầu»: thu hẹp danh sách mời (`th`) và đóng sớm (`ds`) —
+      // [S1.289 / S3.6c / K10c] Hai khối nữa trong «Tín hiệu trước chữ ký trao thầu»: thu hẹp danh sách mời (`th`) và đóng sớm (`ds`) —
       // cùng khuôn khai thấp; nút ghi nhận gửi `loai`; khối ngoài hiện khi có ít nhất một khối trong.
       const BC_TH = { loai: "INVITE_LIST_NARROWED", chinh_sach: "cs-1", goi: [RFQ], thu_hoi: [{ loi_moi: "i-3", nguoi: "u-pm", luc: "2026-10-09T01:00:00.000000Z", ly_do: "Hết hàng" }] };
       const BC_DS = { loai: "EARLY_CLOSE", chinh_sach: "cs-1", goi: [RFQ], han: "2026-10-16T00:00:00.000000Z", dong_luc: "2026-10-09T02:00:00.000000Z", nguoi_dong: "u-pm", ly_do: "Đủ báo giá", so_bao_gia: 2 };
@@ -1826,7 +1826,7 @@ describe("bề mặt tệp", () => {
         return p;
       };
 
-      it("[S1.9101 / S3.6c / K10c] khối thu hẹp và đóng sớm: hiện đúng khối có tín hiệu, khối ngoài theo; câu chờ nói K10c; ghi nhận gửi đúng thân mang `loai` tới route dùng chung rồi đọc lại; khai thấp giữ thân cũ không `loai`", async () => {
+      it("[S1.289 / S3.6c / K10c] khối thu hẹp và đóng sớm: hiện đúng khối có tín hiệu, khối ngoài theo; câu chờ nói K10c; ghi nhận gửi đúng thân mang `loai` tới route dùng chung rồi đọc lại; khai thấp giữ thân cũ không `loai`", async () => {
         const an = await dungTt(phanAn, phanAn);
         expect([an.el("khoi-tin-hieu-tt").hidden, an.el("khoi-tin-hieu-th").hidden, an.el("khoi-tin-hieu-ds").hidden, an.el("khoi-tin-hieu-kt").hidden]).toEqual([true, true, true, true]);
         const hangTh = { id: "s-1", loai: "INVITE_LIST_NARROWED", nguon: "THU_HOI", bangChung: BC_TH, giaiThich: "1 lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.", ghiNhan: [] };
@@ -2868,9 +2868,9 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
-    // [S1.9101 / S3.6c / K10c] Thu hồi ở gói ĐANG MỞ của tổ chức đã bật: nút hiện, ô lý do hiện, bấm không lý do không gửi, có lý do gửi
+    // [S1.289 / S3.6c / K10c] Thu hồi ở gói ĐANG MỞ của tổ chức đã bật: nút hiện, ô lý do hiện, bấm không lý do không gửi, có lý do gửi
     // thân `{ lyDo }`; lời từ chối có mã của chốt kèm chỉ dẫn. Gói chờ duyệt: không nút, không ô.
-    it("[S1.9101 / S3.6c / K10c] tao-thau: tổ chức đã bật, gói OPEN ⇒ dòng lời mời có nút Thu hồi và ô lý do; thiếu lý do ⇒ câu báo, không gọi; có lý do ⇒ POST mang `lyDo`; 422 có mã K10C_THU_HOI_THIEU_CANH_TRANH ⇒ câu máy chủ + chỉ dẫn", async () => {
+    it("[S1.289 / S3.6c / K10c] tao-thau: tổ chức đã bật, gói OPEN ⇒ dòng lời mời có nút Thu hồi và ô lý do; thiếu lý do ⇒ câu báo, không gọi; có lý do ⇒ POST mang `lyDo`; 422 có mã K10C_THU_HOI_THIEU_CANH_TRANH ⇒ câu máy chủ + chỉ dẫn", async () => {
       const nhan: unknown[] = [];
       const { p, dongMoi } = await moTaoThau(true, "OPEN", (l) =>
         l === "POST /invitations/i-1/revoke"
@@ -3080,7 +3080,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ ~~chỉ Gửi lại link~~ [S1.9101 / S3.6c] Gửi lại link VÀ Thu hồi (có lý do); MVP1 ⇒ cả hai", async () => {
+    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ ~~chỉ Gửi lại link~~ [S1.289 / S3.6c] Gửi lại link VÀ Thu hồi (có lý do); MVP1 ⇒ cả hai", async () => {
       const draft = await moTaoThau(true, "DRAFT");
       expect(draft.dongMoi()?.con[3]?.textContent).toBe("chưa gửi");
       // [S1.273 / S3.3e1] Tổ chức đã bật: hai cột *Đã xác minh*, *Đếm được* đứng trước cột nút — thân không mang cờ ⇒ «—».

@@ -969,7 +969,7 @@ async function napLoiMoi() {
   // [S1.283 / S3.4b · K9] Nhà cung cấp của bảng vừa đọc — ô *có xung đột với* của khối khai báo vẽ lại từ đó.
   phien = { ...phien, nccKhai: nhaCungCapTuLoiMoi(ds) };
   khaiBao.veNhaCungCap();
-  // [S1.9101 / S3.6c / K10c] Ô lý do thu hồi chỉ khi gói đang mở ở tổ chức đã bật và còn lời mời sống để thu hồi.
+  // [S1.289 / S3.6c / K10c] Ô lý do thu hồi chỉ khi gói đang mở ở tổ chức đã bật và còn lời mời sống để thu hồi.
   hien($("khoi-ly-do-thu-hoi"), luong.daBat && luong.trangThaiGoi === "OPEN" && ds.some((m) => m?.revokedAt === null));
   if (luong.daBat) bao($("tom-tat-canh-tranh"), nhanCanhTranh(r.body?.canhTranh) ?? "");
   veChonNgoaiLe();
@@ -1027,7 +1027,7 @@ async function napLoiMoi() {
       nut.textContent = "Thu hồi";
       nut.addEventListener("click", async () => {
         bao($("loi5"), ""); bao($("ok5"), "");
-        // [S1.9101 / S3.6c / K10c] Gói đang mở ở tổ chức đã bật: lý do bắt buộc — vào tín hiệu thu hẹp danh sách và sổ kiểm toán; lời từ
+        // [S1.289 / S3.6c / K10c] Gói đang mở ở tổ chức đã bật: lý do bắt buộc — vào tín hiệu thu hẹp danh sách và sổ kiểm toán; lời từ
         // chối có mã của chốt (dưới ngưỡng cạnh tranh) kèm chỉ dẫn.
         const canLyDo = luong.daBat && luong.trangThaiGoi === "OPEN";
         const lyDo = $("ly-do-thu-hoi").value.trim();

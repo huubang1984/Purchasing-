@@ -642,7 +642,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     }
     giaTrungThau = chon.cost;
     nhaCungCapTrungThau = tenNcc(chon.ncc);
-    // [S1.9101 / S3.6c / K10c] Mọi kịch bản đóng gói SỚM khi đã có báo giá; ở tổ chức đã bật S3 chữ ký trao thầu đòi một người giữ
+    // [S1.289 / S3.6c / K10c] Mọi kịch bản đóng gói SỚM khi đã có báo giá; ở tổ chức đã bật S3 chữ ký trao thầu đòi một người giữ
     // `po.approve` NGOÀI gói (không tạo, không đóng) ghi nhận tín hiệu đóng sớm trước. Tổ chức chưa bật: 422 nghiệp vụ, bỏ qua.
     {
       const nd = hs.nguoi.find((n) => coQuyen(n.vai, "po.approve") && n.ma !== kb.vai.dong && n.ma !== kb.vai.tao);

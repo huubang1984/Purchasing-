@@ -100,7 +100,7 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc đề xuất trao thầu — người gọi duy nhất là `deXuatTraoThau`,
   // sau cổng `award.recommend` của route đề xuất; cùng khuôn `ghiTinHieuKhiNop`.
   "ghiTinHieuKhiDeXuat",
-  // [S1.9101 / S3.6c · K10c] Ảnh chụp tín hiệu thu hẹp danh sách lúc thu hồi lời mời ở OPEN — người gọi duy nhất là `revokeInvitation`,
+  // [S1.289 / S3.6c · K10c] Ảnh chụp tín hiệu thu hẹp danh sách lúc thu hồi lời mời ở OPEN — người gọi duy nhất là `revokeInvitation`,
   // sau cổng `rfq.invite` của route thu hồi; và ảnh chụp tín hiệu đóng sớm lúc đóng gói — người gọi duy nhất là `closeRfq`, sau cổng
   // `rfq.open` của route đóng. Cùng khuôn `ghiTinHieuKhiNop`.
   "ghiTinHieuKhiThuHoi",

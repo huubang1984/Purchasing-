@@ -2138,7 +2138,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(chan.status, chan.text).toBe(403);
 
     // [S1.281 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
-    // [S1.9101 / S3.6c / K10c] Luồng S3: bước 7 đóng gói TRƯỚC hạn khi đã có năm báo giá ⇒ tín hiệu ĐÓNG SỚM chặn chữ ký đầu có tên; giám
+    // [S1.289 / S3.6c / K10c] Luồng S3: bước 7 đóng gói TRƯỚC hạn khi đã có năm báo giá ⇒ tín hiệu ĐÓNG SỚM chặn chữ ký đầu có tên; giám
     // đốc THỨ HAI (ngoài gói — không tạo, không nộp, không đóng) khai không xung đột rồi ghi nhận kèm lý do qua route dùng chung
     // (thân mang `loai`), chữ ký mới đi qua.
     if (batS3) {

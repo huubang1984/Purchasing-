@@ -274,7 +274,7 @@ const CAU_THU_HOI =
 async function thuHoi(t: ToChuc, invId: string): Promise<void> {
   await withTenant(apiPool, t.org, (c) => c.query(CAU_THU_HOI, [invId, t.pm.u, t.pm.s]));
 }
-/** [S1.9101 / S3.6c / K10c] Câu thu hồi CÓ lý do — ở gói đang mở của tổ chức đã bật trigger K4a đòi cột `ly_do_thu_hoi`. */
+/** [S1.289 / S3.6c / K10c] Câu thu hồi CÓ lý do — ở gói đang mở của tổ chức đã bật trigger K4a đòi cột `ly_do_thu_hoi`. */
 const CAU_THU_HOI_LY_DO =
   "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3, ly_do_thu_hoi = $4 " +
   "WHERE id = $1 AND revoked_at IS NULL";
@@ -459,7 +459,7 @@ describe("S3.2a — K4a: lời mời chỉ đổi ở DRAFT; ở OPEN chỉ thê
     expect(bo?.code).toBe("23514");
   });
 
-  // [S1.9101 / S3.6c / K10c] ~~thu hồi bị chặn (tới S3.6)~~ — ở OPEN thu hồi CÓ LÝ DO đi qua khi danh sách còn đủ ngưỡng của bậc (1), bị chặn
+  // [S1.289 / S3.6c / K10c] ~~thu hồi bị chặn (tới S3.6)~~ — ở OPEN thu hồi CÓ LÝ DO đi qua khi danh sách còn đủ ngưỡng của bậc (1), bị chặn
   // có tên khi thiếu lý do hay khi rơi dưới ngưỡng mà không ngoại lệ còn sống.
   it("[INV-K4a] [INV-K10c] OPEN: thêm đi qua và mang nhãn `moi_sau_khi_ky`; thu hồi KHÔNG lý do bị chặn có tên; CÓ lý do đi qua khi còn đủ ngưỡng và bị chặn có tên khi rơi dưới — lời mời có từ DRAFT cũng thế", async () => {
     const t = await toChucDaBat();

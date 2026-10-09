@@ -479,7 +479,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // (người đề xuất, tác giả chính sách), fail-closed khi rút rồi đề xuất báo giá khác, vế vượt ngưỡng kép, đối chứng âm, tổ chức chưa
   // bật, lớp chặn cuối (chữ ký thô), và mỗi vế một đột biến; tập mã = bảng (K12).
   K10b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
-  // K10c — [S1.9101 / S3.6c] hai tín hiệu của lượt mời thầu ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: thu hồi ở OPEN
+  // K10c — [S1.289 / S3.6c] hai tín hiệu của lượt mời thầu ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: thu hồi ở OPEN
   // không lý do bị chặn có tên, có lý do ghi hàng INVITE_LIST_NARROWED/THU_HOI mang {lời mời, người, lúc, lý do}; đóng qua `closeRfq`
   // ghi hàng EARLY_CLOSE/DONG_SOM mang {hạn, lúc đóng, người đóng, lý do, số luồng}; chữ ký bị chặn tới khi người giữ po.approve ngoài
   // gói ghi nhận TỪNG loại; luật người (người thu hồi, người đóng, tác giả chính sách); dưới ngưỡng cạnh tranh bị chặn trừ khi ngoại lệ

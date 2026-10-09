@@ -127,7 +127,7 @@ export type MaChotKiemSoat =
 export interface DongChot {
   /**
    * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Vế có hậu tố
-   * (`K4a`, `K8a`, [S1.9101] `K10c`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b, K10a–c) — cùng khuôn mã của sổ bất biến
+   * (`K4a`, `K8a`, [S1.289] `K10c`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b, K10a–c) — cùng khuôn mã của sổ bất biến
    * (`KHUON_MA`, khoản 246).
    */
   readonly chot: `${"D" | "J" | "K" | "L"}${number}` | `K${number}${"a" | "b" | "c"}`;
@@ -344,8 +344,8 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "xác nhận một ước lượng rơi ngay dưới cận của chính mình",
     thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu khai thấp của gói.",
   },
-  // [S1.9101 / S3.6c / ADR-9201] Bốn dòng K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) và K10 ở
-  // chữ ký trao thầu (`9501`), cộng ngưỡng cạnh tranh của lần thu hồi ở OPEN. Như K10a/K10b: tên ràng buộc `k10c_*` KHÔNG vào
+  // [S1.289 / S3.6c / ADR-161] Bốn dòng K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) và K10 ở
+  // chữ ký trao thầu (`120`), cộng ngưỡng cạnh tranh của lần thu hồi ở OPEN. Như K10a/K10b: tên ràng buộc `k10c_*` KHÔNG vào
   // `CHOT_THEO_RANG_BUOC` — tầng gói hỏi `award_chot_tin_hieu` / `rfq_chot_thu_hoi` trước câu ghi; trigger là lớp chặn cuối.
   K10C_TIN_HIEU_CHUA_GHI_NHAN: {
     chot: "K10c",
@@ -452,7 +452,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     lyDo:
       "một người thu hồi lời mời khỏi gói đã nộp duyệt hay đã mở — thu hẹp danh sách sau khi ký là đúng đường chiếm pool " +
       "(ADR-058 ⒜) mà S3 chặn; ~~thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (chủ dự án chốt 2026-09-27)~~ " +
-      "[S1.9101 / S3.6c] ở gói đã mở, thu hồi CÓ LÝ DO đi qua và sinh tín hiệu `INVITE_LIST_NARROWED` (K10c); gói đã đóng hay đã " +
+      "[S1.289 / S3.6c] ở gói đã mở, thu hồi CÓ LÝ DO đi qua và sinh tín hiệu `INVITE_LIST_NARROWED` (K10c); gói đã đóng hay đã " +
       "mở thầu thì không",
     thongDiep:
       "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo, hay đang mở và có lý do; gói đang chờ duyệt thì trả về soạn thảo " +

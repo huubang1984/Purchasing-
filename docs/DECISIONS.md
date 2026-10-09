@@ -12598,13 +12598,13 @@ hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm
 
 - Lời khai thành cam kết, lưu cùng award, giải trình khi hạng giá khác hạng TCO (S4.7c).
 
-## ADR-9201 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
+## ADR-161 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
 
 **Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-09: *"S3.6c"*, rồi chốt bốn câu hỏi theo đề xuất (⑴ dưới ngưỡng
 thì từ chối trừ khi có ngoại lệ còn sống; ⑵ `EARLY_CLOSE` chặn chữ ký cùng cổng với hai loại kia; ⑶ một hàng K10c cho cả hai loại; ⑷ khối
-chung ở bước 7 `/mo-thau` và nút thu hồi có lý do ở `/tao-thau`) · **[S1.9101]** · **Migration:** `9501_tin_hieu_moi_thau` · **Liên quan:**
+chung ở bước 7 `/mo-thau` và nút thu hồi có lý do ở `/tao-thau`) · **[S1.289]** · **Migration:** `120_tin_hieu_moi_thau` · **Liên quan:**
 ADR-058 ⒜, ADR-082 ⒁, ADR-084 ⑵, ADR-120, ADR-128, ADR-157 · **Spec:** S3 §3.3 (dòng `OPEN`), §4.6, §5.1 K4a, K10, §9 S3.6 ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+**Biên bản:** `evidence/security-reviews.md` §S1.289
 
 ### Bối cảnh
 

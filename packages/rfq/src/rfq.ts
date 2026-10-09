@@ -902,7 +902,7 @@ export async function closeRfq(
     );
   }
 
-  // [S1.9101 / S3.6c / K10c] Ảnh chụp tín hiệu ĐÓNG SỚM — SAU câu đóng, TRƯỚC hàng sổ. Đóng đúng hạn, không luồng báo giá nào, hay tổ
+  // [S1.289 / S3.6c / K10c] Ảnh chụp tín hiệu ĐÓNG SỚM — SAU câu đóng, TRƯỚC hàng sổ. Đóng đúng hạn, không luồng báo giá nào, hay tổ
   // chức chưa bật thì `tin_hieu_dong_som` trả NULL và không hàng nào được ghi; đóng sớm khi đã có báo giá chặn CHỮ KÝ duyệt trao thầu
   // tới khi một người giữ `po.approve` ngoài gói đọc nó — vế *"phê duyệt riêng khi đã có báo giá"* mà `011` §(H-4) hoãn.
   await ghiTinHieuKhiDongSom(client, orgId, hang.id, actor);

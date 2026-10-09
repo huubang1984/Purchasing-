@@ -129,7 +129,7 @@ function booleanBatBuoc(body: unknown, ten: string): boolean {
   if (typeof v !== "boolean") throw new HttpError(422, `trường "${ten}" phải là boolean`);
   return v;
 }
-/** [S1.9101 / S3.6c] Loại tín hiệu ở chữ ký trao thầu trong thân — vắng là khai thấp (hợp đồng S3.6d); có mặt thì phải là một trong ba. */
+/** [S1.289 / S3.6c] Loại tín hiệu ở chữ ký trao thầu trong thân — vắng là khai thấp (hợp đồng S3.6d); có mặt thì phải là một trong ba. */
 function loaiTinHieuTraoThau(body: unknown): LoaiTinHieu {
   const v = truong(body, "loai");
   if (v === undefined || v === null) return "ESTIMATE_UNDERSTATED";
@@ -1314,7 +1314,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     // với chữ ký duyệt trao thầu (`po.approve`, ADR-084 ⑵). Hàm gói hỏi lại cùng mã, rồi luật người (không tạo, không nộp, không đặt
     // ngân sách, không đề xuất, không khai phiên bản chính sách ghim) — lời từ chối vào sổ `CONTROL_DENIED`. Đề xuất rút rồi đề xuất
     // lại làm bằng chứng đổi: lần ghi nhận trước lỗi thời, tín hiệu mới được lưu ở đây (fail-closed, ADR-082 ⒁).
-    // [S1.9101 / S3.6c · K10c] Cùng route cho ba loại ở chữ ký trao thầu — thân mang `loai` (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`;
+    // [S1.289 / S3.6c · K10c] Cùng route cho ba loại ở chữ ký trao thầu — thân mang `loai` (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`;
     // vắng là khai thấp): cùng quyền, cùng cạnh bị chặn, cùng luật người — một route hai quyền mới là cổng nói dối với H17.
     permission: PERMISSIONS.PO_APPROVE,
     resourceType: "RFQ",
@@ -1648,7 +1648,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: {
-        // [S1.9101 / S3.6c / K10c] `lyDo` tuỳ chọn trong thân: gói đang mở ở tổ chức đã bật thì hàm gói và trigger K4a đòi nó.
+        // [S1.289 / S3.6c / K10c] `lyDo` tuỳ chọn trong thân: gói đang mở ở tổ chức đã bật thì hàm gói và trigger K4a đòi nó.
         revoked: await revokeInvitation(
           ctx.client,
           ctx.orgId,

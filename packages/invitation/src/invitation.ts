@@ -1303,7 +1303,7 @@ export async function revokeInvitation(
      */
     readonly reason?: "LINK_SEND_FAILED";
     /**
-     * [S1.9101 / S3.6c / K10c] Lý do của NGƯỜI MUA — bắt buộc khi gói đang `OPEN` ở tổ chức đã bật (trigger K4a đòi, tên
+     * [S1.289 / S3.6c / K10c] Lý do của NGƯỜI MUA — bắt buộc khi gói đang `OPEN` ở tổ chức đã bật (trigger K4a đòi, tên
      * `k10c_thu_hoi_thieu_ly_do`): nó vào cột `ly_do_thu_hoi`, vào bằng chứng của tín hiệu `INVITE_LIST_NARROWED` và vào sổ. Văn bản
      * tự do như `reason` của `closeRfq` — không lớp máy nào chặn một con số nằm trong giá trị.
      */
@@ -1319,7 +1319,7 @@ export async function revokeInvitation(
     throw new InvitationError("Lý do thu hồi không nằm trong danh sách cho phép.");
   }
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
-  // [S1.9101 / S3.6c] Lý do thu hồi: cắt, không rỗng, không quá trần — cùng số và đơn vị với CHECK của cột. Lần thu hồi bù của hệ
+  // [S1.289 / S3.6c] Lý do thu hồi: cắt, không rỗng, không quá trần — cùng số và đơn vị với CHECK của cột. Lần thu hồi bù của hệ
   // thống (`LINK_SEND_FAILED`) mang chính mã ấy làm lý do: ở gói đang mở nó cũng là một lần thu hẹp danh sách, tín hiệu phải kể.
   const lyDo = input.lyDo === undefined ? (input.reason ?? null) : input.lyDo.trim();
   if (lyDo !== null && lyDo === "") throw new InvitationError("Ghi lý do thu hồi lời mời.");
@@ -1355,7 +1355,7 @@ export async function revokeInvitation(
       new InvitationError(THONG_DIEP_THU_HOI_SAU_MO_THAU),
     );
   }
-  // [S1.9101 / S3.6c / K10c] Gói đang mở: hỏi hàm vị từ `rfq_chot_thu_hoi` TRƯỚC câu ghi — thu hồi làm danh sách rơi dưới ngưỡng cạnh
+  // [S1.289 / S3.6c / K10c] Gói đang mở: hỏi hàm vị từ `rfq_chot_thu_hoi` TRƯỚC câu ghi — thu hồi làm danh sách rơi dưới ngưỡng cạnh
   // tranh của bậc ghim mà không ngoại lệ còn sống là `CONTROL_DENIED` ở giao dịch độc lập (khuôn `hoiChot` của `kiem-soat`); trigger
   // K4a hỏi lại với tên `k10c_thu_hoi_thieu_canh_tranh` cho câu đi tắt (không qua bảng tên → mã, ADR-120). Tổ chức chưa bật: NULL.
   if (goi !== undefined && goi.status === "OPEN") {
@@ -1379,7 +1379,7 @@ export async function revokeInvitation(
     const ma = maChotTuLoi(loi);
     const rfqId = goiCuaLoiMoi[0]?.rfq_id;
     if (ma !== null && rfqId !== undefined) await tuChoiTheoChot(auditPool, orgId, actor, rfqId, ma, loi);
-    // [S1.9101 / S3.6c] Thiếu lý do ở gói đang mở của tổ chức đã bật — lỗi hình dạng của lời gọi, trigger nói có tên.
+    // [S1.289 / S3.6c] Thiếu lý do ở gói đang mở của tổ chức đã bật — lỗi hình dạng của lời gọi, trigger nói có tên.
     const { code, constraint } = (loi ?? {}) as { code?: unknown; constraint?: unknown };
     if (code === "23514" && constraint === "k10c_thu_hoi_thieu_ly_do") {
       throw new InvitationError("Thu hồi lời mời ở gói thầu đang mở cần một lý do — nó vào tín hiệu thu hẹp danh sách và sổ kiểm toán (K10c).");
@@ -1403,7 +1403,7 @@ export async function revokeInvitation(
       " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
-  // [S1.9101 / S3.6c / K10c] Ảnh chụp tín hiệu thu hẹp danh sách — SAU câu thu hồi, TRƯỚC hàng sổ (hàng sổ giữ khoá chuỗi tới commit).
+  // [S1.289 / S3.6c / K10c] Ảnh chụp tín hiệu thu hẹp danh sách — SAU câu thu hồi, TRƯỚC hàng sổ (hàng sổ giữ khoá chuỗi tới commit).
   // Gói không ở OPEN hay tổ chức chưa bật thì hàm tín hiệu trả NULL và không hàng nào được ghi.
   if (goi !== undefined && goi.status === "OPEN") await ghiTinHieuKhiThuHoi(client, orgId, goi.rfq_id, actor);
 

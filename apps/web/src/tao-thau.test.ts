@@ -125,13 +125,13 @@ describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
     );
     for (const g of RFQ_STATUSES) {
       expect(nutLoiMoi(false, g, false), `chưa bật · ${g}`).toEqual({ guiLai: true, thuHoi: !sau.has(g) });
-      // [S1.9101 / S3.6c / K10c] Thu hồi ở OPEN mở lại cho tổ chức đã bật — có lý do, sinh tín hiệu thu hẹp danh sách.
+      // [S1.289 / S3.6c / K10c] Thu hồi ở OPEN mở lại cho tổ chức đã bật — có lý do, sinh tín hiệu thu hẹp danh sách.
       expect(nutLoiMoi(true, g, false).thuHoi, `đã bật · ${g}`).toBe(g === "DRAFT" || g === "OPEN");
       expect(nutLoiMoi(true, g, false).guiLai, `đã bật · ${g}`).toBe(g === "OPEN" || g === "BAFO_OPEN");
     }
   });
 
-  it("tổ chức đã bật: thu hồi ĐÚNG ở DRAFT và [S1.9101 / S3.6c] OPEN (K4a, K10c); gửi lại ĐÚNG khi gói nhận báo giá — OPEN, BAFO_OPEN", () => {
+  it("tổ chức đã bật: thu hồi ĐÚNG ở DRAFT và [S1.289 / S3.6c] OPEN (K4a, K10c); gửi lại ĐÚNG khi gói nhận báo giá — OPEN, BAFO_OPEN", () => {
     const ra = Object.fromEntries(TRANG_THAI_GOI.map((g) => [g, nutLoiMoi(true, g, false)]));
     expect(ra).toEqual({
       DRAFT: { guiLai: false, thuHoi: true },
@@ -681,7 +681,7 @@ describe("[S1.285 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng 
   });
 });
 
-describe("[S1.9101 / S3.6c / K10c] khung tín hiệu của lượt mời thầu — phần `thuHep` và `dongSom`, cùng khuôn khai thấp", () => {
+describe("[S1.289 / S3.6c / K10c] khung tín hiệu của lượt mời thầu — phần `thuHep` và `dongSom`, cùng khuôn khai thấp", () => {
   const TH = { loai: "INVITE_LIST_NARROWED", chinh_sach: "cs-1", goi: ["r-1"], thu_hoi: [{ loi_moi: "i-3", nguoi: "u-pm", luc: "2026-10-09T01:00:00.000000Z", ly_do: "Hết hàng" }] };
   const DS = { loai: "EARLY_CLOSE", chinh_sach: "cs-1", goi: ["r-1"], han: "2026-10-16T00:00:00.000000Z", dong_luc: "2026-10-09T02:00:00.000000Z", nguoi_dong: "u-pm", ly_do: "Đủ báo giá", so_bao_gia: 2 };
   const phan = (hienTai: unknown, canGhiNhan: boolean, ghiNhanDuoc = true) => ({ hienTai, canGhiNhan, nguoiXem: { ghiNhanDuoc, lyDo: null }, soNguoiGhiNhanDuoc: canGhiNhan ? 3 : null });

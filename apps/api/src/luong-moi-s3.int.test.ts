@@ -806,7 +806,7 @@ describe("S3.2d — K4a vào sổ: thêm hay thu hồi lời mời sai trạng t
     expect(rows[0]?.n, "lời mời lúc DRAFT còn, lần chèn lúc chờ duyệt rollback").toBe(1);
   });
 
-  // [S1.9101 / S3.6c / K10c] ~~Thu hồi ở OPEN ⇒ K4A_THU_HOI_SAI_TRANG_THAI~~ — ở gói đang mở, thu hồi CÓ LÝ DO đi qua khi danh sách còn đủ
+  // [S1.289 / S3.6c / K10c] ~~Thu hồi ở OPEN ⇒ K4A_THU_HOI_SAI_TRANG_THAI~~ — ở gói đang mở, thu hồi CÓ LÝ DO đi qua khi danh sách còn đủ
   // ngưỡng cạnh tranh của bậc và sinh tín hiệu INVITE_LIST_NARROWED; dưới ngưỡng là K10C_THU_HOI_THIEU_CANH_TRANH vào sổ.
   it("[INV-K4a] [INV-K10c] thu hồi ở OPEN: lời mời duy nhất (ngưỡng 1) ⇒ 422 ma K10C_THU_HOI_THIEU_CANH_TRANH + MỘT hàng CONTROL_DENIED, lời mời và token còn sống; mời thêm rồi thu hồi KHÔNG lý do ⇒ 422 không hàng sổ; CÓ lý do ⇒ 200, token thu hồi, hàng INVITE_LIST_NARROWED/THU_HOI", async () => {
     const t = await toChucDaBat();

@@ -75,12 +75,12 @@ export interface NguoiXemTinHieu {
 }
 
 /**
- * [S1.285 / S3.6d] Loại tín hiệu — ~~hai loại, hai cạnh bị chặn, hai quyền của cạnh~~ [S1.9101 / S3.6c] bốn loại, hai cạnh bị
+ * [S1.285 / S3.6d] Loại tín hiệu — ~~hai loại, hai cạnh bị chặn, hai quyền của cạnh~~ [S1.289 / S3.6c] bốn loại, hai cạnh bị
  * chặn: chia nhỏ ở cạnh mở gói (`rfq.approve`); khai thấp, thu hẹp danh sách mời và đóng sớm ở CHỮ KÝ duyệt trao thầu
  * (`po.approve`, ADR-084 ⑵).
  */
 export type LoaiTinHieu = "PURCHASE_SPLITTING" | "ESTIMATE_UNDERSTATED" | "INVITE_LIST_NARROWED" | "EARLY_CLOSE";
-/** [S1.9101 / S3.6c] Ba loại mà chữ ký duyệt trao thầu đòi ghi nhận (K10b, K10c). */
+/** [S1.289 / S3.6c] Ba loại mà chữ ký duyệt trao thầu đòi ghi nhận (K10b, K10c). */
 export const LOAI_TIN_HIEU_TRAO_THAU: ReadonlySet<LoaiTinHieu> = new Set<LoaiTinHieu>(["ESTIMATE_UNDERSTATED", "INVITE_LIST_NARROWED", "EARLY_CLOSE"]);
 
 /** [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng của gói — phần `/mo-thau` cần, cùng hình dạng với phần chia nhỏ. */
@@ -93,7 +93,7 @@ export interface TinHieuKhaiThap {
   /** Số người giữ `po.approve` mà luật người cho ghi nhận; `null` khi không có gì cần ghi nhận. */
   readonly soNguoiGhiNhanDuoc: number | null;
 }
-/** [S1.9101 / S3.6c] Cùng hình dạng cho ba loại ở chữ ký trao thầu — `khaiThap`, `thuHep`, `dongSom`. */
+/** [S1.289 / S3.6c] Cùng hình dạng cho ba loại ở chữ ký trao thầu — `khaiThap`, `thuHep`, `dongSom`. */
 export type TinHieuTraoThau = TinHieuKhaiThap;
 
 export interface TinHieuCuaGoi {
@@ -112,9 +112,9 @@ export interface TinHieuCuaGoi {
   readonly soNguoiGhiNhanDuoc: number | null;
   /** [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng — loại thứ hai, chặn chữ ký trao thầu thay vì cạnh mở gói. */
   readonly khaiThap: TinHieuKhaiThap;
-  /** [S1.9101 / S3.6c / K10c] Thu hẹp danh sách mời — lời mời bị thu hồi sau khi gói mở; chặn chữ ký trao thầu tới khi được đọc. */
+  /** [S1.289 / S3.6c / K10c] Thu hẹp danh sách mời — lời mời bị thu hồi sau khi gói mở; chặn chữ ký trao thầu tới khi được đọc. */
   readonly thuHep: TinHieuTraoThau;
-  /** [S1.9101 / S3.6c / K10c] Đóng sớm khi đã có báo giá — chặn chữ ký trao thầu tới khi được đọc. */
+  /** [S1.289 / S3.6c / K10c] Đóng sớm khi đã có báo giá — chặn chữ ký trao thầu tới khi được đọc. */
   readonly dongSom: TinHieuTraoThau;
 }
 
@@ -143,8 +143,8 @@ const CAU_GHI_TIN_HIEU =
   "SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, $6::pg_catalog.text, $3::pg_catalog.text, $4::pg_catalog.uuid, $5::pg_catalog.uuid " +
   "WHERE public.tin_hieu_hien_tai($1::pg_catalog.uuid, $2::pg_catalog.uuid, $6::pg_catalog.text) IS NOT NULL RETURNING id";
 
-// [S1.9101 / S3.6c] Ba loại ở chữ ký trao thầu, mỗi loại một bằng chứng hiện tại và một cờ *chưa ai ghi nhận trên bằng chứng BẰNG nó*
-// — cùng phép so của `award_chot_tin_hieu` (`9501`), tách theo loại để màn nói đúng loại nào còn chờ.
+// [S1.289 / S3.6c] Ba loại ở chữ ký trao thầu, mỗi loại một bằng chứng hiện tại và một cờ *chưa ai ghi nhận trên bằng chứng BẰNG nó*
+// — cùng phép so của `award_chot_tin_hieu` (`120`), tách theo loại để màn nói đúng loại nào còn chờ.
 const CHO_GHI_NHAN = (ham: string): string =>
   `(public.${ham}(r.org_id, r.id) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.governance_signals s ` +
   "JOIN public.governance_signal_acks a ON a.org_id OPERATOR(pg_catalog.=) s.org_id AND a.signal_id OPERATOR(pg_catalog.=) s.id " +
@@ -296,7 +296,7 @@ export async function ghiTinHieuKhiDeXuat(
 }
 
 /**
- * [S1.9101 / S3.6c / K10c] ⑴c Ảnh chụp tín hiệu THU HẸP DANH SÁCH MỜI lúc một lời mời vừa bị thu hồi ở gói đang mở — `revokeInvitation`
+ * [S1.289 / S3.6c / K10c] ⑴c Ảnh chụp tín hiệu THU HẸP DANH SÁCH MỜI lúc một lời mời vừa bị thu hồi ở gói đang mở — `revokeInvitation`
  * gọi SAU câu thu hồi, trong cùng giao dịch, TRƯỚC hàng sổ của nó. Tổ chức chưa bật (hay gói chưa mở) thì `tin_hieu_thu_hep` trả
  * NULL — không ghi gì. Không chặn gì: tín hiệu chặn CHỮ KÝ duyệt trao thầu khi chưa ai ghi nhận (`award_chot_tin_hieu`).
  */
@@ -322,7 +322,7 @@ export async function ghiTinHieuKhiThuHoi(
 }
 
 /**
- * [S1.9101 / S3.6c / K10c] ⑴d Ảnh chụp tín hiệu ĐÓNG SỚM lúc gói vừa đóng — `closeRfq` gọi SAU câu đóng, trong cùng giao dịch, TRƯỚC
+ * [S1.289 / S3.6c / K10c] ⑴d Ảnh chụp tín hiệu ĐÓNG SỚM lúc gói vừa đóng — `closeRfq` gọi SAU câu đóng, trong cùng giao dịch, TRƯỚC
  * hàng sổ của nó. Đóng đúng hạn, không luồng báo giá nào, hay tổ chức chưa bật thì `tin_hieu_dong_som` trả NULL — không ghi gì.
  */
 export async function ghiTinHieuKhiDongSom(
@@ -360,7 +360,7 @@ export async function ghiNhanTinHieu(
 ): Promise<KetQuaGhiNhan> {
   await assertTenantBound(client, orgId, "ghiNhanTinHieu");
   // [S1.285 / S3.6d] Hai loại, hai cạnh bị chặn: chia nhỏ — gói chờ duyệt, `rfq.approve`; khai thấp — gói có đề xuất, `po.approve`.
-  // [S1.9101 / S3.6c] Thu hẹp danh sách và đóng sớm cùng cạnh với khai thấp — gói có đề xuất, `po.approve` (K10c).
+  // [S1.289 / S3.6c] Thu hẹp danh sách và đóng sớm cùng cạnh với khai thấp — gói có đề xuất, `po.approve` (K10c).
   const loai: LoaiTinHieu = input.loai ?? "PURCHASE_SPLITTING";
   const khaiThap = loai === "ESTIMATE_UNDERSTATED";
   const traoThau = LOAI_TIN_HIEU_TRAO_THAU.has(loai);
@@ -566,7 +566,7 @@ export async function lietKeTinHieu(
   const canGhiNhan = goi.status === "PENDING_APPROVAL" && goi.ly_do !== null;
   const xem = canGhiNhan ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id) : null;
   // [S1.285 / S3.6d / K10b] Phần khai thấp: cùng khuôn, cạnh bị chặn là chữ ký trao thầu, quyền `po.approve`.
-  // [S1.9101 / S3.6c / K10c] Thu hẹp danh sách và đóng sớm: cùng cạnh, cùng quyền — mỗi loại một cờ *chưa ai ghi nhận* riêng.
+  // [S1.289 / S3.6c / K10c] Thu hẹp danh sách và đóng sớm: cùng cạnh, cùng quyền — mỗi loại một cờ *chưa ai ghi nhận* riêng.
   const phanTraoThau = async (hienTai: unknown, cho: boolean, loai: LoaiTinHieu): Promise<TinHieuTraoThau> => {
     const can = goi.status === "AWARDED" && cho;
     const xem = can ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id, loai) : null;

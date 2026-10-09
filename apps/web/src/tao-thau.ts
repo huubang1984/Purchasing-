@@ -61,7 +61,7 @@ const GOI_SAU_MO_THAU: ReadonlySet<string> = new Set(["UNSEALED", "EVALUATING", 
  *   · Tổ chức chưa bật: như MVP1 — ~~cả hai nút~~ *Gửi lại link* ở mọi trạng thái, máy chủ tự từ chối ca nó không cho.
  *     [S1.240 / khoản 276] *Thu hồi* ẩn sau lần mở thầu (`GOI_SAU_MO_THAU`): từ ADR-128 máy chủ chặn thu hồi ở đó bằng một 422
  *     câu cố định, nên nút ấy là một nút không bao giờ đi được.
- *   · Tổ chức đã bật: *Thu hồi* ở DRAFT, ~~ở OPEN thu hồi bị chặn tới S3.6~~ [S1.9101 / S3.6c / K10c] và ở OPEN — có lý do, sinh
+ *   · Tổ chức đã bật: *Thu hồi* ở DRAFT, ~~ở OPEN thu hồi bị chặn tới S3.6~~ [S1.289 / S3.6c / K10c] và ở OPEN — có lý do, sinh
  *     tín hiệu thu hẹp danh sách, bị chặn khi làm danh sách rơi dưới ngưỡng cạnh tranh mà không ngoại lệ (K4a; ở PENDING_APPROVAL
  *     phải trả gói về soạn thảo trước); *Gửi lại link* chỉ khi gói nhận báo giá — trước lần mở gói chưa có token nào để gửi (K6).
  */
@@ -338,7 +338,7 @@ export interface KhungTinHieuKhaiThap {
 
 export const KHUNG_TIN_HIEU_KHAI_THAP_RONG: KhungTinHieuKhaiThap = { hien: false, tomTat: "", choDoc: false, lichSu: [], choGhiNhan: false, khongDuoc: null };
 
-/** [S1.9101 / S3.6c / K10c] Ba loại tín hiệu mà chữ ký duyệt trao thầu đòi ghi nhận — phần của thân `GET /rfqs/:rfqId/signals`. */
+/** [S1.289 / S3.6c / K10c] Ba loại tín hiệu mà chữ ký duyệt trao thầu đòi ghi nhận — phần của thân `GET /rfqs/:rfqId/signals`. */
 export type LoaiTinHieuTraoThau = "ESTIMATE_UNDERSTATED" | "INVITE_LIST_NARROWED" | "EARLY_CLOSE";
 const PHAN_THEO_LOAI: Readonly<Record<LoaiTinHieuTraoThau, string>> = { ESTIMATE_UNDERSTATED: "khaiThap", INVITE_LIST_NARROWED: "thuHep", EARLY_CLOSE: "dongSom" };
 
@@ -356,7 +356,7 @@ function tomTatTuBangChung(loai: LoaiTinHieuTraoThau, hienTai: Record<string, un
 }
 
 /**
- * [S1.9101 / S3.6c / K10c] Khung MỘT loại tín hiệu ở chữ ký trao thầu — cùng khuôn khai thấp cho ba loại: phần theo loại của
+ * [S1.289 / S3.6c / K10c] Khung MỘT loại tín hiệu ở chữ ký trao thầu — cùng khuôn khai thấp cho ba loại: phần theo loại của
  * `tinHieu` (`khaiThap` / `thuHep` / `dongSom`) cộng các hàng đã lưu của loại ấy.
  */
 export function khungTinHieuTraoThau(body: unknown, loai: LoaiTinHieuTraoThau): KhungTinHieuKhaiThap {
@@ -528,7 +528,7 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
       return "Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này.";
     case "K10B_TAC_GIA_CHINH_SACH":
       return "Đổi ở bước 1 sang người khác: tác giả của bản chính sách gói ghim không làm việc này được.";
-    // [S1.9101 / S3.6c] Bốn mã K10c — thu hẹp danh sách mời và đóng sớm ở bước 7 của `/mo-thau`; ngưỡng của lần thu hồi ở bước 5 `/tao-thau`.
+    // [S1.289 / S3.6c] Bốn mã K10c — thu hẹp danh sách mời và đóng sớm ở bước 7 của `/mo-thau`; ngưỡng của lần thu hồi ở bước 5 `/tao-thau`.
     case "K10C_TIN_HIEU_CHUA_GHI_NHAN":
       return "Trên màn: khối «Tín hiệu trước chữ ký trao thầu» ở bước 7 — ai đứng ngoài gói mà giữ quyền ký đọc từng tín hiệu còn chờ, " +
         "ghi lý do rồi bấm «Ghi nhận», sau đó mới ký.";

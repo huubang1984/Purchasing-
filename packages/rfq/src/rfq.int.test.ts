@@ -1763,7 +1763,7 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
     for (const r of triggerBac) expect(r.prosrc, "ba trigger đặt tên bằng chính mã viết thường").toMatch(/CONSTRAINT = lower\(ly_do\)/u);
     // [S1.281 / S3.4a / K9] Ba hàm vị từ K9 nằm trong `rows`; `k9_chu_ky_co_xung_dot` đứng ở HAI thân (tên tĩnh của
     // `coi_kiem_trao_thau` và `RETURN` của `rfq_chot_chu_ky_xung_dot`) nên phép so là một TẬP.
-    // [S1.9101 / S3.6c / K10c] Trigger K4a (thân `9501`) đặt thêm hai tên `k10c_*` ở nhánh OPEN — theo khuôn K10 (ADR-120) chúng KHÔNG
+    // [S1.289 / S3.6c / K10c] Trigger K4a (thân `120`) đặt thêm hai tên `k10c_*` ở nhánh OPEN — theo khuôn K10 (ADR-120) chúng KHÔNG
     // vào `CHOT_THEO_RANG_BUOC`: tầng gói hỏi `rfq_chot_thu_hoi` trước câu ghi và bắt `k10c_thu_hoi_thieu_ly_do` đích danh. Ghim đúng
     // hai tên ấy rồi loại chúng khỏi phép so hai chiều.
     const tenK10c = [...new Set(rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(k10c_\w+)'/gu)].map((m) => m[1]!)))].sort();

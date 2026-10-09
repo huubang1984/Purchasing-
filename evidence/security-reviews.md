@@ -26754,12 +26754,12 @@ một quyết định sản phẩm — đã đề xuất thành việc riêng.
 
 ---
 
-# §S1.9101 — S3.6c: K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) CHẶN CHỮ KÝ DUYỆT TRAO THẦU NHƯ K10b; THU HỒI LỜI MỜI MỞ Ở `OPEN` CHO TỔ CHỨC ĐÃ BẬT — CÓ LÝ DO, QUA NGƯỠNG CẠNH TRANH; S3.6 KHÉP — ADR-9201, MIGRATION `9501_tin_hieu_moi_thau`
+# §S1.289 — S3.6c: K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) CHẶN CHỮ KÝ DUYỆT TRAO THẦU NHƯ K10b; THU HỒI LỜI MỜI MỞ Ở `OPEN` CHO TỔ CHỨC ĐÃ BẬT — CÓ LÝ DO, QUA NGƯỠNG CẠNH TRANH; S3.6 KHÉP — ADR-161, MIGRATION `120_tin_hieu_moi_thau`
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — tổ chức chưa bật S3 chạy nguyên MVP1 (thu hồi ở OPEN không
 lý do như trước, hai hàm tín hiệu trả NULL, một chữ ký). Đổi ở tổ chức đã bật: thu hồi ở gói đang mở nay ĐI ĐƯỢC (có lý do, qua ngưỡng)
 thay vì bị K4a chặn; một lần thu hồi hay một lần đóng sớm khi đã có báo giá để lại một hàng tín hiệu và chữ ký trao thầu đòi một lần đọc
-cho TỪNG loại. Migration `9501_tin_hieu_moi_thau`, ADR-9201, K10c vào sổ (91 bất biến). Không khoản mới.
+cho TỪNG loại. Migration `120_tin_hieu_moi_thau`, ADR-161, K10c vào sổ (91 bất biến). Không khoản mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-09: *"S3.6c"*, rồi chốt bốn câu hỏi theo đề xuất (dưới ngưỡng thì từ chối trừ khi ngoại lệ còn sống; `EARLY_CLOSE`
@@ -26780,7 +26780,7 @@ S3.6: phần c — hai loại tín hiệu còn lại và K10 cho chúng; S3.6 kh
   làm đỏ mọi nơi ký trao thầu ở tổ chức đã bật: `trao-thau-theo-bac`, `xung-dot-loi-ich`, kịch bản 41 (S3), pilot. `luot-danh-gia`,
   `bo-xuat` ký ở tổ chức chưa bật — không chạm. Biết trước nên sửa trong một lượt (bài học `cong-moi-tren-bang-cu`).
 
-## 3. Hình dạng (ADR-9201)
+## 3. Hình dạng (ADR-161)
 Cột `ly_do_thu_hoi`; K4a mở nhánh OPEN (thiếu lý do → `k10c_thu_hoi_thieu_ly_do`; hàm vị từ `rfq_chot_thu_hoi` đếm nhóm trên tập đếm được
 TRỪ lời mời này, dưới `so_ncc_toi_thieu` mà không ngoại lệ còn sống đúng loại → `K10C_THU_HOI_THIEU_CANH_TRANH`, tầng gói hỏi trước câu
 ghi); `tin_hieu_thu_hep` (mọi lời mời `revoked_at >= opened_at`, bằng chứng {lời mời, người, lúc UTC, lý do}) và `tin_hieu_dong_som`
@@ -26790,10 +26790,10 @@ cạnh thu hồi (`THU_HOI`) và cạnh đóng (`DONG_SOM`); `award_chot_tin_hie
 gộp ba khối con; `invitation` phụ thuộc `kiem-soat` (chiều cho phép, như `rfq → kiem-soat`).
 
 ## 4. Thay đổi
-- `db/migrations/9501_tin_hieu_moi_thau.sql` (11 khối): cột + hai CHECK; `rfq_chot_thu_hoi`; K4a định nghĩa lại; `tin_hieu_thu_hep`,
+- `db/migrations/120_tin_hieu_moi_thau.sql` (11 khối): cột + hai CHECK; `rfq_chot_thu_hoi`; K4a định nghĩa lại; `tin_hieu_thu_hep`,
   `tin_hieu_dong_som`; `tin_hieu_hien_tai`, `tin_hieu_kiem_ghi`, `tin_hieu_chot_nguoi_ghi_nhan`, `tin_hieu_kiem_ghi_nhan` thêm nhánh;
   `award_chot_tin_hieu`, `award_kiem_tin_hieu_khai_thap` định nghĩa lại (trigger giữ). `hardening.always.sql`: bảy khối ghi lại (*thân từ
-  9501*), ba khối hàm mới — vân tay tính từ văn bản migration, phán xét bằng `migrate()` hai lần trên cụm dùng một lần (115 tệp / 0 tệp).
+  120*), ba khối hàm mới — vân tay tính từ văn bản migration, phán xét bằng `migrate()` hai lần trên cụm dùng một lần (115 tệp / 0 tệp).
   `db/migrations.int.test.ts` ba danh sách + bảy con trỏ; `db/rls-coverage.int.test.ts` một hàng ACL cột.
 - `identity`: bốn mã `K10C_*`, kiểu `chot` nhận hậu tố `c`, lời K4a sửa; `rbac` danh mục về cổng. `kiem-soat`: `LoaiTinHieu` bốn loại,
   `LOAI_TIN_HIEU_TRAO_THAU`, `ghiTinHieuKhiThuHoi`, `ghiTinHieuKhiDongSom`, `ghiNhanTinHieu` ba loại ở chữ ký, `lietKeTinHieu` thêm
@@ -26807,7 +26807,7 @@ gộp ba khối con; `invitation` phụ thuộc `kiem-soat` (chiều cho phép, 
   ghi nhận đóng sớm bằng `gd2` trước mọi chữ ký của tệp; `danh-sach-moi.int`, `luong-moi-s3.int` lật hai ca K4a ở OPEN; `xung-dot-loi-ich.int`
   một DIRECTOR mới ghi nhận; kịch bản 41 bước 12i; `tin-hieu-chia-nho.int` từ vựng bỏ K10c; `tao-thau.test`, `phuc-vu.test` cho khung, nút,
   ba khối; hai sổ kiến trúc (barrel, phân loại hàm ghi); `pilot-gia-lap` thêm bước ghi nhận. Sổ: TEST-PLAN hàng K10c (91) + K4a + tổng;
-  sổ khai nhãn bốn tệp; `MOC_GHIM` 91; STATE, spec §3.3/§5.1 K4·K10/§9 S3.6, ADR-9201, Handoff (lời khai đếm).
+  sổ khai nhãn bốn tệp; `MOC_GHIM` 91; STATE, spec §3.3/§5.1 K4·K10/§9 S3.6, ADR-161, Handoff (lời khai đếm).
 
 ## 5. Điểm phát hiện lúc đo
 - **`to_jsonb(timestamptz)` đi theo múi giờ của phiên**: bằng chứng mang mốc giờ sẽ khác nhau giữa trigger và tầng gói khi hai phiên hai

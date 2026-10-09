@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- [S1.9101 / S3.6c · K10c] HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU — THU HẸP DANH SÁCH MỜI (`INVITE_LIST_NARROWED`) VÀ ĐÓNG SỚM KHI ĐÃ CÓ BÁO GIÁ
+-- [S1.289 / S3.6c · K10c] HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU — THU HẸP DANH SÁCH MỜI (`INVITE_LIST_NARROWED`) VÀ ĐÓNG SỚM KHI ĐÃ CÓ BÁO GIÁ
 -- (`EARLY_CLOSE`) — VÀ K10 CHO CHÚNG Ở CHỮ KÝ DUYỆT TRAO THẦU; THU HỒI LỜI MỜI MỞ Ở `OPEN` CHO TỔ CHỨC ĐÃ BẬT
 --
 -- Spec S3 §3.3 (bảng trạng thái danh sách mời, dòng `OPEN`: *thu hồi phải có lý do và sinh tín hiệu; thu hồi làm danh sách còn dưới
@@ -7,7 +7,7 @@
 -- gốc, lúc đóng, người đóng, lý do*; *chữ ký duyệt award đòi ghi nhận*), §2.5 ⒁ / ADR-082 ⒁ (một điều kiện fail-closed; thêm
 -- `EARLY_CLOSE` — vế *"phê duyệt riêng khi đã có báo giá"* mà `011` §(H-4) hoãn), §9 S3.6c, ADR-120 (khuôn K10a), ADR-157 (khuôn K10b,
 -- hai bảng tín hiệu mở theo loại), ADR-128 (sau lần mở thầu đầu tiên lời mời không thu hồi được — giữ nguyên). Chủ dự án chốt
--- 2026-10-09 (ADR-9201): dưới ngưỡng thì từ chối trừ khi có ngoại lệ còn sống; `EARLY_CLOSE` CHẶN chữ ký như hai loại kia; một hàng
+-- 2026-10-09 (ADR-161): dưới ngưỡng thì từ chối trừ khi có ngoại lệ còn sống; `EARLY_CLOSE` CHẶN chữ ký như hai loại kia; một hàng
 -- K10c cho cả hai loại; khối chung ở bước 7 `/mo-thau` và nút thu hồi có lý do ở `/tao-thau`.
 --
 -- Trước vòng này `080` chặn thu hồi ở mọi trạng thái ngoài DRAFT (`k4a_thu_hoi_sai_trang_thai`) "tới khi S3.6 dựng tín hiệu". Vòng này:

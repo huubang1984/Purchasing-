@@ -931,13 +931,13 @@ async function veTraoThau() {
       : ` — ${a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
-  // [S1.285 / S3.6d / K10b · S1.9101 / S3.6c / K10c] Có đề xuất thì đọc ba tín hiệu trước chữ ký — mỗi khối chỉ hiện khi có tín hiệu.
+  // [S1.285 / S3.6d / K10b · S1.289 / S3.6c / K10c] Có đề xuất thì đọc ba tín hiệu trước chữ ký — mỗi khối chỉ hiện khi có tín hiệu.
   await napTinHieuTraoThau();
   return a;
 }
 
 /**
- * [S1.285 / S3.6d / K10b · S1.9101 / S3.6c / K10c] Ba khối «Tín hiệu trước chữ ký trao thầu»: `GET /rfqs/:rfqId/signals` (cùng route của
+ * [S1.285 / S3.6d / K10b · S1.289 / S3.6c / K10c] Ba khối «Tín hiệu trước chữ ký trao thầu»: `GET /rfqs/:rfqId/signals` (cùng route của
  * tín hiệu chia nhỏ ở `/tao-thau`; phần `khaiThap` / `thuHep` / `dongSom`). Trang không tự quyết ai ghi nhận được — máy chủ nói
  * (`nguoiXem`), và nói vì sao không. Route ghi nhận dùng chung, thân mang `loai` cho hai loại mới (khai thấp giữ thân cũ).
  */

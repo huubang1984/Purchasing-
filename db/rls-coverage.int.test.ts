@@ -1507,7 +1507,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "link_channel", quyen: "INSERT" },
-      // [S1.9101 / S3.6c / K10c] Lý do thu hồi: đi trong CÙNG câu với `revoked_at`; ở gói đang mở trigger K4a đòi nó, nó vào bằng chứng
+      // [S1.289 / S3.6c / K10c] Lý do thu hồi: đi trong CÙNG câu với `revoked_at`; ở gói đang mở trigger K4a đòi nó, nó vào bằng chứng
       // của tín hiệu thu hẹp danh sách mời.
       { grantee: "app_api", bang: "rfq_invitations", cot: "ly_do_thu_hoi", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "org_id", quyen: "INSERT" },
