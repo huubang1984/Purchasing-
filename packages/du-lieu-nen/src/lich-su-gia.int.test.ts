@@ -844,7 +844,14 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
         "AND p.prokind IN ('f', 'p') AND pg_get_functiondef(p.oid) ~ 'rfq_unsealed_bids' ORDER BY 1",
     );
     // [S1.280 / S3.5a / K7] `award_so_tien_trao` đọc số tiền và tiền tệ của báo giá được chọn để phân bậc trao thầu — cùng dòng ở lớp tĩnh.
-    expect(rows.map((r) => r.ten)).toEqual(["public.anh_xa_kiem_luat", "public.award_so_tien_trao", "public.goi_y_kiem_luat", "public.quan_sat_gia"]);
+    // [S1.288 / S4.7c1 / L8] `award_dien_cam_ket` đọc bốn ô khai của báo giá được đề xuất vào cam kết — cùng dòng ở lớp tĩnh.
+    expect(rows.map((r) => r.ten)).toEqual([
+      "public.anh_xa_kiem_luat",
+      "public.award_dien_cam_ket",
+      "public.award_so_tien_trao",
+      "public.goi_y_kiem_luat",
+      "public.quan_sat_gia",
+    ]);
   });
 
   it("không view hay materialized view nào đọc bảng bản rõ, và `quan_sat_gia` chạy dưới quyền NGƯỜI GỌI", async () => {

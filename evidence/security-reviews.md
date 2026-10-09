@@ -26717,7 +26717,7 @@ bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
 | `hardening-suy-tu` | 38/38 — nhân chứng `award_dien_cam_ket`/`rfq_award_cam_ket`/INSERT dưới `app_api` |
 | `rls-coverage`, `check-an-ninh` | 61/61 (khối đã chạy), 4/4 |
 | `phuc-vu`, `tco.test` | xanh — ô theo hàng, theo mã, đọc lại bảng, đổi gói, cam kết lệch báo giá không hiện, đề xuất cũ |
-| `pnpm t0`, `pnpm test` | sạch; 157 tệp / 2806 ca (trước các sửa sau rà soát — số cuối ở mục 10) |
+| `pnpm t0`, `pnpm test` | sạch; 157 tệp / 2806 ca trước các sửa sau rà soát — số cuối ở mục 10 |
 | Hardening tự chữa | thân `RETURN NEW` ở `award_kiem_giai_trinh`, thân hằng ở `award_hang_gia`, gỡ `rfq_awards_chup_cam_ket`, tắt `rfq_award_cam_ket_chan_truncate` ⇒ `migrate()` kế dựng lại cả bốn |
 | `gieo:demo --s3` trên cụm mới | thoát 0; gói TCO: hạng 1 có hạng giá 2. `soan2` đề xuất không giải trình ⇒ `THIEU_GIAI_TRINH_LECH_HANG`; kèm giải trình ⇒ PROPOSED, cam kết `hangTco 1, hangGia 2`, lời khai `freight 500000.00, paymentDays 60, leadTimeDays 30`, tham số ba khoá, số ngày giao 30 |
 
@@ -26780,4 +26780,13 @@ xuất có trước migration.
 
 ## 10. Đo cuối
 
-(điền sau `pnpm evidence`)
+| Hạng mục | Kết quả |
+|---|---|
+| `pnpm t0` | sạch (typecheck, lint, depcruise 567 mô-đun) |
+| `pnpm cap-so --kiem` | sạch — S1.288, ADR-160, migration 119 |
+| `pnpm evidence` | vitest mã 0, 5133 khẳng định (5123 đạt, 10 bỏ qua có chủ đích, 0 hỏng), **89/89**, cổng XANH. Ma trận: L8 51 → 59 |
+| `migrations.int` · `luot-danh-gia.int` · `hardening-suy-tu` · kịch bản 41 · `buyer.int` · `rls-coverage` · `phuc-vu` | 128/128 · 142/142 · 38/38 · 94/94 · 31/31 · 61/61 · 328/328 |
+
+Lượt `evidence` đầu đỏ ba ca — ba sổ đăng ký chưa theo kịp, không ca nào là hành vi: tổng điều tra trigger của `migrations.int` (hai trigger
+`bid_chi_ghi_them` của bảng cam kết chưa vào mục ghim của hàm ấy), lớp CSDL của L5 ở `lich-su-gia.int` (`award_dien_cam_ket` chạm bản rõ —
+lớp tĩnh đã khai, lớp CSDL chưa), và thân 422 của lần rút ở `buyer.int` (nay mang `ma`). Sửa cả ba, lượt hai xanh.
