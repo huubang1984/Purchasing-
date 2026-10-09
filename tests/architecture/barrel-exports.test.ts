@@ -542,6 +542,9 @@ const DANH_SACH_TRANG_RFQ = [
   "datNhomHangChoGoi",
   // [S1.284 / S4.7b1] Số ngày giao yêu cầu của gói đang soạn (`112_tco`) — route đòi `rfq.create`, như nhóm hàng.
   "datSoNgayGiao",
+  // [S1.286 / S4.7b2] Thước TCO chụp lúc mở — hàm đọc, người gọi duy nhất là `GET /guest/rfq` (lọc theo mã bật); KHÔNG nằm trong
+  // `RfqRecord` nên route agent không mang tham số quy đổi.
+  "docThuocTcoGoi",
   "doiTrangThaiNhomHang",
   "extendRfqDeadline",
   "getActiveProcurementPolicy",

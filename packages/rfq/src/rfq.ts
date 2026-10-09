@@ -500,6 +500,28 @@ export async function getRfq(
   return hang === undefined ? null : doiRfq(hang);
 }
 
+/**
+ * [S1.286 / S4.7b2 / L16] Thước TCO chụp lúc vào OPEN (`112` (4), `117`): tập mã thành phần của phiên bản ghim theo thứ tự chính sách,
+ * và nhóm khoá `tco` của cùng phiên bản (`{}` khi phiên bản không khai). `null` khi gói chưa có ảnh chụp (chưa mở, mở trước S4.5a, hay
+ * phiên bản ghim không khai trọng số). KHÔNG nằm trong `RfqRecord` — mọi route trả `RfqRecord`, kể cả route agent: tham số quy đổi chỉ đi
+ * ra ở route khách, lọc theo mã bật (rà soát §S1.286 — THẤP-3; `/policy/versions` vẫn `agent: false`).
+ */
+export interface ThuocTcoGoi {
+  readonly ma: readonly string[];
+  readonly thamSo: Readonly<Record<string, string>>;
+}
+
+export async function docThuocTcoGoi(client: pg.PoolClient, orgId: string, rfqId: string): Promise<ThuocTcoGoi | null> {
+  await assertTenantBound(client, orgId, "docThuocTcoGoi");
+  const { rows } = await client.query<{ ma: string[] | null; tham_so: Record<string, string> | null }>(
+    "SELECT tco_ma_ghim AS ma, tco_tham_so_ghim AS tham_so FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1",
+    [rfqId],
+  );
+  const h = rows[0];
+  if (h === undefined || h.ma === null) return null;
+  return { ma: h.ma, thamSo: h.tham_so ?? {} };
+}
+
 export async function listRfqItems(
   client: pg.PoolClient,
   orgId: string,

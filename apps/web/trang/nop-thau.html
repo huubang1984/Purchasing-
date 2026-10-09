@@ -68,6 +68,29 @@
       <option value="VND" selected>VND — đồng Việt Nam</option>
       <option value="USD">USD — đô la Mỹ</option>
     </select>
+    <!-- [S1.286 / S4.7b2 / L16] Ô khai TCO — ĐÚNG ô của mã bật trong thước chụp lúc gói mở (`GET /guest/rfq` → `tco`), cùng lời quy
+         đổi với chính tham số ấy. Bắt buộc trên form (ADR-156 ⑶): không có khoản nào thì ghi 0. Không mã nào ngoài giá ⇒ khối ẩn. -->
+    <div id="khoi-tco" hidden>
+      <h3>Chi phí ngoài giá</h3>
+      <div id="ghi-tco"></div>
+      <div id="o-van-chuyen" hidden>
+        <label for="tco-van-chuyen">Phí vận chuyển (cùng tiền tệ với báo giá; số nguyên, dấu chấm chỉ nhóm nghìn)</label>
+        <input id="tco-van-chuyen" inputmode="numeric" autocomplete="off">
+      </div>
+      <div id="o-nhap-khau" hidden>
+        <label for="tco-nhap-khau">Chi phí nhập khẩu (cùng tiền tệ với báo giá; số nguyên, dấu chấm chỉ nhóm nghìn)</label>
+        <input id="tco-nhap-khau" inputmode="numeric" autocomplete="off">
+      </div>
+      <div id="o-ngay-thanh-toan" hidden>
+        <label for="tco-ngay-thanh-toan">Số ngày thanh toán — bên mua trả tiền sau bao nhiêu ngày (0–3650)</label>
+        <input id="tco-ngay-thanh-toan" inputmode="numeric" autocomplete="off">
+      </div>
+      <div id="o-ngay-giao" hidden>
+        <label for="tco-ngay-giao">Số ngày giao hàng — anh/chị giao trong bao nhiêu ngày (0–3650)</label>
+        <input id="tco-ngay-giao" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="bao luu" id="tco-thieu" hidden></div>
+    </div>
     <div class="bao luu" id="tong"></div>
     <button id="nut-nop">Niêm phong và nộp</button>
     <div class="bao loi" id="loi3" hidden></div>
