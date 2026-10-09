@@ -28,6 +28,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import * as benchmarkWeb from "./benchmark.js";
 import * as chinhSach from "./chinh-sach.js";
+import * as tcoWeb from "./tco.js";
 import * as dangNhap from "./dang-nhap.js";
 import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
@@ -281,6 +282,7 @@ describe("bề mặt tệp", () => {
     };
     // `/lib/chinh-sach.js` và `/lib/tao-thau.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một
     // hàm trả chuỗi rỗng.
+    const banRoDaNiem: Record<string, unknown>[] = [];
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
       // [S1.201 / S3.6a] `/lib/nhom-hang.js` là bản thật: ô chọn nhóm hàng của `/tao-thau` và bảng của `/nhom-hang` đọc từ nó.
@@ -295,11 +297,17 @@ describe("bề mặt tệp", () => {
       ...benchmarkWeb,
       // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
       ...xungDot,
+      // [S1.286 / S4.7b2] `/lib/tco.js` là bản thật: ô khai TCO của `/nop-thau` và phép tính của `/mo-thau` chạy từ nó.
+      ...tcoWeb,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
-      sealBid: () => Promise.resolve(new Uint8Array(0)),
+      // [S1.286 / S4.7b2] Bản rõ mỗi lần niêm phong được giữ lại — để đo trang ĐƯA GÌ vào phong bì (ô khai TCO), không chỉ có gọi.
+      sealBid: (a: { plaintext: Uint8Array }) => {
+        banRoDaNiem.push(JSON.parse(new TextDecoder().decode(a.plaintext)) as Record<string, unknown>);
+        return Promise.resolve(new Uint8Array(0));
+      },
       chooseKeyAgreementAlgorithm: () => "ECDH_P256",
       describeEnvelope: () => ({ formatVersion: 1, algorithm: "ECDH_P256", ephemeralPublicKey: new Uint8Array(0) }),
     };
@@ -1293,7 +1301,7 @@ describe("bề mặt tệp", () => {
           { rank: 2, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [] },
         ],
       };
-      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI) => {
+      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI, xepHang: unknown = XEP_HANG) => {
         const p = await dungTrang("mo-thau", {
           hash: "", cookie: B,
           thay: (l) => {
@@ -1303,7 +1311,7 @@ describe("bề mặt tệp", () => {
             if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 200, body: { comparison: soSanh } });
             if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: bm } });
             if (l === `GET /rfqs/${RFQ}/items/1/benchmark`) return Promise.resolve({ status: 200, body: { dai } });
-            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: xepHang } });
             return undefined;
           },
         });
@@ -1508,6 +1516,58 @@ describe("bề mặt tệp", () => {
           "1 bất thường (cao) · 1 không đo được · phủ 1/2 dòng",
           "1 trong dải · 1 không đo được · phủ 1/2 dòng",
         ]);
+      });
+
+      // [S1.286 / S4.7b2] Bảng có thước TCO (ADR-156 ⑷; spec S4 §8.6, §8.13): cột hạng giá, phép tính của mã quy đổi cạnh con số nó
+      // sinh ra, mã thiếu gọi tên, và câu *"theo lời khai"*. Bảng chỉ giá giữ nguyên sáu cột (ca khoản 334 dưới).
+      it("[INV-L16] [S1.286 / S4.7b2] bảng có thước TCO: cột Hạng giá hiện, ô theo hàng ('—' ở báo giá không hạng); phép tính hai mã quy đổi với tham số phiên bản; mã thiếu gọi tên; câu theo lời khai", async () => {
+        const tre = (coSo: string, ngayKhai: string, tien: string) => ({
+          ma: "chi_phi_tre", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien, nguon: { coSo, ngayKhai, ngayYeuCau: "30", tyLe: "0.001" },
+        });
+        const gia = (tien: string) => ({ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien });
+        const XEP_TCO = {
+          evaluationId: "e-2", policyVersion: 2, currency: "VND", evaluatedAt: "2026-10-01T02:00:00Z",
+          rows: [
+            { rank: 1, hangGia: 2, maThieu: null, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [gia("990.00"), tre("990.00", "40", "9.90")] },
+            { rank: 2, hangGia: 1, maThieu: null, supplierName: "Công ty Thép Hai", effectiveCost: "1099.80", bidVersionId: "bv-2", components: [gia("900.00"), tre("900.00", "252", "199.80")] },
+            { rank: null, hangGia: null, maThieu: ["chi_phi_tre"], supplierName: "Công ty Thép Ba", effectiveCost: null, bidVersionId: "bv-3", components: [] },
+          ],
+        };
+        const p = await dung(BM_CO, SO_SANH, DAI, XEP_TCO);
+        await p.bam("nut-xep-hang");
+        expect(p.el("th-hang-gia").hidden).toBe(false);
+        const tbody = p.el("bang-hang").querySelector("tbody");
+        expect(tbody.con[0]?.con.map((td) => td.dataset["nhan"] ?? "")).toEqual(["Hạng", "Hạng giá", "Nhà cung cấp", "Chi phí hiệu dụng", "Thành phần", "Benchmark", ""]);
+        expect(tbody.con.map((tr) => tr.con.slice(0, 3).map((td) => td.textContent))).toEqual([
+          ["1", "2", "Công ty Thép Một"],
+          ["2", "1", "Công ty Thép Hai"],
+          ["—", "—", "Công ty Thép Ba"],
+        ]);
+        const thanhPhan = (i: number) => (tbody.con[i]?.con[4]?.con[0]?.con ?? []).map((li) => li.textContent);
+        expect(thanhPhan(1)).toEqual([
+          "gia · 900.00 × 1.0000 = 900.00 (TIEN)",
+          "Chi phí trễ giao = max(0, 252 ngày khai − 30 ngày yêu cầu) × 0.001/ngày × 900.00 = 199.80 — tham số của chính sách phiên bản 2",
+        ]);
+        expect(thanhPhan(2)).toEqual(["không hạng — thiếu: Chi phí trễ giao (chi_phi_tre)"]);
+        expect(ttChu(p, "tt-luot")).toContain("Chi phí hiệu dụng|tổng chi phí theo LỜI KHAI của nhà cung cấp — chưa đối chiếu với hoá đơn hay phiếu nhập kho");
+
+        // [rà soát §S1.286 — THẤP-5] Đọc lại khi gói chưa chấm (`ranking: null`) ⇒ bảng rỗng và đầu cột hạng giá ẩn theo.
+        // Thân giả được `JSON.stringify` ở MỖI lần gọi, nên `toJSON` cho cùng trang hai câu trả lời: bảng TCO, rồi `null`.
+        let bangHienTai: unknown = XEP_TCO;
+        const r = await dung(BM_CO, SO_SANH, DAI, { toJSON: () => bangHienTai });
+        await r.bam("nut-xep-hang");
+        expect(r.el("th-hang-gia").hidden).toBe(false);
+        bangHienTai = null;
+        await r.bam("nut-xep-hang");
+        expect(r.el("bang-hang").querySelector("tbody").con).toEqual([]);
+        expect(r.el("th-hang-gia").hidden, "chưa chấm ⇒ bảng rỗng ⇒ đầu cột hạng giá ẩn").toBe(true);
+
+        // Bảng chỉ giá (cùng trang, lượt chấm cũ): cột ẩn, không ô thêm, không câu theo lời khai.
+        const q = await dung(BM_CO);
+        await q.bam("nut-xep-hang");
+        expect(q.el("th-hang-gia").hidden).toBe(true);
+        expect(q.el("bang-hang").querySelector("tbody").con[0]?.con).toHaveLength(6);
+        expect(ttChu(q, "tt-luot")).not.toContain("LỜI KHAI");
       });
 
       // [S1.277 / khoản 334] Đo trên Chromium ở 375×812 (§S1.277): bảng xếp hạng rộng 870 px, bảng so sánh lố 10 px, cả trang 903 px —
@@ -2426,6 +2486,110 @@ describe("bề mặt tệp", () => {
     /** Gói thầu có một khoá công khai khớp thuật toán mà thư viện giả chọn — đủ để "Niêm phong và nộp" đi tới POST /guest/bids. */
     const GOI_NOP = { ...GOI_THAU_KHACH, publicKeys: [{ algorithm: "ECDH_P256", publicKey: "", keyVersion: "k1" }] };
     const BIEN_NHAN = { status: 201, body: { receipt: { bidVersionId: "bv-1", version: 1, submittedAt: "2026-09-27T00:00:00Z", canonicalText: "van ban", signature: "ky" } } };
+
+    // [S1.286 / S4.7b2 / L16 vế form] Thước TCO chụp lúc gói mở: ĐÚNG ô của mã bật, lời quy đổi với chính tham số, ô bắt buộc chặn nút
+    // nộp và gọi tên ô, phong bì mang trường chuẩn của ô — và chỉ của ô cần khai.
+    const GOI_TCO = {
+      ...GOI_NOP,
+      rfq: { ...GOI_NOP.rfq, soNgayGiao: 30 },
+      tco: { ma: ["gia", "van_chuyen", "chi_phi_thanh_toan", "chi_phi_tre"], thamSo: { chiPhiVonNam: "0.12", ngayThanhToanChuan: "60", tyLeTreNgay: "0.001" } },
+    };
+    const goTco = async (p: Awaited<ReturnType<typeof dungTrang>>, id: string, v: string) => {
+      p.el(id).value = v;
+      for (const f of p.el(id).nghe["input"] ?? []) await f();
+    };
+
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: thước TCO ⇒ đúng ô của mã bật và lời quy đổi với chính tham số; ô trống chặn nút nộp, gọi tên ô; đủ ô ⇒ phong bì mang trường chuẩn", async () => {
+      banRoDaNiem.length = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_TCO }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      expect(bangGoiThau(p)).toContain("Số ngày giao yêu cầu");
+      expect(bangGoiThau(p)).toContain("30 ngày");
+      expect(p.el("khoi-tco").hidden).toBe(false);
+      expect(["o-van-chuyen", "o-nhap-khau", "o-ngay-thanh-toan", "o-ngay-giao"].map((id) => p.el(id).hidden), "ô nhập khẩu không bật ⇒ ẩn").toEqual([
+        false, true, false, false,
+      ]);
+      const loi = p.el("ghi-tco").con.map((x) => x.textContent);
+      expect(loi).toHaveLength(4);
+      expect(loi[2]).toContain("kỳ thanh toán chuẩn của bên mua là 60 ngày");
+      expect(loi[2]).toContain("chi phí vốn 0.12 một năm");
+      expect(loi[3]).toContain("số ngày giao yêu cầu là 30 ngày");
+      expect(loi[3]).toContain("quy thành 0.001 × tổng báo giá");
+
+      // Ô trống ⇒ câu gọi tên ô đầu tiên, nút nộp tắt, bấm cũng không niêm phong.
+      expect(p.el("tco-thieu").hidden).toBe(false);
+      expect(p.el("tco-thieu").textContent).toMatch(/^Phí vận chuyển là ô bắt buộc của gói này — không có khoản ấy thì ghi 0\./u);
+      expect(p.el("nut-nop").disabled).toBe(true);
+      await goTco(p, "tco-van-chuyen", "1.500.000");
+      await goTco(p, "tco-ngay-thanh-toan", "30");
+      expect(p.el("tco-thieu").textContent).toMatch(/^Số ngày giao hàng là ô bắt buộc/u);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi, "thiếu ô ⇒ không niêm phong, không nộp").not.toContain("POST /guest/bids");
+      expect(banRoDaNiem).toEqual([]);
+      await goTco(p, "tco-ngay-giao", "045");
+      expect(p.el("tco-thieu").textContent).toBe('Số ngày giao hàng "045" không đọc được: số ngày nguyên từ 0 đến 3650.');
+      expect(p.el("nut-nop").disabled).toBe(true);
+      // Ô nhập khẩu ẨN mà có chữ (người gõ trước khi thước đổi) không chặn và không vào phong bì.
+      p.el("tco-nhap-khau").value = "999";
+      await goTco(p, "tco-ngay-giao", "45");
+      expect(p.el("tco-thieu").hidden).toBe(true);
+      expect(p.el("nut-nop").disabled).toBe(false);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi.at(-1)).toBe("POST /guest/bids");
+      expect(banRoDaNiem).toHaveLength(1);
+      expect(banRoDaNiem[0]).toMatchObject({ freight: "1500000", paymentDays: "30", leadTimeDays: "45" });
+      expect(Object.keys(banRoDaNiem[0] ?? {}), "không khoá `importCost` — mã nhập khẩu không bật").not.toContain("importCost");
+    });
+
+    // [rà soát §S1.286 — TRUNG-1] Bốn ô TCO là phần tử TĨNH của trang (ô đơn giá thì dựng lại mỗi lần nạp): trước bản sửa, A thoát rồi B
+    // mở link của mình trên cùng thẻ thì B thấy nguyên lời khai của A, câu ô thiếu im, và nút nộp niêm phong lời khai ấy vào báo giá của B.
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: A thoát, B mở link của mình trên cùng thẻ ⇒ bốn ô TCO rỗng, khối ẩn tới lần nạp mới, câu ô thiếu nói lại, không niêm phong lời khai của A", async () => {
+      banRoDaNiem.length = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_TCO }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : REDEEM(l)),
+      });
+      await p.bam("nut-dung-phien");
+      await goTco(p, "tco-van-chuyen", "1.500.000");
+      await goTco(p, "tco-ngay-thanh-toan", "30");
+      await goTco(p, "tco-ngay-giao", "45");
+      expect(p.el("tco-thieu").hidden, "đối chứng: A đủ ô").toBe(true);
+      await p.bam("nut-thoat-khach");
+      expect(["tco-van-chuyen", "tco-nhap-khau", "tco-ngay-thanh-toan", "tco-ngay-giao"].map((id) => p.el(id).value)).toEqual(["", "", "", ""]);
+      expect([p.el("khoi-tco").hidden, p.el("tco-thieu").hidden, p.el("ghi-tco").con.length]).toEqual([true, true, 0]);
+
+      await p.doiFragment(`#${ORG}:maCuaB`);
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(moBuoc3(p)).toBe(true);
+      expect(p.el("khoi-tco").hidden).toBe(false);
+      expect(p.el("tco-thieu").textContent).toMatch(/^Phí vận chuyển là ô bắt buộc/u);
+      expect(p.el("nut-nop").disabled).toBe(true);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi).not.toContain("POST /guest/bids");
+      expect(banRoDaNiem, "không phong bì nào mang lời khai của A").toEqual([]);
+    });
+
+    it("[S1.286 / S4.7b2] nop-thau: gói chỉ chấm theo giá (hay gói mở trước S4.7b2, `tco` null) ⇒ khối TCO ẩn, không ô nào chặn, phong bì không mang trường TCO", async () => {
+      for (const goi of [{ ...GOI_NOP, tco: { ma: ["gia"], thamSo: { chiPhiVonNam: null, ngayThanhToanChuan: null, tyLeTreNgay: null } } }, { ...GOI_NOP, tco: null }]) {
+        banRoDaNiem.length = 0;
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: goi }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined),
+        });
+        await p.bam("nut-dung-phien");
+        expect(p.el("khoi-tco").hidden).toBe(true);
+        expect(p.el("tco-thieu").hidden).toBe(true);
+        expect(bangGoiThau(p), "gói không khai số ngày giao ⇒ không dòng ấy").not.toContain("Số ngày giao yêu cầu");
+        await p.bam("nut-nop");
+        expect(p.trangThai.goi.at(-1)).toBe("POST /guest/bids");
+        expect(Object.keys(banRoDaNiem[0] ?? {}).sort()).toEqual(["currency", "lines", "totalAmount"]);
+      }
+    });
 
     it("[S1.181 / lượt soi] nop-thau: trước khi niêm phong trang hỏi lại phiên — thẻ khác đã đổi cookie sang doanh nghiệp khác ⇒ DỪNG, không POST /guest/bids", async () => {
       let lanRfq = 0;

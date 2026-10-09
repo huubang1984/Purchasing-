@@ -47,6 +47,8 @@ import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
 // [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
 import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
+// [S1.286 / S4.7b2] Thước TCO của màn `/nop-thau` và phép tính của `/mo-thau` — khối TCO cuối tệp dựng phong bì bằng chính các hàm ấy.
+import { docThuocTco, loiOKhai, moTaThanhPhan, oCanKhai, truongKhai, type ThanhPhanXepHang } from "../../web/src/tco.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
@@ -3095,5 +3097,205 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
     expect(khongVeThuHoi, "phép gỡ vế phải thật sự đổi câu").not.toBe(cau);
     const { rows: lech } = await db.pool.query<{ id: string }>(khongVeThuHoi, [st.ycVongMot, orgA]);
     expect(lech.map((r) => r.id), "không vế lời mời còn sống: luồng đã thu hồi bị suy thành phong bì hỏng").toEqual([st.v1ThuHoi]);
+  });
+});
+
+// ===============================================================================================
+// [S1.286 / S4.7b2] TCO QUA HTTP — THƯỚC ĐI TỚI NHÀ CUNG CẤP, Ô KHAI ĐI VÀO PHONG BÌ, HAI HẠNG ĐI RA TỚI NGƯỜI MUA
+//
+// S4.7a đo lượt chấm năm mã trên hàng bản rõ dựng sẵn (`luot-danh-gia-tco.int.test.ts`); S4.7b1 cho người mua khai mã, tham số và
+// số ngày giao qua HTTP. Khối này nối hai đầu bằng đúng đường của sản phẩm: chính sách bốn mã qua `POST /policy`, số ngày giao qua
+// `PUT /rfqs/:rfqId/delivery-days`, gói mở (trigger chụp tập mã VÀ tham số — `117`), nhà cung cấp đọc thước ở `GET /guest/rfq`,
+// dựng trường phong bì bằng CHÍNH hàm của màn `/nop-thau` (`truongKhai` của `apps/web/src/tco.ts` — import tương đối xuyên app như
+// `chinh-sach.js` ở đầu tệp), worker mở, lượt chấm đọc ô khai bằng bộ đọc SQL, và `GET /ranking` trả hạng chi phí, hạng giá, mã
+// thiếu, phép tính của mã quy đổi. Một tên khoá lệch giữa màn và bộ đọc SQL là một báo giá thiếu ô ở đây — không phải ở màn.
+//
+// Ba báo giá, chọn để hai hạng KHÁC nhau (ADR-156 ⑷):
+//   A — 100 000 000, phí vận chuyển gõ "500.000" (dấu chấm nhóm nghìn như ở màn), trả đúng kỳ chuẩn, giao đúng hạn ⇒ 100 500 000.
+//   B —  98 000 000, không phí, đòi trả ngay (0 ngày) và giao muộn 15 ngày ⇒ 98 000 000 + 1 933 150,68 + 1 470 000 = 101 403 150,68.
+//   C —  90 000 000 — rẻ nhất — nhưng phong bì KHÔNG có số ngày giao (một nhà cung cấp không qua màn) ⇒ không hạng, thiếu `chi_phi_tre`,
+//        và không hạng giá: hạng giá chỉ tính trên báo giá có hạng (chủ dự án chốt 2026-10-08).
+// Hạng chi phí: A 1, B 2. Hạng giá: B 1, A 2. Tổ chức RIÊNG, luồng MVP1 (TCO không phụ thuộc S3 — `112` (5) chụp ở cả hai), một chữ
+// ký mở gói, một chữ ký mở thầu: thứ đo là thước, không phải D2.
+// ===============================================================================================
+describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và số ngày giao, ô khai của màn đi vào phong bì, người mua thấy HAI hạng và phép tính", () => {
+  /** Tham số quy đổi của phiên bản — cùng bộ GIẢ ĐỊNH của `gieo:demo` (`THAM_SO_TCO_DEMO`), viết lại ở đây để phép đo đứng một mình. */
+  const THAM_SO = { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" } as const;
+  const MA = ["gia", "van_chuyen", "chi_phi_thanh_toan", "chi_phi_tre"] as const;
+  const SO_NGAY_GIAO = 30;
+  /** Ô như người gõ ở `/nop-thau` — `null` là ô người ấy KHÔNG có (phong bì dựng ngoài màn). */
+  const BAO_GIA = [
+    { ten: "NCC TCO A dung han", tong: "100000000.00", o: { vanChuyen: "500.000", nhapKhau: "", ngayThanhToan: "60", ngayGiao: "30" } },
+    { ten: "NCC TCO B tra ngay giao muon", tong: "98000000.00", o: { vanChuyen: "0", nhapKhau: "", ngayThanhToan: "0", ngayGiao: "45" } },
+    { ten: "NCC TCO C thieu ngay giao", tong: "90000000.00", o: { vanChuyen: "0", nhapKhau: "", ngayThanhToan: "60", ngayGiao: null } },
+  ] as const;
+
+  const st = {
+    mua: { id: "", cookie: "" } as Nguoi,
+    pm2: { id: "", cookie: "" } as Nguoi,
+    gd1: { id: "", cookie: "" } as Nguoi,
+    taiChinh: { id: "", cookie: "" } as Nguoi,
+    rfqId: "",
+    phien: [] as string[],
+  };
+
+  beforeAll(async () => {
+    goc = gocMacDinh;
+    orgA =
+      (
+        await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id", [
+          "Cong ty Mua Sam TCO",
+          "cong-ty-tco",
+        ])
+      ).rows[0]?.id ?? "";
+    st.mua = await dangNhap("mua-tco@vidu.vn", "PROCUREMENT_MANAGER");
+    st.pm2 = await dangNhap("pm2-tco@vidu.vn", "PROCUREMENT_MANAGER");
+    st.gd1 = await dangNhap("gd1-tco@vidu.vn", "DIRECTOR");
+    st.taiChinh = await dangNhap("taichinh-tco@vidu.vn", "FINANCE");
+  }, 240000);
+
+  it("dựng qua HTTP: chính sách bốn mã và tham số, số ngày giao, gói mở — hàng gói CHỤP tập mã và tham số của phiên bản ghim", async () => {
+    const m = st.mua.cookie;
+    const cs = await goi("POST", "/policy", st.taiChinh.cookie, {
+      version: 1,
+      dualApprovalThreshold: "5000000000.00",
+      currency: "VND",
+      evalComponents: MA.map((ma) => ({ ma, don_vi: "TIEN", he_so: "1.0000" })),
+      bafoTopN: 0,
+      tco: THAM_SO,
+    });
+    expect(cs.status, cs.text).toBe(201);
+    const rfq = await goi("POST", "/rfqs", m, { title: "Van bi — do thuoc TCO", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
+    expect(rfq.status, rfq.text).toBe(201);
+    st.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("POST", `/rfqs/${st.rfqId}/items`, m, { lineNo: 1, description: "Van bi DN50", quantity: "10.0000", unit: "cai" })).status).toBe(201);
+    const ns = await goi("PUT", `/rfqs/${st.rfqId}/budget`, m, { estimatedValue: "120000000.00", currency: "VND" });
+    expect(ns.status, ns.text).toBe(200);
+    const ng = await goi("PUT", `/rfqs/${st.rfqId}/delivery-days`, m, { soNgayGiao: SO_NGAY_GIAO });
+    expect(ng.status, ng.text).toBe(200);
+    expect((await goi("POST", `/rfqs/${st.rfqId}/submit`, m)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${st.rfqId}/approve`, st.pm2.cookie)).status).toBe(200);
+    const mo = await goi("POST", `/rfqs/${st.rfqId}/open`, m);
+    expect(mo.status, mo.text).toBe(200);
+    const { rows } = await db.pool.query<{ tco_ma_ghim: string[]; tco_tham_so_ghim: unknown }>(
+      "SELECT tco_ma_ghim, tco_tham_so_ghim FROM rfq_packages WHERE id = $1",
+      [st.rfqId],
+    );
+    expect(rows[0], "trigger cạnh mở chụp tập mã theo thứ tự chính sách, và NGUYÊN nhóm khoá tco của phiên bản ghim").toEqual({
+      tco_ma_ghim: [...MA],
+      tco_tham_so_ghim: THAM_SO,
+    });
+    // [rà soát §S1.286 — THẤP-3] Ảnh chụp không nằm trong `RfqRecord`: `GET /rfqs/:rfqId` (route agent — công cụ MCP `get_rfq`) không
+    // mang tham số quy đổi; chỉ route khách mang, lọc theo mã bật.
+    const doc = await goi("GET", `/rfqs/${st.rfqId}`, m);
+    expect(doc.status, doc.text).toBe(200);
+    for (const lo of ["tcoThamSoGhim", "tcoMaGhim", "chi_phi_von_nam", "ty_le_tre_ngay"]) expect(doc.text, lo).not.toContain(lo);
+  });
+
+  it("nhà cung cấp mở phiên và đọc ở `GET /guest/rfq`: số ngày giao yêu cầu, tập mã, tham số của mã bật — không gì khác của chính sách", async () => {
+    const m = st.mua.cookie;
+    for (const [i, bg] of BAO_GIA.entries()) {
+      const s = await goi("POST", "/suppliers", m, { legalName: bg.ten, taxCode: `032000000${String(i)}` });
+      expect(s.status, s.text).toBe(201);
+      const supplierId = (s.body as { supplier: { id: string } }).supplier.id;
+      const c = await goi("POST", `/suppliers/${supplierId}/contacts`, m, {
+        fullName: `Kinh doanh TCO ${String(i)}`,
+        email: `tco-${String(i)}@ncc.vn`,
+        phone: `09130000${String(i)}0`,
+      });
+      expect(c.status, c.text).toBe(201);
+      const truoc = dv.loiMoiDaGui.length;
+      const lm = await goi("POST", `/rfqs/${st.rfqId}/invitations`, m, { supplierId, contactId: (c.body as { contact: { id: string } }).contact.id });
+      expect(lm.status, lm.text).toBe(201);
+      expect(dv.loiMoiDaGui).toHaveLength(truoc + 1);
+      st.phien.push(await moPhienKhach(dv.loiMoiDaGui.at(-1)!.token));
+    }
+    const r = await goi("GET", "/guest/rfq", st.phien[0]);
+    expect(r.status, r.text).toBe(200);
+    const than = r.body as { rfq: { soNgayGiao: unknown }; tco: unknown };
+    expect(than.rfq.soNgayGiao).toBe(SO_NGAY_GIAO);
+    expect(than.tco, "thước của lượt chấm: mã theo thứ tự chính sách, tham số bằng chữ — không ngưỡng, không bậc, không hệ số").toEqual({
+      ma: [...MA],
+      thamSo: { chiPhiVonNam: "0.12", ngayThanhToanChuan: "60", tyLeTreNgay: "0.001" },
+    });
+    // Màn đọc thước bằng hàm của chính nó, và đòi đúng ba ô của ba mã ngoài giá đang bật — ô nhập khẩu không hiện.
+    expect(oCanKhai(docThuocTco(than.tco))).toEqual({ vanChuyen: true, nhapKhau: false, ngayThanhToan: true, ngayGiao: true });
+  });
+
+  it("ba báo giá niêm phong: trường TCO dựng bằng `truongKhai` của màn từ ô người gõ; báo giá C không có số ngày giao", async () => {
+    for (const [i, bg] of BAO_GIA.entries()) {
+      const cookie = st.phien[i]!;
+      const r = await goi("GET", "/guest/rfq", cookie);
+      expect(r.status, r.text).toBe(200);
+      const than = r.body as { tco: unknown; publicKeys: { algorithm: string; publicKey: string }[] };
+      const can = oCanKhai(docThuocTco(than.tco));
+      const o = { ...bg.o, ngayGiao: bg.o.ngayGiao ?? "" };
+      // Màn chặn nút nộp khi thiếu ô (ADR-156 ⑶) — C đi qua màn thì không nộp được; phong bì của C dựng NGOÀI màn, bỏ ô ấy.
+      expect(loiOKhai(can, o) === null, `${bg.ten}: màn ${bg.o.ngayGiao === null ? "chặn" : "cho"} nút nộp`).toBe(bg.o.ngayGiao !== null);
+      const truong = truongKhai(can, o);
+      const khoa = than.publicKeys.find((k) => k.algorithm === "ECDH_P256");
+      if (khoa === undefined) throw new Error("goi thau khong co khoa ECDH_P256 qua HTTP");
+      const phongBi = await sealBid({
+        rfqId: st.rfqId,
+        algorithm: "ECDH_P256",
+        recipientPublicKey: new Uint8Array(Buffer.from(khoa.publicKey, "base64")),
+        plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: bg.tong, currency: "VND", nhaCungCap: bg.ten, ...truong })),
+      });
+      const bn = await goi("POST", "/guest/bids", cookie, { envelope: Buffer.from(phongBi).toString("base64") });
+      expect(bn.status, `${bg.ten}: ${bn.text}`).toBe(201);
+    }
+    expect(truongKhai({ vanChuyen: true, nhapKhau: false, ngayThanhToan: true, ngayGiao: true }, BAO_GIA[0].o), "ô tiền gõ có dấu chấm nhóm nghìn đi vào phong bì dạng chuẩn").toEqual({
+      freight: "500000",
+      paymentDays: "60",
+      leadTimeDays: "30",
+    });
+  });
+
+  it("đóng, mở thầu, chấm — `GET /ranking` trả hạng chi phí, hạng GIÁ trên báo giá có hạng, mã thiếu, và phép tính của hai mã quy đổi", async () => {
+    const m = st.mua.cookie;
+    expect((await goi("POST", `/rfqs/${st.rfqId}/close`, m, { reason: "dong som de do thuoc TCO" })).status).toBe(200);
+    const yc = await goi("POST", `/rfqs/${st.rfqId}/unseal`, m, { reason: "het han nop, mo thau de cham TCO" });
+    expect(yc.status, yc.text).toBe(201);
+    const ycId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+    const duyet = await goi("POST", `/unseal/${ycId}/approve`, st.gd1.cookie);
+    expect((duyet.body as { unsealRequest: { status: string } }).unsealRequest.status, duyet.text).toBe("APPROVED");
+    expect((await goi("POST", `/unseal/${ycId}/dispatch`, m)).status).toBe(200);
+    const kq = await withTenant(unsealPool, orgA, (c) => executeUnsealRequest(c, orgA, { unsealRequestId: ycId, unwrapper: boMoBoc }, unsealPool));
+    expect([kq.opened, kq.failedBidVersionIds]).toEqual([3, []]);
+
+    const cham = await goi("POST", `/rfqs/${st.rfqId}/evaluate`, m, {});
+    expect(cham.status, cham.text).toBe(201);
+    const bxh = await goi("GET", `/rfqs/${st.rfqId}/ranking`, m);
+    expect(bxh.status, bxh.text).toBe(200);
+    const hang = (bxh.body as {
+      ranking: {
+        rows: {
+          supplierName: string;
+          effectiveCost: string | null;
+          rank: number | null;
+          hangGia: number | null;
+          maThieu: readonly string[] | null;
+          components: ThanhPhanXepHang[];
+        }[];
+      };
+    }).ranking.rows;
+    expect(hang.map((h) => [h.supplierName, h.effectiveCost, h.rank, h.hangGia, h.maThieu])).toEqual([
+      [BAO_GIA[0].ten, "100500000.00", 1, 2, null],
+      [BAO_GIA[1].ten, "101403150.68", 2, 1, null],
+      [BAO_GIA[2].ten, null, null, null, ["chi_phi_tre"]],
+    ]);
+    const b = hang[1]!;
+    expect(b.components.map((c) => [c.ma, c.tien, c.nguon ?? null]), "mã quy đổi mang phép tính của nó; mã khai thẳng không").toEqual([
+      ["gia", "98000000.00", null],
+      ["van_chuyen", "0.00", null],
+      ["chi_phi_thanh_toan", "1933150.68", { coSo: "98000000.00", ngayKhai: "0", ngayChuan: "60", tyLe: "0.12" }],
+      ["chi_phi_tre", "1470000.00", { coSo: "98000000.00", ngayKhai: "45", ngayYeuCau: "30", tyLe: "0.001" }],
+    ]);
+    // Màn `/mo-thau` viết phép tính bằng hàm của chính nó, từ đúng thân ấy (§8.6).
+    expect(b.components.map((c) => moTaThanhPhan(c, 1)).slice(2)).toEqual([
+      "Chi phí thanh toán = max(0, kỳ chuẩn 60 − 0 ngày khai) × 0.12/năm ÷ 365 × 98000000.00 = 1933150.68 — tham số của chính sách phiên bản 1",
+      "Chi phí trễ giao = max(0, 45 ngày khai − 30 ngày yêu cầu) × 0.001/ngày × 98000000.00 = 1470000.00 — tham số của chính sách phiên bản 1",
+    ]);
+    expect(hang[2]!.components, "báo giá không hạng không có thành phần").toEqual([]);
   });
 });

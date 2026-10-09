@@ -577,12 +577,18 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // biến), và cạnh mở đòi số ngày giao khi phiên bản tính chi phí trễ.
   // [S1.284 / S4.7b1] Vế NGƯỜI MUA: `buyer.int` đo route số ngày giao (chỉ gói đang soạn, cổng, miền, hàng sổ, xuyên tổ chức);
   // `tao-thau.test` và `phuc-vu` đo ô chỉ ở DRAFT, dòng ở màn duyệt mọi trạng thái, và thân màn gửi.
+  // [S1.286 / S4.7b2] Vế THAM SỐ và vế FORM: `luot-danh-gia` đo ảnh chụp tham số và lượt chấm từ chối khi nó lệch phiên bản ghim;
+  // `guest.int` đo thước ở route khách (gói không ảnh chụp ⇒ `null`, tham số chỉ của mã bật, mã lạ lọc, không hệ số hay ngưỡng);
+  // `phuc-vu` đo ô của mã bật, ô bắt buộc chặn nút nộp, ô ẩn không vào phong bì, ô xoá khi đổi phiên; `bac-mac-dinh-dong-bo` khoá bốn khoá
+  // phong bì của màn với bốn khoá bộ đọc SQL của lượt chấm.
   L16: [
     "apps/api/src/buyer.int.test.ts",
+    "apps/api/src/guest.int.test.ts",
     "apps/web/src/phuc-vu.test.ts",
     "apps/web/src/tao-thau.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
+    "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
   ],
   // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở

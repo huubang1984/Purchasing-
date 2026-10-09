@@ -14,6 +14,7 @@ import { tien } from "/lib/so-tien.js";
 import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
+import { coThuocTco, moTaMaThieu, moTaThanhPhan } from "/lib/tco.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 // [S1.282 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
 // ghim nó với gói.
@@ -724,18 +725,22 @@ function chuCotBenchmark(bidVersionId) {
  * `he_so`/`gia_tri` vắng thì hiện một gạch ngang — `057` chỉ đòi `ma` và `tien`, nên một hàng có
  * thể thật sự không mang chúng, và bịa ra `1.0000` là bịa ra chính thứ J2 phải kiểm được.
  */
-function veThanhPhan(tp) {
+function veThanhPhan(tp, maThieu, phienBan) {
   const ul = document.createElement("ul");
   ul.className = "tp";
   for (const t of tp) {
     const li = document.createElement("li");
     // `textContent`, không `innerHTML`: `ma` đến từ chính sách của tổ chức, tức từ người dùng.
-    li.textContent = `${t.ma} · ${t.giaTri ?? "—"} × ${t.heSo ?? "—"} = ${t.tien ?? "—"} (${t.donVi})`;
+    // [S1.286 / S4.7b2] Mã quy đổi mang phép tính với tham số của phiên bản ghim (§8.6) — `moTaThanhPhan`; mã khai thẳng giữ dạng cũ.
+    li.textContent = moTaThanhPhan(t, phienBan);
     ul.append(li);
   }
   if (tp.length === 0) {
     const li = document.createElement("li");
-    li.textContent = "không thành phần nào — báo giá này không đọc được số tiền";
+    // [S1.286 / S4.7b2] Báo giá không hạng gọi tên mã thiếu (`ma_thieu`) — không lấy 0 (ADR-153 ⑷).
+    li.textContent = Array.isArray(maThieu) && maThieu.length > 0
+      ? moTaMaThieu(maThieu)
+      : "không thành phần nào — báo giá này không đọc được số tiền";
     ul.append(li);
   }
   return ul;
@@ -753,17 +758,25 @@ async function veXepHang() {
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
   if (b === null) {
     phien = { ...phien, xepHang: [], xepHangLuot: "" };
+    // [rà soát §S1.286 — THẤP-5] Bảng vừa xoá: đầu cột hạng giá của gói đọc trước không ở lại trên một bảng rỗng.
+    hien($("th-hang-gia"), false);
     dienDl($("tt-luot"), [["Lượt chấm", "chưa chấm lần nào — bấm Chấm thầu"]]);
     return;
   }
   phien = { ...phien, xepHang: Array.isArray(b.rows) ? b.rows : [], xepHangLuot: b.evaluationId };
   // [S1.283 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
   khaiBao.veNhaCungCap();
+  // [S1.286 / S4.7b2] Bảng có thước TCO ⇒ cột hạng giá (trên đúng các báo giá có hạng — ADR-156 ⑷) và câu *"theo lời khai"* (§8.13).
+  const tco = coThuocTco(b.rows ?? []);
+  hien($("th-hang-gia"), tco);
   dienDl($("tt-luot"), [
     ["Mã lượt chấm", b.evaluationId],
     ["Chính sách phiên bản", b.policyVersion],
     ["Tiền tệ", b.currency],
     ["Chấm lúc", new Date(b.evaluatedAt).toLocaleString("vi-VN")],
+    ...(tco
+      ? [["Chi phí hiệu dụng", "tổng chi phí theo LỜI KHAI của nhà cung cấp — chưa đối chiếu với hoá đơn hay phiếu nhập kho"]]
+      : []),
   ]);
   for (const h of b.rows ?? []) {
     const tr = document.createElement("tr");
@@ -774,11 +787,14 @@ async function veXepHang() {
     const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
     tr.append(
       coNhan(td(h.rank === null ? "—" : String(h.rank), "so"), "Hạng"),
+    );
+    if (tco) tr.append(coNhan(td(typeof h.hangGia === "number" ? String(h.hangGia) : "—", "so"), "Hạng giá"));
+    tr.append(
       coNhan(td(h.supplierName), "Nhà cung cấp"),
       coNhan(td(h.effectiveCost === null ? "—" : tien(h.effectiveCost), "so"), "Chi phí hiệu dụng"),
     );
     const o = coNhan(document.createElement("td"), "Thành phần");
-    o.append(veThanhPhan(h.components ?? []));
+    o.append(veThanhPhan(h.components ?? [], h.maThieu, typeof b.policyVersion === "number" ? b.policyVersion : null));
     tr.append(o);
     // [S1.260 / S4.5c1] Nhãn ở bảng xếp hạng (spec S4 §4.6): tóm tắt theo lần đọc benchmark gần nhất ở bước 4.
     const bm = coNhan(td(typeof h.bidVersionId === "string" ? chuCotBenchmark(h.bidVersionId) : "—", "cot-benchmark"), "Benchmark");

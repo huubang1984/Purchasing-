@@ -26600,3 +26600,154 @@ một chữ ký như MVP1. K12: tập mã K10b trong thân ba hàm = ba dòng `c
 - Cây gộp `origin/master` (#262 S1.284 / S4.7b1, #248 — `ec667da1`, năm xung đột tài liệu gỡ tay, lời khai ADR 156): `pnpm t0` 51 s;
   `pnpm test` 154 tệp / 2775 ca; kịch bản 41 HTTP 89/89; `tin-hieu-chia-nho.int` 14/14; evidence vitest thoát mã **0**, **90/90**,
   **5105** khẳng định, 1 885 s (bắt đầu 11:18 ngày 2026-10-09 sau 6 lượt chờ) — `INV-matrix.md` sinh lại BẰNG bản gộp tự động.
+
+---
+
+# §S1.286 — S4.7b2: TCO PHÍA NHÀ CUNG CẤP VÀ KẾT QUẢ — THAM SỐ CHỤP LÚC MỞ, THƯỚC Ở ROUTE KHÁCH, Ô KHAI BẮT BUỘC Ở `/nop-thau`, HAI HẠNG VÀ PHÉP TÍNH Ở `/mo-thau` — ADR-158
+
+## 1. Vòng này là gì
+
+Phần thứ hai của S4.7b (spec S4 §9): phía NHÀ CUNG CẤP và KẾT QUẢ của TCO, trên nhánh riêng sau PR của S4.7b1 (§S1.284). Một migration
+(`117_tco_tham_so_ghim`). Không câu hỏi mới: vòng này thực hiện ⑵ ⑶ ⑷ của ADR-156 mà chủ dự án chốt 2026-10-08.
+
+## 2. Quyết định của chủ dự án
+
+Chủ dự án: *"Làm tiếp S4.7b2"*; chọn *"PR b1 ngay, b2 nhánh riêng"*. Ba câu của ADR-156 áp ở đây: nhà cung cấp thấy tập mã, số ngày giao
+VÀ tham số quy đổi; ô khai BẮT BUỘC trên form (tuỳ chọn ở lượt chấm); hạng giá chỉ trên báo giá có hạng.
+
+## 3. Đo trước
+
+- Phiên khách không đọc `org_procurement_policies` (`027` §6); hàng gói chỉ mang tập mã (`tco_ma_ghim`). `GET /guest/rfq` là danh sách
+  trắng không có số ngày giao.
+- Lượt chấm đọc tham số từ phiên bản ghim. Một ảnh chụp cho nhà cung cấp không được so với phiên bản ấy thì hai thước có thể lệch.
+- `docBangXepHang` bỏ `ma_thieu` (cột của `112`) và `nguon` (khoá thêm trong `components`, lượt chấm lưu từ S4.7a); không hạng giá.
+- Phong bì của `/nop-thau`: `totalAmount`, `currency`, `lines` — không ô nào cho bốn mã ngoài giá; bộ đọc SQL của lượt chấm đọc `freight`,
+  `importCost` (`bid_so_tien`), `paymentDays`, `leadTimeDays` (`bid_so_ngay`).
+- `gieo:demo --s3` đo trên `postgres:16-alpine` mới (migrate, vai `app_unseal_login` dựng tay, `TRUSTPROCURE_KEY_ADAPTER=local-dev`): bản
+  đầu của vòng này thoát 0, nhưng phiên bản 2 tính chi phí trễ làm gói chia nhỏ thứ ba (`PENDING_APPROVAL`, chờ người demo ghi nhận tín
+  hiệu rồi mở) và gói một nguồn (`DRAFT`) không mở được — cạnh mở đòi số ngày giao (ADR-153 ⑶), mà gói chờ duyệt không đổi được nó.
+
+## 4. Thay đổi
+
+- **CSDL** — `117_tco_tham_so_ghim`: cột `rfq_packages.tco_tham_so_ghim jsonb` (ngoài mọi `GRANT` ghi), lấp cho gói đã mở bằng nhóm khoá
+  của chính phiên bản ghim, `rfq_tco_khi_mo` chụp nó cùng tập mã; ghim hardening đổi nhãn sang `117`; `migrations.int` (bản đồ hàm, ba
+  danh sách).
+- **`packages/rfq`** — `RfqRecord.tcoMaGhim`, `tcoThamSoGhim`.
+- **`packages/danh-gia`** — `docChinhSach` so ảnh chụp với nhóm khoá của phiên bản ghim ở CSDL (`IS NOT DISTINCT FROM`, `jsonb`), lệch ⇒
+  câu gọi tên L16; `docBangXepHang` trả `hangGia` (xếp `gia` của hàng có hạng bằng chính `xepHang`, nay xuất trong gói — không qua cửa),
+  `maThieu`, `nguon`.
+- **`apps/api`** — `GET /guest/rfq`: `rfq.soNgayGiao`, `tco` (tập mã; tham số CHỈ của mã bật; `null` khi không ảnh chụp).
+- **`apps/web`** — `/lib/tco.js` (`apps/web/src/tco.ts`): đọc thước, ô cần khai, miền ô ngày (bản chép `bid_so_ngay`), ô tiền (quy ước ô
+  đơn giá, ≤ 16 chữ số), câu ô thiếu, trường phong bì, lời quy đổi, phép tính, mã thiếu. `/nop-thau`: khối *"Chi phí ngoài giá"*, ô theo
+  mã bật, câu chặn, dòng *"Số ngày giao yêu cầu"*, phong bì mang trường chuẩn. `/mo-thau`: cột *"Hạng giá"*, phép tính kèm phiên bản, mã
+  thiếu, câu *"theo lời khai"*. Gỡ hai câu tạm của S4.7b1.
+- **`gieo:demo --s3`** — phiên bản 2 (bốn mã, tham số giả định), gói *"Goi TCO"* chấm sẵn; hai gói người demo mở tay khai số ngày giao
+  ở DRAFT.
+- **Tài liệu** — ADR-158; ADR-156 trỏ sang; TEST-PLAN L8, L16; spec §9 S4.7b2; STATE; PRODUCT; Handoff (156 ADR, 113 migration).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. Chụp NGUYÊN nhóm khoá `tco` (không lọc theo mã bật) — lượt chấm so đúng một đối tượng với một đối tượng; route khách lọc theo mã bật.
+2. L16 vế tham số so ở CSDL trên `jsonb`, cùng câu đọc phiên bản ghim — không đọc lại, không so chuỗi.
+3. Hạng giá TÍNH lúc đọc, không lưu: lượt chấm và bảng `rfq_evaluation_lines` không đổi, J1/J2 không đổi; một hàm xếp hạng cho cả hai.
+4. Ô ẩn không vào phong bì dù có chữ — ô theo thước, không theo những gì người gõ để lại.
+5. Miền ô ở màn là bản chép miền của bộ đọc SQL — màn không nhận một con số mà lượt chấm sẽ đọc thành *thiếu*.
+6. `gieo:demo`: khai số ngày giao cho đúng hai gói người demo mở tay; không đổi gói nào khác.
+7. Kịch bản 41: khối TCO ở tổ chức riêng, luồng MVP1 — TCO không phụ thuộc S3 (`112` (5) chụp ở cả hai), và khối không đổi số lời mời,
+   chữ ký hay hàng sổ của hai luồng chính.
+
+## 6. Đo
+
+- **Đơn vị** — `tco.test` 16 ca (thước, ô cần khai, miền ô ngày — bản chép `bid_so_ngay` —, ô tiền ≤ 16 chữ số, câu ô thiếu, trường phong
+  bì, lời quy đổi, phép tính, mã thiếu, `coThuocTco` kể cả bảng chỉ giá có báo giá thiếu `gia`); `bac-mac-dinh-dong-bo` hai ca mới (phiên
+  bản TCO của `gieo:demo --s3` là thứ màn khai được và lượt chấm nhận; bốn khoá phong bì của màn là bốn khoá bộ đọc SQL của lượt chấm,
+  kể cả `importCost`).
+- **DOM** — `phuc-vu.test` bốn ca mới: `/nop-thau` thước ⇒ đúng ô của mã bật, lời quy đổi mang tham số, ô trống hay sai miền chặn nút nộp
+  và gọi tên ô, ô ẩn có chữ không vào phong bì, phong bì mang trường chuẩn; gói chỉ giá hay `tco: null` ⇒ không khối, phong bì ba khoá; A
+  thoát, B mở link trên cùng thẻ ⇒ bốn ô rỗng (sau rà soát); `/mo-thau` cột hạng giá, phép tính kèm phiên bản, mã thiếu, câu *"theo lời
+  khai"*, gói chưa chấm ẩn đầu cột (sau rà soát), bảng chỉ giá sáu cột.
+- **HTTP** — kịch bản 41 khối TCO bốn ca, qua HTTP từ đầu tới cuối (tổ chức riêng): ảnh chụp bằng nhóm khoá của phiên bản ghim;
+  `GET /rfqs/:rfqId` không mang tham số (sau rà soát); `GET /guest/rfq` mang số ngày giao và thước; phong bì dựng bằng `truongKhai` của màn
+  từ ô người gõ (`"500.000"` ⇒ `"500000"`); worker mở ba phong bì; `GET /ranking`: A 100 500 000 hạng 1 / hạng giá 2, B 101 403 150,68
+  hạng 2 / hạng giá 1, C không hạng, thiếu `chi_phi_tre`, không hạng giá; phép tính của B viết bằng `moTaThanhPhan` của màn. `guest.int`
+  một ca mới (không ảnh chụp ⇒ `null`; tham số chỉ của mã bật; mã lạ lọc; không hệ số, ngưỡng, mã phiên bản).
+- **CSDL** — `luot-danh-gia.int` năm ca mới: ảnh chụp bằng nhóm khoá, phiên bản khai sau không đổi nó, phiên bản chỉ giá ⇒ `NULL`; ảnh
+  chụp lệch ⇒ không chấm, câu L16, không lượt nào, `app_api` 42501, thứ tự khoá không là lệch; hạng giá ≠ hạng chi phí, bằng giá cùng hạng,
+  báo giá không hạng không hạng giá, `nguon` chỉ ở mã quy đổi; luồng MVP1 hạng giá = hạng; đường ghi thứ hai (`tien` khác dạng, hàng không
+  hạng còn thành phần) ⇒ không hạng giá, không ném.
+- **Không lùi** — `pnpm test` (sau rà soát) và các tệp int chạm tới: `guest.int` 27/27, `luot-danh-gia.int` 136/136.
+- **`gieo:demo`** — ba lượt trên cụm mới (`--s3` hai lần, MVP1 một lần), thoát 0; gói TCO: 58 200 000 (hạng 1) / 59 431 000 /
+  60 009 617,95 / 60 585 000 — báo giá rẻ nhất theo giá (56 546 000) đứng hạng 3; gói chia nhỏ thứ ba và gói một nguồn mang số ngày giao
+  30, chữ ký của gói thứ ba khớp băm số ngày giao.
+- **Màn trên Chromium** — `/nop-thau` với thước bốn và năm mã ở 375×812 và 1280×900 (`playwright` toàn cục, máy chủ tĩnh của
+  `apps/web`, `/api` giả): `scrollWidth` bằng khung, không ô nào tràn, câu ô thiếu đúng ô đầu tiên, nút nộp tắt.
+
+## 7. Đột biến
+
+Script áp từng đột biến, chạy tệp test đích, khôi phục và tự kiểm sha256. Hai mươi chín đột biến:
+- **Màn (15)**: `truongKhai` mang ô không cần khai (W1); bỏ vế ô trống (W2); bỏ biên 3650 (W3); bỏ biên 16 chữ số (W4); ô ngày giao gán
+  cho mã thanh toán (W5); phép tính đảo ngày chuẩn và ngày khai (W6); `coThuocTco` coi `["gia"]` là thước (W7); ô thiếu không tắt nút
+  (W8); `tinhLai` trả tổng dù thiếu ô (W9); phong bì không mang ô (W10); ô nhập khẩu luôn hiện (W11); không cột hạng giá (W12); cột
+  hạng giá luôn hiện (W13); `dongCacBuoc` không xoá ô (W14); gói chưa chấm không ẩn đầu cột (W15) — cả mười lăm ĐỎ.
+- **Máy chủ (13)**: lượt chấm bỏ kiểm ảnh chụp (D2); so bằng `=` thay `IS NOT DISTINCT FROM` (D3 — bảy ca đỏ: gói chỉ giá thành lệch);
+  route khách trả tham số của mã không bật (D4), bỏ số ngày giao (D5), trả thước rỗng thay `null` (D6), không mang thước — kịch bản 41
+  (D10), không lọc mã (D11); hạng giá trên mọi hàng (D7); bỏ `nguon` (D8); bỏ `maThieu` (D9); bỏ kiểm dạng `tien` (D12); `RfqRecord` mang
+  lại tham số (D13) — cả mười ba ĐỎ.
+- **CSDL (1)**: trigger cạnh mở không chụp tham số — thân của `117`, thân ghim hardening và chuỗi `$than$` cùng đổi (D1) — năm ca đỏ:
+  ảnh chụp `NULL` lệch nhóm khoá của phiên bản ghim, mọi lượt chấm TCO dừng ở L16.
+
+D7 SỐNG ở lượt đầu, và đó là phát hiện: lượt chấm ghi hàng không hạng với `components` rỗng, nên tính hạng giá trên mọi hàng cho cùng
+kết quả — vế *"chỉ hàng có hạng"* là lớp thứ hai mà không ca nào đo. Ca của THẤP-7 thêm một hàng không hạng còn thành phần giá (đường
+ghi thứ hai, vai chủ cụm), rồi D7 đỏ.
+
+## 8. Rà soát đối kháng
+
+Một lượt soi đối kháng độc lập trên diff `f8e3945..8be3a58`, đo bằng đọc mã, chạy test, một Postgres 16 tạm (backfill trong giao dịch
+rollback, `gieo:demo --s3` trọn, mô phỏng bước tay ghi nhận tín hiệu rồi mở gói chia nhỏ thứ ba) và một test DOM tạm. Không phát hiện
+CAO. Kiểm sạch: không trường nào ngoài danh sách trắng tới phiên khách, tham số lọc theo mã bật, trang vẽ bằng `textContent`; cột mới
+ngoài mọi `GRANT` ghi, trigger chỉ chạy ở cạnh `PENDING_APPROVAL→OPEN`, thứ tự tên sau trigger ghim chính sách, `ENABLE ALWAYS`, thân
+ghim hardening khớp `117`; backfill khớp `o.tco` trên chín gói đã mở và một gói huỷ; phép so `jsonb` (mọi giá trị là chuỗi theo `CHECK`);
+miền ô của màn khớp `bid_so_ngay` / `bid_so_tien`; kiểm ô bắt buộc nằm trong chính handler của nút nộp. Tám phát hiện, đã sửa:
+- **TRUNG-1** — bốn ô TCO là phần tử TĨNH của `/nop-thau` và lần đóng các bước không xoá chúng: A thoát, B mở link của mình trên cùng thẻ
+  thì B thấy `1.500.000 / 30 / 45` của A, câu ô thiếu im, nút nộp bật, và phong bì niêm phong mang lời khai của A — lời khai thương mại
+  lộ sang đối thủ trên máy dùng chung, báo giá của B sai mà không ai biết. Cùng lớp lỗi S1.181 đã sửa cho bảng giá. Chú thích *"giữ qua lần
+  nạp lại, như ô đơn giá"* sai (ô đơn giá dựng lại mỗi lần nạp). Sửa: `dongCacBuoc` xoá bốn ô, câu ô thiếu, lời quy đổi, ẩn khối; ca DOM
+  A→B (W14).
+- **TRUNG-2** — `gieo:demo --s3` không in mã gói TCO; `/mo-thau` đọc gói theo mã dán vào, nên người demo không tới được bảng hai hạng —
+  điểm trình diễn chính của vòng. Sửa: khối *"TCO"* in mã và các bước, như khối trao thầu.
+- **THẤP-3** — ảnh chụp nằm trong `RfqRecord`, nên `GET /rfqs/:rfqId` (`agent: true`, công cụ MCP `get_rfq`) mang nguyên nhóm khoá `tco`,
+  kể cả chi phí vốn khi mã thanh toán không bật — trong khi `/policy/versions` cố ý `agent: false`. Sửa: `docThuocTcoGoi` riêng, chỉ route
+  khách gọi; kịch bản 41 khẳng định `GET /rfqs/:rfqId` không mang tham số (D13).
+- **THẤP-4** — phiên bản chỉ giá ghi `ma_thieu` `["gia"]` cho báo giá không đọc được tổng, và `coThuocTco` coi bảng ấy là bảng TCO (thêm cột
+  hạng giá và câu *"theo lời khai"*, trái ADR-158 ⑹). Sửa: chỉ mã ngoài giá bật thước (W7).
+- **THẤP-5** — đọc gói TCO rồi đọc gói chưa chấm: đầu cột *"Hạng giá"* ở lại trên bảng rỗng. Sửa: ẩn ở nhánh chưa chấm (W15).
+- **THẤP-6** — `tco.ma` trả nguyên văn chuỗi mã bên mua khai (`057` chỉ kiểm kiểu). Sửa: lọc theo `MA_CO_NGUON` (D11).
+- **THẤP-7** — hạng giá đọc `tien` bằng `BigInt` sau khi bỏ dấu chấm; `057` chỉ đòi chuỗi, nên một hàng khác dạng (đường ghi thứ hai) làm
+  cả `GET /ranking` trả 500 — trước vòng này phép đọc không phân tích gì. Sửa: chỉ dạng `\d{1,16}\.\d{2}` vào hạng giá (D12).
+- **THẤP-8** — lời demo *"ba gói"* của lịch sử giá không kể gói trao thầu (lệch từ S1.282) và gói TCO, mà cả hai mở trên ba hàng chuẩn ấy.
+  Sửa: câu nói ra.
+
+Hai quan sát ngoài phạm vi, có từ S4.7a, nêu ở ADR-158 *Giới hạn*: cạnh mở không đòi tham số (một phiên bản bật mã quy đổi thiếu tham số
+vẫn mở được gói — nhà cung cấp thấy *"—"*, lượt chấm từ chối); ảnh chụp lệch ném lỗi thường (500, không 422 có tên). Việc thứ nhất là
+một quyết định sản phẩm — đã đề xuất thành việc riêng.
+
+## 9. Giới hạn, nói ra
+
+1. Ô bắt buộc chỉ ở form — phong bì niêm phong ở trình duyệt; phong bì thiếu ô dựng ngoài màn thì không hạng, gọi tên mã thiếu.
+2. Hạng giá không lưu và không vào bộ bằng chứng — suy được từ thành phần đã lưu (S4.7c).
+3. Lời khai không đối chiếu hoá đơn — câu ở bảng nói ra.
+4. Tham số và tập mã lộ cho nhà cung cấp được mời (ADR-156 ⑵).
+5. Cạnh mở không đòi tham số; ảnh chụp lệch trả 500 (mục 8).
+6. `/mo-thau` không đo lại trên trình duyệt — cột mới theo khuôn nhãn ô của khoản 334, đo ở `phuc-vu.test`.
+
+## 10. Đo cuối
+
+- Sau các sửa của mục 8 và lần cấp số: `pnpm t0` xanh; `pnpm test` 157 tệp / 2800 ca; `migrations.int` 128/128; int chạm tới
+  (`guest.int`, `luot-danh-gia.int`, kịch bản 41 khối TCO) xanh.
+- `cap-so` cấp S1.286, ADR-158, migration 117 — base là nhánh S4.7b1 đã gộp `origin/master` (nhánh xếp chồng: base `origin/master` sẽ
+  thu hồi số của S4.7b1, cùng số tạm 9101/9201, và trộn với số của vòng này); vòng 285, ADR-157, migration 116 do nhánh
+  `s3-6d-k10-chu-ky-trao-thau` giữ trên remote. Bảy số trần `9501` trong chú thích thay tay. `--kiem` sạch.
+- `pnpm evidence` trên `460ed60`: vitest thoát mã 0, 5119 khẳng định; bộ sinh dừng ở hai vấn đề CHẶN MERGE — hai cặp nhãn ↔ tệp mới
+  (L16 ở `guest.int` và `bac-mac-dinh-dong-bo`) chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai hai cặp kèm câu đo gì, chạy lại
+  BƯỚC 2 (bộ sinh) trên cùng báo cáo: **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận: L8 49 → 51
+  khẳng định, L16 31 → 38.

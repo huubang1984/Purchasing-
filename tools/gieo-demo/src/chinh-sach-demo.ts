@@ -34,3 +34,17 @@ export const TRONG_SO_DEMO: readonly { readonly ma: string; readonly don_vi: str
   { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
 ];
 export const BAFO_TOP_N_DEMO = 2;
+
+/**
+ * [S1.286 / S4.7b2] Phiên bản 2 của `--s3`: cùng bậc và mức với phiên bản 1, cộng BỐN thành phần TCO và tham số quy đổi — GIẢ ĐỊNH
+ * cho demo (chi phí vốn 12%/năm, kỳ thanh toán chuẩn 60 ngày, chi phí trễ 0,1% giá trị mỗi ngày), không mặc định của sản phẩm: màn
+ * `/chinh-sach` không điền sẵn tham số nào (spec §4.8). `bac-mac-dinh-dong-bo.test.ts` đòi màn dựng được đúng bộ này và lượt chấm nhận nó.
+ */
+export const TRONG_SO_TCO_DEMO: readonly { readonly ma: string; readonly don_vi: string; readonly he_so: string }[] = [
+  { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
+  { ma: "van_chuyen", don_vi: "TIEN", he_so: "1.0000" },
+  { ma: "chi_phi_thanh_toan", don_vi: "TIEN", he_so: "1.0000" },
+  { ma: "chi_phi_tre", don_vi: "TIEN", he_so: "1.0000" },
+];
+export const THAM_SO_TCO_DEMO = { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" } as const;
+
