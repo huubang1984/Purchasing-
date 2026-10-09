@@ -12588,7 +12588,8 @@ các mã bật, giải trình — chỉ khi cam kết nói về đúng báo giá
 ⑻ **Kịch bản 41** — khối TCO đi tiếp tới đề xuất: không giải trình ⇒ 422 gọi tên, giải trình rỗng ⇒ 422 của route, kèm giải trình ⇒ 201;
 `GET /award/commitment` trả lời khai, hai hạng, tham số, số ngày giao, giải trình — và bước 7 viết nó bằng hàm của màn.
 
-⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.288 mục 8) — không CAO; sửa TRUNG-2 và sáu THẤP, TRUNG-1 nói ra dưới đây:
+⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.288 mục 8) — không CAO; sửa TRUNG-2 và sáu THẤP; TRUNG-1 vá ở ⑽ (chủ dự án:
+*"Vá đi"*):
 - **TRUNG-2** — ô giải trình chỉ theo bảng xếp hạng đã đọc: người giữ `award.recommend` mà không giữ `bid.view` (BUYER) không bao giờ thấy
   ô, nên không đề xuất được báo giá lệch hạng; bảng cũ cho vòng lặp *ô hiện — máy chủ nói không cần*. Sửa: mã của lời từ chối điều khiển
   ô, lần đọc bảng đặt lại ô.
@@ -12600,12 +12601,19 @@ các mã bật, giải trình — chỉ khi cam kết nói về đúng báo giá
 - Siết trong vòng, trước khi rà soát báo: cam kết chỉ ghi trong chính giao dịch đề xuất — không ai viết sau được một cam kết cho đề xuất có
   trước migration.
 
+⑽ **Hàng chấm chỉ ghi trong giao dịch tạo lượt, cho báo giá của đúng gói** (rà soát TRUNG-1, có từ `057`). `app_api` giữ `GRANT INSERT`
+theo cột trên `rfq_evaluation_lines`, và trigger duy nhất của bảng chỉ kiểm hình dạng thành phần: một câu ghi thẳng chèn được vào lượt mới
+nhất đã commit một hàng có hạng với giá rẻ hơn (phiên bản vòng 1 trước BAFO, báo giá gói khác), đổi hạng giá mà ⑶ dựa vào — và cả bảng
+xếp hạng (J1). Trigger BEFORE INSERT `rfq_evaluation_lines_kiem_luot` → `luot_cham_kiem_hang` (`119` mục (5)): `rfq_evaluations.created_at
+= now()` — hàng ghi trong CHÍNH giao dịch tạo lượt, như `taoLuotDanhGia` (`created_at` ngoài `GRANT INSERT`; khuôn `103` và ⑷) —, và báo
+giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham_ngoai_giao_dich_luot`, `hang_cham_bao_gia_goi_khac`). Mã sản xuất không
+đổi; ba chỗ test ghi hàng chấm ở giao dịch khác viết lại cho cùng giao dịch, nhân chứng của `dungKichBan()` dựng lượt thứ hai cùng hàng.
+
 ### Giới hạn nói ra
 
-- **TRUNG-1 — hàng chấm ghi thêm được vào lượt cũ** (có từ `057`): `app_api` giữ `GRANT INSERT` theo cột trên `rfq_evaluation_lines`, và
-  không trigger nào buộc hàng thuộc chính giao dịch tạo lượt hay báo giá của đúng gói. Một câu ghi thẳng (đường ghi thứ hai) chèn được
-  một hàng có hạng với giá rẻ hơn, đổi hạng giá — và cả bảng xếp hạng. Vá nó đụng J1 và sáu tệp test chèn hàng chấm thẳng; đề xuất thành
-  việc riêng, chờ chủ dự án.
+- **Một đường ghi thứ hai dựng TRỌN một lượt chấm mới** trong giao dịch của nó vẫn chọn được hàng của lượt ấy trong các báo giá đã mở của
+  gói (kể cả phiên bản vòng 1 sau BAFO) — vế ấy là J2, lượt chấm tái lập được từ bản rõ, đo ở bộ kiểm ngoại tuyến của bộ bằng chứng.
+  Buộc *"đúng phiên bản của vòng"* ở CSDL chạm ngữ nghĩa lượt chấm sau BAFO; không làm ở vòng này.
 - **Đề xuất trước S4.7c không có cam kết**, kể cả đề xuất còn sống trên gói TCO của S4.7a/b lệch hạng mà không giải trình — vẫn duyệt
   được. Không lấp ngược.
 - **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.

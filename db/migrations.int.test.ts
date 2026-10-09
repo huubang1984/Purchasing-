@@ -2488,6 +2488,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "award_kiem_giai_trinh", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_xet_giai_trinh"] },
     { ham: "award_dien_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_award_cam_ket_dien"] },
     { ham: "award_chup_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_chup_cam_ket"] },
+    // [S1.288 / S4.7c1 / J1 — rà soát TRUNG-1] Hàng chấm chỉ ghi trong giao dịch tạo lượt, cho báo giá của đúng gói. Thân `RETURN NEW` cho
+    // một hàng chèn sau vào lượt đã commit đổi hạng giá mà lời đòi giải trình dựa vào.
+    { ham: "luot_cham_kiem_hang", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_evaluation_lines_kiem_luot"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.

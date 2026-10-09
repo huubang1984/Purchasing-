@@ -24,6 +24,8 @@
 --     Cam kết chỉ ghi được trong CHÍNH giao dịch của lần đề xuất (`acted_at` của hàng award là `now()` của giao dịch ghi nó, và
 --     `app_api` không ghi được `acted_at`): một đề xuất có trước migration này, hay một hàng mà trigger chụp không chạy, không nhận được
 --     một cam kết viết sau.
+-- (5) `luot_cham_kiem_hang` — trigger BEFORE INSERT của `rfq_evaluation_lines` [rà soát §S1.288 TRUNG-1]: hàng chấm chỉ ghi trong CHÍNH
+--     giao dịch tạo lượt, cho báo giá của ĐÚNG gói — hạng giá của (2) không bị một hàng chèn sau làm lệch.
 -- ==============================================================================================
 
 -- (1) -------------------------------------------------------------------------------------------
@@ -234,3 +236,48 @@ CREATE TRIGGER rfq_awards_chup_cam_ket
   AFTER INSERT ON rfq_awards
   FOR EACH ROW WHEN (NEW.status = 'PROPOSED') EXECUTE FUNCTION public.award_chup_cam_ket();
 ALTER TABLE rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_chup_cam_ket;
+
+-- (5) -------------------------------------------------------------------------------------------
+-- [rà soát §S1.288 — TRUNG-1] HÀNG CHẤM CHỈ GHI TRONG GIAO DỊCH TẠO LƯỢT, CHO BÁO GIÁ CỦA ĐÚNG GÓI. `057` cấp `app_api` `GRANT
+-- INSERT` theo cột trên `rfq_evaluation_lines`, và trigger duy nhất của bảng (`rfq_evaluation_lines_kiem_thanh_phan`) chỉ kiểm hình dạng
+-- thành phần: một câu ghi thẳng (đường ghi thứ hai) chèn được vào lượt chấm MỚI NHẤT — đã commit — một hàng có hạng với `gia` rẻ hơn
+-- (phiên bản vòng 1 trước BAFO, báo giá của gói khác). Từ (2) và (3) đó là đổi được hạng giá mà lời đòi giải trình dựa vào, và cả bảng
+-- xếp hạng không còn là sản phẩm của đúng một lần chấm (J1). `taoLuotDanhGia` ghi lượt và mọi hàng của nó trong CÙNG giao dịch;
+-- `rfq_evaluations.created_at` là `now()` của giao dịch ấy (`057` — ngoài `GRANT INSERT`), nên `created_at = now()` là vế *"cùng giao
+-- dịch"* — khuôn khoá ngoại benchmark của `103` và cam kết ở (4). Vế *"đúng gói"* đi qua lời mời của báo giá.
+--
+-- KHÔNG làm, nói ra: một đường ghi thứ hai dựng TRỌN một lượt chấm mới trong giao dịch của nó vẫn chọn được hàng của lượt ấy trong các
+-- báo giá đã mở của gói — vế ấy là J2 (lượt chấm tái lập được từ bản rõ), đo ở bộ kiểm ngoại tuyến của bộ bằng chứng, không ở đây.
+CREATE OR REPLACE FUNCTION public.luot_cham_kiem_hang() RETURNS trigger
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  luot record;
+BEGIN
+  SELECT e.rfq_id, e.created_at INTO luot
+    FROM public.rfq_evaluations e
+   WHERE e.org_id = NEW.org_id AND e.id = NEW.evaluation_id;
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+  IF luot.created_at IS DISTINCT FROM now() THEN
+    RAISE EXCEPTION 'Hang xep hang chi ghi trong chinh giao dich tao luot cham % (J1)', NEW.evaluation_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_ngoai_giao_dich_luot';
+  END IF;
+  IF NOT EXISTS (SELECT 1
+                   FROM public.vendor_bid_versions v
+                   JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+                   JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+                  WHERE v.org_id = NEW.org_id AND v.id = NEW.bid_version_id AND i.rfq_id = luot.rfq_id) THEN
+    RAISE EXCEPTION 'Bao gia % khong thuoc goi thau cua luot cham % (J1)', NEW.bid_version_id, NEW.evaluation_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_bao_gia_goi_khac';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+
+CREATE TRIGGER rfq_evaluation_lines_kiem_luot
+  BEFORE INSERT ON rfq_evaluation_lines
+  FOR EACH ROW EXECUTE FUNCTION public.luot_cham_kiem_hang();
+ALTER TABLE rfq_evaluation_lines ENABLE ALWAYS TRIGGER rfq_evaluation_lines_kiem_luot;

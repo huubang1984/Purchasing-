@@ -1500,7 +1500,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // `kiem_danh_tinh_theo_phien` trên `rfq_evaluations`/INSERT (hàm cũ, BẢNG mới — bộ ba là (hàm, bảng,
   // sự kiện), nên một bảng mới là một bộ ba mới), và `kiem_thanh_phan_theo_chinh_sach` trên
   // `rfq_evaluation_lines`/INSERT. Hàng phải KHỚP tập `(ma, đơn vị)` của chính sách đã ghim.
-  const ld = await chenNC(
+  await chenNC(
     "public.rfq_evaluations",
     api(
       "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
@@ -1509,17 +1509,32 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       { org_id: org, rfq_id: rfq1, policy_id: cs, currency: "VND", created_by: pm.u, created_by_session_id: pm.s },
     ),
   );
+  // [S1.288 / S4.7c1 — rà soát TRUNG-1] Hàng chấm chỉ ghi trong CHÍNH giao dịch tạo lượt (`luot_cham_kiem_hang`), như `taoLuotDanhGia`:
+  // lượt ngay trên đã commit, nên nhân chứng của hàng dựng lượt THỨ HAI của gói ở bước chuẩn bị (dưới `app_api`, cùng giao dịch) rồi ghi
+  // hàng vào nó. Lượt thứ hai là lượt mới nhất — vòng BAFO và chuỗi trao thầu dưới đây dựa trên nó (J5).
+  let ld = "";
+  const khaiHang: Record<string, unknown> = { org_id: org, bid_version_id: pb, effective_cost: "100.00", rank: 1 };
+  const ghiHang = api(
+    "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+      "SELECT $1, e.id, $2, '100.00', $3::jsonb, 1 FROM rfq_evaluations e WHERE e.org_id = $1 AND e.rfq_id = $4 " +
+      "ORDER BY e.created_at DESC, e.id DESC LIMIT 1 RETURNING org_id, evaluation_id, bid_version_id, effective_cost, rank",
+    [org, pb, TP_HANG_KICH_BAN, rfq1],
+    khaiHang,
+  );
   doiSoHang(
-    await so.chung(
-      "public.rfq_evaluation_lines",
-      "INSERT",
-      api(
-        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
-          "VALUES ($1, $2, $3, '100.00', $4::jsonb, 1) RETURNING org_id, evaluation_id, bid_version_id, effective_cost, rank",
-        [org, ld, pb, TP_HANG_KICH_BAN],
-        { org_id: org, evaluation_id: ld, bid_version_id: pb, effective_cost: "100.00", rank: 1 },
-      ),
-    ),
+    await so.chung("public.rfq_evaluation_lines", "INSERT", {
+      ...ghiHang,
+      chuanBi: async (c) => {
+        await ghiHang.chuanBi?.(c);
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+            "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+          [org, rfq1, cs, pm.u, pm.s],
+        );
+        ld = rows[0]?.id ?? "";
+        khaiHang["evaluation_id"] = ld;
+      },
+    }),
     1,
     "rfq_evaluation_lines",
   );

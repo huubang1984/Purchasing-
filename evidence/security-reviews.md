@@ -26688,6 +26688,11 @@ bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
 - **Sổ đăng ký** — `migrations.int` (HAM_56, HAM_ANH_XA, ba danh sách), `danh-sach-ham-canh`, `check-an-ninh`, `rls-coverage` (quyền bảng,
   quyền cột, policy khách), `hardening-suy-tu` (bảng chỉ-ghi-thêm, nhân chứng `rfq_award_cam_ket`/INSERT), `migration-shape`,
   `ban-ro-liet-ke`, `barrel-exports`, `cong-quyen-route`, `so-khai-nhan`.
+- **CSDL — vá TRUNG-1 (chủ dự án: *"Vá đi"*)** — `119` mục (5): `luot_cham_kiem_hang`, trigger `rfq_evaluation_lines_kiem_luot` — hàng chấm
+  chỉ ghi trong chính giao dịch tạo lượt (`rfq_evaluations.created_at = now()`), cho báo giá của đúng gói (qua lời mời). Ghim hardening,
+  TRIGGER_DUOC_PHEP, `migrations.int`, `danh-sach-ham-canh`. Ba chỗ test ghi hàng chấm ở giao dịch khác viết lại cho cùng giao dịch
+  (`luot-danh-gia.int` — hàm `chenHang` của J1 và ca `ma_thieu`; `lich-su-gia.int`); nhân chứng của `dungKichBan()` dựng lượt thứ hai
+  cùng hàng.
 - **`packages/danh-gia`** — `deXuatTraoThau` nhận `giaiTrinhLechHang`, đổi hai tên ràng buộc thành `THIEU_GIAI_TRINH_LECH_HANG` /
   `GIAI_TRINH_LECH_HANG_KHONG_CAN` (không vào sổ), sổ ghi cờ `coGiaiTrinhLechHang`; `TraoThau.giaiTrinhLechHang`; `docCamKetTraoThau` dưới
   `bid.view`, hàng sổ `AWARD_COMMITMENT_VIEWED`. Hai mã vào `VAO_SO` và `DANH_MUC_VE_CONG`.
@@ -26723,7 +26728,7 @@ bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
 
 ## 7. Đột biến
 
-35 đột biến, mỗi cái chạy lại bộ đo của nó; 35/35 đỏ — S15 sống ở lượt đầu.
+38 đột biến, mỗi cái chạy lại bộ đo của nó; 38/38 đỏ — S15 sống ở lượt đầu.
 
 | Lớp | Đột biến | Đỏ ở |
 |---|---|---|
@@ -26732,6 +26737,7 @@ bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
 | CSDL — cam kết | S7 `freight` đọc `importCost` · S8 hạng giá chép hạng chi phí · S9 bỏ giải trình · S10 bỏ tham số · S11 cam kết cho hàng không đề xuất · S12 không chụp · S13 `leadTimeDays` đọc `paymentDays` · S14 `app_api` ghi mọi cột · S15 chi phí chép giá · S18 cam kết viết sau giao dịch | `luot-danh-gia.int` |
 | Lớp gói | T1 không đổi tên ràng buộc · T2 hai mã đổi chỗ · T3 câu ghi bỏ giải trình · T4 đọc cam kết không cổng · T5 lần đọc không vào sổ · T6 đọc cam kết của đề xuất cũ nhất | `luot-danh-gia.int` |
 | Route | T7 bỏ giải trình · T8 nhận chuỗi rỗng · T9 lời từ chối không mang mã · T10 bỏ ký tự rộng 0 · T11 bỏ trần 2000 | kịch bản 41 khối TCO |
+| CSDL — hàng chấm (TRUNG-1) | M1 hàng ghi sau giao dịch tạo lượt · M2 báo giá của gói khác · M3 thân `RETURN NEW` sớm | `luot-danh-gia.int` |
 | Màn | W1 hạng giá vắng không đòi · W2 thân luôn mang giải trình · W3 đổi gói không xoá ô · W4 lời khai không lọc mã · W5 ô trống vẫn gửi · W6 mã THIEU không hiện ô · W7 đọc lại bảng không đặt lại ô | `tco.test`, `phuc-vu.test` |
 
 S15 (chi phí hiệu dụng của cam kết chép giá thay vì chép hàng chấm) sống ở lượt đầu, và đó là phát hiện: mọi ca đo cam kết dùng báo giá có
@@ -26743,9 +26749,9 @@ Một lượt soi đọc-không-sửa trên diff chưa commit. **Không CAO.** H
 
 - **TRUNG-1 — hàng chấm ghi thêm được vào lượt cũ** (có từ `057`). `app_api` giữ `GRANT INSERT` theo cột trên `rfq_evaluation_lines`, trigger
   duy nhất của bảng chỉ kiểm hình dạng thành phần. Một câu ghi thẳng chèn được vào lượt mới nhất một hàng có hạng với `gia` rẻ hơn (phiên
-  bản vòng 1 trước BAFO, báo giá gói khác): hạng giá của báo giá được đề xuất đổi và trigger giải trình cho qua. **Không sửa ở vòng này** —
-  vá là một trigger buộc hàng thuộc chính giao dịch tạo lượt và báo giá của đúng gói; sáu tệp test chèn hàng chấm thẳng vào lượt có sẵn,
-  và vế *"phiên bản của đúng vòng"* chạm ngữ nghĩa lượt chấm sau BAFO. Đề xuất thành việc riêng, chờ chủ dự án.
+  bản vòng 1 trước BAFO, báo giá gói khác): hạng giá của báo giá được đề xuất đổi và trigger giải trình cho qua. Báo cáo chủ dự án kèm
+  khuyến nghị tách việc; chủ dự án: *"Vá đi"*. **Sửa:** trigger `rfq_evaluation_lines_kiem_luot` (mục 4). Vế *"phiên bản của đúng vòng"*
+  KHÔNG làm — chạm ngữ nghĩa lượt chấm sau BAFO; nói ra ở mục 9.
 - **TRUNG-2 — ô giải trình chỉ theo bảng đã đọc.** BUYER giữ `award.recommend`, không giữ `bid.view` (`005`): không bao giờ đọc được bảng,
   ô không bao giờ hiện, đề xuất lệch hạng không đi được; mỗi lần thử đọc lại bảng ⇒ 403 vào sổ. Bảng cũ (sau BAFO) cho vòng lặp ô hiện /
   máy chủ nói không cần. **Sửa:** lời từ chối trao thầu mang `ma` (`dispatch`), màn hiện hay ẩn ô theo mã, không đọc lại bảng; `veXepHang`
@@ -26772,7 +26778,8 @@ xuất có trước migration.
 
 ## 9. Giới hạn, nói ra
 
-- **TRUNG-1** ở mục 8 — mở, việc riêng.
+- **Một đường ghi thứ hai dựng TRỌN một lượt chấm mới** trong giao dịch của nó vẫn chọn được hàng trong các báo giá đã mở của gói (kể cả
+  phiên bản vòng 1 sau BAFO) — vế J2, đo ở bộ kiểm ngoại tuyến; buộc *"đúng phiên bản của vòng"* ở CSDL chạm ngữ nghĩa lượt chấm sau BAFO.
 - **Đề xuất trước S4.7c** không có cam kết, kể cả đề xuất còn sống lệch hạng trên gói TCO của S4.7a/b; vẫn duyệt được.
 - **Dò hạng** qua lời đáp *không cần* của người giữ `award.recommend` — không hàng sổ (ADR-060).
 - **Bộ bằng chứng chưa mang cam kết** (`PHIEN_BAN_BUNDLE = 2`) — S4.7c2.

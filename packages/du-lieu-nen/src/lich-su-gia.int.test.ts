@@ -605,18 +605,30 @@ describe("[INV-L5] ⑵ vòng BAFO, huỷ, và `status` không được đọc", 
     expect(vongMot.map((q) => q.thanh_tien).sort()).toEqual(["1000.00", "1100.00", "1200.00"]);
 
     // Lượt chấm (khuôn `luotTrong` của danh-gia), rồi EVALUATING — `gia_da_lo` không đọc `status`.
-    const evalId = (
-      await db.pool.query<{ id: string }>(
-        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
-        [orgA, rfqId, chinhSachA, pm.nguoi, pm.phien],
-      )
-    ).rows[0]!.id;
-    for (const [i, b] of bg.entries()) {
-      const tien = ["1000.00", "1100.00", "1200.00"][i]!;
-      await db.pool.query(
-        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) VALUES ($1, $2, $3, $4, $5, $6)",
-        [orgA, evalId, b.versionId, tien, JSON.stringify([{ ma: "gia", tien }]), i + 1],
-      );
+    // [S1.288] Lượt và hàng chấm trong CÙNG giao dịch — `luot_cham_kiem_hang` từ chối hàng ghi vào một lượt đã commit.
+    const ketNoi = await db.pool.connect();
+    let evalId = "";
+    try {
+      await ketNoi.query("BEGIN");
+      evalId = (
+        await ketNoi.query<{ id: string }>(
+          "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+          [orgA, rfqId, chinhSachA, pm.nguoi, pm.phien],
+        )
+      ).rows[0]!.id;
+      for (const [i, b] of bg.entries()) {
+        const tien = ["1000.00", "1100.00", "1200.00"][i]!;
+        await ketNoi.query(
+          "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) VALUES ($1, $2, $3, $4, $5, $6)",
+          [orgA, evalId, b.versionId, tien, JSON.stringify([{ ma: "gia", tien }]), i + 1],
+        );
+      }
+      await ketNoi.query("COMMIT");
+    } catch (e) {
+      await ketNoi.query("ROLLBACK");
+      throw e;
+    } finally {
+      ketNoi.release();
     }
     await db.pool.query("UPDATE rfq_packages SET status = 'EVALUATING' WHERE id = $1", [rfqId]);
     expect(await daLo(rfqId), "EVALUATING — không đọc status").toBe(true);
