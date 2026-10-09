@@ -27083,3 +27083,7 @@ hàm = bốn dòng `chot: K10c`; ba tên `k10c_*` không ở `CHOT_THEO_RANG_BUO
   web 401; `tsc` 0. Những lần đỏ trước đó đều ở test hay lời khai (§5), không lần nào đổi hình dạng SQL sau khi ghim.
 - Hardening: mười khối (bảy ghi lại, ba mới) đo trên cụm dùng một lần `postgres:16-alpine` — `migrate()` hai lần (115 tệp / 0 tệp), vân
   tay khớp.
+- Cây gộp `origin/master` (#263 S1.287 / S3.7a1 — Supplier Passport, ADR-159, migration 118 — `ce99f965`, sáu xung đột tài liệu và danh
+  sách migration gỡ tay; lời khai 116 migration, 159 ADR, 91 bất biến): `pnpm t0` 54 s; `pnpm test` 157 tệp / 2820 ca; kịch bản 41 HTTP
+  93/93 48 s; `tin-hieu-chia-nho.int` 14/14 16 s; evidence vitest thoát mã **0**, **91/91**, **5186** khẳng định, 2 056 s (bắt đầu
+  00:31 ngày 2026-10-10 sau 6 lượt chờ) — `INV-matrix.md` sinh lại trên bản gộp.
