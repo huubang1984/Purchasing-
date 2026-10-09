@@ -230,6 +230,8 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // [S1.288 / S4.7c1 / J1 — rà soát TRUNG-1] `luot_cham_kiem_hang` (BEFORE INSERT của `rfq_evaluation_lines`) từ chối CÓ ĐIỀU KIỆN — hàng
   // ghi ngoài giao dịch tạo lượt, hay báo giá của gói khác. Hàng chấm của `dungKichBan()` (cùng giao dịch với lượt của nó) đi qua.
   "public.luot_cham_kiem_hang",
+  // [S1.285 / S3.6d / K10b] `award_kiem_tin_hieu_khai_thap` (chữ ký — tín hiệu khai thấp chưa ai ghi nhận ⇒ NÉM). Tổ chức chưa bật, hay không tín hiệu, đi qua.
+  "public.award_kiem_tin_hieu_khai_thap",
   // [S1.270 / S3.3d / K3] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_xoay_vong_khi_nop` chỉ ngoài READ COMMITTED hay khi danh sách
   // không có nhà cung cấp mới mà không ngoại lệ ROTATION; `rfq_kiem_xoay_vong_khi_mo` thêm vế `opened_at` là giờ của lần mở.
   // `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.

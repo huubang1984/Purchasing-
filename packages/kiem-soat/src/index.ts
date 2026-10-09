@@ -9,14 +9,17 @@
 export {
   KiemSoatError,
   ghiNhanTinHieu,
+  ghiTinHieuKhiDeXuat,
   ghiTinHieuKhiNop,
   lietKeTinHieu,
   type GhiNhanTinHieu,
   type GoiTrongBangChung,
   type KetQuaGhiNhan,
+  type LoaiTinHieu,
   type NguoiXemTinHieu,
   type TinHieu,
   type TinHieuCuaGoi,
+  type TinHieuKhaiThap,
 } from "./tin-hieu.js";
 // [S1.281 / S3.4a] Khai báo xung đột lợi ích (K9, spec S3 §4.5): khai và đọc khai báo của CHÍNH người gọi. Chốt ở bảy cổng là
 // trigger của `114_khai_bao_xung_dot`; gói này không giữ bản sao nào của phép so.

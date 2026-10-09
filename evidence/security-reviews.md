@@ -26503,6 +26503,106 @@ rò rỉ hay sink HTML. Tám phát hiện:
   **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận đổi đúng hai hàng: L8 24 → 49 khẳng định,
   L16 14 → 31, tầng T3 → T1, T3.
 
+---
+
+# §S1.285 — S3.6d: K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) TÍNH Ở ĐỀ XUẤT, CHẶN CHỮ KÝ DUYỆT TRAO THẦU CHO TỚI KHI NGƯỜI GIỮ `po.approve` NGOÀI GÓI GHI NHẬN; HAI BẢNG TÍN HIỆU CỦA `088` MỞ THEO LOẠI — ADR-157, MIGRATION `116_tin_hieu_khai_thap`
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — tổ chức chưa bật S3 chạy nguyên MVP1 (`tin_hieu_khai_thap` trả
+NULL, không hàng, một chữ ký như trước). Đổi ở tổ chức đã bật: một đề xuất khai thấp để lại một hàng tín hiệu và chữ ký đầu đòi một lần
+đọc. Migration `116_tin_hieu_khai_thap`, ADR-157, K10b vào sổ (90 bất biến). Không khoản mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-08: *"Tiếp bước S3.6d"*, rồi *"Chốt câu hỏi theo đề xuất rồi làm luôn"* — vòng tự chốt hình dạng theo đề xuất và ghi ở
+ADR-157. Phạm vi theo spec §9 dòng S3.6: `ESTIMATE_UNDERSTATED` và K10 ở chữ ký trao thầu, làm riêng (không gộp vào S3.5).
+
+## 2. Đo trước (đọc mã trên `5ae1393a`)
+- `088` khoá cứng mọi thứ của tín hiệu vào `PURCHASE_SPLITTING`: CHECK `loai`/`nguon`, trigger `governance_signals_tinh` đòi PENDING_APPROVAL
+  và gọi `tin_hieu_chia_nho`, luật người đọc `goi[]`, trigger ghi nhận đòi PENDING_APPROVAL + `rfq.approve` + bằng chứng so với
+  `tin_hieu_chia_nho`; gói `kiem-soat` và route ghi nhận cùng khoá cứng. `113` tính *bậc cao hơn* (`award_bac_cao_hon`) và để vế tín hiệu
+  cho S3.6d; `115` (K9) đếm chữ ký còn hiệu lực. Không dòng mã nào của `ESTIMATE_UNDERSTATED`; `gieo:demo` không gieo ca khai thấp.
+- Spec: §4.6 bảng tín hiệu (tính ở đề xuất, bằng chứng mốc bậc), *chữ ký duyệt award đòi ghi nhận*; §2.5 ⒁ / ADR-082 ⒁ (một điều kiện
+  fail-closed, không số tiền, bắn cả khi vượt ngưỡng kép); §8.4; ADR-084 ⑵ (`po.approve` ở trao thầu); ADR-120 (khuôn K10a).
+- Điểm spec chưa định: *người gây ra* của `ESTIMATE_UNDERSTATED` — chốt: người tạo, người nộp, người đặt ngân sách (người khai ước lượng),
+  người đề xuất; cộng người khai phiên bản ghim như K10a.
+
+## 3. Hình dạng (ADR-157, tự chốt theo đề xuất)
+Một hàm `tin_hieu_khai_thap`; bằng chứng mang hai mốc bậc, id đề xuất và phiên bản báo giá (đề xuất lại là bằng chứng khác — fail-closed);
+hàng ghi ở cạnh đề xuất (`DE_XUAT`) sau câu chèn và trước mọi hàng sổ; không chặn đề xuất; K10b ở TỪNG chữ ký duyệt (hàm vị từ hỏi ở tầng
+gói trước câu chèn, trigger riêng hỏi lại, tên `k10b_*` không qua bảng tên → mã như ADR-120); người ghi nhận `po.approve` ngoài gói;
+hai bảng của `088` rẽ theo loại với thân cũ nguyên văn; `tin_hieu_hien_tai(org, gói, loại)` một chỗ; gói `kiem-soat` nhận `loai` (mặc
+định chia nhỏ — người gọi cũ không đổi), `lietKeTinHieu` thêm `khaiThap`; route riêng dưới `po.approve`; khối ở bước 7 `/mo-thau`.
+
+## 4. Thay đổi
+- `db/migrations/116_tin_hieu_khai_thap.sql`: hai CHECK mở; `tin_hieu_khai_thap`, `tin_hieu_hien_tai`, `award_chot_tin_hieu`,
+  `award_kiem_tin_hieu_khai_thap` + trigger `rfq_award_approvals_kiem_tin_hieu_khai_thap`; ba hàm của `088` định nghĩa lại theo loại.
+  `hardening.always.sql`: bốn khối ghim mới, ba khối của `088` ghi lại (*thân từ 116*), tổng điều tra trigger `rfq_award_approvals` thêm
+  một tên — vân tay tính từ văn bản migration và phán xét bằng `migrate()` hai lần trên cụm dùng một lần. `db/danh-sach-ham-canh.ts`,
+  `db/migrations.int.test.ts` (ba danh sách, con trỏ ba hàm dời về `116`).
+- `packages/identity`: ba mã `K10B_*` (`CHOT_VAO_SO`, `DANH_MUC_VE_CONG`). `packages/kiem-soat`: `LoaiTinHieu`, `ghiTinHieuKhiDeXuat`,
+  `ghiNhanTinHieu({ loai })`, `lietKeTinHieu.khaiThap`, câu SQL qua `tin_hieu_hien_tai`. `packages/danh-gia/src/trao-thau.ts`: ghi tín hiệu
+  sau cạnh `EVALUATING→AWARDED`, `CAU_CHOT_TIN_HIEU_KHAI_THAP` trước câu chèn chữ ký; `danh-gia` khai phụ thuộc `kiem-soat`.
+- `apps/api`: `POST /rfqs/:rfqId/award/signals/acknowledge` (`po.approve`). `apps/web`: khối «Tín hiệu khai thấp» ở bước 7 `/mo-thau`,
+  `khungTinHieuKhaiThap`, ba chỉ dẫn `K10B_*`.
+- Test: `trao-thau-theo-bac.int` khối `[INV-K10b]` (8 ca); hai ca KHAI THẤP của K7/K5b ghi nhận trước chữ ký; kịch bản 41 HTTP thân quét cho
+  route mới; `tao-thau.test`, `phuc-vu.test` cho khung và khối. Sổ: TEST-PLAN hàng K10b (90), sổ khai nhãn, `MOC_GHIM` 90, STATE, spec
+  §5.1 K10 và §9 S3.6, ADR-157, Handoff (lời khai đếm).
+
+## 5. Điểm phát hiện lúc đo
+- **Lượt sửa của hardening gỡ trigger mới chưa ghim** (ADR-122): lần đo vân tay đầu trên cụm dùng một lần thấy trigger
+  `rfq_award_approvals_kiem_tin_hieu_khai_thap` KHÔNG tồn tại — tổng điều tra trigger của bảng chưa có tên nó. Ghim tên vào tổng điều tra
+  TRƯỚC, dựng lại CSDL, đo lại.
+- **Hardening cũ phục hồi thân cũ của ba hàm `088` trong lượt đo** nên vân tay đo được không phải thân mới: vân tay tính từ chính văn bản
+  migration (`btrim(regexp_replace(prosrc, '\s+', ' ', 'g'))`), rồi phán xét bằng `migrate()` hai lần trên CSDL mới — xanh.
+- **Hai ca KHAI THẤP sẵn có** (K7, K5b — ước lượng bậc 0, giá trúng bậc 1) đỏ đúng chỗ K10b bắt đầu hỏi: thêm một lần ghi nhận trước chữ
+  ký đầu — K10b làm đúng việc của nó trên fixture của người khác.
+- **Hai gói 50 triệu cùng nhóm hàng trong một tổ chức test chạm cận 100 triệu** ⇒ K10a đòi ghi nhận trước khi mở (như S3.5a): ca đột biến
+  lấy gói thứ hai ở tổ chức mới.
+- Câu chỉ dẫn của màn lặp sáu chữ của câu máy chủ hai lần (tên khối «…ước lượng», *một người giữ quyền duyệt trao*) — cổng văn bản của
+  `tao-thau.test.ts` bắt, viết lại.
+- Chuỗi cuối đỏ hai lần trước khi tới evidence: `pnpm t0` (một biến thừa trong ca FAIL-CLOSED), rồi `pnpm test` ở ba cổng
+  H16/H18 (danh sách trắng cửa `kiem-soat`) và ADR-016 (phân loại hàm ghi) — `ghiTinHieuKhiDeXuat` là symbol mới qua cửa, khai
+  ở hai sổ đăng ký cùng khuôn `ghiTinHieuKhiNop`. Cả ba là cổng làm đúng việc; không đổi mã sản xuất.
+- Lần ba đỏ ở `tin-hieu-chia-nho.int` [INV-K10a] từ vựng: thân `tin_hieu_chot_nguoi_ghi_nhan` nay mang cả mã K10b nên tập mã
+  trả về lớn hơn tập dòng K10a — test bỏ những mã có dòng `chot: K10b` (mã LẠ vẫn bị bắt); vế K10b đo ở ca K12 của K10b.
+- Evidence lượt một (1 927 s) vitest thoát mã 1 ở hai chỗ nữa: sổ hàm đọc `org_procurement_policies` của `bac-chinh-sach.int`
+  (S3.1a) chưa khai `tin_hieu_khai_thap` — khai `THEO_ID` (đọc đúng phiên bản ngân sách ghim); và nhãn `[INV-K12]` ở tên ca K12 của
+  K10b không có hàng trong sổ đăng ký (K12 là tên chốt của spec, không phải bất biến có hàng — S3.5a cũng viết trần) — bỏ nhãn.
+
+## 6. Đột biến (định nghĩa lại hàm lúc chạy, khôi phục tự kiểm sha256)
+| # | Đột biến | Ca chứng | Kết quả |
+|---|---|---|---|
+| 1 | `award_chot_tin_hieu` trả NULL | chữ ký khi chưa ai ghi nhận | chữ ký đi qua ⇒ bản thật chặn |
+| 2 | `tin_hieu_khai_thap` không bao giờ bắn | đề xuất khai thấp | không hàng tín hiệu ⇒ bản thật ghi một hàng |
+| 3 | luật người bỏ vế người đề xuất | tc3 đề xuất rồi tự ghi nhận | ghi nhận được ⇒ bản thật `K10B_TU_GHI_NHAN` |
+| 4 | luật người bỏ vế tác giả chính sách | tc ghi nhận | ghi nhận được ⇒ bản thật `K10B_TAC_GIA_CHINH_SACH` |
+Lớp chặn cuối: chữ ký thô dưới `app_api` ⇒ `23514 k10b_tin_hieu_chua_ghi_nhan`, không hàng sổ. Fail-closed: rút rồi đề xuất báo giá khác
+⇒ bằng chứng mới, lần ghi nhận cũ không đếm, chữ ký lại bị chặn. Vượt ngưỡng kép cùng bậc ⇒ tín hiệu với `vuot_nguong_kep`, câu giải
+thích nói ngưỡng; đối chứng âm cùng bậc dưới ngưỡng ⇒ không tín hiệu, hai chữ ký APPROVED, không `CONTROL_DENIED`; tổ chức chưa bật ⇒
+một chữ ký như MVP1. K12: tập mã K10b trong thân ba hàm = ba dòng `chot: K10b`.
+
+## 7. Giới hạn còn lại
+- `INVITE_LIST_NARROWED`, `EARLY_CLOSE` và K10 cho chúng ở chữ ký trao thầu — S3.6c. `gieo:demo --s3` chưa gieo ca khai thấp; chưa lượt
+  đi thử T4 cho K10b (màn đo bằng DOM giả) — S3.6c hay một vòng màn.
+- Người ghi nhận có thể là người ký (ghi nhận là đọc, không tách người); bậc trao là đấu thầu chính thức không tới tín hiệu (K7 từ chối
+  đề xuất trước).
+- Lượt soi hình dạng của vòng do chính vòng làm (chủ dự án uỷ quyền chốt theo đề xuất) — không có lượt soi đối kháng riêng.
+
+## 8. Số đo
+- Trên cây stage cuối (ngày 2026-10-09, giờ máy UTC+7): `pnpm t0` 37 s; `pnpm test` 154 tệp / 2703 ca (2 tệp, 14 ca bỏ qua);
+  `kich-ban-41-http.int` 89/89, 46 s; `tin-hieu-chia-nho.int` 14/14, 15 s; evidence vitest thoát mã **0**, **90/90** bất biến
+  (68 nghiệp vụ + 22 hàng rào), **5031** khẳng định, 1 914 s — bắt đầu 00:09 sau 6 lượt chờ máy rảnh (không container test lạ).
+  Ma trận: hàng K10b mới **8 ca** ✅; K7 11, K5b 3, K10a 15 không đổi.
+- Lượt evidence một (1 927 s): vitest thoát mã 1 ở hai sổ đăng ký (§5), cùng 90/90 và 5031 khẳng định — số khẳng định không
+  phải tín hiệu, dòng *vitest thoát mã* mới là.
+- Trước evidence: `pnpm t0` đỏ một lần (biến thừa), `pnpm test` đỏ một lần (H16/H18/ADR-016 — symbol mới qua cửa),
+  `tin-hieu-chia-nho.int` đỏ một lần (từ vựng K10a) — mỗi lần một sổ đăng ký, không lần nào đổi mã sản xuất.
+- Đột biến K10b (§6): lượt lọc 14 passed sau khi áp và khôi phục (sha256 khớp); `tao-thau.test` 50/50 ở lượt riêng.
+- Cây gộp `origin/master` (#262 S1.284 / S4.7b1, #248 — `ec667da1`, năm xung đột tài liệu gỡ tay, lời khai ADR 156): `pnpm t0` 51 s;
+  `pnpm test` 154 tệp / 2775 ca; kịch bản 41 HTTP 89/89; `tin-hieu-chia-nho.int` 14/14; evidence vitest thoát mã **0**, **90/90**,
+  **5105** khẳng định, 1 885 s (bắt đầu 11:18 ngày 2026-10-09 sau 6 lượt chờ) — `INV-matrix.md` sinh lại BẰNG bản gộp tự động.
+
+---
+
 # §S1.286 — S4.7b2: TCO PHÍA NHÀ CUNG CẤP VÀ KẾT QUẢ — THAM SỐ CHỤP LÚC MỞ, THƯỚC Ở ROUTE KHÁCH, Ô KHAI BẮT BUỘC Ở `/nop-thau`, HAI HẠNG VÀ PHÉP TÍNH Ở `/mo-thau` — ADR-158
 
 ## 1. Vòng này là gì

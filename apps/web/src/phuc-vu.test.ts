@@ -1725,6 +1725,81 @@ describe("bề mặt tệp", () => {
         expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
       });
 
+      // [S1.285 / S3.6d / K10b] Khối «Tín hiệu khai thấp» ở bước 7: đọc cùng đề xuất, ẩn khi không tín hiệu, ô ghi nhận chỉ
+      // khi máy chủ nói người xem ghi nhận được; lời từ chối K10b ở chữ ký kèm chỉ dẫn trỏ khối.
+      const BC_KT = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: [RFQ] };
+      const thanTinHieu = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({
+        tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap },
+      });
+      const dungKt = async (khaiThap: Record<string, unknown> | null, tinHieu: unknown[] = [], ghiNhan: { status: number; body: unknown } = { status: 201, body: { ghiNhan: {} } }, duyet?: { status: number; body: unknown }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: { ...deXuat("aw-1"), chuKyCan: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/signals`) return Promise.resolve(khaiThap === null ? { status: 401, body: { error: "x" } } : { status: 200, body: thanTinHieu(khaiThap, tinHieu) });
+            if (l === `POST /rfqs/${RFQ}/award/signals/acknowledge`) return Promise.resolve(ghiNhan);
+            if (l.startsWith(`POST /rfqs/${RFQ}/award/`)) return Promise.resolve(duyet ?? { status: 201, body: { award: daDuyet("aw-1") } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-doc-award");
+        return p;
+      };
+
+      it("[S1.285 / S3.6d / K10b] đọc đề xuất ⇒ đọc tín hiệu; không tín hiệu (hay đọc hỏng) ⇒ khối ẩn; có tín hiệu chờ đọc ⇒ khối hiện, câu CSDL + «chữ ký đang bị chặn», ô lý do chỉ khi máy chủ cho ghi nhận", async () => {
+        const an = await dungKt({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null });
+        expect(an.trangThai.goi).toContain(`GET /rfqs/${RFQ}/signals`);
+        expect(an.el("khoi-tin-hieu-kt").hidden).toBe(true);
+        const hong = await dungKt(null);
+        expect(hong.el("khoi-tin-hieu-kt").hidden).toBe(true);
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]);
+        expect(p.el("khoi-tin-hieu-kt").hidden).toBe(false);
+        expect(p.el("tom-tat-tin-hieu-kt").textContent).toBe(`${hang.giaiThich} Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn (K10b).`);
+        expect(p.el("khoi-ghi-nhan-kt").hidden).toBe(false);
+        const khong = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đề xuất trao thầu của gói không ghi nhận được." }, soNguoiGhiNhanDuoc: 1 }, [hang]);
+        expect(khong.el("khoi-ghi-nhan-kt").hidden).toBe(true);
+        expect(khong.el("loi-thkt").textContent).toBe("Người đề xuất trao thầu của gói không ghi nhận được.");
+      });
+
+      it("[S1.285 / S3.6d / K10b] ghi nhận: thiếu lý do không gửi; gửi đúng thân tới route trao thầu; 201 ⇒ câu *đã ghi nhận* và đọc lại; đã có người đọc ⇒ lịch sử một dòng, ô ẩn", async () => {
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]);
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.trangThai.goi).not.toContain(`POST /rfqs/${RFQ}/award/signals/acknowledge`);
+        expect(p.el("loi-thkt").textContent).toMatch(/Cần ghi lý do ghi nhận/u);
+        p.el("ly-do-ghi-nhan-kt").value = "  Đã đọc: giá thị trường tăng  ";
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award/signals/acknowledge`).at(-1)?.than).toEqual({ lyDo: "Đã đọc: giá thị trường tăng" });
+        expect(p.el("ok-thkt").textContent).toMatch(/^Đã ghi nhận tín hiệu khai thấp/u);
+        expect(p.trangThai.goi.filter((l) => l === `GET /rfqs/${RFQ}/signals`), "đọc lại sau khi ghi nhận").toHaveLength(2);
+        const daDoc = await dungKt({ hienTai: BC_KT, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }, [
+          { ...hang, ghiNhan: [{ id: "a-1", lyDo: "Đã đọc", nguoi: "u-gd2", nguoiTen: "Nguoi duyet 2", luc: "2026-10-08T01:00:00Z" }] },
+        ]);
+        expect(daDoc.el("tom-tat-tin-hieu-kt").textContent).toMatch(/Đã có người ghi nhận\.$/u);
+        expect(daDoc.el("lich-su-tin-hieu-kt").con.map((x) => x.textContent)).toEqual([expect.stringMatching(/Nguoi duyet 2 đã ghi nhận: Đã đọc$/u)]);
+        expect(daDoc.el("khoi-ghi-nhan-kt").hidden).toBe(true);
+      });
+
+      it("[S1.285 / S3.6d / K10b] ký khi chưa ai ghi nhận ⇒ câu máy chủ rồi chỉ dẫn trỏ khối «Tín hiệu khai thấp»; ghi nhận bị K10B_TU_GHI_NHAN ⇒ chỉ dẫn đổi người", async () => {
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "x", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang],
+          { status: 422, body: { error: "Người đề xuất không ghi nhận được tín hiệu khai thấp.", ma: "K10B_TU_GHI_NHAN" } },
+          { status: 422, body: { error: "Gói thầu có tín hiệu khai thấp ước lượng chưa được ghi nhận.", ma: "K10B_TIN_HIEU_CHUA_GHI_NHAN" } });
+        await p.bam("nut-duyet-award");
+        expect(p.el("loi7").textContent).toMatch(/^Gói thầu có tín hiệu khai thấp ước lượng chưa được ghi nhận\. Trên màn: khối «Tín hiệu khai thấp» ở bước 7/u);
+        p.el("ly-do-ghi-nhan-kt").value = "Đã đọc";
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.el("loi-thkt").textContent).toMatch(/^Người đề xuất không ghi nhận được tín hiệu khai thấp\. Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này\.$/u);
+      });
+
       it("[S1.282 / S3.5b · S1.283 K9] M đếm như máy chủ: chữ ký `conHieuLuc: false` không vào *có M* nhưng vẫn hiện trong danh sách kèm dấu *không đếm*", async () => {
         const haiMotKhongDem = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [
           { approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z", conHieuLuc: true },

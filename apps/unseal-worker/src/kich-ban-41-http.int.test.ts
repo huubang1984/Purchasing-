@@ -1047,6 +1047,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // luồng, nên lời gọi qua cổng `rfq.approve`, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên của `KiemSoatError`.
         case "POST /rfqs/:rfqId/signals/acknowledge":
           return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan de quet" }, cookie: trangThai.pm2.cookie };
+        // [S1.285 / S3.6d · K10b] Ghi nhận tín hiệu KHAI THẤP trên gói hy sinh B bằng giám đốc (`po.approve`): gói B không có đề xuất
+        // trao thầu nào ở cả hai luồng, nên lời gọi qua cổng quyền, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên.
+        case "POST /rfqs/:rfqId/award/signals/acknowledge":
+          return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan khai thap de quet" }, cookie: trangThai.gd1.cookie };
         // [S1.281 / S3.4a / K9] Khai báo xung đột trên gói hy sinh B bằng `pm3` (không ký gói ấy): luồng S3 đi trọn tới 201; luồng
         // MVP1 dừng ở lời từ chối *tổ chức chưa bật* của trigger `coi_kiem_khai_bao` — 422 nghiệp vụ có tên, không 422 hình dạng.
         case "POST /rfqs/:rfqId/coi-declarations":

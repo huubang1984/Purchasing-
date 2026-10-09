@@ -474,6 +474,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/rfq/src/tin-hieu-chia-nho.int.test.ts",
   ],
+  // K10b — [S1.285 / S3.6d] tín hiệu khai thấp ước lượng ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: đề xuất ghi hàng
+  // ESTIMATE_UNDERSTATED mang hai mốc bậc (không số tiền), chữ ký bị chặn tới khi người giữ po.approve ngoài gói ghi nhận, luật người
+  // (người đề xuất, tác giả chính sách), fail-closed khi rút rồi đề xuất báo giá khác, vế vượt ngưỡng kép, đối chứng âm, tổ chức chưa
+  // bật, lớp chặn cuối (chữ ký thô), và mỗi vế một đột biến; tập mã = bảng (K12).
+  K10b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
