@@ -26597,3 +26597,6 @@ một chữ ký như MVP1. K12: tập mã K10b trong thân ba hàm = ba dòng `c
 - Trước evidence: `pnpm t0` đỏ một lần (biến thừa), `pnpm test` đỏ một lần (H16/H18/ADR-016 — symbol mới qua cửa),
   `tin-hieu-chia-nho.int` đỏ một lần (từ vựng K10a) — mỗi lần một sổ đăng ký, không lần nào đổi mã sản xuất.
 - Đột biến K10b (§6): lượt lọc 14 passed sau khi áp và khôi phục (sha256 khớp); `tao-thau.test` 50/50 ở lượt riêng.
+- Cây gộp `origin/master` (#262 S1.284 / S4.7b1, #248 — `ec667da1`, năm xung đột tài liệu gỡ tay, lời khai ADR 156): `pnpm t0` 51 s;
+  `pnpm test` 154 tệp / 2775 ca; kịch bản 41 HTTP 89/89; `tin-hieu-chia-nho.int` 14/14; evidence vitest thoát mã **0**, **90/90**,
+  **5105** khẳng định, 1 885 s (bắt đầu 11:18 ngày 2026-10-09 sau 6 lượt chờ) — `INV-matrix.md` sinh lại BẰNG bản gộp tự động.
