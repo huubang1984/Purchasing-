@@ -217,24 +217,55 @@
       <button id="nut-huy-award" class="phu">Huỷ trao thầu</button>
     </div>
     <dl class="tt" id="tt-award"></dl>
-    <!-- [S1.285 / S3.6d / K10b] Tín hiệu KHAI THẤP ƯỚC LƯỢNG (spec S3 §4.6, §8.4; ADR-157): tính lúc đề xuất — bậc của số tiền trao cao hơn
-         bậc ước lượng, hay số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không. Không chặn đề xuất; chặn CHỮ KÝ duyệt cho tới khi
-         một người giữ `po.approve` đứng ngoài gói (không tạo, không nộp, không đặt ngân sách, không đề xuất, không khai chính sách) ghi nhận
-         kèm lý do. Khối chỉ hiện khi có tín hiệu; trang đọc lại sau mỗi lần đọc đề xuất. Không số tiền nào trên màn — bằng chứng là mốc bậc. -->
-    <div id="khoi-tin-hieu-kt" hidden>
-      <h3>Tín hiệu khai thấp</h3>
-      <p class="ghi">Số tiền trao rơi vào bậc <strong>cao hơn</strong> bậc của ước lượng (hay vượt ngưỡng phê duyệt kép mà ước lượng
-        thì không). Tín hiệu không chặn đề xuất; nó chặn <strong>chữ ký duyệt</strong> cho tới khi một người giữ quyền duyệt trao thầu
-        <strong>đứng ngoài gói</strong> đọc nó và ghi nhận kèm lý do — lần ghi nhận vào sổ kiểm toán.</p>
-      <p id="tom-tat-tin-hieu-kt"></p>
-      <ul id="lich-su-tin-hieu-kt"></ul>
-      <div id="khoi-ghi-nhan-kt" hidden>
-        <label for="ly-do-ghi-nhan-kt">Lý do ghi nhận</label>
-        <input id="ly-do-ghi-nhan-kt" autocomplete="off" placeholder="Đã đọc: giá thị trường tăng sau khi ước lượng; trao đúng báo giá thấp nhất">
-        <button id="nut-ghi-nhan-kt" class="phu">Ghi nhận tín hiệu</button>
+    <!-- [S1.285 / S3.6d / K10b · S1.289 / S3.6c / K10c] Tín hiệu TRƯỚC CHỮ KÝ TRAO THẦU (spec S3 §4.6; ADR-157, ADR-161): ba loại, cùng
+         một luật — tín hiệu không chặn đề xuất, nó chặn CHỮ KÝ duyệt cho tới khi một người giữ `po.approve` đứng ngoài gói đọc và ghi
+         nhận kèm lý do. Khai thấp tính lúc đề xuất (bậc trao cao hơn bậc ước lượng, hay vượt ngưỡng kép mà ước lượng thì không); thu hẹp
+         danh sách tính từ các lời mời bị thu hồi sau khi gói mở; đóng sớm tính từ lần đóng trước hạn khi đã có báo giá. Mỗi khối chỉ hiện
+         khi có tín hiệu; trang đọc lại sau mỗi lần đọc đề xuất. Không số tiền nào trên màn. -->
+    <div id="khoi-tin-hieu-tt" hidden>
+      <h3>Tín hiệu trước chữ ký trao thầu</h3>
+      <p class="ghi">Mỗi tín hiệu dưới đây chặn <strong>chữ ký duyệt</strong> cho tới khi một người giữ quyền duyệt trao thầu
+        <strong>đứng ngoài gói</strong> đọc nó và ghi nhận kèm lý do — lần ghi nhận vào sổ kiểm toán. Người gây ra tín hiệu và tác giả
+        của bản chính sách gói ghim không ghi nhận được.</p>
+      <div id="khoi-tin-hieu-kt" hidden>
+        <h4>Tín hiệu khai thấp</h4>
+        <p class="ghi">Số tiền trao rơi vào bậc <strong>cao hơn</strong> bậc của ước lượng (hay vượt ngưỡng phê duyệt kép mà ước lượng thì không). Tín hiệu không chặn đề xuất.</p>
+        <p id="tom-tat-tin-hieu-kt"></p>
+        <ul id="lich-su-tin-hieu-kt"></ul>
+        <div id="khoi-ghi-nhan-kt" hidden>
+          <label for="ly-do-ghi-nhan-kt">Lý do ghi nhận</label>
+          <input id="ly-do-ghi-nhan-kt" autocomplete="off" placeholder="Đã đọc: giá thị trường tăng sau khi ước lượng; trao đúng báo giá thấp nhất">
+          <button id="nut-ghi-nhan-kt" class="phu">Ghi nhận tín hiệu</button>
+        </div>
+        <div class="bao loi" id="loi-thkt" hidden></div>
+        <div class="bao ok" id="ok-thkt" hidden></div>
       </div>
-      <div class="bao loi" id="loi-thkt" hidden></div>
-      <div class="bao ok" id="ok-thkt" hidden></div>
+      <div id="khoi-tin-hieu-th" hidden>
+        <h4>Tín hiệu thu hẹp danh sách mời</h4>
+        <p class="ghi">Một hay nhiều lời mời bị <strong>thu hồi sau khi gói mở</strong> — danh sách mà người duyệt đã ký lên bị thu hẹp. Lý do thu hồi nằm trong bằng chứng.</p>
+        <p id="tom-tat-tin-hieu-th"></p>
+        <ul id="lich-su-tin-hieu-th"></ul>
+        <div id="khoi-ghi-nhan-th" hidden>
+          <label for="ly-do-ghi-nhan-th">Lý do ghi nhận</label>
+          <input id="ly-do-ghi-nhan-th" autocomplete="off" placeholder="Đã đọc: lý do thu hồi hợp lý, nhà cung cấp còn lại vẫn đủ cạnh tranh">
+          <button id="nut-ghi-nhan-th" class="phu">Ghi nhận tín hiệu</button>
+        </div>
+        <div class="bao loi" id="loi-thth" hidden></div>
+        <div class="bao ok" id="ok-thth" hidden></div>
+      </div>
+      <div id="khoi-tin-hieu-ds" hidden>
+        <h4>Tín hiệu đóng sớm</h4>
+        <p class="ghi">Gói <strong>đóng trước hạn</strong> khi đã có báo giá — nhà cung cấp chưa nộp mất cơ hội. Lý do đóng sớm nằm trong bằng chứng.</p>
+        <p id="tom-tat-tin-hieu-ds"></p>
+        <ul id="lich-su-tin-hieu-ds"></ul>
+        <div id="khoi-ghi-nhan-ds" hidden>
+          <label for="ly-do-ghi-nhan-ds">Lý do ghi nhận</label>
+          <input id="ly-do-ghi-nhan-ds" autocomplete="off" placeholder="Đã đọc: đóng sớm vì đủ báo giá theo kế hoạch; không ai bị loại khỏi cuộc thi">
+          <button id="nut-ghi-nhan-ds" class="phu">Ghi nhận tín hiệu</button>
+        </div>
+        <div class="bao loi" id="loi-thds" hidden></div>
+        <div class="bao ok" id="ok-thds" hidden></div>
+      </div>
     </div>
     <!-- [S1.282 / S3.5b / K2b] Ngoại lệ HẬU KIỂM (spec S3 §4.7, ADR-154 ⑸): `LOW_ACTUAL_COMPETITION` lập và rút chỉ khi gói ở EVALUATING,
          trước đề xuất; không vào băm danh sách mời; tác giả vào tập loại trừ của K5b. Khối chỉ hiện cho người giữ quyền mời

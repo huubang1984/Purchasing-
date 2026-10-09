@@ -61,13 +61,14 @@ const GOI_SAU_MO_THAU: ReadonlySet<string> = new Set(["UNSEALED", "EVALUATING", 
  *   · Tổ chức chưa bật: như MVP1 — ~~cả hai nút~~ *Gửi lại link* ở mọi trạng thái, máy chủ tự từ chối ca nó không cho.
  *     [S1.240 / khoản 276] *Thu hồi* ẩn sau lần mở thầu (`GOI_SAU_MO_THAU`): từ ADR-128 máy chủ chặn thu hồi ở đó bằng một 422
  *     câu cố định, nên nút ấy là một nút không bao giờ đi được.
- *   · Tổ chức đã bật: *Thu hồi* chỉ ở DRAFT (K4a — ở OPEN thu hồi bị chặn tới S3.6, ở PENDING_APPROVAL phải trả gói về
- *     soạn thảo trước); *Gửi lại link* chỉ khi gói nhận báo giá — trước lần mở gói chưa có token nào để gửi (K6).
+ *   · Tổ chức đã bật: *Thu hồi* ở DRAFT, ~~ở OPEN thu hồi bị chặn tới S3.6~~ [S1.289 / S3.6c / K10c] và ở OPEN — có lý do, sinh
+ *     tín hiệu thu hẹp danh sách, bị chặn khi làm danh sách rơi dưới ngưỡng cạnh tranh mà không ngoại lệ (K4a; ở PENDING_APPROVAL
+ *     phải trả gói về soạn thảo trước); *Gửi lại link* chỉ khi gói nhận báo giá — trước lần mở gói chưa có token nào để gửi (K6).
  */
 export function nutLoiMoi(daBat: boolean, trangThaiGoi: string, daThuHoi: boolean): { readonly guiLai: boolean; readonly thuHoi: boolean } {
   if (daThuHoi) return { guiLai: false, thuHoi: false };
   if (!daBat) return { guiLai: true, thuHoi: !GOI_SAU_MO_THAU.has(trangThaiGoi) };
-  return { guiLai: GOI_NHAN_BAO_GIA.has(trangThaiGoi), thuHoi: trangThaiGoi === "DRAFT" };
+  return { guiLai: GOI_NHAN_BAO_GIA.has(trangThaiGoi), thuHoi: trangThaiGoi === "DRAFT" || trangThaiGoi === "OPEN" };
 }
 
 /** Lời mời như thân `201` của `POST /rfqs/:rfqId/invitations` trả về — chỉ hai trường màn đọc. */
@@ -337,17 +338,37 @@ export interface KhungTinHieuKhaiThap {
 
 export const KHUNG_TIN_HIEU_KHAI_THAP_RONG: KhungTinHieuKhaiThap = { hien: false, tomTat: "", choDoc: false, lichSu: [], choGhiNhan: false, khongDuoc: null };
 
-export function khungTinHieuKhaiThap(body: unknown): KhungTinHieuKhaiThap {
+/** [S1.289 / S3.6c / K10c] Ba loại tín hiệu mà chữ ký duyệt trao thầu đòi ghi nhận — phần của thân `GET /rfqs/:rfqId/signals`. */
+export type LoaiTinHieuTraoThau = "ESTIMATE_UNDERSTATED" | "INVITE_LIST_NARROWED" | "EARLY_CLOSE";
+const PHAN_THEO_LOAI: Readonly<Record<LoaiTinHieuTraoThau, string>> = { ESTIMATE_UNDERSTATED: "khaiThap", INVITE_LIST_NARROWED: "thuHep", EARLY_CLOSE: "dongSom" };
+
+/** Câu tóm tắt dựng từ bằng chứng khi chưa có hàng nào mang câu CSDL viết — không số tiền nào. */
+function tomTatTuBangChung(loai: LoaiTinHieuTraoThau, hienTai: Record<string, unknown>): string {
+  if (loai === "INVITE_LIST_NARROWED") {
+    const so = Array.isArray(hienTai.thu_hoi) ? hienTai.thu_hoi.length : 0;
+    return `${String(so)} lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.`;
+  }
+  if (loai === "EARLY_CLOSE") {
+    const so = typeof hienTai.so_bao_gia === "number" ? String(hienTai.so_bao_gia) : "—";
+    return `Gói thầu đóng lúc ${chuHoacNull(hienTai.dong_luc) ?? "—"}, trước hạn ${chuHoacNull(hienTai.han) ?? "—"}, khi đã có ${so} luồng báo giá.`;
+  }
+  return `Bậc của số tiền trao (từ ${soNghin(hienTai.bac_trao)}) so với bậc của ước lượng (từ ${soNghin(hienTai.bac_uoc_luong)})${hienTai.vuot_nguong_kep === true ? "; số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không" : ""}.`;
+}
+
+/**
+ * [S1.289 / S3.6c / K10c] Khung MỘT loại tín hiệu ở chữ ký trao thầu — cùng khuôn khai thấp cho ba loại: phần theo loại của
+ * `tinHieu` (`khaiThap` / `thuHep` / `dongSom`) cộng các hàng đã lưu của loại ấy.
+ */
+export function khungTinHieuTraoThau(body: unknown, loai: LoaiTinHieuTraoThau): KhungTinHieuKhaiThap {
   const t = laDoiTuong(body) && laDoiTuong(body.tinHieu) ? body.tinHieu : null;
-  const kt = t !== null && laDoiTuong(t.khaiThap) ? t.khaiThap : null;
+  const phan = t?.[PHAN_THEO_LOAI[loai]];
+  const kt = t !== null && laDoiTuong(phan) ? phan : null;
   if (t === null || kt === null) return KHUNG_TIN_HIEU_KHAI_THAP_RONG;
   const hienTai = laDoiTuong(kt.hienTai) ? kt.hienTai : null;
   if (hienTai === null) return KHUNG_TIN_HIEU_KHAI_THAP_RONG;
-  const daLuu = (Array.isArray(t.tinHieu) ? t.tinHieu.filter(laDoiTuong) : []).filter((h) => h.loai === "ESTIMATE_UNDERSTATED");
+  const daLuu = (Array.isArray(t.tinHieu) ? t.tinHieu.filter(laDoiTuong) : []).filter((h) => h.loai === loai);
   const khop = daLuu.find((h) => JSON.stringify(h.bangChung) === JSON.stringify(hienTai)) ?? null;
-  const tomTat = khop !== null && typeof khop.giaiThich === "string" && khop.giaiThich !== ""
-    ? khop.giaiThich
-    : `Bậc của số tiền trao (từ ${soNghin(hienTai.bac_trao)}) so với bậc của ước lượng (từ ${soNghin(hienTai.bac_uoc_luong)})${hienTai.vuot_nguong_kep === true ? "; số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không" : ""}.`;
+  const tomTat = khop !== null && typeof khop.giaiThich === "string" && khop.giaiThich !== "" ? khop.giaiThich : tomTatTuBangChung(loai, hienTai);
   const lichSu: DongLichSu[] = (khop !== null && Array.isArray(khop.ghiNhan) ? khop.ghiNhan.filter(laDoiTuong) : []).map((g) => ({
     luc: chuHoacNull(g.luc),
     noiDung: `${chuHoacNull(g.nguoiTen) ?? "một người duyệt"} đã ghi nhận: ${chuHoacNull(g.lyDo) ?? "—"}`,
@@ -357,6 +378,10 @@ export function khungTinHieuKhaiThap(body: unknown): KhungTinHieuKhaiThap {
   const choGhiNhan = choDoc && nguoiXem?.ghiNhanDuoc === true;
   const khongDuoc = choDoc && !choGhiNhan ? chuHoacNull(nguoiXem?.lyDo) : null;
   return { hien: true, tomTat, choDoc, lichSu, choGhiNhan, khongDuoc };
+}
+
+export function khungTinHieuKhaiThap(body: unknown): KhungTinHieuKhaiThap {
+  return khungTinHieuTraoThau(body, "ESTIMATE_UNDERSTATED");
 }
 
 /** Lý do ghi nhận: bắt buộc, không quá trần — cùng số và đơn vị với `ghiNhanTinHieu` (`packages/kiem-soat`). `null` là hợp lệ. */
@@ -503,6 +528,16 @@ export function chiDanChot(ma: unknown, coQuyenMoi: boolean): string | null {
       return "Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này.";
     case "K10B_TAC_GIA_CHINH_SACH":
       return "Đổi ở bước 1 sang người khác: tác giả của bản chính sách gói ghim không làm việc này được.";
+    // [S1.289 / S3.6c] Bốn mã K10c — thu hẹp danh sách mời và đóng sớm ở bước 7 của `/mo-thau`; ngưỡng của lần thu hồi ở bước 5 `/tao-thau`.
+    case "K10C_TIN_HIEU_CHUA_GHI_NHAN":
+      return "Trên màn: khối «Tín hiệu trước chữ ký trao thầu» ở bước 7 — ai đứng ngoài gói mà giữ quyền ký đọc từng tín hiệu còn chờ, " +
+        "ghi lý do rồi bấm «Ghi nhận», sau đó mới ký.";
+    case "K10C_TU_GHI_NHAN":
+      return "Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này.";
+    case "K10C_TAC_GIA_CHINH_SACH":
+      return "Đổi ở bước 1 sang người khác: tác giả của bản chính sách gói ghim không làm việc này được.";
+    case "K10C_THU_HOI_THIEU_CANH_TRANH":
+      return "Giữ lời mời này, hay mời thêm nhà cung cấp đếm được ở bước 5 rồi mới thu hồi; ngoại lệ cạnh tranh chỉ lập được khi gói còn soạn thảo.";
     default:
       return null;
   }

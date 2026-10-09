@@ -116,6 +116,10 @@ export type MaChotKiemSoat =
   | "K10B_TAC_GIA_CHINH_SACH"
   | "K10B_TIN_HIEU_CHUA_GHI_NHAN"
   | "K10B_TU_GHI_NHAN"
+  | "K10C_TAC_GIA_CHINH_SACH"
+  | "K10C_THU_HOI_THIEU_CANH_TRANH"
+  | "K10C_TIN_HIEU_CHUA_GHI_NHAN"
+  | "K10C_TU_GHI_NHAN"
   | "THIEU_NGAN_SACH"
   | "THIEU_NHOM_HANG"
   | "TIN_HIEU_CHUA_GHI_NHAN";
@@ -123,10 +127,10 @@ export type MaChotKiemSoat =
 export interface DongChot {
   /**
    * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Vế có hậu tố
-   * (`K4a`, `K8a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b) — cùng khuôn mã của sổ bất biến
+   * (`K4a`, `K8a`, [S1.289] `K10c`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b, K10a–c) — cùng khuôn mã của sổ bất biến
    * (`KHUON_MA`, khoản 246).
    */
-  readonly chot: `${"D" | "J" | "K" | "L"}${number}` | `K${number}${"a" | "b"}`;
+  readonly chot: `${"D" | "J" | "K" | "L"}${number}` | `K${number}${"a" | "b" | "c"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
   readonly vaoSo: boolean;
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
@@ -340,6 +344,49 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "xác nhận một ước lượng rơi ngay dưới cận của chính mình",
     thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu khai thấp của gói.",
   },
+  // [S1.289 / S3.6c / ADR-161] Bốn dòng K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) và K10 ở
+  // chữ ký trao thầu (`120`), cộng ngưỡng cạnh tranh của lần thu hồi ở OPEN. Như K10a/K10b: tên ràng buộc `k10c_*` KHÔNG vào
+  // `CHOT_THEO_RANG_BUOC` — tầng gói hỏi `award_chot_tin_hieu` / `rfq_chot_thu_hoi` trước câu ghi; trigger là lớp chặn cuối.
+  K10C_TIN_HIEU_CHUA_GHI_NHAN: {
+    chot: "K10c",
+    vaoSo: true,
+    lyDo:
+      "một người ký duyệt trao thầu khi gói có tín hiệu thu hẹp danh sách mời (lời mời bị thu hồi sau khi danh sách đã được ký) " +
+      "hay tín hiệu đóng sớm khi đã có báo giá (vế mà `011` §(H-4) hoãn) tính NGAY LÚC ẤY mà chưa ai ghi nhận (spec §4.6): " +
+      "cùng khuôn `K10B_TIN_HIEU_CHUA_GHI_NHAN` — tín hiệu chặn việc không ai đọc nó",
+    thongDiep:
+      "Gói thầu có tín hiệu của lượt mời thầu (thu hẹp danh sách mời hay đóng sớm khi đã có báo giá) chưa được ghi nhận: một " +
+      "người giữ quyền duyệt trao thầu không tạo, không nộp gói, không thu hồi lời mời, không đóng gói phải đọc và ghi nhận " +
+      "trước khi ký (K10c).",
+  },
+  K10C_TU_GHI_NHAN: {
+    chot: "K10c",
+    vaoSo: true,
+    lyDo:
+      "người tạo, người nộp, người thu hồi lời mời hay người đóng gói cố ghi nhận chính tín hiệu mình gây ra — spec §4.6 loại " +
+      "{người tạo gói, người gây ra tín hiệu}, cùng khuôn `K10B_TU_GHI_NHAN`",
+    thongDiep: "Người tạo, người nộp, người thu hồi lời mời hay người đóng gói thầu không ghi nhận được tín hiệu của lượt mời thầu.",
+  },
+  K10C_TAC_GIA_CHINH_SACH: {
+    chot: "K10c",
+    vaoSo: true,
+    lyDo:
+      "người khai phiên bản chính sách mà gói ghim cố ghi nhận tín hiệu của lượt mời thầu của gói ấy (spec §2.4 ⑺): người đặt " +
+      "ngưỡng cạnh tranh của bậc không tự xác nhận một danh sách bị thu hẹp hay một lần đóng sớm dưới ngưỡng của chính mình",
+    thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu của lượt mời thầu của gói.",
+  },
+  K10C_THU_HOI_THIEU_CANH_TRANH: {
+    chot: "K10c",
+    vaoSo: true,
+    lyDo:
+      "một lần thu hồi lời mời ở gói đã mở làm số nhóm nhà cung cấp đếm được rơi dưới `so_ncc_toi_thieu` của bậc ghim mà không " +
+      "có ngoại lệ còn sống đúng loại (spec §3.3 dòng OPEN: *thu hồi làm danh sách còn dưới ngưỡng thì cần ngoại lệ có chữ ký " +
+      "độc lập*; chủ dự án chốt 2026-10-09: ngoại lệ lập từ DRAFT còn sống thì cho qua, vòng này không mở lập ngoại lệ ở OPEN) — " +
+      "loại người thua sau khi thấy danh sách là đúng đường chiếm pool (ADR-058 ⒜)",
+    thongDiep:
+      "Thu hồi lời mời này làm danh sách rơi dưới ngưỡng cạnh tranh của bậc mà gói ghim; cần một ngoại lệ cạnh tranh còn hiệu " +
+      "lực, hoặc giữ lời mời (K10c).",
+  },
   D2_NGUOI_TAO_TU_DUYET: {
     chot: "D2",
     vaoSo: true,
@@ -404,10 +451,12 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     vaoSo: true,
     lyDo:
       "một người thu hồi lời mời khỏi gói đã nộp duyệt hay đã mở — thu hẹp danh sách sau khi ký là đúng đường chiếm pool " +
-      "(ADR-058 ⒜) mà S3 chặn; thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (chủ dự án chốt 2026-09-27)",
+      "(ADR-058 ⒜) mà S3 chặn; ~~thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (chủ dự án chốt 2026-09-27)~~ " +
+      "[S1.289 / S3.6c] ở gói đã mở, thu hồi CÓ LÝ DO đi qua và sinh tín hiệu `INVITE_LIST_NARROWED` (K10c); gói đã đóng hay đã " +
+      "mở thầu thì không",
     thongDiep:
-      "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
-      "thu hồi được (K4a).",
+      "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo, hay đang mở và có lý do; gói đang chờ duyệt thì trả về soạn thảo " +
+      "trước, gói đã đóng thì không thu hồi được (K4a).",
   },
   // [S1.265 / S3.3b / spec S3 §4.4] Lời từ chối K4a thứ ba — trigger `ngoai_le_kiem` (`105`) là lớp có thẩm quyền, tầng gói
   // (`lapNgoaiLe`, `rutNgoaiLe`) bắt CHÍNH lỗi của nó theo tên ràng buộc, khuôn ADR-114.

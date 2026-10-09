@@ -9587,10 +9587,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_chu_ky_danh_sach_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.185 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
+    -- [S1.289 / S3.6c / K4a K10c] Than tu 120_tin_hieu_moi_thau.sql: loi moi cua to chuc da bat chi doi o DRAFT; o OPEN them, hoac THU HOI co ly do (k10c_thu_hoi_thieu_ly_do) va khong lam danh sach roi duoi nguong canh tranh cua bac ghim tru khi co ngoai le con song (rfq_chot_thu_hoi, k10c_thu_hoi_thieu_canh_tranh); moi trang thai khac giu k4a_thu_hoi_sai_trang_thai. Than `RETURN NEW` mo lai danh sach sau khi ky.
     ARRAY[
-      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076, thân từ 080_k4a_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_k4a_co_ten.sql')$q$,
+      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9602,6 +9602,7 @@ $ham$;
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
   trang_thai text;
+  ly_do text;
 BEGIN
   IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
     RETURN NEW;
@@ -9626,9 +9627,21 @@ BEGIN
     NEW.status := 'UNSENT';
     RETURN NEW;
   END IF;
-  IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN
-    RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
-      USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai';
+  IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL THEN
+    IF trang_thai = 'OPEN' THEN
+      IF NEW.ly_do_thu_hoi IS NULL THEN
+        RAISE EXCEPTION 'Thu hoi loi moi o goi da mo phai co ly do (K10c)'
+          USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_thu_hoi_thieu_ly_do';
+      END IF;
+      ly_do := public.rfq_chot_thu_hoi(NEW.org_id, NEW.rfq_id, NEW.id);
+      IF ly_do IS NOT NULL THEN
+        RAISE EXCEPTION 'Thu hoi loi moi lam danh sach roi duoi nguong canh tranh cua bac ghim (K10c): %', ly_do
+          USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_thu_hoi_thieu_canh_tranh';
+      END IF;
+    ELSIF trang_thai <> 'DRAFT' THEN
+      RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai';
+    END IF;
   END IF;
   IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN
     RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai
@@ -9656,7 +9669,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; ly_do text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL THEN IF trang_thai = 'OPEN' THEN IF NEW.ly_do_thu_hoi IS NULL THEN RAISE EXCEPTION 'Thu hoi loi moi o goi da mo phai co ly do (K10c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_thu_hoi_thieu_ly_do'; END IF; ly_do := public.rfq_chot_thu_hoi(NEW.org_id, NEW.rfq_id, NEW.id); IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Thu hoi loi moi lam danh sach roi duoi nguong canh tranh cua bac ghim (K10c): %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_thu_hoi_thieu_canh_tranh'; END IF; ELSIF trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai'; END IF; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -15269,10 +15282,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm tin_hieu_chia_nho(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: bang chung cua hang tin hieu do CSDL tinh THEO LOAI — PURCHASE_SPLITTING o PENDING_APPROVAL (nhanh cu nguyen van), ESTIMATE_UNDERSTATED o AWARDED (tin_hieu_khai_thap, nguon DE_XUAT hay GHI_NHAN). Than `RETURN NEW` cho nguoi goi khai bang chung; mot nhanh khai thap doc tin_hieu_chia_nho thi K10b ghi nhan mot bang chung sai.
+    -- [S1.289 / S3.6c / K10a K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: bang chung cua hang tin hieu do CSDL tinh THEO LOAI — PURCHASE_SPLITTING o PENDING_APPROVAL, ESTIMATE_UNDERSTATED o AWARDED (hai nhanh cu nguyen van), INVITE_LIST_NARROWED (THU_HOI o OPEN / GHI_NHAN o AWARDED, tin_hieu_thu_hep), EARLY_CLOSE (DONG_SOM o CLOSED / GHI_NHAN o AWARDED, tin_hieu_dong_som). Than `RETURN NEW` cho nguoi goi khai bang chung.
     ARRAY[
-      $q$hàm + trigger tin_hieu_kiem_ghi (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger tin_hieu_kiem_ghi (088_tin_hieu_chia_nho, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -15332,6 +15345,60 @@ BEGIN
     NEW.tinh_luc := pg_catalog.clock_timestamp();
     RETURN NEW;
   END IF;
+  IF NEW.loai = 'INVITE_LIST_NARROWED' THEN
+    IF NEW.nguon NOT IN ('THU_HOI', 'GHI_NHAN') THEN
+      RAISE EXCEPTION 'Tin hieu thu hep danh sach chi tinh o lan thu hoi hay lan ghi nhan (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai';
+    END IF;
+    IF NEW.nguon = 'THU_HOI' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                    WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'OPEN') THEN
+      RAISE EXCEPTION 'Tin hieu thu hep danh sach ghi o lan thu hoi chi khi goi thau dang mo (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_mo';
+    END IF;
+    IF NEW.nguon = 'GHI_NHAN' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                    WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN
+      RAISE EXCEPTION 'Tin hieu thu hep danh sach ghi o lan ghi nhan chi khi goi thau dang co de xuat trao thau (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao';
+    END IF;
+    NEW.bang_chung := public.tin_hieu_thu_hep(NEW.org_id, NEW.rfq_id);
+    IF NEW.bang_chung IS NULL THEN
+      RAISE EXCEPTION 'Goi thau khong co tin hieu thu hep danh sach nao de ghi (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co';
+    END IF;
+    NEW.do_tin_cay := 'XAC_DINH';
+    NEW.giai_thich := pg_catalog.format(
+      '%s lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.',
+      pg_catalog.jsonb_array_length(NEW.bang_chung -> 'thu_hoi'));
+    NEW.tinh_luc := pg_catalog.clock_timestamp();
+    RETURN NEW;
+  END IF;
+  IF NEW.loai = 'EARLY_CLOSE' THEN
+    IF NEW.nguon NOT IN ('DONG_SOM', 'GHI_NHAN') THEN
+      RAISE EXCEPTION 'Tin hieu dong som chi tinh o lan dong hay lan ghi nhan (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai';
+    END IF;
+    IF NEW.nguon = 'DONG_SOM' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                    WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'CLOSED') THEN
+      RAISE EXCEPTION 'Tin hieu dong som ghi o lan dong chi khi goi thau vua dong (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_dong';
+    END IF;
+    IF NEW.nguon = 'GHI_NHAN' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                    WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN
+      RAISE EXCEPTION 'Tin hieu dong som ghi o lan ghi nhan chi khi goi thau dang co de xuat trao thau (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao';
+    END IF;
+    NEW.bang_chung := public.tin_hieu_dong_som(NEW.org_id, NEW.rfq_id);
+    IF NEW.bang_chung IS NULL THEN
+      RAISE EXCEPTION 'Goi thau khong co tin hieu dong som nao de ghi (S3.6c)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co';
+    END IF;
+    NEW.do_tin_cay := 'XAC_DINH';
+    NEW.giai_thich := pg_catalog.format(
+      'Gói thầu đóng lúc %s, trước hạn %s, khi đã có %s luồng báo giá.',
+      NEW.bang_chung ->> 'dong_luc', NEW.bang_chung ->> 'han', NEW.bang_chung ->> 'so_bao_gia');
+    NEW.tinh_luc := pg_catalog.clock_timestamp();
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Loai tin hieu khong co: %', NEW.loai USING ERRCODE = 'check_violation';
 END
 $ham$;
@@ -15350,7 +15417,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF NEW.loai = 'PURCHASE_SPLITTING' THEN IF NEW.nguon NOT IN ('NOP_DUYET', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu chia nho chi tinh o lan nop duyet hay lan ghi nhan (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'PENDING_APPROVAL') THEN RAISE EXCEPTION 'Tin hieu chi ghi cho goi thau dang cho duyet (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_cho_duyet'; END IF; NEW.bang_chung := public.tin_hieu_chia_nho(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu chia nho nao de ghi (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := pg_catalog.format( '%s gói cùng nhóm hàng nộp duyệt trong %s ngày tính tới lần nộp của gói này; mỗi gói dưới cận bậc %s mà tổng từ cận ấy trở lên.', pg_catalog.jsonb_array_length(NEW.bang_chung -> 'goi'), NEW.bang_chung ->> 'cua_so_ngay', NEW.bang_chung ->> 'can'); NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; IF NEW.loai = 'ESTIMATE_UNDERSTATED' THEN IF NEW.nguon NOT IN ('DE_XUAT', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu khai thap chi tinh o lan de xuat hay lan ghi nhan (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Tin hieu khai thap chi ghi cho goi thau dang co de xuat trao thau (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao'; END IF; NEW.bang_chung := public.tin_hieu_khai_thap(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu khai thap nao de ghi (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := CASE WHEN (NEW.bang_chung ->> 'bac_trao')::numeric > (NEW.bang_chung ->> 'bac_uoc_luong')::numeric THEN pg_catalog.format('Bậc của số tiền trao (từ %s) cao hơn bậc của ước lượng (từ %s)%s.', NEW.bang_chung ->> 'bac_trao', NEW.bang_chung ->> 'bac_uoc_luong', CASE WHEN (NEW.bang_chung ->> 'vuot_nguong_kep')::boolean THEN '; số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không' ELSE '' END) ELSE pg_catalog.format('Số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không (cùng bậc từ %s).', NEW.bang_chung ->> 'bac_trao') END; NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; RAISE EXCEPTION 'Loai tin hieu khong co: %', NEW.loai USING ERRCODE = 'check_violation'; END$than$
+                = $than$BEGIN IF NEW.loai = 'PURCHASE_SPLITTING' THEN IF NEW.nguon NOT IN ('NOP_DUYET', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu chia nho chi tinh o lan nop duyet hay lan ghi nhan (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'PENDING_APPROVAL') THEN RAISE EXCEPTION 'Tin hieu chi ghi cho goi thau dang cho duyet (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_cho_duyet'; END IF; NEW.bang_chung := public.tin_hieu_chia_nho(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu chia nho nao de ghi (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := pg_catalog.format( '%s gói cùng nhóm hàng nộp duyệt trong %s ngày tính tới lần nộp của gói này; mỗi gói dưới cận bậc %s mà tổng từ cận ấy trở lên.', pg_catalog.jsonb_array_length(NEW.bang_chung -> 'goi'), NEW.bang_chung ->> 'cua_so_ngay', NEW.bang_chung ->> 'can'); NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; IF NEW.loai = 'ESTIMATE_UNDERSTATED' THEN IF NEW.nguon NOT IN ('DE_XUAT', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu khai thap chi tinh o lan de xuat hay lan ghi nhan (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Tin hieu khai thap chi ghi cho goi thau dang co de xuat trao thau (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao'; END IF; NEW.bang_chung := public.tin_hieu_khai_thap(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu khai thap nao de ghi (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := CASE WHEN (NEW.bang_chung ->> 'bac_trao')::numeric > (NEW.bang_chung ->> 'bac_uoc_luong')::numeric THEN pg_catalog.format('Bậc của số tiền trao (từ %s) cao hơn bậc của ước lượng (từ %s)%s.', NEW.bang_chung ->> 'bac_trao', NEW.bang_chung ->> 'bac_uoc_luong', CASE WHEN (NEW.bang_chung ->> 'vuot_nguong_kep')::boolean THEN '; số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không' ELSE '' END) ELSE pg_catalog.format('Số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không (cùng bậc từ %s).', NEW.bang_chung ->> 'bac_trao') END; NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; IF NEW.loai = 'INVITE_LIST_NARROWED' THEN IF NEW.nguon NOT IN ('THU_HOI', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu thu hep danh sach chi tinh o lan thu hoi hay lan ghi nhan (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NEW.nguon = 'THU_HOI' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'OPEN') THEN RAISE EXCEPTION 'Tin hieu thu hep danh sach ghi o lan thu hoi chi khi goi thau dang mo (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_mo'; END IF; IF NEW.nguon = 'GHI_NHAN' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Tin hieu thu hep danh sach ghi o lan ghi nhan chi khi goi thau dang co de xuat trao thau (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao'; END IF; NEW.bang_chung := public.tin_hieu_thu_hep(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu thu hep danh sach nao de ghi (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := pg_catalog.format( '%s lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.', pg_catalog.jsonb_array_length(NEW.bang_chung -> 'thu_hoi')); NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; IF NEW.loai = 'EARLY_CLOSE' THEN IF NEW.nguon NOT IN ('DONG_SOM', 'GHI_NHAN') THEN RAISE EXCEPTION 'Tin hieu dong som chi tinh o lan dong hay lan ghi nhan (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_nguon_sai'; END IF; IF NEW.nguon = 'DONG_SOM' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'CLOSED') THEN RAISE EXCEPTION 'Tin hieu dong som ghi o lan dong chi khi goi thau vua dong (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_dong'; END IF; IF NEW.nguon = 'GHI_NHAN' AND NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = NEW.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Tin hieu dong som ghi o lan ghi nhan chi khi goi thau dang co de xuat trao thau (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_goi_khong_trao'; END IF; NEW.bang_chung := public.tin_hieu_dong_som(NEW.org_id, NEW.rfq_id); IF NEW.bang_chung IS NULL THEN RAISE EXCEPTION 'Goi thau khong co tin hieu dong som nao de ghi (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'tin_hieu_khong_co'; END IF; NEW.do_tin_cay := 'XAC_DINH'; NEW.giai_thich := pg_catalog.format( 'Gói thầu đóng lúc %s, trước hạn %s, khi đã có %s luồng báo giá.', NEW.bang_chung ->> 'dong_luc', NEW.bang_chung ->> 'han', NEW.bang_chung ->> 'so_bao_gia'); NEW.tinh_luc := pg_catalog.clock_timestamp(); RETURN NEW; END IF; RAISE EXCEPTION 'Loai tin hieu khong co: %', NEW.loai USING ERRCODE = 'check_violation'; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -15379,10 +15446,10 @@ $ham$;
       $q$quyền sở hữu hàm public.tin_hieu_kiem_ghi() và bảng public.governance_signals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: luat nguoi ghi nhan THEO LOAI cua bang chung — khai thap: nguoi tao, nguoi nop, nguoi dat ngan sach (nguoi khai uoc luong) hay nguoi de xuat => K10B_TU_GHI_NHAN, tac gia phien ban chinh sach => K10B_TAC_GIA_CHINH_SACH; chia nho: nhanh cu nguyen van. Mot than RETURN NULL cho nguoi khai thap tu ghi nhan tin hieu soi minh.
+    -- [S1.289 / S3.6c / K10a K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: luat nguoi ghi nhan THEO LOAI cua bang chung — hai nhanh cu nguyen van; thu hep / dong som: nguoi tao, nguoi nop, nguoi thu hoi (thu_hoi[].nguoi) hay nguoi dong (nguoi_dong) => K10C_TU_GHI_NHAN, tac gia phien ban chinh sach => K10C_TAC_GIA_CHINH_SACH. Mot than RETURN NULL cho nguoi thu hoi tu ghi nhan tin hieu soi minh.
     ARRAY[
-      $q$định nghĩa hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) (088_tin_hieu_chia_nho, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.tin_hieu_chot_nguoi_ghi_nhan(p_org uuid, p_bang_chung jsonb, p_nguoi uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -15419,6 +15486,27 @@ BEGIN
     END IF;
     RETURN NULL;
   END IF;
+  IF (p_bang_chung ->> 'loai') IN ('INVITE_LIST_NARROWED', 'EARLY_CLOSE') THEN
+    IF EXISTS (SELECT 1
+                 FROM public.rfq_packages r
+                WHERE r.org_id = p_org
+                  AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x)
+                  AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi))
+       OR EXISTS (SELECT 1
+                    FROM pg_catalog.jsonb_array_elements(coalesce(p_bang_chung -> 'thu_hoi', '[]'::jsonb)) x
+                   WHERE (x ->> 'nguoi')::uuid = p_nguoi)
+       OR (p_bang_chung ->> 'nguoi_dong')::uuid = p_nguoi THEN
+      RETURN 'K10C_TU_GHI_NHAN';
+    END IF;
+    IF EXISTS (SELECT 1
+                 FROM public.org_procurement_policies p
+                WHERE p.org_id = p_org
+                  AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid
+                  AND p.created_by = p_nguoi) THEN
+      RETURN 'K10C_TAC_GIA_CHINH_SACH';
+    END IF;
+    RETURN NULL;
+  END IF;
   IF EXISTS (SELECT 1
                FROM public.rfq_packages r
               WHERE r.org_id = p_org
@@ -15437,7 +15525,7 @@ BEGIN
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF p_bang_chung IS NULL THEN RETURN NULL; END IF; IF (p_bang_chung ->> 'loai') = 'ESTIMATE_UNDERSTATED' THEN IF EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi)) OR EXISTS (SELECT 1 FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND b.created_by = p_nguoi) OR EXISTS (SELECT 1 FROM public.rfq_awards w WHERE w.org_id = p_org AND w.id = (p_bang_chung ->> 'award')::uuid AND w.acted_by = p_nguoi) THEN RETURN 'K10B_TU_GHI_NHAN'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies p WHERE p.org_id = p_org AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid AND p.created_by = p_nguoi) THEN RETURN 'K10B_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi)) THEN RETURN 'K10A_TU_GHI_NHAN'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies p WHERE p.org_id = p_org AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid AND p.created_by = p_nguoi) THEN RETURN 'K10A_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END$than$
+                = $than$BEGIN IF p_bang_chung IS NULL THEN RETURN NULL; END IF; IF (p_bang_chung ->> 'loai') = 'ESTIMATE_UNDERSTATED' THEN IF EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi)) OR EXISTS (SELECT 1 FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND b.created_by = p_nguoi) OR EXISTS (SELECT 1 FROM public.rfq_awards w WHERE w.org_id = p_org AND w.id = (p_bang_chung ->> 'award')::uuid AND w.acted_by = p_nguoi) THEN RETURN 'K10B_TU_GHI_NHAN'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies p WHERE p.org_id = p_org AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid AND p.created_by = p_nguoi) THEN RETURN 'K10B_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END IF; IF (p_bang_chung ->> 'loai') IN ('INVITE_LIST_NARROWED', 'EARLY_CLOSE') THEN IF EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi)) OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(coalesce(p_bang_chung -> 'thu_hoi', '[]'::jsonb)) x WHERE (x ->> 'nguoi')::uuid = p_nguoi) OR (p_bang_chung ->> 'nguoi_dong')::uuid = p_nguoi THEN RETURN 'K10C_TU_GHI_NHAN'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies p WHERE p.org_id = p_org AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid AND p.created_by = p_nguoi) THEN RETURN 'K10C_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id IN (SELECT (x #>> '{}')::uuid FROM pg_catalog.jsonb_array_elements(p_bang_chung -> 'goi') x) AND (r.created_by = p_nguoi OR r.submitted_by = p_nguoi)) THEN RETURN 'K10A_TU_GHI_NHAN'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies p WHERE p.org_id = p_org AND p.id = (p_bang_chung ->> 'chinh_sach')::uuid AND p.created_by = p_nguoi) THEN RETURN 'K10A_TAC_GIA_CHINH_SACH'; END IF; RETURN NULL; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -15455,10 +15543,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.285 / S3.6d / K10a K10b] Than tu 116_tin_hieu_khai_thap.sql: lan ghi nhan kiem THEO LOAI — trang thai goi (PENDING_APPROVAL / AWARDED), quyen cua canh bi chan (rfq.approve / po.approve, ADR-084), luat nguoi (bon ma), bang chung bang tin_hieu_hien_tai. Than `RETURN NEW` cho nguoi gay ra tu ghi nhan hay ghi nhan mot bang chung da doi.
+    -- [S1.289 / S3.6c / K10a K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: lan ghi nhan kiem THEO LOAI — trang thai goi (PENDING_APPROVAL cho chia nho; AWARDED cho ba loai o chu ky trao thau), quyen cua canh bi chan (rfq.approve / po.approve, ADR-084), luat nguoi (sau ma), bang chung bang tin_hieu_hien_tai. Than `RETURN NEW` cho nguoi gay ra tu ghi nhan hay ghi nhan mot bang chung da doi.
     ARRAY[
-      $q$hàm + trigger tin_hieu_kiem_ghi_nhan (088_tin_hieu_chia_nho, thân từ 116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger tin_hieu_kiem_ghi_nhan (088_tin_hieu_chia_nho, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -15485,6 +15573,13 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r
                     WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'AWARDED') THEN
       RAISE EXCEPTION 'Chi ghi nhan tin hieu khai thap khi goi thau dang co de xuat trao thau (S3.6d)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai';
+    END IF;
+  ELSIF s.loai IN ('INVITE_LIST_NARROWED', 'EARLY_CLOSE') THEN
+    quyen := 'po.approve';
+    IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                    WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'AWARDED') THEN
+      RAISE EXCEPTION 'Chi ghi nhan tin hieu thu hep danh sach hay dong som khi goi thau dang co de xuat trao thau (S3.6c)'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai';
     END IF;
   ELSE
@@ -15520,6 +15615,14 @@ BEGIN
     RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu khai thap (K10b)'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tac_gia_chinh_sach_ghi_nhan';
   END IF;
+  IF ly_do = 'K10C_TU_GHI_NHAN' THEN
+    RAISE EXCEPTION 'Nguoi tao, nguoi nop, nguoi thu hoi loi moi hay nguoi dong goi khong ghi nhan duoc tin hieu cua luot moi thau (K10c)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_nguoi_gay_ra_tu_ghi_nhan';
+  END IF;
+  IF ly_do = 'K10C_TAC_GIA_CHINH_SACH' THEN
+    RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu cua luot moi thau (K10c)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_tac_gia_chinh_sach_ghi_nhan';
+  END IF;
   IF ly_do IS NOT NULL THEN
     RAISE EXCEPTION 'Nguoi nay khong ghi nhan duoc tin hieu (K10): %', ly_do
       USING ERRCODE = 'check_violation';
@@ -15546,7 +15649,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE s record; ly_do text; quyen text; BEGIN SELECT g.rfq_id, g.loai, g.bang_chung INTO s FROM public.governance_signals g WHERE g.org_id = NEW.org_id AND g.id = NEW.signal_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay tin hieu de ghi nhan (S3.6b1)' USING ERRCODE = 'foreign_key_violation'; END IF; IF s.loai = 'ESTIMATE_UNDERSTATED' THEN quyen := 'po.approve'; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Chi ghi nhan tin hieu khai thap khi goi thau dang co de xuat trao thau (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai'; END IF; ELSE quyen := 'rfq.approve'; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'PENDING_APPROVAL') THEN RAISE EXCEPTION 'Chi ghi nhan tin hieu khi goi thau dang cho duyet (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai'; END IF; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = quyen) THEN RAISE EXCEPTION 'Nguoi ghi nhan tin hieu phai giu quyen cua canh bi chan: % (ADR-084)', quyen USING ERRCODE = 'check_violation'; END IF; ly_do := public.tin_hieu_chot_nguoi_ghi_nhan(NEW.org_id, s.bang_chung, NEW.created_by); IF ly_do = 'K10A_TU_GHI_NHAN' THEN RAISE EXCEPTION 'Nguoi tao hay nguoi nop mot goi trong bang chung khong ghi nhan duoc tin hieu (K10a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_nguoi_gay_ra_tu_ghi_nhan'; END IF; IF ly_do = 'K10A_TAC_GIA_CHINH_SACH' THEN RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu (K10a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_tac_gia_chinh_sach_ghi_nhan'; END IF; IF ly_do = 'K10B_TU_GHI_NHAN' THEN RAISE EXCEPTION 'Nguoi tao, nguoi nop, nguoi dat ngan sach hay nguoi de xuat cua goi khong ghi nhan duoc tin hieu khai thap (K10b)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_nguoi_gay_ra_tu_ghi_nhan'; END IF; IF ly_do = 'K10B_TAC_GIA_CHINH_SACH' THEN RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu khai thap (K10b)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tac_gia_chinh_sach_ghi_nhan'; END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Nguoi nay khong ghi nhan duoc tin hieu (K10): %', ly_do USING ERRCODE = 'check_violation'; END IF; IF public.tin_hieu_hien_tai(NEW.org_id, s.rfq_id, s.loai) IS DISTINCT FROM s.bang_chung THEN RAISE EXCEPTION 'Bang chung cua tin hieu da doi — ghi nhan tin hieu hien tai (K10)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_bang_chung_da_doi'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE s record; ly_do text; quyen text; BEGIN SELECT g.rfq_id, g.loai, g.bang_chung INTO s FROM public.governance_signals g WHERE g.org_id = NEW.org_id AND g.id = NEW.signal_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay tin hieu de ghi nhan (S3.6b1)' USING ERRCODE = 'foreign_key_violation'; END IF; IF s.loai = 'ESTIMATE_UNDERSTATED' THEN quyen := 'po.approve'; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Chi ghi nhan tin hieu khai thap khi goi thau dang co de xuat trao thau (S3.6d)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai'; END IF; ELSIF s.loai IN ('INVITE_LIST_NARROWED', 'EARLY_CLOSE') THEN quyen := 'po.approve'; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'AWARDED') THEN RAISE EXCEPTION 'Chi ghi nhan tin hieu thu hep danh sach hay dong som khi goi thau dang co de xuat trao thau (S3.6c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai'; END IF; ELSE quyen := 'rfq.approve'; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = s.rfq_id AND r.status = 'PENDING_APPROVAL') THEN RAISE EXCEPTION 'Chi ghi nhan tin hieu khi goi thau dang cho duyet (S3.6b1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_ghi_nhan_sai_trang_thai'; END IF; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = quyen) THEN RAISE EXCEPTION 'Nguoi ghi nhan tin hieu phai giu quyen cua canh bi chan: % (ADR-084)', quyen USING ERRCODE = 'check_violation'; END IF; ly_do := public.tin_hieu_chot_nguoi_ghi_nhan(NEW.org_id, s.bang_chung, NEW.created_by); IF ly_do = 'K10A_TU_GHI_NHAN' THEN RAISE EXCEPTION 'Nguoi tao hay nguoi nop mot goi trong bang chung khong ghi nhan duoc tin hieu (K10a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_nguoi_gay_ra_tu_ghi_nhan'; END IF; IF ly_do = 'K10A_TAC_GIA_CHINH_SACH' THEN RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu (K10a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_tac_gia_chinh_sach_ghi_nhan'; END IF; IF ly_do = 'K10B_TU_GHI_NHAN' THEN RAISE EXCEPTION 'Nguoi tao, nguoi nop, nguoi dat ngan sach hay nguoi de xuat cua goi khong ghi nhan duoc tin hieu khai thap (K10b)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_nguoi_gay_ra_tu_ghi_nhan'; END IF; IF ly_do = 'K10B_TAC_GIA_CHINH_SACH' THEN RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu khai thap (K10b)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tac_gia_chinh_sach_ghi_nhan'; END IF; IF ly_do = 'K10C_TU_GHI_NHAN' THEN RAISE EXCEPTION 'Nguoi tao, nguoi nop, nguoi thu hoi loi moi hay nguoi dong goi khong ghi nhan duoc tin hieu cua luot moi thau (K10c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_nguoi_gay_ra_tu_ghi_nhan'; END IF; IF ly_do = 'K10C_TAC_GIA_CHINH_SACH' THEN RAISE EXCEPTION 'Nguoi khai phien ban chinh sach cua goi khong ghi nhan duoc tin hieu cua luot moi thau (K10c)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_tac_gia_chinh_sach_ghi_nhan'; END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Nguoi nay khong ghi nhan duoc tin hieu (K10): %', ly_do USING ERRCODE = 'check_violation'; END IF; IF public.tin_hieu_hien_tai(NEW.org_id, s.rfq_id, s.loai) IS DISTINCT FROM s.bang_chung THEN RAISE EXCEPTION 'Bang chung cua tin hieu da doi — ghi nhan tin hieu hien tai (K10)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k10_bang_chung_da_doi'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -15767,10 +15870,10 @@ $ham$$q$,
                   'hàm public.tin_hieu_khai_thap(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm tin_hieu_khai_thap(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.285 / S3.6d / K10a K10b] Tin hieu HIEN TAI cua goi theo loai — mot cho, hai nguoi doc (tang goi kiem-soat va trigger ghi nhan). Mot than tra tin_hieu_chia_nho cho moi loai thi lan ghi nhan tin hieu khai thap so voi bang chung sai loai.
+    -- [S1.289 / S3.6c / K10a K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: tin hieu HIEN TAI cua goi theo loai — bon loai, mot cho, hai nguoi doc (tang goi kiem-soat va trigger ghi nhan). Mot than tra sai ham cho mot loai thi lan ghi nhan so voi bang chung sai loai.
     ARRAY[
-      $q$định nghĩa hàm tin_hieu_hien_tai(uuid, uuid, text) (116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm tin_hieu_hien_tai(uuid, uuid, text) (116_tin_hieu_khai_thap, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.tin_hieu_hien_tai(p_org uuid, p_rfq uuid, p_loai text) RETURNS jsonb
   LANGUAGE plpgsql
   STABLE
@@ -15783,11 +15886,17 @@ BEGIN
   IF p_loai = 'ESTIMATE_UNDERSTATED' THEN
     RETURN public.tin_hieu_khai_thap(p_org, p_rfq);
   END IF;
+  IF p_loai = 'INVITE_LIST_NARROWED' THEN
+    RETURN public.tin_hieu_thu_hep(p_org, p_rfq);
+  END IF;
+  IF p_loai = 'EARLY_CLOSE' THEN
+    RETURN public.tin_hieu_dong_som(p_org, p_rfq);
+  END IF;
   RAISE EXCEPTION 'Loai tin hieu khong co: %', p_loai USING ERRCODE = 'check_violation';
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF p_loai = 'PURCHASE_SPLITTING' THEN RETURN public.tin_hieu_chia_nho(p_org, p_rfq); END IF; IF p_loai = 'ESTIMATE_UNDERSTATED' THEN RETURN public.tin_hieu_khai_thap(p_org, p_rfq); END IF; RAISE EXCEPTION 'Loai tin hieu khong co: %', p_loai USING ERRCODE = 'check_violation'; END$than$
+                = $than$BEGIN IF p_loai = 'PURCHASE_SPLITTING' THEN RETURN public.tin_hieu_chia_nho(p_org, p_rfq); END IF; IF p_loai = 'ESTIMATE_UNDERSTATED' THEN RETURN public.tin_hieu_khai_thap(p_org, p_rfq); END IF; IF p_loai = 'INVITE_LIST_NARROWED' THEN RETURN public.tin_hieu_thu_hep(p_org, p_rfq); END IF; IF p_loai = 'EARLY_CLOSE' THEN RETURN public.tin_hieu_dong_som(p_org, p_rfq); END IF; RAISE EXCEPTION 'Loai tin hieu khong co: %', p_loai USING ERRCODE = 'check_violation'; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -15804,10 +15913,10 @@ $ham$$q$,
                   'hàm public.tin_hieu_hien_tai(uuid, uuid, text) không tồn tại')$q$,
       $q$quyền sở hữu hàm tin_hieu_hien_tai(uuid, uuid, text) hoặc SUPERUSER$q$
     ],
-    -- [S1.285 / S3.6d / K10b] Ham vi tu K10b o chu ky duyet trao thau: tin hieu khai thap tinh NGAY LUC AY chua co lan ghi nhan nao tren mot tin hieu co bang chung BANG no => K10B_TIN_HIEU_CHUA_GHI_NHAN (mot dieu kien, fail-closed — ADR-082 (14)). Mot than RETURN NULL cho trao thau khai thap di qua ma khong ai doc tin hieu.
+    -- [S1.289 / S3.6c / K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: ham vi tu o chu ky duyet trao thau doc BA ham tin hieu — khai thap chua ghi nhan => K10B_TIN_HIEU_CHUA_GHI_NHAN, thu hep hay dong som chua ghi nhan => K10C_TIN_HIEU_CHUA_GHI_NHAN (mot dieu kien, fail-closed — ADR-082 (14)). Mot than bo mot ham thi loai ay di qua ma khong ai doc.
     ARRAY[
-      $q$định nghĩa hàm award_chot_tin_hieu(uuid, uuid) (116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$định nghĩa hàm award_chot_tin_hieu(uuid, uuid) (116_tin_hieu_khai_thap, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_tin_hieu(p_org uuid, p_rfq uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -15817,20 +15926,31 @@ DECLARE
   bc jsonb;
 BEGIN
   bc := public.tin_hieu_khai_thap(p_org, p_rfq);
-  IF bc IS NULL THEN
-    RETURN NULL;
-  END IF;
-  IF EXISTS (SELECT 1
+  IF bc IS NOT NULL AND NOT EXISTS (SELECT 1
                FROM public.governance_signals s
                JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id
               WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN
-    RETURN NULL;
+    RETURN 'K10B_TIN_HIEU_CHUA_GHI_NHAN';
   END IF;
-  RETURN 'K10B_TIN_HIEU_CHUA_GHI_NHAN';
+  bc := public.tin_hieu_thu_hep(p_org, p_rfq);
+  IF bc IS NOT NULL AND NOT EXISTS (SELECT 1
+               FROM public.governance_signals s
+               JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id
+              WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN
+    RETURN 'K10C_TIN_HIEU_CHUA_GHI_NHAN';
+  END IF;
+  bc := public.tin_hieu_dong_som(p_org, p_rfq);
+  IF bc IS NOT NULL AND NOT EXISTS (SELECT 1
+               FROM public.governance_signals s
+               JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id
+              WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN
+    RETURN 'K10C_TIN_HIEU_CHUA_GHI_NHAN';
+  END IF;
+  RETURN NULL;
 END
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE bc jsonb; BEGIN bc := public.tin_hieu_khai_thap(p_org, p_rfq); IF bc IS NULL THEN RETURN NULL; END IF; IF EXISTS (SELECT 1 FROM public.governance_signals s JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN RETURN NULL; END IF; RETURN 'K10B_TIN_HIEU_CHUA_GHI_NHAN'; END$than$
+                = $than$DECLARE bc jsonb; BEGIN bc := public.tin_hieu_khai_thap(p_org, p_rfq); IF bc IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.governance_signals s JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN RETURN 'K10B_TIN_HIEU_CHUA_GHI_NHAN'; END IF; bc := public.tin_hieu_thu_hep(p_org, p_rfq); IF bc IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.governance_signals s JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN RETURN 'K10C_TIN_HIEU_CHUA_GHI_NHAN'; END IF; bc := public.tin_hieu_dong_som(p_org, p_rfq); IF bc IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.governance_signals s JOIN public.governance_signal_acks a ON a.org_id = s.org_id AND a.signal_id = s.id WHERE s.org_id = p_org AND s.rfq_id = p_rfq AND s.bang_chung = bc) THEN RETURN 'K10C_TIN_HIEU_CHUA_GHI_NHAN'; END IF; RETURN NULL; END$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -15847,10 +15967,10 @@ $ham$$q$,
                   'hàm public.award_chot_tin_hieu(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_tin_hieu(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.285 / S3.6d / K10b] Trigger rieng tren chu ky trao thau, xep sau J3 va truoc K7 vai, K9: hoi award_chot_tin_hieu va tu choi voi ten k10b_tin_hieu_chua_ghi_nhan (khong qua bang ten -> ma, ADR-120). Than `RETURN NEW` cho mot chu ky di tat qua tin hieu khai thap chua ai ghi nhan.
+    -- [S1.289 / S3.6c / K10b K10c] Than tu 120_tin_hieu_moi_thau.sql: trigger rieng tren chu ky trao thau (xep sau J3, truoc K7 vai va K9) hoi award_chot_tin_hieu va tu choi theo ma — k10b_tin_hieu_chua_ghi_nhan hay k10c_tin_hieu_chua_ghi_nhan (khong qua bang ten -> ma, ADR-120). Than `RETURN NEW` cho mot chu ky di tat qua tin hieu chua ai ghi nhan.
     ARRAY[
-      $q$hàm + trigger award_kiem_tin_hieu_khai_thap (116_tin_hieu_khai_thap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '116_tin_hieu_khai_thap.sql')$q$,
+      $q$hàm + trigger award_kiem_tin_hieu_khai_thap (116_tin_hieu_khai_thap, thân từ 120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -15869,9 +15989,13 @@ BEGIN
     RETURN NEW;
   END IF;
   ly_do := public.award_chot_tin_hieu(NEW.org_id, goi);
-  IF ly_do IS NOT NULL THEN
+  IF ly_do = 'K10B_TIN_HIEU_CHUA_GHI_NHAN' THEN
     RAISE EXCEPTION 'Chu ky trao thau chua ghi duoc (K10b): %', ly_do
       USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tin_hieu_chua_ghi_nhan';
+  END IF;
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'Chu ky trao thau chua ghi duoc (K10c): %', ly_do
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_tin_hieu_chua_ghi_nhan';
   END IF;
   RETURN NEW;
 END
@@ -15891,7 +16015,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE goi uuid; ly_do text; BEGIN SELECT w.rfq_id INTO goi FROM public.rfq_awards w WHERE w.org_id = NEW.org_id AND w.id = NEW.award_id; IF NOT FOUND THEN RETURN NEW; END IF; ly_do := public.award_chot_tin_hieu(NEW.org_id, goi); IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Chu ky trao thau chua ghi duoc (K10b): %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tin_hieu_chua_ghi_nhan'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE goi uuid; ly_do text; BEGIN SELECT w.rfq_id INTO goi FROM public.rfq_awards w WHERE w.org_id = NEW.org_id AND w.id = NEW.award_id; IF NOT FOUND THEN RETURN NEW; END IF; ly_do := public.award_chot_tin_hieu(NEW.org_id, goi); IF ly_do = 'K10B_TIN_HIEU_CHUA_GHI_NHAN' THEN RAISE EXCEPTION 'Chu ky trao thau chua ghi duoc (K10b): %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = 'k10b_tin_hieu_chua_ghi_nhan'; END IF; IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Chu ky trao thau chua ghi duoc (K10c): %', ly_do USING ERRCODE = 'check_violation', CONSTRAINT = 'k10c_tin_hieu_chua_ghi_nhan'; END IF; RETURN NEW; END$than$
             AND p.provolatile = 'v'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
@@ -15919,6 +16043,187 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.award_kiem_tin_hieu_khai_thap()')),
                   'hàm public.award_kiem_tin_hieu_khai_thap() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.award_kiem_tin_hieu_khai_thap() và bảng public.rfq_award_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.289 / S3.6c / K10c] Ham vi tu cua lan thu hoi loi moi o OPEN: so NHOM dem duoc sau thu hoi (rfq_dem_nhom_loi_moi tren tap dem duoc TRU loi moi nay) duoi so_ncc_toi_thieu cua bac ghim => K10C_THU_HOI_THIEU_CANH_TRANH, tru khi co ngoai le con song dung loai (cung luat rfq_chot_canh_tranh, K2). Mot than RETURN NULL cho thu hep danh sach xuong duoi nguong ma khong ngoai le.
+    ARRAY[
+      $q$định nghĩa hàm rfq_chot_thu_hoi(uuid, uuid, uuid) (120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_chot_thu_hoi(p_org uuid, p_rfq uuid, p_loi_moi uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  bac jsonb;
+  nguong integer;
+  so integer;
+  so_moi integer;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r
+                  WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'OPEN') THEN
+    RETURN NULL;
+  END IF;
+  bac := public.rfq_bac_ghim(p_org, p_rfq);
+  IF bac IS NULL OR (bac ->> 'dau_thau_chinh_thuc')::boolean IS TRUE THEN
+    RETURN NULL;
+  END IF;
+  nguong := (bac ->> 'so_ncc_toi_thieu')::integer;
+  IF nguong IS NULL THEN
+    RAISE EXCEPTION 'Bac ghim thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K10c, ADR-082 (10))'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  so := public.rfq_dem_nhom_loi_moi(p_org, p_rfq,
+          ARRAY(SELECT t.d FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d) WHERE t.d <> p_loi_moi));
+  IF so >= nguong THEN
+    RETURN NULL;
+  END IF;
+  SELECT count(*)::integer INTO so_moi
+    FROM public.rfq_invitations i
+   WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL AND i.id <> p_loi_moi;
+  IF so_moi >= 1
+     AND EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e
+                  WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP'
+                    AND e.loai = CASE WHEN so_moi = 1 THEN 'SINGLE_SOURCE' ELSE 'LIMITED_COMPETITION' END
+                    AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r
+                                     WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN
+    RETURN NULL;
+  END IF;
+  RETURN 'K10C_THU_HOI_THIEU_CANH_TRANH';
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE bac jsonb; nguong integer; so integer; so_moi integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'OPEN') THEN RETURN NULL; END IF; bac := public.rfq_bac_ghim(p_org, p_rfq); IF bac IS NULL OR (bac ->> 'dau_thau_chinh_thuc')::boolean IS TRUE THEN RETURN NULL; END IF; nguong := (bac ->> 'so_ncc_toi_thieu')::integer; IF nguong IS NULL THEN RAISE EXCEPTION 'Bac ghim thieu so_ncc_toi_thieu — ham theo bac khong tra loi duoc (K10c, ADR-082 (10))' USING ERRCODE = 'check_violation'; END IF; so := public.rfq_dem_nhom_loi_moi(p_org, p_rfq, ARRAY(SELECT t.d FROM public.rfq_loi_moi_dem_duoc(p_org, p_rfq) AS t(d) WHERE t.d <> p_loi_moi)); IF so >= nguong THEN RETURN NULL; END IF; SELECT count(*)::integer INTO so_moi FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL AND i.id <> p_loi_moi; IF so_moi >= 1 AND EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions e WHERE e.org_id = p_org AND e.rfq_id = p_rfq AND e.hanh_dong = 'LAP' AND e.loai = CASE WHEN so_moi = 1 THEN 'SINGLE_SOURCE' ELSE 'LIMITED_COMPETITION' END AND NOT EXISTS (SELECT 1 FROM public.rfq_sourcing_exceptions r WHERE r.org_id = e.org_id AND r.hanh_dong = 'RUT' AND r.ngoai_le_id = e.id)) THEN RETURN NULL; END IF; RETURN 'K10C_THU_HOI_THIEU_CANH_TRANH'; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_chot_thu_hoi(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_chot_thu_hoi(uuid, uuid, uuid)')),
+                  'hàm public.rfq_chot_thu_hoi(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_chot_thu_hoi(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.289 / S3.6c / K10c] Tin hieu thu hep danh sach moi — MOT ham: NULL khi to chuc chua bat, goi chua mo, hay khong loi moi nao bi thu hoi tu luc mo (revoked_at >= opened_at). Bang chung: phien ban chinh sach, goi, thu_hoi[] {loi_moi, nguoi, luc UTC, ly_do} — KHONG so tien (ADR-054). Mot than RETURN NULL thi chu ky trao thau khong bao gio hoi ve danh sach da bi thu hep.
+    ARRAY[
+      $q$định nghĩa hàm tin_hieu_thu_hep(uuid, uuid) (120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.tin_hieu_thu_hep(p_org uuid, p_rfq uuid) RETURNS jsonb
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  mo timestamptz;
+  cs uuid;
+  ds jsonb;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  SELECT r.opened_at INTO mo FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq;
+  IF NOT FOUND OR mo IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT jsonb_agg(jsonb_build_object(
+           'loi_moi', i.id,
+           'nguoi', i.revoked_by,
+           'luc', to_char(i.revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+           'ly_do', i.ly_do_thu_hoi) ORDER BY i.revoked_at, i.id)
+    INTO ds
+    FROM public.rfq_invitations i
+   WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NOT NULL AND i.revoked_at >= mo;
+  IF ds IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT b.policy_id INTO cs FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  RETURN jsonb_build_object('loai', 'INVITE_LIST_NARROWED', 'chinh_sach', cs, 'goi', jsonb_build_array(p_rfq), 'thu_hoi', ds);
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE mo timestamptz; cs uuid; ds jsonb; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT r.opened_at INTO mo FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq; IF NOT FOUND OR mo IS NULL THEN RETURN NULL; END IF; SELECT jsonb_agg(jsonb_build_object( 'loi_moi', i.id, 'nguoi', i.revoked_by, 'luc', to_char(i.revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), 'ly_do', i.ly_do_thu_hoi) ORDER BY i.revoked_at, i.id) INTO ds FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NOT NULL AND i.revoked_at >= mo; IF ds IS NULL THEN RETURN NULL; END IF; SELECT b.policy_id INTO cs FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq; RETURN jsonb_build_object('loai', 'INVITE_LIST_NARROWED', 'chinh_sach', cs, 'goi', jsonb_build_array(p_rfq), 'thu_hoi', ds); END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.jsonb'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.tin_hieu_thu_hep(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.tin_hieu_thu_hep(uuid, uuid)')),
+                  'hàm public.tin_hieu_thu_hep(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm tin_hieu_thu_hep(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.289 / S3.6c / K10c] Tin hieu dong som khi da co bao gia — MOT ham: NULL khi to chuc chua bat, goi chua dong, dong khong truoc han, hay khong luong bao gia nao cua loi moi con song. Bang chung: han, luc dong (UTC), nguoi dong, ly do, so luong bao gia, phien ban chinh sach, goi — ve ma 011 (H-4) hoan. Mot than RETURN NULL thi dong som di qua chu ky trao thau ma khong ai doc.
+    ARRAY[
+      $q$định nghĩa hàm tin_hieu_dong_som(uuid, uuid) (120_tin_hieu_moi_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '120_tin_hieu_moi_thau.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.tin_hieu_dong_som(p_org uuid, p_rfq uuid) RETURNS jsonb
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+DECLARE
+  g record;
+  cs uuid;
+  so integer;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN NULL;
+  END IF;
+  SELECT r.closed_at, r.deadline_at, r.closed_by, r.early_close_reason INTO g
+    FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq;
+  IF NOT FOUND OR g.closed_at IS NULL OR g.deadline_at IS NULL OR g.closed_at >= g.deadline_at THEN
+    RETURN NULL;
+  END IF;
+  SELECT count(*)::integer INTO so
+    FROM public.vendor_bids b
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+   WHERE b.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL;
+  IF so = 0 THEN
+    RETURN NULL;
+  END IF;
+  SELECT b.policy_id INTO cs FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq;
+  RETURN jsonb_build_object(
+    'loai', 'EARLY_CLOSE',
+    'chinh_sach', cs,
+    'goi', jsonb_build_array(p_rfq),
+    'han', to_char(g.deadline_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'dong_luc', to_char(g.closed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'nguoi_dong', g.closed_by,
+    'ly_do', g.early_close_reason,
+    'so_bao_gia', so);
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE g record; cs uuid; so integer; BEGIN IF NOT public.to_chuc_da_bat_s3(p_org) THEN RETURN NULL; END IF; SELECT r.closed_at, r.deadline_at, r.closed_by, r.early_close_reason INTO g FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq; IF NOT FOUND OR g.closed_at IS NULL OR g.deadline_at IS NULL OR g.closed_at >= g.deadline_at THEN RETURN NULL; END IF; SELECT count(*)::integer INTO so FROM public.vendor_bids b JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id WHERE b.org_id = p_org AND i.rfq_id = p_rfq AND i.revoked_at IS NULL; IF so = 0 THEN RETURN NULL; END IF; SELECT b.policy_id INTO cs FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq; RETURN jsonb_build_object( 'loai', 'EARLY_CLOSE', 'chinh_sach', cs, 'goi', jsonb_build_array(p_rfq), 'han', to_char(g.deadline_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), 'dong_luc', to_char(g.closed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), 'nguoi_dong', g.closed_by, 'ly_do', g.early_close_reason, 'so_bao_gia', so); END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.jsonb'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.tin_hieu_dong_som(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.tin_hieu_dong_som(uuid, uuid)')),
+                  'hàm public.tin_hieu_dong_som(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm tin_hieu_dong_som(uuid, uuid) hoặc SUPERUSER$q$
     ],
     -- [S1.204 / S4.3a] Bam cua mot dong — anh xa va goi y chi hieu luc khi bam da luu bang bam hien tai. Mot than tra hang so lam anh xa cu song qua lan sua dong.
     ARRAY[

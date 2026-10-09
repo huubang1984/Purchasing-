@@ -26969,3 +26969,121 @@ container ấy; không chẩn đoán, ghi một lần. **Lượt 2** cùng HEAD,
 `migrations.int` 128/128, `passport.int` 20/20, kịch bản 41 HTTP 89/89, `phuc-vu` 321/321, `so-tai-khoan-liet-ke` 5/5.
 `evidence/INV-matrix.md` của hai lượt trùng nhau: A5 20 → 25 ca, D5 185 → 187, E1 14 → 17, E2 6 → 10, E5 3 → 4; hàng L6 đổi theo ngoặc
 của TEST-PLAN.
+
+---
+
+# §S1.289 — S3.6c: K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) CHẶN CHỮ KÝ DUYỆT TRAO THẦU NHƯ K10b; THU HỒI LỜI MỜI MỞ Ở `OPEN` CHO TỔ CHỨC ĐÃ BẬT — CÓ LÝ DO, QUA NGƯỠNG CẠNH TRANH; S3.6 KHÉP — ADR-161, MIGRATION `120_tin_hieu_moi_thau`
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — tổ chức chưa bật S3 chạy nguyên MVP1 (thu hồi ở OPEN không
+lý do như trước, hai hàm tín hiệu trả NULL, một chữ ký). Đổi ở tổ chức đã bật: thu hồi ở gói đang mở nay ĐI ĐƯỢC (có lý do, qua ngưỡng)
+thay vì bị K4a chặn; một lần thu hồi hay một lần đóng sớm khi đã có báo giá để lại một hàng tín hiệu và chữ ký trao thầu đòi một lần đọc
+cho TỪNG loại. Migration `120_tin_hieu_moi_thau`, ADR-161, K10c vào sổ (91 bất biến). Không khoản mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-09: *"S3.6c"*, rồi chốt bốn câu hỏi theo đề xuất (dưới ngưỡng thì từ chối trừ khi ngoại lệ còn sống; `EARLY_CLOSE`
+chặn chữ ký cùng cổng; một hàng K10c cho hai loại; khối chung ở bước 7 và nút thu hồi có lý do ở `/tao-thau`). Phạm vi theo spec §9 dòng
+S3.6: phần c — hai loại tín hiệu còn lại và K10 cho chúng; S3.6 khép.
+
+## 2. Đo trước (đọc mã trên `21aba4ca`, master sau #261)
+- `080` chặn thu hồi ở mọi trạng thái ngoài DRAFT với lời *"chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6"*; `revokeInvitation` không nhận
+  lý do nào của người mua (chỉ `LINK_SEND_FAILED` của hệ thống); `closeRfq` đặt `early_close_reason` và một hàng sổ — không ai ở chữ ký
+  trao thầu bị bắt đọc. `116` mở hai bảng tín hiệu theo loại cho đúng hai loại; `award_chot_tin_hieu` đọc một hàm.
+- Spec §3.3 dòng OPEN: *thu hồi phải có lý do và sinh tín hiệu; thu hồi làm danh sách còn dưới ngưỡng thì cần ngoại lệ có chữ ký độc lập*;
+  §4.6 hai dòng bằng chứng; dòng K10 chỉ kể hai loại ở chữ ký award (viết trước khi `EARLY_CLOSE` được thêm ở ADR-082 ⒁); ADR-128 đã chốt
+  ngữ nghĩa thu hồi (sau lần mở thầu đầu không thu hồi); ngoại lệ chỉ lập ở DRAFT (`105`).
+- `rfq_loi_moi_dem_duoc` (`108`) coi người thu hồi là *người chọn*: thu hồi ở OPEN làm nhà cung cấp do người ấy nhập/xác minh thôi đếm
+  được — luật có từ S3.3d, vòng này thêm một đường tới nó (ghi ở ADR, cái giá).
+- Tìm theo nghĩa, không theo tên: mọi fixture int và công cụ đóng gói SỚM khi đã có báo giá (`moThau` thô ở `trao-thau-theo-bac`,
+  `xung-dot-loi-ich`, `luot-danh-gia`, `bo-xuat`; `closeRfq` ở kịch bản 41, `gieo-demo`, `pilot-gia-lap`) — `EARLY_CLOSE` chặn chữ ký sẽ
+  làm đỏ mọi nơi ký trao thầu ở tổ chức đã bật: `trao-thau-theo-bac`, `xung-dot-loi-ich`, kịch bản 41 (S3), pilot. `luot-danh-gia`,
+  `bo-xuat` ký ở tổ chức chưa bật — không chạm. Biết trước nên sửa trong một lượt (bài học `cong-moi-tren-bang-cu`).
+
+## 3. Hình dạng (ADR-161)
+Cột `ly_do_thu_hoi`; K4a mở nhánh OPEN (thiếu lý do → `k10c_thu_hoi_thieu_ly_do`; hàm vị từ `rfq_chot_thu_hoi` đếm nhóm trên tập đếm được
+TRỪ lời mời này, dưới `so_ncc_toi_thieu` mà không ngoại lệ còn sống đúng loại → `K10C_THU_HOI_THIEU_CANH_TRANH`, tầng gói hỏi trước câu
+ghi); `tin_hieu_thu_hep` (mọi lời mời `revoked_at >= opened_at`, bằng chứng {lời mời, người, lúc UTC, lý do}) và `tin_hieu_dong_som`
+(`closed_at < deadline_at` và có luồng báo giá của lời mời còn sống; bằng chứng {hạn, lúc đóng, người đóng, lý do, số luồng}); hàng ghi ở
+cạnh thu hồi (`THU_HOI`) và cạnh đóng (`DONG_SOM`); `award_chot_tin_hieu` đọc BA hàm — khai thấp trước (mã K10b như cũ), rồi thu hẹp, rồi
+đóng sớm (mã K10c dùng chung); luật người K10c = tạo, nộp, thu hồi, đóng + tác giả chính sách; route ghi nhận dùng chung nhận `loai`; màn
+gộp ba khối con; `invitation` phụ thuộc `kiem-soat` (chiều cho phép, như `rfq → kiem-soat`).
+
+## 4. Thay đổi
+- `db/migrations/120_tin_hieu_moi_thau.sql` (11 khối): cột + hai CHECK; `rfq_chot_thu_hoi`; K4a định nghĩa lại; `tin_hieu_thu_hep`,
+  `tin_hieu_dong_som`; `tin_hieu_hien_tai`, `tin_hieu_kiem_ghi`, `tin_hieu_chot_nguoi_ghi_nhan`, `tin_hieu_kiem_ghi_nhan` thêm nhánh;
+  `award_chot_tin_hieu`, `award_kiem_tin_hieu_khai_thap` định nghĩa lại (trigger giữ). `hardening.always.sql`: bảy khối ghi lại (*thân từ
+  120*), ba khối hàm mới — vân tay tính từ văn bản migration, phán xét bằng `migrate()` hai lần trên cụm dùng một lần (115 tệp / 0 tệp).
+  `db/migrations.int.test.ts` ba danh sách + bảy con trỏ; `db/rls-coverage.int.test.ts` một hàng ACL cột.
+- `identity`: bốn mã `K10C_*`, kiểu `chot` nhận hậu tố `c`, lời K4a sửa; `rbac` danh mục về cổng. `kiem-soat`: `LoaiTinHieu` bốn loại,
+  `LOAI_TIN_HIEU_TRAO_THAU`, `ghiTinHieuKhiThuHoi`, `ghiTinHieuKhiDongSom`, `ghiNhanTinHieu` ba loại ở chữ ký, `lietKeTinHieu` thêm
+  `thuHep`/`dongSom` (mỗi loại một cờ *chưa ai ghi nhận* tính trong SQL). `invitation.revokeInvitation`: `lyDo`, hỏi `rfq_chot_thu_hoi`
+  trước câu ghi, ghi tín hiệu sau câu ghi, lỗi thiếu lý do có tên. `rfq.closeRfq`: ghi tín hiệu đóng sớm trước hàng sổ. API: route thu hồi
+  nhận `lyDo`; route ghi nhận trao thầu nhận `loai` (ba giá trị). Web: `nutLoiMoi` mở thu hồi ở OPEN, ô lý do ở bước 5 `/tao-thau`;
+  `khungTinHieuTraoThau(body, loai)` (khai thấp uỷ quyền vào nó), bốn chỉ dẫn `K10C_*`; `/mo-thau` khối «Tín hiệu trước chữ ký trao
+  thầu» ba khối con, một vòng lặp nạp/ghi nhận.
+- Test: `trao-thau-theo-bac.int` khối `[INV-K10c]` 6 ca (thu hồi ở OPEN trọn luồng tới APPROVED; đóng sớm qua `closeRfq` + luật người +
+  không báo giá; dưới ngưỡng + không đếm được + ngoại lệ đúng/sai loại + MVP1; lớp chặn cuối ba tên; năm đột biến; K12) và wrapper `duyet`
+  ghi nhận đóng sớm bằng `gd2` trước mọi chữ ký của tệp; `danh-sach-moi.int`, `luong-moi-s3.int` lật hai ca K4a ở OPEN; `xung-dot-loi-ich.int`
+  một DIRECTOR mới ghi nhận; kịch bản 41 bước 12i; `tin-hieu-chia-nho.int` từ vựng bỏ K10c; `tao-thau.test`, `phuc-vu.test` cho khung, nút,
+  ba khối; hai sổ kiến trúc (barrel, phân loại hàm ghi); `pilot-gia-lap` thêm bước ghi nhận. Sổ: TEST-PLAN hàng K10c (91) + K4a + tổng;
+  sổ khai nhãn bốn tệp; `MOC_GHIM` 91; STATE, spec §3.3/§5.1 K4·K10/§9 S3.6, ADR-161, Handoff (lời khai đếm).
+
+## 5. Điểm phát hiện lúc đo
+- **`to_jsonb(timestamptz)` đi theo múi giờ của phiên**: bằng chứng mang mốc giờ sẽ khác nhau giữa trigger và tầng gói khi hai phiên hai
+  múi, và K10 fail-closed oan — mốc giờ ghi bằng `to_char` ở UTC trước khi một ca đo bắt được.
+- **`duyetTraoThau` hỏi K10 (tầng gói) TRƯỚC K9 (trigger)**: ca K9 *"gd chưa khai"* của `xung-dot-loi-ich` nhận K10C thay K9 nếu đóng sớm
+  chưa ai ghi nhận; và người ghi nhận phải KHAI trước (ghi nhận là một cổng K9) — nên không mượn được người mà ca sau cần *chưa khai*: một
+  DIRECTOR mới. Lần đầu mượn `tc3` làm đỏ ca *tc3 chưa khai* ở cuối cùng tệp.
+- **Chữ ký thô trong ca K2b lớp chặn cuối** nay gặp K10c trước hàng APPROVED: tắt trigger K10c trong cùng giao dịch — vế đo của ca ấy là
+  `k2b_thieu_canh_tranh_thuc`.
+- **Lời mời của fixture là `UNSENT`** (mở gói thô không gửi) — ba khẳng định đoán `SENT`, đỏ, sửa.
+- **Ngoại lệ sai loại không cứu**: còn một lời mời sống thì cần `SINGLE_SOURCE`; `LIMITED_COMPETITION` lập từ DRAFT không cứu lần thu hồi
+  để lại một lời mời — đo thành ca.
+- `nutLoiMoi` ở OPEN đổi hợp đồng ⇒ một ca màn S1.191 đổi lời khai; `tao-thau.ts` hint `so_bao_gia` qua `String()` bị `no-base-to-string`.
+- **Evidence lượt một đỏ hai sổ đăng ký** (vitest thoát mã 1 dù vẫn in 91/91): `check-an-ninh.int` [khoản 105] — hai CHECK mới của
+  `ly_do_thu_hoi` chưa phân loại (miễn `DO_DAI`, `MOC`); `rfq.int` — phép so hai chiều *tên ràng buộc trong thân ↔ `CHOT_THEO_RANG_BUOC`*
+  gom thân trigger K4a, nay có hai tên `k10c_*` không vào bảng theo khuôn K10: ghim đúng hai tên ấy rồi loại khỏi phép so. Chỉ evidence
+  bắt — hai tệp không nằm trong tập int chọn theo nghĩa; bài S3.6d lặp lại ở dạng khác: *tên ràng buộc mới đặt trong trigger CŨ* ⇒ grep
+  tệp nào đo tên của trigger ấy (`CONSTRAINT = '`) và tệp phân loại CHECK trước evidence.
+- **Evidence lượt hai: vitest thoát mã 0, 91/91, nhưng cổng sổ khai nhãn CHẶN MERGE** — `so-khai-nhan.ts` kể kịch bản 41 HTTP cho K10c mà tên
+  bước 12i chưa mang `[INV-K10c]`; gắn nhãn (hàng K10c 8 → 9 ca). Lượt 1 không thấy vì nó dừng ở *vitest thoát mã 1* trước cổng này.
+  Bài: sổ khai nhãn kể tệp nào thì grep nhãn ở tệp ấy TRƯỚC evidence — một lượt evidence là 40 phút.
+
+## 6. Đột biến (định nghĩa lại hàm lúc chạy, khôi phục tự kiểm sha256)
+| # | Đột biến | Ca chứng | Kết quả |
+|---|---|---|---|
+| 1 | `award_chot_tin_hieu` bỏ hàm thu hẹp (`bc := NULL`) | chữ ký khi thu hẹp chưa ghi nhận | đi qua ⇒ bản thật `K10C_TIN_HIEU_CHUA_GHI_NHAN` |
+| 2 | `award_chot_tin_hieu` bỏ hàm đóng sớm | chữ ký khi đóng sớm chưa ghi nhận | đi qua ⇒ bản thật chặn |
+| 3 | `tin_hieu_thu_hep` vế `revoked_at >= opened_at` → `false` | thu hồi ở OPEN | không hàng ⇒ bản thật một hàng THU_HOI |
+| 4 | `rfq_chot_thu_hoi` RETURN NULL | thu hồi lời mời đếm được còn dưới ngưỡng | đi qua ⇒ bản thật `K10C_THU_HOI_THIEU_CANH_TRANH` |
+| 5 | luật người bỏ `RETURN 'K10C_TU_GHI_NHAN'` | người thu hồi (tc3) tự ghi nhận | ghi nhận được ⇒ bản thật từ chối |
+Lớp chặn cuối: chữ ký thô ⇒ `23514 k10c_tin_hieu_chua_ghi_nhan`, không hàng sổ; câu thu hồi thô ở OPEN không lý do ⇒
+`k10c_thu_hoi_thieu_ly_do`; dưới ngưỡng ⇒ `k10c_thu_hoi_thieu_canh_tranh` (cả ở `danh-sach-moi.int`). K12: tập mã K10c trong thân bốn
+hàm = bốn dòng `chot: K10c`; ba tên `k10c_*` không ở `CHOT_THEO_RANG_BUOC`.
+
+## 7. Giới hạn còn lại
+- Không mở lập ngoại lệ ở OPEN (chủ dự án chọn phương án ⑴); một lần thu hồi dưới ngưỡng ở gói đã mở không đi được — giữ lời mời hay mời thêm.
+- `gieo:demo --s3` chưa gieo ca thu hẹp hay đóng sớm; lượt đi thử T4 cho ba tín hiệu ở chữ ký chưa chạy; `pilot-gia-lap` bước ghi nhận
+  mới chưa chạy thật (kịch bản đo bằng mã).
+- Người ghi nhận có thể là người ký; lý do thu hồi và lý do đóng là văn bản tự do trong bằng chứng (dư lượng như `reason` của `closeRfq`).
+- Lượt soi hình dạng do chính vòng làm (chủ dự án chốt theo đề xuất) — không có lượt soi đối kháng riêng.
+
+## 8. Số đo
+- Trên cây stage cuối (ngày 2026-10-09, giờ máy UTC+7): `pnpm t0` 69 s; `pnpm test` 155 tệp / 2806 ca (2 tệp, 14 ca bỏ qua);
+  `kich-ban-41-http.int` 93/93, 50 s; `tin-hieu-chia-nho.int` 14/14, 17 s; evidence vitest thoát mã **0**, **91/91** bất biến
+  (69 nghiệp vụ + 22 hàng rào), **5152** khẳng định, 2 429 s — bắt đầu 22:20 sau 79 lượt chờ máy rảnh (79 lượt vì container test của một phiên khác chạy ~40 phút — xếp hàng, không giết).
+  Ma trận: hàng K10c mới **10 ca** ✅ (8 ở lượt 1–2, +2 nhãn ở kịch bản 41 bước 12i — chạy ở hai luồng); K4a 41 ca không đổi số, đổi lời; K10b 8, K10a 15 không đổi.
+- Lượt evidence một (2 269 s, bắt đầu 19:58 sau 6 lượt chờ): vitest thoát mã 1 ở hai sổ đăng ký (§5 — `check-an-ninh.int`, `rfq.int`),
+  cùng 91/91 và 5152 khẳng định — số khẳng định không phải tín hiệu, dòng *vitest thoát mã* mới là. Trước nó: `pnpm t0` 43 s,
+  `pnpm test` 155 tệp / 2806 ca, kịch bản 41 HTTP 93/93 48 s, `tin-hieu-chia-nho.int` 14/14 16 s. Sau vá: hai tệp chạy riêng
+  4/4 (27 s) và 60/60 (18 s), rồi trọn chuỗi lần hai (t0 70 s, test 155 tệp / 2806 ca 158 s, kb41 93/93 56 s, tin-hieu 14/14 18 s):
+  evidence vitest thoát mã **0**, 91/91, 5152 khẳng định, 2 622 s (bắt đầu 20:48 sau 6 lượt chờ) — nhưng cổng sổ khai nhãn chặn (§5),
+  gắn nhãn rồi chạy trọn chuỗi lần ba.
+- Trước evidence: tám tệp int chạm K10c chạy riêng tuần tự đều xanh (`trao-thau-theo-bac` 32, `luong-moi-s3` 20, `danh-sach-moi` 23,
+  `xung-dot-loi-ich` 13, `tin-hieu-chia-nho` 14, `rls-coverage` 61, kịch bản 41 HTTP 93, `bac-chinh-sach` 42); `tests/architecture` 632;
+  web 401; `tsc` 0. Những lần đỏ trước đó đều ở test hay lời khai (§5), không lần nào đổi hình dạng SQL sau khi ghim.
+- Hardening: mười khối (bảy ghi lại, ba mới) đo trên cụm dùng một lần `postgres:16-alpine` — `migrate()` hai lần (115 tệp / 0 tệp), vân
+  tay khớp.
+- Cây gộp `origin/master` (#263 S1.287 / S3.7a1 — Supplier Passport, ADR-159, migration 118 — `ce99f965`, sáu xung đột tài liệu và danh
+  sách migration gỡ tay; lời khai 116 migration, 159 ADR, 91 bất biến): `pnpm t0` 54 s; `pnpm test` 157 tệp / 2820 ca; kịch bản 41 HTTP
+  93/93 48 s; `tin-hieu-chia-nho.int` 14/14 16 s; evidence vitest thoát mã **0**, **91/91**, **5186** khẳng định, 2 056 s (bắt đầu
+  00:31 ngày 2026-10-10 sau 6 lượt chờ) — `INV-matrix.md` sinh lại trên bản gộp.

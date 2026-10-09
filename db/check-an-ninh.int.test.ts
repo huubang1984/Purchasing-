@@ -206,6 +206,10 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_invitations_link_channel_check: "MIEN",
   rfq_invitations_status_check: "MIEN",
   rfq_invitations_thu_hoi_co_moc: "MOC",
+  // [S1.289 / S3.6c / K10c] Lý do thu hồi: độ dài, và chỉ đi kèm một lần thu hồi — hình dạng và mốc. Luật chịu lực (gói OPEN thì
+  // BẮT BUỘC có lý do; ngưỡng cạnh tranh) nằm ở trigger K4a `rfq_invitations_kiem_danh_sach` và hàm vị từ `rfq_chot_thu_hoi`.
+  rfq_invitations_ly_do_di_kem_thu_hoi: "MOC",
+  rfq_invitations_ly_do_thu_hoi_check: "DO_DAI",
   rfq_items_description_check: "DO_DAI",
   rfq_items_line_no_check: "SO",
   rfq_items_quantity_check: "SO",

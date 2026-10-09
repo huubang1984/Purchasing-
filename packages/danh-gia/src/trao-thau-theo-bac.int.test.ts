@@ -24,10 +24,10 @@ import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
-import { CHOT_VAO_SO } from "@trustprocure/identity";
-import { lapNgoaiLe, rutNgoaiLe } from "@trustprocure/invitation";
+import { CHOT_THEO_RANG_BUOC, CHOT_VAO_SO } from "@trustprocure/identity";
+import { lapNgoaiLe, revokeInvitation, rutNgoaiLe } from "@trustprocure/invitation";
 import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
-import { approveRfq } from "@trustprocure/rfq";
+import { approveRfq, closeRfq } from "@trustprocure/rfq";
 import { withTenant } from "@trustprocure/tenancy";
 import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
@@ -274,12 +274,20 @@ async function nopBaoGia(t: ToChuc, rfqId: string, lm: LoiMoi): Promise<string> 
   });
 }
 
-/** Đóng sớm, yêu cầu mở thầu (`pm`), duyệt (`gd1`), chèn bản rõ dưới `app_unseal` — khuôn `moThau` của `luot-danh-gia.int.test.ts`. */
-async function moThau(t: ToChuc, rfqId: string, banRo: readonly (readonly [string, unknown])[]): Promise<void> {
-  await db.pool.query(
-    "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som de kiem tra', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
-    [rfqId, t.pm.u, t.pm.s],
-  );
+/**
+ * Đóng sớm, yêu cầu mở thầu (`pm`), duyệt (`gd1`), chèn bản rõ dưới `app_unseal` — khuôn `moThau` của `luot-danh-gia.int.test.ts`.
+ * [S1.289 / S3.6c] `dongQuaGoi`: đóng bằng `closeRfq` dưới phiên người ấy (hàng tín hiệu ĐÓNG SỚM ghi ở cạnh đóng) thay cho câu thô.
+ */
+async function moThau(t: ToChuc, rfqId: string, banRo: readonly (readonly [string, unknown])[], tuyChon: { readonly dongQuaGoi?: NguoiPhien } = {}): Promise<void> {
+  if (tuyChon.dongQuaGoi !== undefined) {
+    const ai = tuyChon.dongQuaGoi;
+    await withTenant(apiPool, t.org, (c) => closeRfq(c, t.org, { rfqId, reason: "dong som de kiem tra", actorSessionId: ai.s }));
+  } else {
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som de kiem tra', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+      [rfqId, t.pm.u, t.pm.s],
+    );
+  }
   const yc = await withTenant(apiPool, t.org, (c) => requestUnseal(c, t.org, { rfqId, reason: "den gio mo thau", actorSessionId: t.pm.s }, apiPool));
   await withTenant(apiPool, t.org, (c) => approveUnseal(c, t.org, { unsealRequestId: yc.id, actorSessionId: t.gd1.s }, apiPool));
   await withTenant(unsealPool, t.org, async (c) => {
@@ -318,6 +326,8 @@ async function goiDaCham(
     readonly themMoi?: (rfqId: string) => Promise<LoiMoi[]>;
     /** Chỉ số lời mời (trong `loiMoi`) nộp từng giá — mặc định theo thứ tự. */
     readonly chon?: readonly number[];
+    /** [S1.289 / S3.6c] Đóng bằng `closeRfq` dưới phiên người này thay cho câu thô. */
+    readonly dongQuaGoi?: NguoiPhien;
   } = {},
 ): Promise<GoiDaCham> {
   const rfqId = await goiNhap(t, uocLuong);
@@ -332,7 +342,7 @@ async function goiDaCham(
     banRo.push(v);
     ban.push([v, { totalAmount: g, currency: tuyChon.tienTe ?? "VND" }]);
   }
-  await moThau(t, rfqId, ban);
+  await moThau(t, rfqId, ban, tuyChon.dongQuaGoi === undefined ? {} : { dongQuaGoi: tuyChon.dongQuaGoi });
   const kq = await withTenant(apiPool, t.org, (c) => taoLuotDanhGia(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
   expect(await trangThai(rfqId), "tiền đề: gói phải ở EVALUATING").toBe("EVALUATING");
   return { rfqId, banRo, luotId: kq.evaluationId, loiMoi };
@@ -352,8 +362,24 @@ const ghiNhanKhaiThap = (t: ToChuc, rfqId: string, ai: NguoiPhien) =>
   withTenant(apiPool, t.org, (c) =>
     ghiNhanTinHieu(c, t.org, { rfqId, lyDo: "Da doc: gia thi truong tang sau khi uoc luong; trao dung bao gia thap nhat.", actorSessionId: ai.s, loai: "ESTIMATE_UNDERSTATED" }, apiPool),
   );
-const duyet = (t: ToChuc, rfqId: string, awardId: string, ai: NguoiPhien) =>
+/** [S1.289 / S3.6c / K10c] Ghi nhận một tín hiệu của lượt mời thầu (thu hẹp danh sách / đóng sớm) — người giữ `po.approve` ngoài gói. */
+const ghiNhanTT = (t: ToChuc, rfqId: string, ai: NguoiPhien, loai: "INVITE_LIST_NARROWED" | "EARLY_CLOSE") =>
+  withTenant(apiPool, t.org, (c) => ghiNhanTinHieu(c, t.org, { rfqId, lyDo: "Da doc tin hieu cua luot moi thau.", actorSessionId: ai.s, loai }, apiPool));
+/** Chữ ký duyệt trao thầu THÔ của tầng gói — không ghi nhận gì trước. */
+const duyetTho = (t: ToChuc, rfqId: string, awardId: string, ai: NguoiPhien) =>
   withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId, awardId, actorSessionId: ai.s }, apiPool));
+/**
+ * [S1.289 / S3.6c / K10c] Mọi fixture của tệp đóng gói SỚM khi đã có báo giá (`moThau`), nên ở tổ chức đã bật mọi chữ ký trao thầu nay
+ * đi qua K10c: trước khi ký, `gd2` (giữ `po.approve`, ngoài gói — không tạo, không nộp, không đóng) ghi nhận tín hiệu ĐÓNG SỚM nếu nó
+ * còn chờ. Ghi nhận là đọc, không phải ký thay; nó không để hàng `CONTROL_DENIED` nào. K10c tự đo ở khối ⑶c bằng `duyetTho`.
+ */
+const duyet = async (t: ToChuc, rfqId: string, awardId: string, ai: NguoiPhien) => {
+  if (t.daBat) {
+    const th = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId, actorSessionId: t.gd2.s }));
+    if (th.dongSom.canGhiNhan) await ghiNhanTT(t, rfqId, t.gd2, "EARLY_CLOSE");
+  }
+  return duyetTho(t, rfqId, awardId, ai);
+};
 const doc = (t: ToChuc, rfqId: string) => withTenant(apiPool, t.org, (c) => docTraoThau(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
 const lapNl = (t: ToChuc, rfqId: string, ai: NguoiPhien = t.pm) =>
   withTenant(apiPool, t.org, (c) =>
@@ -660,6 +686,9 @@ describe("[S1.280 / S3.5a / K2b] hậu kiểm: số nhóm có báo giá hợp l�
     try {
       await c.query("BEGIN");
       await c.query("ALTER TABLE public.rfq_awards DISABLE TRIGGER rfq_awards_kiem_theo_bac_khi_de_xuat");
+      // [S1.289 / S3.6c / K10c] Fixture đóng gói SỚM khi đã có báo giá ⇒ chữ ký thô dưới đây bị K10c chặn trước khi tới hàng APPROVED; vế
+      // đo ở ca này là `k2b_thieu_canh_tranh_thuc` trên hàng APPROVED, nên tắt trigger K10c trong cùng giao dịch (K10c đo ở khối ⑶c).
+      await c.query("ALTER TABLE public.rfq_award_approvals DISABLE TRIGGER rfq_award_approvals_kiem_tin_hieu_khai_thap");
       const dxId = (
         await c.query<{ id: string }>(
           "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, 'PROPOSED', 'tho', $5, $6) RETURNING id",
@@ -798,7 +827,9 @@ describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — gh
     expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_RECORDED", g.rfqId)).toBe(1);
 
     // Chữ ký đầu bị chặn ở tầng gói: một hàng CONTROL_DENIED đúng người, không chữ ký, đề xuất đứng yên.
-    expect((await loi(duyet(t, g.rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
+    // [S1.289 / S3.6c] `duyetTho`: khai thấp hỏi TRƯỚC đóng sớm trong `award_chot_tin_hieu`, nên chữ ký thô bị K10b mà không cần ghi nhận đóng sớm —
+    // và số lần ghi nhận bên dưới đếm đúng một.
+    expect((await loi(duyetTho(t, g.rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
     expect(await tuChoiChot(t.org, g.rfqId)).toEqual([{ ma: "K10B_TIN_HIEU_CHUA_GHI_NHAN", actorId: t.gd1.u }]);
     expect(await chuKy(dx.awardId)).toEqual([]);
     // Màn: gd2 ghi nhận được; pm (tạo gói, đặt ngân sách) không giữ po.approve — câu nói thiếu quyền.
@@ -924,6 +955,241 @@ describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — gh
     const trongBang = Object.entries(CHOT_VAO_SO).filter(([, d]) => d.chot === "K10b").map(([k]) => k).sort();
     expect(trongThan).toEqual(trongBang);
     expect(trongBang).toEqual(["K10B_TAC_GIA_CHINH_SACH", "K10B_TIN_HIEU_CHUA_GHI_NHAN", "K10B_TU_GHI_NHAN"]);
+  });
+});
+
+
+// =============================================================================================
+// ⑶c K10c — HAI TÍN HIỆU CỦA LƯỢT MỜI THẦU (THU HẸP DANH SÁCH MỜI, ĐÓNG SỚM) VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6c, `120`)
+// =============================================================================================
+describe("[S1.289 / S3.6c / K10c] tín hiệu của lượt mời thầu — thu hồi ở OPEN có lý do và qua ngưỡng, đóng sớm khi đã có báo giá; chữ ký trao thầu bị chặn tới khi người độc lập ghi nhận từng tín hiệu", { timeout: 300000 }, () => {
+  const tinHieuCua = async (rfqId: string) =>
+    (
+      await db.pool.query<{ loai: string; nguon: string; bang_chung: Record<string, unknown>; giai_thich: string }>(
+        "SELECT loai, nguon, bang_chung, giai_thich FROM governance_signals WHERE rfq_id = $1 ORDER BY tinh_luc, id",
+        [rfqId],
+      )
+    ).rows;
+  const docTh = (t: ToChuc, rfqId: string, ai: NguoiPhien) => withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId, actorSessionId: ai.s }));
+  const thuHoi = (t: ToChuc, loiMoiId: string, ai: NguoiPhien, lyDo?: string) =>
+    withTenant(apiPool, t.org, (c) => revokeInvitation(c, t.org, { invitationId: loiMoiId, actorSessionId: ai.s, ...(lyDo === undefined ? {} : { lyDo }) }, apiPool));
+  const hangLoiMoi = async (loiMoiId: string) =>
+    (await db.pool.query<{ status: string; ly_do: string | null }>("SELECT status, ly_do_thu_hoi AS ly_do FROM rfq_invitations WHERE id = $1", [loiMoiId])).rows[0]!;
+  const CAU_THU_HOI_THO =
+    "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), revoked_by = $2, revoked_by_session_id = $3, ly_do_thu_hoi = $4 WHERE id = $1";
+  const LY_DO = "Nha cung cap bao het hang";
+  const MOC_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
+
+  /** Gói đã MỞ với `soMoi` nhà cung cấp đếm được — chưa báo giá, chưa đóng. */
+  async function goiDaMo(t: ToChuc, uocLuong: string, soMoi: number): Promise<{ readonly rfqId: string; readonly loiMoi: LoiMoi[] }> {
+    const rfqId = await goiNhap(t, uocLuong);
+    const loiMoi = await moiDemDuoc(t, rfqId, soMoi);
+    await nopKyMo(t, rfqId);
+    expect(await trangThai(rfqId), "tiền đề: gói phải ở OPEN").toBe("OPEN");
+    return { rfqId, loiMoi };
+  }
+  /** Báo giá theo `gia` của các lời mời đầu, đóng (qua `closeRfq` dưới `nguoiDong` nếu có), mở thầu, chấm, đề xuất báo giá rẻ nhất. */
+  async function chamVaDeXuat(t: ToChuc, rfqId: string, loiMoi: readonly LoiMoi[], gia: readonly string[], nguoiDong?: NguoiPhien) {
+    const ban: [string, unknown][] = [];
+    const banRo: string[] = [];
+    for (const [i, g] of gia.entries()) {
+      const v = await nopBaoGia(t, rfqId, loiMoi[i]!);
+      banRo.push(v);
+      ban.push([v, { totalAmount: g, currency: "VND" }]);
+    }
+    await moThau(t, rfqId, ban, nguoiDong === undefined ? {} : { dongQuaGoi: nguoiDong });
+    await withTenant(apiPool, t.org, (c) => taoLuotDanhGia(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
+    const dx = await deXuat(t, rfqId, banRo[0]!);
+    return { dx, banRo };
+  }
+
+  it("[INV-K10c] THU HỒI Ở OPEN: không lý do ⇒ từ chối có tên, lời mời còn sống; có lý do ⇒ cột ly_do_thu_hoi và hàng INVITE_LIST_NARROWED/THU_HOI mang {lời mời, người, lúc, lý do}, không số tiền; chữ ký bị K10C_TIN_HIEU_CHUA_GHI_NHAN + CONTROL_DENIED tới khi gd2 ghi nhận CẢ thu hẹp lẫn đóng sớm", async () => {
+    const t = await taoToChuc();
+    const { rfqId, loiMoi } = await goiDaMo(t, UL_BAC1, 3);
+    const khong = await loi(thuHoi(t, loiMoi[2]!.id, t.pm));
+    expect(khong?.message).toMatch(/cần một lý do/u);
+    expect(await hangLoiMoi(loiMoi[2]!.id)).toEqual({ status: "UNSENT", ly_do: null });
+    expect(await tinHieuCua(rfqId)).toEqual([]);
+
+    expect(await thuHoi(t, loiMoi[2]!.id, t.pm, `  ${LY_DO}  `)).toBe(true);
+    expect(await hangLoiMoi(loiMoi[2]!.id)).toEqual({ status: "REVOKED", ly_do: LY_DO });
+    const th = await tinHieuCua(rfqId);
+    expect(th).toHaveLength(1);
+    expect([th[0]!.loai, th[0]!.nguon]).toEqual(["INVITE_LIST_NARROWED", "THU_HOI"]);
+    const bcTh = th[0]!.bang_chung as { thu_hoi: { luc: string; loi_moi: string; nguoi: string; ly_do: string }[] } & Record<string, unknown>;
+    expect(bcTh.thu_hoi.map((x) => x.luc)).toEqual([expect.stringMatching(MOC_UTC) as string]);
+    expect({ ...bcTh, thu_hoi: bcTh.thu_hoi.map((x) => ({ loi_moi: x.loi_moi, nguoi: x.nguoi, ly_do: x.ly_do })) }).toEqual({
+      loai: "INVITE_LIST_NARROWED", chinh_sach: t.chinhSachId, goi: [rfqId],
+      thu_hoi: [{ loi_moi: loiMoi[2]!.id, nguoi: t.pm.u, ly_do: LY_DO }],
+    });
+    expect(th[0]!.giai_thich).toBe("1 lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.");
+    expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_RECORDED", rfqId)).toBe(1);
+
+    const { dx } = await chamVaDeXuat(t, rfqId, loiMoi, GIA_BAC1, t.pm);
+    expect((await tinHieuCua(rfqId)).map((h) => [h.loai, h.nguon])).toEqual([["INVITE_LIST_NARROWED", "THU_HOI"], ["EARLY_CLOSE", "DONG_SOM"]]);
+    // Chữ ký đầu bị chặn ở tầng gói: một hàng CONTROL_DENIED đúng người, không chữ ký.
+    expect((await loi(duyetTho(t, rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([{ ma: "K10C_TIN_HIEU_CHUA_GHI_NHAN", actorId: t.gd1.u }]);
+    expect(await chuKy(dx.awardId)).toEqual([]);
+    // Màn: hai phần, mỗi phần còn chờ; gd2 ghi nhận được cả hai; pm (tạo, thu hồi, đóng) không giữ po.approve.
+    const xem = await docTh(t, rfqId, t.gd2);
+    expect([xem.thuHep.canGhiNhan, xem.thuHep.nguoiXem, xem.thuHep.soNguoiGhiNhanDuoc]).toEqual([true, { ghiNhanDuoc: true, lyDo: null }, 4]);
+    expect([xem.dongSom.canGhiNhan, xem.dongSom.nguoiXem, xem.dongSom.soNguoiGhiNhanDuoc]).toEqual([true, { ghiNhanDuoc: true, lyDo: null }, 4]);
+    expect(xem.khaiThap.hienTai, "cùng bậc: không khai thấp").toBeNull();
+    expect((await docTh(t, rfqId, t.pm)).thuHep.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: "Ghi nhận tín hiệu của lượt mời thầu cần quyền duyệt trao thầu." });
+
+    expect((await ghiNhanTT(t, rfqId, t.gd2, "INVITE_LIST_NARROWED")).tinHieuMoi, "bằng chứng chưa đổi: ghi nhận lên hàng THU_HOI").toBe(false);
+    expect((await loi(duyetTho(t, rfqId, dx.awardId, t.gd1)))?.lyDo, "đóng sớm còn chờ").toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+    const sau = await docTh(t, rfqId, t.gd2);
+    expect([sau.thuHep.canGhiNhan, sau.dongSom.canGhiNhan]).toEqual([false, true]);
+    expect((await ghiNhanTT(t, rfqId, t.gd2, "EARLY_CLOSE")).tinHieuMoi).toBe(false);
+    expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_ACKNOWLEDGED", rfqId)).toBe(2);
+    expect((await duyetTho(t, rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
+    expect((await duyetTho(t, rfqId, dx.awardId, t.gd2)).status).toBe("APPROVED");
+    expect(await hangAward(rfqId)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+
+  it("[INV-K10c] ĐÓNG SỚM qua closeRfq: hàng EARLY_CLOSE/DONG_SOM ghi ở cạnh đóng — bằng chứng {hạn, lúc đóng, người đóng, lý do, số luồng báo giá}; LUẬT NGƯỜI: người đóng (gd1) ⇒ K10C_TU_GHI_NHAN, tác giả chính sách (tc) ⇒ K10C_TAC_GIA_CHINH_SACH, tc3 ghi nhận được; đóng sớm KHÔNG báo giá ⇒ không tín hiệu", async () => {
+    const t = await taoToChuc();
+    const { rfqId, loiMoi } = await goiDaMo(t, UL_BAC1, 2);
+    const { dx } = await chamVaDeXuat(t, rfqId, loiMoi, GIA_BAC1, t.gd1);
+    const th = await tinHieuCua(rfqId);
+    expect(th).toHaveLength(1);
+    expect([th[0]!.loai, th[0]!.nguon]).toEqual(["EARLY_CLOSE", "DONG_SOM"]);
+    const { han, dong_luc, ...bcDs } = th[0]!.bang_chung as { han: string; dong_luc: string } & Record<string, unknown>;
+    expect([han, dong_luc].map((x) => MOC_UTC.test(x))).toEqual([true, true]);
+    expect(bcDs).toEqual({ loai: "EARLY_CLOSE", chinh_sach: t.chinhSachId, goi: [rfqId], nguoi_dong: t.gd1.u, ly_do: "dong som de kiem tra", so_bao_gia: 2 });
+    expect(JSON.stringify(th[0]!.bang_chung), "bằng chứng không mang số tiền (ADR-054)").not.toContain("150000000");
+    expect(th[0]!.giai_thich).toMatch(/^Gói thầu đóng lúc .+, trước hạn .+, khi đã có 2 luồng báo giá\.$/u);
+
+    expect((await loi(ghiNhanTT(t, rfqId, t.gd1, "EARLY_CLOSE")))?.lyDo).toBe("K10C_TU_GHI_NHAN");
+    expect((await loi(ghiNhanTT(t, rfqId, t.tc, "EARLY_CLOSE")))?.lyDo).toBe("K10C_TAC_GIA_CHINH_SACH");
+    expect((await tuChoiChot(t.org, rfqId)).map((h) => h.ma)).toEqual(["K10C_TU_GHI_NHAN", "K10C_TAC_GIA_CHINH_SACH"]);
+    expect((await docTh(t, rfqId, t.gd1)).dongSom.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10C_TU_GHI_NHAN.thongDiep });
+    expect((await docTh(t, rfqId, t.gd1)).dongSom.soNguoiGhiNhanDuoc, "gd2, tc2, tc3 — không gd1 (đóng), không tc (tác giả)").toBe(3);
+    expect((await ghiNhanTT(t, rfqId, t.tc3, "EARLY_CLOSE")).tinHieuMoi).toBe(false);
+    expect((await duyetTho(t, rfqId, dx.awardId, t.gd2)).status).toBe("PROPOSED");
+
+    const g2 = await goiDaMo(t, UL_BAC1, 2);
+    await withTenant(apiPool, t.org, (c) => closeRfq(c, t.org, { rfqId: g2.rfqId, reason: "dong som khong bao gia", actorSessionId: t.pm.s }));
+    expect(await tinHieuCua(g2.rfqId)).toEqual([]);
+    expect((await db.pool.query<{ n: boolean }>("SELECT public.tin_hieu_dong_som($1, $2) IS NULL AS n", [t.org, g2.rfqId])).rows[0]!.n).toBe(true);
+  });
+
+  it("[INV-K10c] DƯỚI NGƯỠNG (bậc 1, ngưỡng 2): hai lời mời đếm được, thu hồi một ⇒ K10C_THU_HOI_THIEU_CANH_TRANH + CONTROL_DENIED, lời mời sống, không tín hiệu; lời mời KHÔNG đếm được thu hồi được (số nhóm không đổi) và vẫn vào tín hiệu; NGOẠI LỆ còn sống đúng loại cứu, sai loại không; TỔ CHỨC CHƯA BẬT thu hồi ở OPEN không lý do như MVP1", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t, UL_BAC1);
+    const dem = await moiDemDuoc(t, rfqId, 2);
+    const vo = await moiKhongDemDuoc(t, rfqId);
+    await nopKyMo(t, rfqId);
+    expect((await loi(thuHoi(t, dem[0]!.id, t.pm, LY_DO)))?.lyDo).toBe("K10C_THU_HOI_THIEU_CANH_TRANH");
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([{ ma: "K10C_THU_HOI_THIEU_CANH_TRANH", actorId: t.pm.u }]);
+    expect(await hangLoiMoi(dem[0]!.id)).toEqual({ status: "UNSENT", ly_do: null });
+    expect(await tinHieuCua(rfqId)).toEqual([]);
+    expect(await thuHoi(t, vo.id, t.pm, LY_DO), "nhà cung cấp vỏ không đếm: thu hồi không đổi số nhóm").toBe(true);
+    expect((await tinHieuCua(rfqId)).map((h) => (h.bang_chung.thu_hoi as { loi_moi: string }[]).map((x) => x.loi_moi))).toEqual([[vo.id]]);
+
+    // Ngoại lệ SAI loại không cứu: ba lời mời + LIMITED_COMPETITION lập ở DRAFT; thu hồi một ⇒ còn 2 ≥ 2 (qua); thu hồi hai ⇒ còn 1 lời mời sống — cần SINGLE_SOURCE.
+    const rfqB = await goiNhap(t, UL_BAC1);
+    const demB = await moiDemDuoc(t, rfqB, 3);
+    await withTenant(apiPool, t.org, (c) => lapNgoaiLe(c, t.org, { rfqId: rfqB, loai: "LIMITED_COMPETITION", maLyDo: "EMERGENCY", giaiTrinh: GIAI_TRINH, actorSessionId: t.pm.s }, apiPool));
+    await nopKyMo(t, rfqB);
+    expect(await thuHoi(t, demB[0]!.id, t.pm, LY_DO)).toBe(true);
+    expect((await loi(thuHoi(t, demB[1]!.id, t.pm, LY_DO)))?.lyDo, "ngoại lệ LIMITED_COMPETITION không cứu lần thu hồi để lại MỘT lời mời").toBe("K10C_THU_HOI_THIEU_CANH_TRANH");
+    // Ngoại lệ ĐÚNG loại cứu: hai lời mời + SINGLE_SOURCE lập ở DRAFT; thu hồi một ⇒ còn 1 < 2 nhưng ngoại lệ còn sống.
+    const rfqC = await goiNhap(t, UL_BAC1);
+    const demC = await moiDemDuoc(t, rfqC, 2);
+    await withTenant(apiPool, t.org, (c) => lapNgoaiLe(c, t.org, { rfqId: rfqC, loai: "SINGLE_SOURCE", maLyDo: "EMERGENCY", giaiTrinh: GIAI_TRINH, actorSessionId: t.pm.s }, apiPool));
+    await nopKyMo(t, rfqC);
+    expect(await thuHoi(t, demC[0]!.id, t.pm, LY_DO)).toBe(true);
+    expect(await hangLoiMoi(demC[0]!.id)).toEqual({ status: "REVOKED", ly_do: LY_DO });
+
+    const t0 = await taoToChuc(false);
+    const g0 = await goiDaMo(t0, UL_BAC1, 1);
+    expect(await thuHoi(t0, g0.loiMoi[0]!.id, t0.pm), "MVP1: thu hồi ở OPEN không lý do, không chốt").toBe(true);
+    expect(await tinHieuCua(g0.rfqId)).toEqual([]);
+    expect(await tuChoiChot(t0.org, g0.rfqId)).toEqual([]);
+  });
+
+  it("[INV-K10c] LỚP CHẶN CUỐI: chữ ký thô dưới app_api khi thu hẹp chưa ghi nhận ⇒ 23514 k10c_tin_hieu_chua_ghi_nhan, không hàng sổ; câu thu hồi thô ở OPEN không lý do ⇒ k10c_thu_hoi_thieu_ly_do; dưới ngưỡng ⇒ k10c_thu_hoi_thieu_canh_tranh", async () => {
+    const t = await taoToChuc();
+    const { rfqId, loiMoi } = await goiDaMo(t, UL_BAC1, 3);
+    expect(await thuHoi(t, loiMoi[2]!.id, t.pm, LY_DO)).toBe(true);
+    const { dx } = await chamVaDeXuat(t, rfqId, loiMoi, GIA_BAC1);
+    await ghiNhanTT(t, rfqId, t.gd2, "EARLY_CLOSE");
+    const truoc = await tuChoiChot(t.org, rfqId);
+    const tho = await loi(
+      withTenant(apiPool, t.org, (c) =>
+        c.query("INSERT INTO public.rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)", [t.org, dx.awardId, t.gd1.u, t.gd1.s]),
+      ),
+    );
+    expect([tho?.code, tho?.constraint]).toEqual(["23514", "k10c_tin_hieu_chua_ghi_nhan"]);
+    expect(await tuChoiChot(t.org, rfqId), "câu đi tắt: không hàng sổ nào thêm").toEqual(truoc);
+    expect(await chuKy(dx.awardId)).toEqual([]);
+
+    const gA = await goiDaMo(t, UL_BAC1, 3);
+    const thieuLyDo = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_THU_HOI_THO, [gA.loiMoi[0]!.id, t.pm.u, t.pm.s, null])));
+    expect([thieuLyDo?.code, thieuLyDo?.constraint]).toEqual(["23514", "k10c_thu_hoi_thieu_ly_do"]);
+    const gB = await goiDaMo(t, UL_BAC1, 2);
+    const duoiNguong = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_THU_HOI_THO, [gB.loiMoi[0]!.id, t.pm.u, t.pm.s, LY_DO])));
+    expect([duoiNguong?.code, duoiNguong?.constraint]).toEqual(["23514", "k10c_thu_hoi_thieu_canh_tranh"]);
+    expect(await hangLoiMoi(gB.loiMoi[0]!.id)).toEqual({ status: "UNSENT", ly_do: null });
+  });
+
+  it("[INV-K10c] ĐỘT BIẾN: `award_chot_tin_hieu` bỏ hàm thu hẹp / bỏ hàm đóng sớm ⇒ chữ ký đi qua không ai đọc; `tin_hieu_thu_hep` không bao giờ bắn ⇒ thu hồi không để hàng; `rfq_chot_thu_hoi` RETURN NULL ⇒ dưới ngưỡng đi qua; luật người bỏ vế người gây ra ⇒ người thu hồi tự ghi nhận được", async () => {
+    const t = await taoToChuc();
+    const { rfqId, loiMoi } = await goiDaMo(t, UL_BAC1, 3);
+    expect(await thuHoi(t, loiMoi[2]!.id, t.pm, LY_DO)).toBe(true);
+    const { dx } = await chamVaDeXuat(t, rfqId, loiMoi, GIA_BAC1);
+    await voiDotBien("public.award_chot_tin_hieu(uuid, uuid)", "bc := public.tin_hieu_thu_hep(p_org, p_rfq);", "bc := NULL;", async () => {
+      expect((await duyet(t, rfqId, dx.awardId, t.gd1)).status, "đột biến: thu hẹp không còn hỏi (đóng sớm đã được gd2 ghi nhận)").toBe("PROPOSED");
+    });
+    expect((await loi(duyetTho(t, rfqId, dx.awardId, t.gd2)))?.lyDo, "hàm thật: thu hẹp vẫn chưa ai ghi nhận").toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+
+    const g2 = await goiDaCham(t, UL_BAC1, GIA_BAC1);
+    const dx2 = await deXuat(t, g2.rfqId, g2.banRo[0]!);
+    await voiDotBien("public.award_chot_tin_hieu(uuid, uuid)", "bc := public.tin_hieu_dong_som(p_org, p_rfq);", "bc := NULL;", async () => {
+      expect((await duyetTho(t, g2.rfqId, dx2.awardId, t.gd1)).status, "đột biến: đóng sớm không còn hỏi").toBe("PROPOSED");
+    });
+    expect((await loi(duyetTho(t, g2.rfqId, dx2.awardId, t.gd2)))?.lyDo).toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+
+    const g3 = await goiDaMo(t, UL_BAC1, 3);
+    await voiDotBien("public.tin_hieu_thu_hep(uuid, uuid)", "AND i.revoked_at >= mo;", "AND false;", async () => {
+      expect(await thuHoi(t, g3.loiMoi[2]!.id, t.pm, LY_DO)).toBe(true);
+      expect(await tinHieuCua(g3.rfqId), "đột biến: tín hiệu không bao giờ bắn").toEqual([]);
+    });
+    expect((await docTh(t, g3.rfqId, t.gd2)).thuHep.hienTai, "hàm thật: tín hiệu hiện tại có, hàng thì chưa — lần ghi nhận sẽ lưu nó").not.toBeNull();
+
+    const g4 = await goiDaMo(t, UL_BAC1, 2);
+    await voiDotBien("public.rfq_chot_thu_hoi(uuid, uuid, uuid)", "RETURN 'K10C_THU_HOI_THIEU_CANH_TRANH';", "RETURN NULL;", async () => {
+      expect(await thuHoi(t, g4.loiMoi[0]!.id, t.pm, LY_DO), "đột biến: dưới ngưỡng đi qua").toBe(true);
+    });
+
+    const t5 = await taoToChuc();
+    const g5 = await goiDaMo(t5, UL_BAC1, 3);
+    expect(await thuHoi(t5, g5.loiMoi[2]!.id, t5.tc3, LY_DO), "tc3 thu hồi — người gây ra tín hiệu").toBe(true);
+    await chamVaDeXuat(t5, g5.rfqId, g5.loiMoi, GIA_BAC1);
+    expect((await loi(ghiNhanTT(t5, g5.rfqId, t5.tc3, "INVITE_LIST_NARROWED")))?.lyDo, "hàm thật").toBe("K10C_TU_GHI_NHAN");
+    await voiDotBien("public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)", "RETURN 'K10C_TU_GHI_NHAN';", "RETURN NULL;", async () => {
+      expect((await ghiNhanTT(t5, g5.rfqId, t5.tc3, "INVITE_LIST_NARROWED")).tinHieuMoi, "đột biến: người thu hồi tự ghi nhận").toBe(false);
+    });
+  });
+
+  it("[INV-K10c] K12: tập mã K10c trong thân bốn hàm SQL = các dòng `chot: K10c` của CHOT_VAO_SO; tên ràng buộc k10c_* KHÔNG ở CHOT_THEO_RANG_BUOC (ADR-120)", async () => {
+    const { rows } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_tin_hieu(uuid, uuid)'::regprocedure, 'public.rfq_chot_thu_hoi(uuid, uuid, uuid)'::regprocedure, " +
+        "'public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)'::regprocedure, 'public.tin_hieu_kiem_ghi_nhan()'::regprocedure)",
+    );
+    const trongThan = [...new Set(rows.flatMap((r) => [...r.prosrc.matchAll(/'(K10C_\w+)'/gu)].map((m) => m[1])))].sort();
+    const trongBang = Object.entries(CHOT_VAO_SO).filter(([, d]) => d.chot === "K10c").map(([k]) => k).sort();
+    expect(trongThan).toEqual(trongBang);
+    expect(trongBang).toEqual(["K10C_TAC_GIA_CHINH_SACH", "K10C_THU_HOI_THIEU_CANH_TRANH", "K10C_TIN_HIEU_CHUA_GHI_NHAN", "K10C_TU_GHI_NHAN"]);
+    const { rows: rb } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.award_kiem_tin_hieu_khai_thap()'::regprocedure)",
+    );
+    const ten = [...new Set(rb.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(k10c_\w+)'/gu)].map((m) => m[1])))].sort();
+    expect(ten).toEqual(["k10c_thu_hoi_thieu_canh_tranh", "k10c_thu_hoi_thieu_ly_do", "k10c_tin_hieu_chua_ghi_nhan"]);
+    expect(Object.keys(CHOT_THEO_RANG_BUOC).filter((k) => k.startsWith("k10c_"))).toEqual([]);
   });
 });
 

@@ -216,6 +216,12 @@
       <thead><tr><th>Nhà cung cấp</th><th>Người liên hệ</th><th>Kênh</th><th>Trạng thái</th><th id="th-xac-minh" hidden>Đã xác minh</th><th id="th-dem" hidden>Đếm được</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
+    <!-- [S1.289 / S3.6c / K10c] Thu hồi ở gói ĐANG MỞ của tổ chức đã bật phải có lý do: nó vào tín hiệu thu hẹp danh sách mời (chữ ký
+         duyệt trao thầu đòi một người ngoài gói đọc) và vào sổ kiểm toán. Thu hồi làm danh sách rơi dưới ngưỡng cạnh tranh bị chặn. -->
+    <div id="khoi-ly-do-thu-hoi" hidden>
+      <label for="ly-do-thu-hoi">Lý do thu hồi (gói đang mở — vào tín hiệu thu hẹp danh sách mời và sổ kiểm toán)</label>
+      <input id="ly-do-thu-hoi" autocomplete="off" placeholder="Nhà cung cấp báo hết hàng; thu hồi để mời đơn vị khác">
+    </div>
     <div class="bao loi" id="loi5" hidden></div>
     <div class="bao ok" id="ok5" hidden></div>
     <!-- [S1.273 / S3.3e1] Ngoại lệ cạnh tranh (spec S3 §4.4): lập và rút chỉ ở DRAFT, nằm trong băm danh sách người duyệt ký; tác giả
