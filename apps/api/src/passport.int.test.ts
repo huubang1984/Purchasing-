@@ -437,7 +437,7 @@ describe("[S1.9101 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () 
     expect(duoiNguoiMua.passport_sessions).toBeGreaterThanOrEqual(2);
   });
 
-  it("[INV-A5] phiên khách của LỜI MỜI (GUC khách đặt, GUC Passport rỗng) thấy 0 phiên bản Passport; GUC Passport lạ một mình không mở gì", async () => {
+  it("[INV-A5] phiên khách của LỜI MỜI (GUC khách đặt, GUC Passport rỗng) thấy 0 phiên bản Passport; GUC Passport của nhà cung cấp khác không mở gì", async () => {
     const t = await taoToChuc();
     const a = await ncc(t);
     const cookieA = await moPhien(t, a, (await yeuCau(t, a)).token!);
@@ -452,6 +452,7 @@ describe("[S1.9101 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () 
       });
     const khach = "00000000-0000-4000-8000-0000000000aa";
     expect(await dem(khach, ""), "phiên khách lời mời").toBe(0);
+    expect(await dem(khach, "00000000-0000-4000-8000-0000000000bb"), "GUC Passport của nhà cung cấp khác").toBe(0);
     expect(await dem(khach, a.ncc), "đối chứng: đúng cặp GUC của phiên Passport").toBe(1);
   });
 
