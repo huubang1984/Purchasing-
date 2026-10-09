@@ -7276,7 +7276,7 @@ S3.x.
 
 ## ADR-081 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139) · Liên quan: **ADR-013** §4, ADR-015,
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139); **[S1.287 / S3.7a1]** ⑴ ⑶ ⑷ cài ở ADR-159 (đường Passport), ⑵ thẩm định và ⑸ ở S3.7a2 · Liên quan: **ADR-013** §4, ADR-015,
 ADR-016, ADR-017, ADR-051, ADR-080, ADR-082 ⑹ · Spec S3 §2.3 (b), §4.8
 
 **Bối cảnh.** ADR-013 §4 đòi một ADR mới cho Level 2, và ADR ấy phải trả lời câu hỏi oracle MST. Chủ dự án đưa trọn
@@ -12597,3 +12597,95 @@ hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm
 ### Điều ADR này KHÔNG nói
 
 - Lời khai thành cam kết, lưu cùng award, giải trình khi hạng giá khác hạng TCO (S4.7c).
+---
+
+## ADR-159 — S3.7a1: Supplier Passport — link, OTP khác kênh và phiên của NHÀ CUNG CẤP (đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất), phiên bản hồ sơ chỉ-ghi-thêm, số tài khoản là ranh giới cột ở tầng mã; S3.7 chia ba PR
+
+**Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-08: *"Làm 2 đi, S3.7 trong lúc chờ"*; chọn chia ba PR
+(⑴) và chốt hai câu sau lượt soi hình dạng (⑵ đòi K8a, ⑺ ranh giới cột ở tầng mã) — cả ba theo khuyến nghị; phần còn lại theo đề xuất
+của lượt soi · **[S1.287]** · **Liên quan:** ADR-013, ADR-015, ADR-016, ADR-018, ADR-020, ADR-060, ADR-080, **ADR-081**, ADR-082 ⑹,
+ADR-084 ⑵, ADR-109, ADR-110 · **Spec:** S3 §4.8, §5 K11, §8.6, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md` §S1.287
+
+### Bối cảnh
+
+ADR-081 chốt Passport là hồ sơ THEO TỪNG TỔ CHỨC MUA, thẩm định hai cấp, và phiên Passport đặt CHÍNH `app.guest_session_id` — vì mọi
+policy `_khach` hỏi đúng literal ấy, và bảng phiên/OTP của lời mời mang `invitation_id NOT NULL` (`010`). Tới vòng này không dòng mã nào
+của Passport tồn tại. S3.7 là hạng mục lớn nhất của S3: một đường đăng nhập mới cho người ngoài tổ chức, một cột tài chính, và K8b ở
+trao thầu. Hai lượt soi đối kháng chạy trên hình dạng CHƯA CÀI (biên bản §S1.287 mục 2): đường Passport 0 CAO, 6 TRUNG, 10 THẤP;
+thẩm định + K8b 2 CAO, 6 TRUNG — phần K8b để dành S3.7a2.
+
+### Quyết định
+
+⑴ **S3.7 (trừ S3.7b — tài liệu đính kèm, chờ ADR (c)) chia ba PR:** **S3.7a1** đường Passport (vòng này); **S3.7a2** thẩm định
+(`supplier_qualifications`), K8b ở chữ ký trao thầu và hàng `APPROVED`, yêu cầu tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger
+khuôn `033`, kịch bản 41 đi qua Passport; **S3.7a3** màn thẩm định ở `/nha-cung-cap`, chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, T4.
+Giữa a2 và a3 người demo không trao được gói bậc 2 trên màn — khoảng trống cùng loại S3.6b1 → b2.
+
+⑵ **Yêu cầu hồ sơ (`supplier_passport_requests`, chỉ-ghi-thêm).** Một lý do hôm nay: `MANUAL`, dưới `supplier.qualify` (route, hàm gói,
+trigger). Hàm vị từ `passport_chot_yeu_cau` (khuôn K12: tầng gói hỏi trước, trigger hỏi lại, tên ràng buộc bằng chính mã) trả sáu mã:
+tổ chức chưa bật; nhà cung cấp không ACTIVE/không MST; **chưa có xác minh K8a còn hiệu lực** (chủ dự án chốt — một người thứ hai đã
+xác nhận MST và MỌI đích liên hệ, nên người dựng hồ sơ không cài được người liên hệ của mình làm nơi nhận link); người liên hệ không thuộc
+nhà cung cấp hay không ACTIVE; người liên hệ thiếu số điện thoại (link đi EMAIL ⇒ OTP phải đi máy điện thoại); quá trần ba yêu cầu một
+giờ một nhà cung cấp (đếm cả yêu cầu đã bị thay — một người trong tổ chức không giữ nhà cung cấp mãi ở ngoài bằng cách gửi liên tục).
+Lời từ chối của vị từ là cấu hình/dữ liệu chưa sẵn sàng, không phải đi tắt — không vào sổ (ADR-060); thiếu quyền là `PERMISSION_DENIED`.
+
+⑶ **Token (`supplier_passport_tokens`) ràng vào yêu cầu và lưu KÊNH của link.** Băm SHA-256 trần của 32 byte ngẫu nhiên, một mục đích,
+hạn ≤ 7 ngày bằng CHECK. Trigger đòi token đúc trong CÙNG giao dịch, bởi CÙNG người và phiên với yêu cầu; khoá ngoại hợp thành giữ nhà
+cung cấp và người liên hệ trùng yêu cầu; `UNIQUE (org_id, request_id)`. **Một nhà cung cấp có tối đa một link sống**: yêu cầu mới THU HỒI
+mọi link chưa dùng VÀ mọi phiên Passport còn sống của nhà cung cấp — đó là đường bên mua cắt một người nhận nhầm và gỡ một khoá OTP.
+Gửi sau commit, at-most-once; gửi hỏng ⇒ thu hồi token vừa đúc (khuôn ADR-110), yêu cầu ở lại, phản hồi nói *chưa gửi*.
+
+⑷ **OTP và phiên — bảng RIÊNG (ADR-081 ⑶), khuôn đường lời mời sau `012`/`015`/`022`/`024`.** OTP khác LỚP đích với kênh ĐÃ LƯU của link
+(không với một giả định); khoá ở cấp token; `failed_attempts` không giảm; bucket hạn mức MỚI `PASSPORT` theo nhà cung cấp (khoá theo
+token thì mỗi lần đúc lại có ngân sách mới), cùng ba bucket người gọi/đích/đích toàn tổ chức. Câu tiêu thụ token đòi chưa thu hồi và chưa
+hết hạn theo `clock_timestamp()`, kiểm `rowCount`; trigger của phiên dẫn xuất danh tính từ thách thức đã đối chiếu và đọc token
+`FOR SHARE` — một lần thu hồi commit trước câu mở phiên thì phiên không ra. Phiên ≤ 12 giờ bằng CHECK, mặc định 4 giờ; không GRANT
+INSERT cột `id`. Mã nguồn dùng lại các bản vá đã đo của `invitation.ts` (`bam`, `sinhMaOtp`, `demVaTang`, H4, MED-2) — `export` trong
+gói, không qua mặt tiền; mặt tiền giữ E2: không hàm nào trả phiên từ token.
+
+⑸ **Cô lập — phiên đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất `app.passport_supplier_id`.** `withPassportSession` dẫn xuất nhà
+cung cấp từ hàng phiên, từ chối phiên chết, và ĐỌC LẠI năm trục — hai GUC của lời mời phải rỗng; `withGuestSession` đòi GUC Passport
+rỗng. `withTenant`, `vai-tro.ts`, `migrate.ts` học tên GUC thứ năm. Chỉ MỘT policy nới: `supplier_passport_versions_khach` mở theo GUC
+dẫn xuất (đọc); bốn bảng còn lại đóng mặc định, kể cả `passport_sessions` (lần tra phiên chạy trước khi đặt GUC). Mọi policy `_khach` cũ
+đóng với phiên Passport (liệt kê đủ ở biên bản: GUC lời mời rỗng ⇒ NULL; `guest_sessions.id` không trùng id phiên Passport). Route ghi
+chạy dưới kết nối KHÔNG GUC khách (khuôn route ghi của khách — `028`), trigger ràng phiên ↔ nhà cung cấp. Audience MỚI `PASSPORT`
+(cookie `__Host-tp_passport`, tiền tố `/passport` được lớp canh bảng route ép); ba bước vô danh ở `/guest/passport/*`, POST, trần người
+gọi (bước phát OTP miễn ở dispatcher vì trần nằm trong hàm, như `/guest/otp`).
+
+⑹ **Phiên bản hồ sơ (`supplier_passport_versions`) chỉ-ghi-thêm**, khuôn `vendor_bid_versions`: tên pháp lý, MST, người đại diện, địa
+chỉ, ngân hàng, số tài khoản, chứng nhận và nhóm hàng (danh sách ≤ 20 mục, văn bản tự do — danh mục nhóm hàng của bên mua đóng với phiên
+khách). `thu_tu` dưới khoá tư vấn THEO NHÀ CUNG CẤP hạt giống 7 — CÙNG hạt của xác minh: mọi lần ghi về độ tin của một nhà cung cấp xếp
+một hàng. Trigger đòi phiên sống, đúng nhà cung cấp, trần năm phiên bản một phiên. CHECK hình dạng: MST như `008`; số tài khoản CHỈ chữ
+số; văn bản một dòng không ký tự điều khiển hay ký tự định hướng (bidi). MST hồ sơ lệch MST bản ghi KHÔNG chặn nộp — lời đọc của bên mua
+nói `mstKhop`, thẩm định (a2) từ chối (ADR-081 ⑴). Level 2 vẫn là suy diễn (ADR-081 ⑷).
+
+⑺ **Số tài khoản — ranh giới cột ở TẦNG MÃ** (chủ dự án chốt; khuôn `don_gia`): cột chỉ được ĐỌC ở `packages/supplier/src/passport.ts`,
+đúng ba câu — bốn số cuối cho phiên Passport; số đầy đủ của phiên bản mới nhất sau `supplier.qualify`, mỗi lần đọc để một hàng
+`PASSPORT_VIEWED`; bốn số cuối và cờ *đổi tài khoản* của lịch sử. Không câu nào đọc cả hàng; không migration, view hay hàm nào đọc cột;
+bộ bằng chứng không chạm bảng Passport; payload sổ không mang khoá số tài khoản (`tests/architecture/so-tai-khoan-liet-ke.test.ts`).
+Phiên bản mới phải nhập lại đủ số — một cookie bị lấy không đọc ngược được số đã nộp. Phương án loại: mã hoá cột (vòng khoá bí mật thứ
+tư ở cấu hình triển khai — `cau-hinh.ts` đòi các vòng đôi một khác nhau), REVOKE cột khỏi `app_api` (mọi người đọc đều chạy vai ấy),
+SECURITY DEFINER (hardening (C) cấm).
+
+⑻ **Sổ:** `PASSPORT_REQUESTED`, `PASSPORT_TOKEN_ISSUED`, `PASSPORT_TOKEN_REVOKED`, `PASSPORT_VIEWED` (người mua); `PASSPORT_OTP_ISSUED`,
+`PASSPORT_SESSION_STARTED`, `PASSPORT_VERSION_SUBMITTED`, `PASSPORT_SESSION_REVOKED` (actor SUPPLIER = người liên hệ đã giữ kênh, E5).
+Payload mang thứ tự, id, lý do — không một trường hồ sơ, token, mã hay đích.
+
+⑼ **Màn `/ho-so`** (khuôn `/nop-thau`): link `#<orgId>:<mã>` → OTP → form điền từ phiên bản trước TRỪ số tài khoản → nộp; xoá mảnh
+link sau xác minh; hỏi (không tự mở) khi trình duyệt còn phiên; thoát phiên. Ba bộ gửi dựng `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`);
+bộ gửi theo kênh chỉ nhận EMAIL cho link Passport.
+
+### Cái giá, nói thẳng
+
+- **Nhà cung cấp chưa xác minh không nhận được link** — một người thứ hai bên mua xác minh trước. Người liên hệ thiếu số điện thoại
+  cũng không nhận được.
+- **Rủi ro còn lại của số tài khoản:** log tham số của Postgres (nếu bật — hardening (E4) chỉ cảnh báo) và bản sao lưu giữ số rõ. Mối
+  đe doạ chính của cột là bị TRÁO, không phải bị ĐỌC; tráo là việc của K8b (thẩm định trỏ phiên bản MỚI NHẤT, a2).
+- **Một yêu cầu mới cắt phiên đang dùng dở của nhà cung cấp** — cố ý (đường cắt người nhận nhầm), nên trần ba yêu cầu một giờ giữ nó khỏi
+  thành công cụ quấy.
+- **Vòng quét rò của kịch bản 41 chưa gọi được hai route ghi của phiên Passport tới nghiệp vụ** (kịch bản chưa mở phiên Passport — a2).
+
+### Điều ADR này KHÔNG nói
+
+Thẩm định, K8b, yêu cầu tự sinh lúc đề xuất, cổng K9 ở thẩm định, cặp trigger `033` (S3.7a2); màn thẩm định (S3.7a3); tài liệu đính kèm
+(S3.7b); vế view hiệu suất của K11 (S3.8). Chống ba pháp nhân cùng một chủ (ADR-058) — không.

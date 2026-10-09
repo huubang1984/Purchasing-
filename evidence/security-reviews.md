@@ -26751,3 +26751,221 @@ một quyết định sản phẩm — đã đề xuất thành việc riêng.
   (L16 ở `guest.int` và `bac-mac-dinh-dong-bo`) chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai hai cặp kèm câu đo gì, chạy lại
   BƯỚC 2 (bộ sinh) trên cùng báo cáo: **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận: L8 49 → 51
   khẳng định, L16 31 → 38.
+# §S1.287 — S3.7a1: SUPPLIER PASSPORT — BÊN MUA YÊU CẦU HỒ SƠ, LINK TỚI NGƯỜI LIÊN HỆ ĐÃ XÁC MINH (K8a), OTP KHÁC LỚP ĐÍCH, PHIÊN `PASSPORT` CHỈ THẤY HỒ SƠ CỦA MÌNH, PHIÊN BẢN HỒ SƠ CHỈ-GHI-THÊM; SỐ TÀI KHOẢN LÀ RANH GIỚI CỘT Ở TẦNG MÃ; LƯỢT ĐI THỬ T4 31/31 — ADR-159
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và mọi câu ghi mới đòi
+tổ chức đã bật (`PASSPORT_TO_CHUC_CHUA_BAT`). Thay đổi chạm mọi tổ chức: `withTenant`, `withGuestSession`, `vai-tro.ts`, `migrate.ts` đọc và
+dọn một GUC thứ năm (`app.passport_supplier_id`) — rỗng trên mọi đường cũ, nên hành vi y như trước (cụm test hiện có là đối chứng); CHECK
+`bucket_kind` của `otp_rate_limits` thêm `PASSPORT`. Migration `118_passport_nha_cung_cap`, ADR-159; không bất biến mới (ca mới mang nhãn
+A5, D5, E1, E2, E5), không khoản nợ mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-08, khi PR #259 (S3.5b) đang chờ CI: *"Làm 2 đi, S3.7 trong lúc chờ"*. S3.7 theo sổ spec S3 §9 là Supplier Passport cộng
+thẩm định đầy đủ (K8b) — hạng mục lớn nhất của S3: một đường đăng nhập mới cho người NGOÀI tổ chức, một cột tài chính, và một cổng mới ở
+trao thầu. Chia ba PR (§4); vòng này là **S3.7a1 — đường Passport**. Nhánh `s3-7-tham-dinh` dựng từ `master` `5ae1393a` (PR #259).
+
+## 2. Đo trước (đọc mã trên `5ae1393a`)
+- Không dòng mã Passport nào. Lượt tìm: `git grep -il passport 5ae1393a -- packages apps db tools` — ba tệp, cả ba là chú thích (`008` hai dòng
+  *Level 2 thuộc S3+*; `096` và `packages/du-lieu-nen/src/lich-su-gia.ts` khai *"phiên khách và phiên Passport ra 0 hàng nhờ RLS theo người
+  gọi"* — lời khai về một phiên chưa tồn tại; nay có phép đo, §6 D).
+- Bảng thách thức OTP và phiên khách mang `invitation_id uuid NOT NULL` (`010:86`, `:133`) ⇒ Passport cần bảng riêng (ADR-081 ⑶). Mọi
+  policy `_khach` (`027`) hỏi đúng literal `app.guest_session_id` ⇒ phiên Passport đặt CHÍNH GUC ấy thì mọi bảng cũ tự đóng.
+- Lớp canh bảng route chỉ cho ANON ở `/guest/*` và `/auth/*` (`route-types.ts:487`) ⇒ ba bước vô danh ở `/guest/passport/*`.
+- K8a đã có (S3.3e, `ncc_kiem_xac_minh`): một người thứ hai xác nhận MST và MỌI đích liên hệ của nhà cung cấp — là thứ duy nhất trong kho
+  nói *đích này đúng là của nhà cung cấp*.
+
+## 3. Lượt soi hình dạng — hai lượt đối kháng trên bản chốt CHƯA CÀI (2026-10-08/09)
+Bản chốt hình dạng (5 bảng, cô lập phiên, route, thẩm định, K8b) đưa cho hai lượt soi đối kháng, mỗi lượt đọc mã thật ở `5ae1393a`. Mỗi
+phát hiện được đo lại bằng tay trước khi nhận (lượt quét fan-out phải tự kiểm lại): F1 (`022:24-60` so lớp đích với `link_channel` ĐÃ LƯU),
+F7 (`unique-oracle.int.test.ts:130`), F8 (`invitation.ts:932-937` tiêu thụ token không vế `revoked_at`, không `rowCount`), F14
+(`buyer.ts:1503-1525` phần bù là thu hồi token).
+
+**Lượt A — đường Passport: 0 CAO, 6 TRUNG, 10 THẤP.** Mọi phát hiện đều đổi hình dạng trước dòng mã đầu:
+- T1 token không lưu kênh link ⇒ luật *OTP khác lớp đích* chỉ đúng nhờ trùng hợp ⇒ cột `link_channel` trên token, trigger OTP so lớp với nó.
+- T2 token không ràng vào yêu cầu ⇒ trigger đòi CÙNG giao dịch (`r.created_at = now()`), cùng người, cùng phiên; FK hợp thành giữ nhà
+  cung cấp và người liên hệ trùng yêu cầu; `UNIQUE (org_id, request_id)`.
+- T3 yêu cầu không trần, mỗi yêu cầu thu hồi link đang dùng ⇒ thành công cụ quấy ⇒ trần ba yêu cầu một giờ một nhà cung cấp (đếm cả yêu
+  cầu đã bị thay), dưới khoá tư vấn theo nhà cung cấp.
+- T4 không đường thu hồi phiên đang sống ⇒ yêu cầu mới thu hồi luôn mọi phiên Passport còn sống của nhà cung cấp (đường cắt người nhận nhầm).
+- T5 ranh giới cột chưa đủ cho log và bộ bằng chứng ⇒ (câu hỏi cho chủ dự án, §4) + một hàng sổ mỗi lần đọc đầy đủ; CHECK chỉ chữ số.
+- T6 link tới một người liên hệ chưa ai thứ hai xác nhận — người dựng hồ sơ cài người liên hệ của chính mình làm nơi nhận ⇒ (câu hỏi, §4).
+- THẤP: UNIQUE dẫn đầu `org_id` (H14); câu tiêu thụ token đua lần thu hồi ⇒ vế `revoked_at`, `rowCount`, trigger phiên đọc token
+  `FOR SHARE`; khoá OTP không đường gỡ ⇒ yêu cầu mới là đường gỡ; bảy cổng sẽ đỏ (liệt kê trước, §9 nói cổng nào đỏ thật); đọc lại đủ năm
+  GUC; không GRANT INSERT cột `id` của phiên; `passport_sessions_khach` để ĐÓNG (bản chốt định nới); trần phiên bản một phiên; gửi hỏng ⇒ thu
+  hồi token; CHECK trần TTL; CHECK ký tự điều khiển và định hướng.
+- Bốn điểm *chưa chắc* còn lại chốt theo đề xuất của lượt soi: audience MỚI `PASSPORT`; OTP/phiên/token ở mô-đun mới của `packages/invitation`,
+  yêu cầu/phiên bản ở `packages/supplier`; bucket `PASSPORT` khoá theo NHÀ CUNG CẤP (theo token thì mỗi lần đúc lại có ngân sách mới);
+  không route nào lộ đích liên hệ.
+
+**Lượt B — thẩm định và K8b: 2 CAO, 6 TRUNG, 5 THẤP** — để dành S3.7a2, ghi ở đây để vòng sau không phải soi lại từ đầu:
+- C1 ký trước rồi thẩm định sau lách ADR-081 ⑸ ⇒ trigger thẩm định chặn người đã KÝ một đề xuất `PROPOSED` sống của nhà cung cấp; hàng
+  `APPROVED` kiểm theo TẬP (người đề xuất ∪ người ký còn hiệu lực). C2 K8b không đòi K8a ⇒ (chủ dự án chốt, §4) đòi ở lúc thẩm định và
+  trong hàm hiệu lực của thẩm định.
+- TRUNG: trigger `APPROVED` từ chối SAU hàng sổ `SIGNED` ⇒ 500 không `CONTROL_DENIED` (dời hàng sổ, hay hỏi trong nhánh đủ chữ ký); ba
+  hạt khoá tư vấn cho cùng nhà cung cấp và đường trao thầu không khoá ⇒ MỘT hạt (7) cho xác minh, phiên bản, thẩm định — vòng này đã dùng
+  hạt 7 cho phiên bản; yêu cầu tự sinh lúc đề xuất có thể CHẶN đề xuất và tự khoá chuỗi sổ ⇒ vị từ không ném, bỏ qua có lý do; K9 ở thẩm
+  định chỉ là cổng lúc ghi (`coi_kiem_xac_minh` không khoá) ⇒ hiệu lực thẩm định thêm vế tác giả không `CO_XUNG_DOT`; người chọn người dự
+  thi tự thẩm định sau khi đổi vai ⇒ loại theo HÀNH VI; chữ ký cũ mang qua phiên bản Passport mới (CHỜ CHỦ DỰ ÁN ở a2: chỉ đếm chữ ký cùng
+  id thẩm định, hay huỷ và đề xuất lại).
+- THẤP: test sẽ đỏ còn sót (`canh-tranh-toi-thieu.int:598`, `xung-dot-loi-ich.int:819`, `bac-chinh-sach.int:883`); cặp trigger `033`;
+  tách mã `K8B_CHUA_THAM_DINH`; trigger RIÊNG cho `APPROVED`; người thẩm định vào tập loại trừ của trao thầu; CHECK `passport_version_id`
+  theo loại.
+
+## 4. Câu hỏi của chủ dự án (2026-10-08)
+Ba câu, mỗi câu khuyến nghị đứng đầu; chủ dự án chọn cả ba theo khuyến nghị:
+- **Chia S3.7 thành ba PR** — a1 đường Passport; a2 thẩm định + K8b + yêu cầu tự sinh + cổng K9 thứ tám + kịch bản 41 đi qua Passport;
+  a3 màn thẩm định, chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, T4. Giữa a2 và a3 người demo không trao được gói bậc 2 trên màn.
+- **Số tài khoản: ranh giới cột ở TẦNG MÃ**, không mã hoá (khuôn `don_gia`). Rủi ro còn lại nói thẳng lúc hỏi: log tham số của Postgres
+  (nếu bật — hardening (E4) chỉ cảnh báo) và bản sao lưu giữ số rõ; mối đe doạ chính của cột là bị TRÁO, không phải bị ĐỌC. Phương án loại:
+  mã hoá cột (vòng khoá bí mật thứ tư ở cấu hình triển khai), REVOKE cột khỏi `app_api` (mọi người đọc đều chạy vai ấy), SECURITY DEFINER
+  (hardening (C) cấm).
+- **Link Passport, lần thẩm định và hiệu lực của thẩm định ĐỀU đòi K8a còn hiệu lực** — vòng này cài vế của link.
+
+## 5. Thay đổi
+- **Migration `118_passport_nha_cung_cap`** — năm bảng, ENABLE + FORCE RLS, `tenant_isolation` + `_khach` RESTRICTIVE, GRANT theo cột,
+  trigger ENABLE ALWAYS: `supplier_passport_requests` (chỉ-ghi-thêm; một lý do `MANUAL`); `supplier_passport_tokens` (băm 32 byte, một mục
+  đích, `link_channel`, hạn ≤ 7 ngày bằng CHECK; cột thu hồi/tiêu thụ đơn điệu); `passport_otp_challenges` (khuôn `012`/`015`/`022`/`024`;
+  `failed_attempts` không giảm, gỡ khoá không xoá dấu vết); `passport_sessions` (≤ 12 giờ bằng CHECK, không GRANT INSERT cột `id`);
+  `supplier_passport_versions` (chỉ-ghi-thêm; CHECK hình dạng — MST như `008`, số tài khoản chỉ chữ số, văn bản một dòng không ký tự điều
+  khiển hay định hướng, danh sách ≤ 20 mục). Sáu hàm: vị từ `passport_chot_yeu_cau` (khuôn K12 — gói hỏi trước, trigger hỏi lại; sáu mã
+  `PASSPORT_TO_CHUC_CHUA_BAT`, `_NCC_KHONG_HOP_LE`, `_NCC_CHUA_XAC_MINH`, `_LIEN_HE_KHONG_HOP_LE`, `_LIEN_HE_THIEU_KENH_OTP`,
+  `_QUA_TRAN_YEU_CAU`) và năm hàm trigger (yêu cầu, token, kênh OTP, danh tính phiên, phiên bản). Khoá tư vấn theo nhà cung cấp hạt 7 —
+  CÙNG hạt của xác minh K8a. Chỉ `supplier_passport_versions_khach` nới (USING `… IS NULL OR supplier_id = app.passport_supplier_id`, WITH
+  CHECK đóng); bốn bảng còn lại đóng với mọi phiên khách. `otp_rate_limits.bucket_kind` thêm `PASSPORT`.
+- **Hardening** (`hardening.always.sql`): sáu khối ghim thân hàm, `TRIGGER_DUOC_PHEP` của năm bảng (kể cả các trigger dùng hàm chung
+  `kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them`, `thu_hoi_don_dieu`, `otp_go_khoa_khong_xoa_dau_vet`), mười hai hàng `CHECK_AN_NINH_KHAI`,
+  `BANG_TENANT_KHAI`, một hàng `POLICY_RESTRICTIVE_KHAI` — sinh từ catalog của một cụm `postgres:16-alpine` dùng một lần; `migrate()` hai lần
+  trên CSDL mới (113 tệp, lần hai 0), thân mới sống qua hardening.
+- **Tenancy:** GUC thứ năm ở mọi chỗ `withTenant` liệt kê (đọc lúc BEGIN, dọn về rỗng, RESET, đọc lại ở `finally`), `vai-tro.ts`, `migrate.ts`
+  (ba chỗ); `withPassportSession(pool, org, phiên, fn)` dẫn xuất nhà cung cấp từ hàng `passport_sessions`, từ chối phiên chết, ĐỌC LẠI năm
+  trục (hai GUC lời mời phải rỗng); `withGuestSession` đòi GUC Passport rỗng.
+- **Gói:** `packages/invitation/src/passport.ts` — đúc/thu hồi token, redeem, phát và đối chiếu OTP, mở/tra/thu hồi phiên; dùng lại các bản
+  vá đã đo của `invitation.ts` (`bam`, `sinhMaOtp`, `demVaTang` thêm loại `PASSPORT`) qua `export` trong gói, mặt tiền giữ E2 (không hàm nào
+  trả phiên từ token). `packages/supplier/src/passport.ts` — yêu cầu (hỏi vị từ trước, thu hồi link và phiên cũ, đúc token cùng giao dịch),
+  nộp phiên bản, hai lời đọc; `PassportYeuCauError`.
+- **Số tài khoản (ADR-159 ⑺):** cột chỉ được ĐỌC ở `packages/supplier/src/passport.ts`, đúng ba câu — bốn số cuối cho phiên Passport;
+  số đầy đủ của phiên bản mới nhất sau `supplier.qualify` (cổng TRONG hàm gói), mỗi lần đọc một hàng `PASSPORT_VIEWED`; bốn số cuối và cờ
+  *đổi tài khoản* của lịch sử. Cổng `tests/architecture/so-tai-khoan-liet-ke.test.ts` (mới): tệp chạm bảng đúng bằng danh sách, ba câu đọc,
+  không câu đọc cả hàng, không migration/view/hàm nào nhắc cột ngoài tệp dựng bảng và tệp ghim, bộ bằng chứng không chạm bảng Passport,
+  payload sổ không mang khoá số tài khoản; đối chứng của bộ dò (mỗi cách đọc không viết tên cột đều bị nêu).
+- **API:** audience `PASSPORT` (cookie `__Host-tp_passport`, nhánh riêng ở `dispatch.ts`, đường đọc chạy dưới `withPassportSession`); ba
+  route vô danh `POST /guest/passport/{redeem,otp,otp/verify}`; `GET /passport`, `POST /passport/versions`, `POST /passport/logout`; bên mua
+  `POST /suppliers/:supplierId/passport-requests` (`supplier.qualify`; gửi sau commit, gửi hỏng ⇒ thu hồi token vừa đúc, 201 *chưa gửi*) và
+  `GET /suppliers/:supplierId/passport` (`agent: false`). Bộ gửi `PASSPORT_LINK` ở ba adapter (`hop-thu-dev`, `gui-ses`, `kenh-so` — kênh số
+  chỉ nhận EMAIL cho link); `pilot-gia-lap` học loại thư mới; MCP khai hai route bên mua là ngoài tầm agent.
+- **Màn `/ho-so`** (`apps/web/trang/ho-so.{html,js}`, hàm thuần `apps/web/src/ho-so.ts` phục vụ ở `/lib/ho-so.js`): link `#<orgId>:<mã>` →
+  chọn kênh OTP (chỉ các kênh khác lớp với link) → mã → form điền từ phiên bản trước TRỪ số tài khoản → nộp → ô số tài khoản xoá ngay, tóm
+  tắt chỉ bốn số cuối đã che; mảnh link xoá khỏi thanh địa chỉ sau xác minh; trình duyệt còn phiên thì HỎI, không tự mở; *Thoát*.
+- Sổ đăng ký và cổng: `rls-coverage`, `check-an-ninh`, `migrations.int`, `hardening-suy-tu-tinh-chat`, `danh-sach-ham-canh`,
+  `migration-shape`, `barrel-exports`, `cong-quyen-route`, `viec-sau-commit`, `routes.test.ts` (miễn trần, định danh), `so-khai-nhan`, kịch
+  bản 41 HTTP (thân cho vòng quét rò, §9). Tài liệu: ADR-159, ADR-081 (trỏ trạng thái), spec §9 dòng S3.7, TEST-PLAN (ngoặc của L6), STATE.
+
+## 6. Phép đo
+- `apps/api/src/passport.int.test.ts` (mới), sáu khối:
+  - **A** luồng trọn qua HTTP (`[INV-E2] [INV-E5]`): yêu cầu → link qua EMAIL → OTP qua SMS → phiên → nộp; nhà cung cấp thấy bốn số cuối,
+    bên mua thấy số đầy đủ và để đúng một hàng `PASSPORT_VIEWED`; người không giữ `supplier.qualify` đọc ⇒ 403 + một `PERMISSION_DENIED`,
+    route không cho agent (`[INV-D5]`).
+  - **B** mỗi vế của vị từ ra một mã có tên, 422, không token nào được đúc; 403 ở cổng route; trần ba yêu cầu một giờ ⇒ 429 có
+    `Retry-After`; câu ghi thô dưới `app_api` vượt tầng gói ⇒ trigger từ chối có tên.
+  - **C** (`[INV-E1]`) yêu cầu mới ⇒ cookie phiên cũ 401, link cũ chưa dùng 422, sổ đếm đúng số đã thu hồi; bộ gửi hỏng ⇒ 201 *chưa gửi*,
+    token vừa đúc bị thu hồi, sổ có `PASSPORT_TOKEN_REVOKED`.
+  - **D** cô lập (`[INV-A5]`): phiên Passport của A thấy đúng một phiên bản (của A) và **0 hàng ở mọi bảng RLS khác** (bộ quét đọc
+    `pg_class` — mọi bảng `relrowsecurity` mà `app_api` đọc được, > 40), đối chứng dương dưới kết nối người mua; qua HTTP A đọc lại hồ sơ
+    của A dù B nộp SAU; phiên khách của LỜI MỜI thấy 0 phiên bản khi GUC Passport rỗng lẫn khi nó mang id một nhà cung cấp khác; cookie không lẫn đối tượng (cookie Passport ở route
+    khách và ngược lại đều 401); sau *Thoát*: `GET`, `POST /passport/versions` và lần thoát thứ hai đều 401.
+  - **E** trigger của năm bảng dưới `app_api`: token đúc ở giao dịch khác bị từ chối, token sống thứ hai cho cùng nhà cung cấp bị từ chối;
+    OTP cùng lớp đích với kênh ĐÃ LƯU bị từ chối; phiên từ thách thức chưa đối chiếu hay từ token đã thu hồi bị từ chối; phiên bản từ phiên
+    đã thu hồi, phiên của A ghi cho B, phiên bản thứ sáu của một phiên đều bị từ chối.
+  - **F** bảy đột biến lớp CSDL lúc chạy (§7).
+- Web: `apps/web/src/ho-so.test.ts` (bốn ca: kiểm form theo thứ tự ô, chuẩn hoá số tài khoản, tách danh sách, che bốn số cuối); `phuc-vu.test.ts`
+  năm ca của trang (luồng trọn điện thoại, câu lỗi gọi tên ô và không gọi nộp, hỏi-khi-còn-phiên rồi *Thoát*, câu gọi tên lý do 401 — §8,
+  hình dạng link `PASSPORT_LINK` của ba adapter); `kenh-so.test.ts` (kênh số từ chối link Passport không phải EMAIL).
+
+## 7. Đột biến
+- **Bảy đột biến lớp CSDL** (khối F, chạy lúc test: `pg_get_functiondef` → thân đột biến → ca đỏ dưới đột biến, khôi phục tự kiểm sha256 và
+  NÉM khi lệch; policy qua `ALTER POLICY` + `finally`): vế K8a của vị từ tắt ⇒ nhà cung cấp chưa xác minh nhận được yêu cầu; vế quyền của
+  trigger yêu cầu tắt ⇒ người không giữ `supplier.qualify` ghi được yêu cầu thô; vế *cùng giao dịch* của trigger token tắt ⇒ link đúc được
+  cho yêu cầu cũ; vế *khác lớp đích* của trigger OTP tắt ⇒ OTP đi cùng hộp thư với link; vế *chưa thu hồi* của trigger phiên tắt ⇒ phiên mở
+  được từ token đã thu hồi; vế *đúng nhà cung cấp* của trigger phiên bản tắt ⇒ phiên của A ghi hồ sơ của B; policy nới thành mở hẳn ⇒ phiên
+  của A đọc được hồ sơ của B. Mỗi ca kèm đối chứng (khôi phục ⇒ bị từ chối).
+- **Mười một đột biến TS/JS** (script ngoài kho, `--reporter=json`, so tập đỏ với tập dự kiến; khôi phục tự kiểm sha256): **11/11 chết**,
+  bốn đối chứng trên mã nguyên 0 đỏ (`passport.int` 0/20, `ho-so` 0/4, `phuc-vu` 0/320, `so-tai-khoan-liet-ke` 0/5). Danh sách: TS1 đúc link
+  mới không thu hồi phiên cũ; TS2 lời đọc của nhà cung cấp trả số đầy đủ (chết ở `passport.int` và, TS2b, ở cổng tĩnh); TS3 lời đọc của
+  bên mua bỏ cổng `supplier.qualify` trong hàm; TS4 gửi hỏng mà không thu hồi token; TS5 đường đọc `PASSPORT` của bộ điều phối chạy dưới
+  kết nối chỉ gắn tổ chức; TS6 tra phiên nhận phiên đã thu hồi; TS7 `withPassportSession` không đặt GUC dẫn xuất (đỏ 5/20); TS8 màn giữ số
+  tài khoản trên ô sau khi nộp; TS9 che số nhận cả số dài; TS10 màn mở phiên còn hạn mà không hỏi.
+- **TS6 sống ở lượt đầu** (0/20): bỏ vế `revoked_at IS NULL` ở câu tra cookie mà không ca nào đỏ — phiên đã thoát vẫn qua lớp tra, và lớp
+  SAU chặn thay (đường đọc ra 401 vì `withPassportSession` từ chối phiên chết; nộp ra 422 vì trigger phiên bản; thoát lần hai ra 200). Lớp
+  tra cookie là lớp được khai ở ADR nhưng không được đo. Thêm ba khẳng định sau *Thoát* ở khối D (`POST /passport/versions` 401, thoát lần
+  hai 401); chạy lại TS6 cùng đối chứng: **đỏ 1/20** ở ca *cookie không lẫn đối tượng* (script dự kiến ca luồng trọn — đỏ đúng chỗ thêm
+  khẳng định), đối chứng 0 đỏ.
+
+## 8. Lượt đi thử T4 — cụm thật, Chromium, script ngoài kho
+Cụm `pnpm pilot:gia-lap cum` trên CSDL mới (container `tp-pilot-gia-lap` 16-alpine), tổ chức của `pnpm gieo:demo --s3` (cụm một lần → gieo →
+cụm lại — CSDL rỗng thì worker từ chối lên, vế ❷ ADR-040); `playwright-core` 1.63, Chromium bản 1228 sẵn trên máy. Bên mua (`taichinh1`,
+FINANCE) đăng nhập bằng link + TOTP; nhà cung cấp mở link trên khung **375×812** (`isMobile`, `hasTouch`), đọc OTP từ hộp thư dev. **31/31**:
+- gieo để lại một nhà cung cấp đã xác minh có người liên hệ mang số điện thoại; yêu cầu ⇒ 201; thư `PASSPORT_LINK` tới EMAIL người liên hệ,
+  đường `/ho-so#<org>:<mã>`; mở link ⇒ hai ô tự điền; bước 1 và form không cuộn ngang (`scrollWidth` 375 = `clientWidth` 375).
+- bước 2 chỉ hiện SMS và ZALO_ZNS (khác lớp với email của link); mã OTP đi SỐ ĐIỆN THOẠI, không đi email; mã sai ⇒ câu lỗi, vẫn ở bước 2;
+  xác minh ⇒ bước 3, mảnh link biến khỏi thanh địa chỉ; bước 3 nói hồ sơ của doanh nghiệp nào và MST bên mua đang giữ.
+- chưa phiên bản ⇒ tên và MST điền sẵn từ bản ghi, số tài khoản trống; thiếu số tài khoản ⇒ câu gọi tên ô, không gửi; nộp ⇒ phiên bản #1, ô
+  số tài khoản xoá ngay, tóm tắt chỉ bốn số cuối đã che, chứng nhận một mục mỗi dòng; nộp lần hai (đổi tài khoản) ⇒ #2.
+- tải lại ⇒ hỏi phiên còn hạn, nêu tên doanh nghiệp, không tự mở; *Tiếp tục* ⇒ form điền từ #2 TRỪ số tài khoản.
+- bên mua đọc ⇒ số ĐẦY ĐỦ của phiên bản mới nhất, MST khớp bản ghi, lịch sử hai phiên bản với cờ *đổi tài khoản* ở #2, link gần nhất đã
+  dùng; *Thoát* ⇒ về bước 1; link đã dùng ⇒ không mở lại (một link, một phiên).
+- yêu cầu thứ hai ⇒ link mới; yêu cầu thứ ba ⇒ thu hồi MỘT phiên đang sống, và lần nộp trên phiên ấy bị từ chối; yêu cầu thứ tư trong một
+  giờ ⇒ 429 `PASSPORT_QUA_TRAN_YEU_CAU`.
+- Sổ của lượt: `PASSPORT_REQUESTED` 3, `PASSPORT_TOKEN_ISSUED` 3, `PASSPORT_OTP_ISSUED` 2, `PASSPORT_SESSION_STARTED` 2,
+  `PASSPORT_VERSION_SUBMITTED` 2, `PASSPORT_SESSION_REVOKED` 1, `PASSPORT_VIEWED` 1; **0** hàng sổ mang số tài khoản (tìm cả hai số đã nộp
+  trong `payload::text`); **0** `PERMISSION_DENIED`. Phản hồi ≥ 400 từ `api`: đúng bốn, cả bốn có chủ đích — 401 mã sai, 422 redeem link đã
+  dùng, 401 nộp trên phiên đã thu hồi, 429 yêu cầu thứ tư.
+- **Lượt đi thử tìm ra một lỗi màn** (lượt một 31/31 vẫn đạt vì khẳng định chỉ đòi *có câu lỗi*): nộp trên phiên vừa bị thu hồi hiện nguyên
+  hằng 401 không dấu của máy chủ — *"phien khong hop le"* — không nói gì với nhà cung cấp; mã sai hiện *"Mã không đúng (mã 401)"*. Sửa
+  `loiCua` của `ho-so.js`: hằng 401 ấy thành *"…phiên hồ sơ đã hết hạn hay đã bị thu hồi (bên mua vừa gửi link mới?). Mở link mới nhất bên
+  mua gửi."*; năm lý do của lần xác minh (`WRONG_CODE`, `EXPIRED`, `LOCKED_OUT`, `ALREADY_USED`, `NO_CHALLENGE`) mỗi lý do một câu chỉ việc kế.
+  Ca mới ở `phuc-vu.test.ts` (khoá ⇒ câu *tạm khoá 15 phút*; nộp trên phiên thu hồi ⇒ câu mới, không chứa hằng máy chủ). Lượt hai trên CSDL
+  mới khác: **31/31**, hai câu mới hiện đúng trên màn, cùng bốn phản hồi 4xx.
+- Một lần, không phải cổng; script ngoài kho. Cụm dừng theo cây tiến trình; hai CSDL thử và container dùng một lần đã xoá.
+
+## 9. Điểm phát hiện lúc đo
+- **Công cụ ghi biến `\u…` thành ký tự thật:** hằng `KY_TU_CAM` (ký tự điều khiển và định hướng) viết bằng dạng thoát trong nội dung ghi ra
+  ký tự THẬT, kể cả ký tự định hướng — regex dựng lại bằng `chr(92)`, quét điểm mã vô hình sau khi ghi.
+- **Bảy cổng đỏ đúng như lượt soi A liệt kê** (đăng ký danh sách trắng của mặt tiền, phân loại hàm, ghim trigger dùng hàm chung, danh sách
+  của `migration-shape`, khoá miễn trần, khai MCP, số link của `phuc-vu`) cộng hai ngoài danh sách: cổng mã chép api ↔ worker (tên `chuoi`
+  trùng — đổi `chuoiThan`/`kenhThan`; một literal regex trong `ho-so.ts` bỏ) và bộ dò của chính cổng số tài khoản (đọc thiếu một dạng câu —
+  `docDayDu`).
+- **Lượt int lần một: 21 đỏ / 478, lần hai: 3 đỏ / 340** — sổ đăng ký (GRANT và sổ policy của `rls-coverage`, `MIEN_TRU` của
+  `check-an-ninh`, ba danh sách của `migrations.int`, danh sách chỉ-ghi-thêm của `hardening-suy-tu-tinh-chat`). Nhân chứng hành vi của
+  hardening chạy mỗi câu trong một giao dịch riêng ⇒ trigger token từ chối (đúng: token phải cùng giao dịch với yêu cầu) — sửa phần chuẩn bị
+  của nhân chứng để chèn yêu cầu trong cùng giao dịch, câu đọc token theo `r.created_at = now()`.
+- **Kịch bản 41 HTTP:** vòng quét rò đòi thân cho mọi route mới (sổ nợ 49); và luồng S3 đỏ 429 ở bước 16 — lần `GET /suppliers/:id/passport`
+  bằng cookie của `m` (không giữ `supplier.qualify`) để lại một `PERMISSION_DENIED` vào ngân sách từ chối của `m`. Bộ quét dùng cookie của
+  người tài chính cho route ấy và không cookie cho audience `PASSPORT`.
+- Lời khai thiu ở chú thích: *bốn GUC/bốn trục* ở `with-tenant.ts`, `migrate.ts`, `vai-tro.ts` và hai tệp test — gạch, ghi *năm*; câu xoá
+  thứ tư của `withTenant` (GUC Passport) cùng khuôn ba câu cũ, ghi là chưa đo riêng.
+- **Tên một ca nói nhiều hơn phép đo** (đọc lại lúc viết biên bản): ca phiên khách của lời mời ở khối D mang vế *"GUC Passport lạ một mình
+  không mở gì"* mà thân chỉ đo GUC rỗng và đúng cặp. Thêm khẳng định GUC Passport của nhà cung cấp khác ⇒ 0 hàng, tên nói đúng thứ đo.
+
+## 10. Giới hạn còn lại
+- **Số tài khoản rõ trong log tham số của Postgres (nếu bật) và bản sao lưu** — chủ dự án chọn ranh giới ở tầng mã, biết cái giá. Bên mua
+  giữ `supplier.qualify` đọc số đầy đủ không giới hạn số lần; mỗi lần một hàng sổ.
+- **Vòng quét rò của kịch bản 41 chưa gọi được hai route ghi của phiên Passport tới nghiệp vụ** — kịch bản chưa mở phiên Passport (a2).
+- MST hồ sơ lệch MST bản ghi KHÔNG chặn nộp — lời đọc của bên mua nói `mstKhop`; thẩm định (a2) từ chối. Level 2 vẫn là suy diễn.
+- Một yêu cầu mới cắt phiên đang dùng dở của nhà cung cấp — cố ý; trần ba yêu cầu một giờ giữ nó khỏi thành công cụ quấy.
+- `gieo:demo --s3` không gieo Passport đã nộp (a3); lượt đi thử T4 là một lần, script ngoài kho.
+- Bốn điểm *chưa chắc* của lượt soi A (§3) chốt theo đề xuất của vòng, chờ chủ dự án xác nhận lại.
+
+## 11. Số đo
+Nhánh dựng từ `master` `5ae1393a` (PR #259); giữa vòng `master` tiến một PR (#248, khoản 343 — chỉ `tests/architecture/khoa-depcruise*`,
+STATE, Handoff), gộp không xung đột. Trên cây gộp: `pnpm t0` xanh (51 s, 573 mô-đun, không vi phạm); `pnpm test` 156 tệp (2 bỏ qua),
+2708 ca đạt, 14 bỏ qua, 0 đỏ (125 s). Trước đó trên mã chưa commit: `passport.int` 20/20; tập int chạm tới — lần ba `hardening-suy-tu-tinh-chat`
++ kịch bản 41 HTTP 127/127 (38 + 89); `apps/web` (`phuc-vu` + `ho-so`) 325/325; cụm dùng một lần `migrate()` hai lần (113 tệp, lần hai 0).
+Evidence trên `b29da0d4`, hai lượt. **Lượt 1** (1896 s): `pnpm evidence` thoát 0, 89/89, *"Cổng evidence: XANH"* — nhưng vitest
+thoát mã 1: một ca đỏ trong 5048 khẳng định, `migrations.int` IM7 (*khoá tư vấn theo tổ chức: treo vô hạn thành lỗi ồn ào…*),
+`Connection terminated unexpectedly` ở `pool.connect()` đầu tiên của `migrate()` (`migrate.ts:407`) ngay sau khi `startPostgres()` dựng
+container — trước mọi SQL của vòng, ở một ca vòng này không đổi. Docker chỉ giữ lịch sử sự kiện gần nhất nên không còn dấu vết của
+container ấy; không chẩn đoán, ghi một lần. **Lượt 2** cùng HEAD, máy không lượt test nào khác (1933 s): vitest thoát mã 0, 255 tệp,
+**5048** khẳng định (5025 đạt, 23 bỏ qua, 0 đỏ), **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*;
+`migrations.int` 128/128, `passport.int` 20/20, kịch bản 41 HTTP 89/89, `phuc-vu` 321/321, `so-tai-khoan-liet-ke` 5/5.
+`evidence/INV-matrix.md` của hai lượt trùng nhau: A5 20 → 25 ca, D5 185 → 187, E1 14 → 17, E2 6 → 10, E5 3 → 4; hàng L6 đổi theo ngoặc
+của TEST-PLAN.
