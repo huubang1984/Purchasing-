@@ -26639,3 +26639,15 @@ một quyết định sản phẩm — đã đề xuất thành việc riêng.
 4. Tham số và tập mã lộ cho nhà cung cấp được mời (ADR-156 ⑵).
 5. Cạnh mở không đòi tham số; ảnh chụp lệch trả 500 (mục 8).
 6. `/mo-thau` không đo lại trên trình duyệt — cột mới theo khuôn nhãn ô của khoản 334, đo ở `phuc-vu.test`.
+
+## 10. Đo cuối
+
+- Sau các sửa của mục 8 và lần cấp số: `pnpm t0` xanh; `pnpm test` 157 tệp / 2800 ca; `migrations.int` 128/128; int chạm tới
+  (`guest.int`, `luot-danh-gia.int`, kịch bản 41 khối TCO) xanh.
+- `cap-so` cấp S1.286, ADR-158, migration 117 — base là nhánh S4.7b1 đã gộp `origin/master` (nhánh xếp chồng: base `origin/master` sẽ
+  thu hồi số của S4.7b1, cùng số tạm 9101/9201, và trộn với số của vòng này); vòng 285, ADR-157, migration 116 do nhánh
+  `s3-6d-k10-chu-ky-trao-thau` giữ trên remote. Bảy số trần `9501` trong chú thích thay tay. `--kiem` sạch.
+- `pnpm evidence` trên `460ed60`: vitest thoát mã 0, 5119 khẳng định; bộ sinh dừng ở hai vấn đề CHẶN MERGE — hai cặp nhãn ↔ tệp mới
+  (L16 ở `guest.int` và `bac-mac-dinh-dong-bo`) chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai hai cặp kèm câu đo gì, chạy lại
+  BƯỚC 2 (bộ sinh) trên cùng báo cáo: **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận: L8 49 → 51
+  khẳng định, L16 31 → 38.
