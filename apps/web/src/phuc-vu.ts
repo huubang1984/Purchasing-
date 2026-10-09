@@ -107,7 +107,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * [S1.283 / S3.4b] `xung-dot` — khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` (K9); chạm DOM qua `document` mà
  * trang trao vào, khuôn `dang-nhap`.
  *
- * [S1.9101 / S3.7a1] `ho-so` — kiểm form, tách danh sách và che số tài khoản của màn hồ sơ Passport (`/ho-so`).
+ * [S1.287 / S3.7a1] `ho-so` — kiểm form, tách danh sách và che số tài khoản của màn hồ sơ Passport (`/ho-so`).
  */
 export const MODULE_WEB = [
   "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap", "xung-dot",
@@ -134,7 +134,7 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.273 / S3.3e1] Màn xác minh nhà cung cấp của người giữ `supplier.qualify` (spec S3 §9 S3.3e, K8a).
   "/nha-cung-cap": "nha-cung-cap.html",
   "/nha-cung-cap.js": "nha-cung-cap.js",
-  // [S1.9101 / S3.7a1 / ADR-081] Màn hồ sơ Passport của NHÀ CUNG CẤP — nơi link `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`) dẫn tới.
+  // [S1.287 / S3.7a1 / ADR-081] Màn hồ sơ Passport của NHÀ CUNG CẤP — nơi link `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`) dẫn tới.
   "/ho-so": "ho-so.html",
   "/ho-so.js": "ho-so.js",
   "/chung.css": "chung.css",

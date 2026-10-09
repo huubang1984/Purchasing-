@@ -2120,8 +2120,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "coi_chot_hanh_dong", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     { ham: "coi_chot_xac_minh", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     { ham: "rfq_chot_chu_ky_xung_dot", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
-    // [S1.9101 / S3.7a1 / ADR-081] Hàm vị từ của yêu cầu hồ sơ Passport — một thân `RETURN NULL` gửi link tới nhà cung cấp CHƯA xác minh.
-    { ham: "passport_chot_yeu_cau", chuKy: "uuid, uuid, uuid", migration: "9501_passport_nha_cung_cap.sql" },
+    // [S1.287 / S3.7a1 / ADR-081] Hàm vị từ của yêu cầu hồ sơ Passport — một thân `RETURN NULL` gửi link tới nhà cung cấp CHƯA xác minh.
+    { ham: "passport_chot_yeu_cau", chuKy: "uuid, uuid, uuid", migration: "118_passport_nha_cung_cap.sql" },
   ];
 
   it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ ~~[S1.269] mười lăm~~ [S1.280] hai mươi bốn hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2, K5 và award theo bậc: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2299,7 +2299,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_huy",
         "rfq_packages_kiem_nguoi_mo",
         "rfq_packages_kiem_nguoi_nop",
-        // [S1.9101 / S3.7a1] Người yêu cầu hồ sơ Passport và người đúc link — dẫn xuất từ phiên người mua.
+        // [S1.287 / S3.7a1] Người yêu cầu hồ sơ Passport và người đúc link — dẫn xuất từ phiên người mua.
         "supplier_passport_requests_kiem_danh_tinh",
         "supplier_passport_tokens_kiem_danh_tinh",
         // [S1.265 / S3.3b] Tác giả ngoại lệ cạnh tranh là dẫn xuất từ phiên.
@@ -2581,14 +2581,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // xạ không lý do trên gói đã có bản rõ.
     { ham: "goi_y_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_goi_y_bat_bien"] },
     { ham: "anh_xa_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_mappings_bat_bien"] },
-    // [S1.9101 / S3.7a1 / ADR-081] Năm cổng của đường Passport. Một thân `RETURN NEW` ở mỗi cái: yêu cầu của người không giữ
+    // [S1.287 / S3.7a1 / ADR-081] Năm cổng của đường Passport. Một thân `RETURN NEW` ở mỗi cái: yêu cầu của người không giữ
     // `supplier.qualify` hay tới nhà cung cấp chưa xác minh; link đúc cho yêu cầu cũ; OTP về cùng hộp thư với link; phiên tự khai danh
     // tính hay mở từ token đã thu hồi; phiên bản ghi cho nhà cung cấp khác.
-    { ham: "passport_kiem_yeu_cau", migration: "9501_passport_nha_cung_cap.sql", trigger: ["supplier_passport_requests_kiem_yeu_cau"] },
-    { ham: "passport_kiem_token", migration: "9501_passport_nha_cung_cap.sql", trigger: ["supplier_passport_tokens_kiem_token"] },
-    { ham: "passport_otp_kiem_kenh", migration: "9501_passport_nha_cung_cap.sql", trigger: ["passport_otp_challenges_kiem_kenh"] },
-    { ham: "passport_phien_kiem_danh_tinh", migration: "9501_passport_nha_cung_cap.sql", trigger: ["passport_sessions_kiem_danh_tinh"] },
-    { ham: "passport_kiem_phien_ban", migration: "9501_passport_nha_cung_cap.sql", trigger: ["supplier_passport_versions_kiem_phien_ban"] },
+    { ham: "passport_kiem_yeu_cau", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_requests_kiem_yeu_cau"] },
+    { ham: "passport_kiem_token", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_tokens_kiem_token"] },
+    { ham: "passport_otp_kiem_kenh", migration: "118_passport_nha_cung_cap.sql", trigger: ["passport_otp_challenges_kiem_kenh"] },
+    { ham: "passport_phien_kiem_danh_tinh", migration: "118_passport_nha_cung_cap.sql", trigger: ["passport_sessions_kiem_danh_tinh"] },
+    { ham: "passport_kiem_phien_ban", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_versions_kiem_phien_ban"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -4278,8 +4278,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
-        "9501_passport_nha_cung_cap.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8945,8 +8945,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
-        "9501_passport_nha_cung_cap.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9292,8 +9292,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
-        "9501_passport_nha_cung_cap.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

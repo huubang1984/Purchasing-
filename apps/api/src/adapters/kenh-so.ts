@@ -69,7 +69,7 @@ export function taoBoGuiTheoKenh(t: TuyChonTheoKenh): HopThuDev {
         return kenhSo(m.channel).guiLoiMoi(chuanHoaE164(m.destination), `${t.baseUrl}/i#${m.orgId}:${m.token}`);
       },
     },
-    // [S1.9101 / S3.7a1] Link Passport đi EMAIL (kênh của link lưu ở token — `KENH_LINK_PASSPORT`); kênh khác chưa có mẫu tin.
+    // [S1.287 / S3.7a1] Link Passport đi EMAIL (kênh của link lưu ở token — `KENH_LINK_PASSPORT`); kênh khác chưa có mẫu tin.
     passportLinkSender: {
       name: ten,
       send: async (m) => {

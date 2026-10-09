@@ -3063,11 +3063,11 @@ $ham$;
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_phien_khac', '040_dat_lai_totp_hai_nguoi', 'CHECK (((approved_by_session_id IS NULL) OR (approved_by_session_id <> requested_by_session_id)))'),
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_tieu_thu_sau_duyet', '040_dat_lai_totp_hai_nguoi', 'CHECK (((consumed_at IS NULL) OR (status = ''APPROVED''::text)))'),
          ('public', 'otp_rate_limits', 'otp_rate_limits_bucket_hash_check', '010_invitations', 'CHECK ((octet_length(bucket_hash) = 32))'),
-         ('public', 'passport_otp_challenges', 'passport_otp_challenges_bam_ma', '9501_passport_nha_cung_cap', 'CHECK ((octet_length(code_hash) = 32))'),
-         ('public', 'passport_otp_challenges', 'passport_otp_challenges_han_sau_tao', '9501_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
-         ('public', 'passport_sessions', 'passport_sessions_bam', '9501_passport_nha_cung_cap', 'CHECK ((octet_length(token_hash) = 32))'),
-         ('public', 'passport_sessions', 'passport_sessions_han_sau_tao', '9501_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
-         ('public', 'passport_sessions', 'passport_sessions_han_toi_da', '9501_passport_nha_cung_cap', 'CHECK ((expires_at <= (created_at + ''12:00:00''::interval)))'),
+         ('public', 'passport_otp_challenges', 'passport_otp_challenges_bam_ma', '118_passport_nha_cung_cap', 'CHECK ((octet_length(code_hash) = 32))'),
+         ('public', 'passport_otp_challenges', 'passport_otp_challenges_han_sau_tao', '118_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
+         ('public', 'passport_sessions', 'passport_sessions_bam', '118_passport_nha_cung_cap', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'passport_sessions', 'passport_sessions_han_sau_tao', '118_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
+         ('public', 'passport_sessions', 'passport_sessions_han_toi_da', '118_passport_nha_cung_cap', 'CHECK ((expires_at <= (created_at + ''12:00:00''::interval)))'),
          ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '085_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
          ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
          ('public', 'rfq_awards', 'rfq_awards_status_check', '094_award_withdrawn', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text, ''WITHDRAWN''::text])))'),
@@ -3096,13 +3096,13 @@ $ham$;
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_khong_dau_cham_cuoi', '100_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))'),
-         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_bam', '9501_passport_nha_cung_cap', 'CHECK ((octet_length(token_hash) = 32))'),
-         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_han_sau_tao', '9501_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
-         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_han_toi_da', '9501_passport_nha_cung_cap', 'CHECK ((expires_at <= (created_at + ''7 days''::interval)))'),
-         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_kenh_link', '9501_passport_nha_cung_cap', 'CHECK ((link_channel = ANY (ARRAY[''EMAIL''::text, ''SMS''::text, ''ZALO_ZNS''::text])))'),
-         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_muc_dich', '9501_passport_nha_cung_cap', 'CHECK ((purpose = ''PASSPORT_SUBMISSION''::text))'),
-         ('public', 'supplier_passport_versions', 'supplier_passport_versions_so_tai_khoan', '9501_passport_nha_cung_cap', 'CHECK ((so_tai_khoan ~ ''^[0-9]{6,20}$''::text))'),
-         ('public', 'supplier_passport_versions', 'supplier_passport_versions_van_ban', '9501_passport_nha_cung_cap', 'CHECK ((((octet_length(btrim(legal_name)) >= 1) AND (octet_length(btrim(legal_name)) <= 500)) AND ((octet_length(btrim(nguoi_dai_dien)) >= 1) AND (octet_length(btrim(nguoi_dai_dien)) <= 200)) AND ((octet_length(btrim(dia_chi)) >= 1) AND (octet_length(btrim(dia_chi)) <= 1000)) AND ((octet_length(btrim(ngan_hang)) >= 1) AND (octet_length(btrim(ngan_hang)) <= 200)) AND ((((legal_name || nguoi_dai_dien) || dia_chi) || ngan_hang) !~ ''[\x01-\x1f\x7f\x200e\x200f\x202a-\x202e\x2066-\x2069]''::text)))'),
+         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_bam', '118_passport_nha_cung_cap', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_han_sau_tao', '118_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
+         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_han_toi_da', '118_passport_nha_cung_cap', 'CHECK ((expires_at <= (created_at + ''7 days''::interval)))'),
+         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_kenh_link', '118_passport_nha_cung_cap', 'CHECK ((link_channel = ANY (ARRAY[''EMAIL''::text, ''SMS''::text, ''ZALO_ZNS''::text])))'),
+         ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_muc_dich', '118_passport_nha_cung_cap', 'CHECK ((purpose = ''PASSPORT_SUBMISSION''::text))'),
+         ('public', 'supplier_passport_versions', 'supplier_passport_versions_so_tai_khoan', '118_passport_nha_cung_cap', 'CHECK ((so_tai_khoan ~ ''^[0-9]{6,20}$''::text))'),
+         ('public', 'supplier_passport_versions', 'supplier_passport_versions_van_ban', '118_passport_nha_cung_cap', 'CHECK ((((octet_length(btrim(legal_name)) >= 1) AND (octet_length(btrim(legal_name)) <= 500)) AND ((octet_length(btrim(nguoi_dai_dien)) >= 1) AND (octet_length(btrim(nguoi_dai_dien)) <= 200)) AND ((octet_length(btrim(dia_chi)) >= 1) AND (octet_length(btrim(dia_chi)) <= 1000)) AND ((octet_length(btrim(ngan_hang)) >= 1) AND (octet_length(btrim(ngan_hang)) <= 200)) AND ((((legal_name || nguoi_dai_dien) || dia_chi) || ngan_hang) !~ ''[\x01-\x1f\x7f\x200e\x200f\x202a-\x202e\x2066-\x2069]''::text)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
          ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
@@ -3827,8 +3827,8 @@ $ham$;
          ('public', 'organizations', '002_organizations_and_users'),
          ('public', 'otp_rate_limits', '010_invitations'),
          ('public', 'outbox_jobs', '007_outbox'),
-         ('public', 'passport_otp_challenges', '9501_passport_nha_cung_cap'),
-         ('public', 'passport_sessions', '9501_passport_nha_cung_cap'),
+         ('public', 'passport_otp_challenges', '118_passport_nha_cung_cap'),
+         ('public', 'passport_sessions', '118_passport_nha_cung_cap'),
          ('public', 'price_benchmark_inputs', '103_benchmark_gia'),
          ('public', 'price_benchmark_results', '103_benchmark_gia'),
          ('public', 'price_benchmark_snapshot_external_lines', '110_ban_luu_benchmark_ngoai'),
@@ -3855,9 +3855,9 @@ $ham$;
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
-         ('public', 'supplier_passport_requests', '9501_passport_nha_cung_cap'),
-         ('public', 'supplier_passport_tokens', '9501_passport_nha_cung_cap'),
-         ('public', 'supplier_passport_versions', '9501_passport_nha_cung_cap'),
+         ('public', 'supplier_passport_requests', '118_passport_nha_cung_cap'),
+         ('public', 'supplier_passport_tokens', '118_passport_nha_cung_cap'),
+         ('public', 'supplier_passport_versions', '118_passport_nha_cung_cap'),
          ('public', 'supplier_verifications', '082_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
@@ -12499,10 +12499,10 @@ $ham$;
                   'hàm public.coi_kiem_xac_minh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] Ham vi tu cua yeu cau ho so Passport — tang goi hoi truoc, trigger hoi lai. Mot than `RETURN NULL` gui duoc link toi nha cung cap CHUA XAC MINH, toi nguoi lien he thieu kenh OTP, va bo tran ba yeu cau mot gio.
+    -- [S1.287 / S3.7a1 / ADR-081] Ham vi tu cua yeu cau ho so Passport — tang goi hoi truoc, trigger hoi lai. Mot than `RETURN NULL` gui duoc link toi nha cung cap CHUA XAC MINH, toi nguoi lien he thieu kenh OTP, va bo tran ba yeu cau mot gio.
     ARRAY[
-      $q$định nghĩa hàm passport_chot_yeu_cau(uuid, uuid, uuid) (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm passport_chot_yeu_cau(uuid, uuid, uuid) (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.passport_chot_yeu_cau(p_org uuid, p_ncc uuid, p_lien_he uuid) RETURNS text
   LANGUAGE plpgsql STABLE
   SET search_path = pg_catalog, public
@@ -12561,10 +12561,10 @@ $ham$$q$,
                   'hàm public.passport_chot_yeu_cau(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm passport_chot_yeu_cau(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] Luat ghi yeu cau: nguoi yeu cau giu supplier.qualify, roi ham vi tu. Than `RETURN NEW` de bat ky ai trong to chuc gui link Passport.
+    -- [S1.287 / S3.7a1 / ADR-081] Luat ghi yeu cau: nguoi yeu cau giu supplier.qualify, roi ham vi tu. Than `RETURN NEW` de bat ky ai trong to chuc gui link Passport.
     ARRAY[
-      $q$hàm + trigger passport_kiem_yeu_cau (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_kiem_yeu_cau (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -12639,10 +12639,10 @@ $ham$;
                   'hàm public.passport_kiem_yeu_cau() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.passport_kiem_yeu_cau() và bảng public.supplier_passport_requests (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] Token rang vao yeu cau: cung nguoi, cung phien, cung giao dich; mot token song moi nha cung cap. Than `RETURN NEW` de duc link cho mot yeu cau cu ma khong qua cong quyen.
+    -- [S1.287 / S3.7a1 / ADR-081] Token rang vao yeu cau: cung nguoi, cung phien, cung giao dich; mot token song moi nha cung cap. Than `RETURN NEW` de duc link cho mot yeu cau cu ma khong qua cong quyen.
     ARRAY[
-      $q$hàm + trigger passport_kiem_token (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_kiem_token (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -12731,10 +12731,10 @@ $ham$;
                   'hàm public.passport_kiem_token() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.passport_kiem_token() và bảng public.supplier_passport_tokens (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] OTP khac LOP dich voi kenh DA LUU cua link (ADR-015), token song, dung nguoi lien he, khong thach thuc nao dang khoa. Than `RETURN NEW` dua OTP ve cung hop thu da nhan link.
+    -- [S1.287 / S3.7a1 / ADR-081] OTP khac LOP dich voi kenh DA LUU cua link (ADR-015), token song, dung nguoi lien he, khong thach thuc nao dang khoa. Than `RETURN NEW` dua OTP ve cung hop thu da nhan link.
     ARRAY[
-      $q$hàm + trigger passport_otp_kiem_kenh (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_otp_kiem_kenh (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -12816,10 +12816,10 @@ $ham$;
                   'hàm public.passport_otp_kiem_kenh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.passport_otp_kiem_kenh() và bảng public.passport_otp_challenges (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] Danh tinh phien Passport DAN XUAT tu thach thuc da doi chieu va token da tieu thu ma chua bi thu hoi (C2, C3). Than `RETURN NEW` mo phien cho mot nha cung cap tu khai.
+    -- [S1.287 / S3.7a1 / ADR-081] Danh tinh phien Passport DAN XUAT tu thach thuc da doi chieu va token da tieu thu ma chua bi thu hoi (C2, C3). Than `RETURN NEW` mo phien cho mot nha cung cap tu khai.
     ARRAY[
-      $q$hàm + trigger passport_phien_kiem_danh_tinh (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_phien_kiem_danh_tinh (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -12907,10 +12907,10 @@ $ham$;
                   'hàm public.passport_phien_kiem_danh_tinh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.passport_phien_kiem_danh_tinh() và bảng public.passport_sessions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a1 / ADR-081] Phien ban ho so: phien song (clock_timestamp), dung nha cung cap, tran nam phien ban, thu_tu duoi khoa hat giong 7. Than `RETURN NEW` de mot phien Passport ghi ho so cua nha cung cap khac.
+    -- [S1.287 / S3.7a1 / ADR-081] Phien ban ho so: phien song (clock_timestamp), dung nha cung cap, tran nam phien ban, thu_tu duoi khoa hat giong 7. Than `RETURN NEW` de mot phien Passport ghi ho so cua nha cung cap khac.
     ARRAY[
-      $q$hàm + trigger passport_kiem_phien_ban (9501_passport_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_passport_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_kiem_phien_ban (118_passport_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '118_passport_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

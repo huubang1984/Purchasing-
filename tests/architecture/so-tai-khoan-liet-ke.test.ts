@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] SỐ TÀI KHOẢN CỦA HỒ SƠ PASSPORT — RANH GIỚI CỘT Ở TẦNG MÃ
+// [S1.287 / S3.7a1 / ADR-081] SỐ TÀI KHOẢN CỦA HỒ SƠ PASSPORT — RANH GIỚI CỘT Ở TẦNG MÃ
 //
 // Spec S3 §4.8: số tài khoản ngân hàng có *"quyền theo CỘT, không vào log, không vào bộ bằng chứng"*. Chủ dự án chốt (2026-10-08, sau
 // lượt soi hình dạng): bảo vệ bằng RANH GIỚI CỘT Ở TẦNG MÃ, khuôn `don_gia` (`bang-ngoai-liet-ke.test.ts`), không mã hoá. `app_api` có
@@ -11,7 +11,7 @@
 //      mang cột trong danh sách cột, không sau `RETURNING`;
 //   ⑶ không migration nào ngoài tệp dựng bảng và tệp ghim nhắc tên cột — nên không view, hàm hay trigger nào đọc nó;
 //   ⑷ bộ bằng chứng (`bo-bang-chung.ts`) không chạm bảng Passport; payload sổ của hai tệp Passport không mang khoá số tài khoản.
-// Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó. Rủi ro còn lại nói ra ở ADR-9201: log tham số của Postgres và bản sao lưu.
+// Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó. Rủi ro còn lại nói ra ở ADR-159: log tham số của Postgres và bản sao lưu.
 // ==============================================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -69,7 +69,7 @@ function docDayDu(sql: string): boolean {
   return false;
 }
 
-describe("[S1.9101 / S3.7a1] số tài khoản Passport — mọi chỗ chạm có tên", () => {
+describe("[S1.287 / S3.7a1] số tài khoản Passport — mọi chỗ chạm có tên", () => {
   it("tệp TypeScript sản xuất có câu SQL chạm `supplier_passport_versions` đúng bằng danh sách", () => {
     const tep = [...new Set(moiCauSql().filter((c) => BANG.test(c.sql)).map((c) => c.tep))].sort();
     expect(tep, "tệp mới chạm bảng phiên bản Passport: thêm một dòng CÓ LÝ DO vào TEP_TS").toEqual(Object.keys(TEP_TS).sort());

@@ -809,7 +809,7 @@ describe("phủ RLS", () => {
       // `sessions.expires_at`). Vì KHÔNG cấp gì, file 007 cũng KHÔNG làm khoản [NỢ ADR-006] xanh
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
-      // [S1.9101 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
+      // [S1.287 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
       { grantee: "app_api", bang: "passport_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "passport_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
@@ -876,7 +876,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
-      // [S1.9101 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
+      // [S1.287 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
       { grantee: "app_api", bang: "supplier_passport_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_versions", quyen: "SELECT" },
@@ -1335,7 +1335,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
-      // [S1.9101 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
+      // [S1.287 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
       // các cột đơn điệu (`revoked_at`, `consumed_at`, `failed_attempts`, `locked_until`) — khuôn bảng lời mời.
       { grantee: "app_api", bang: "passport_otp_challenges", cot: "channel", quyen: "INSERT" },
       { grantee: "app_api", bang: "passport_otp_challenges", cot: "code_hash", quyen: "INSERT" },
@@ -1699,7 +1699,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
-      // [S1.9101 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
+      // [S1.287 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
       // các cột đơn điệu (`revoked_at`, `consumed_at`, `failed_attempts`, `locked_until`) — khuôn bảng lời mời.
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "contact_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "ly_do", quyen: "INSERT" },
@@ -2273,7 +2273,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",
-      // [S1.9101 / S3.7a1 / ADR-081] Thách thức OTP, phiên, yêu cầu và link Passport ĐÓNG với mọi phiên khách — kể cả phiên
+      // [S1.287 / S3.7a1 / ADR-081] Thách thức OTP, phiên, yêu cầu và link Passport ĐÓNG với mọi phiên khách — kể cả phiên
       // Passport (lần tra phiên chạy trước khi đặt GUC).
       "passport_otp_challenges", "passport_sessions", "supplier_passport_requests", "supplier_passport_tokens",
       // [S1.256 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
@@ -2318,7 +2318,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     khachNoi("rfq_items", khachHoac(veGuest("rfq_id", "app.guest_rfq_id"))),
     khachNoi("rfq_key_material", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),
     khachNoi("rfq_packages", khachHoac(veGuest("id", "app.guest_rfq_id"))),
-    // [S1.9101 / S3.7a1 / ADR-081 ⑶] Phiên Passport đọc phiên bản của CHÍNH nhà cung cấp mình (GUC dẫn xuất); ghi thì đóng.
+    // [S1.287 / S3.7a1 / ADR-081 ⑶] Phiên Passport đọc phiên bản của CHÍNH nhà cung cấp mình (GUC dẫn xuất); ghi thì đóng.
     khachNoi("supplier_passport_versions", khachHoac(veGuest("supplier_id", "app.passport_supplier_id")), KHACH_NULL),
     khachNoi("vendor_bid_versions", khachHoac("(bid_id IN ( SELECT b.id\n   FROM vendor_bids b))")),
     khachNoi("vendor_bids", khachHoac(veGuest("invitation_id", "app.guest_invitation_id"))),

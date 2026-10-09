@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] HÀM THUẦN CỦA MÀN `/ho-so` — HỒ SƠ PASSPORT CỦA NHÀ CUNG CẤP
+// [S1.287 / S3.7a1 / ADR-081] HÀM THUẦN CỦA MÀN `/ho-so` — HỒ SƠ PASSPORT CỦA NHÀ CUNG CẤP
 //
 // Máy chủ gỡ kiểu và phục vụ tệp này ở `/lib/ho-so.js` (`MODULE_WEB`); trang `trang/ho-so.js` import nó. Kiểm ở đây là để nói
 // sớm với người gõ trên điện thoại — máy chủ (`docHoSoPassportNhap`, `packages/supplier`) và CHECK của CSDL mới là thẩm quyền.

@@ -423,7 +423,7 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
 // ba lần CẢ lần lấy hiện hành (275 µs); đếm `pg_locks` thêm ~215 µs; ba bộ đếm prepared/con trỏ/LISTEN thêm ~65 µs. DỌN thì `RESET ALL`
 // 37 µs một vòng đi-về, và bộ `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` ghép vào câu `SET ROLE` thêm ~10 µs.
 // Nên lớp lấy client DỌN, không phán, thứ dọn được: bốn thứ ngoài GUC dọn vô điều kiện ngay trong câu `SET ROLE; DISCARD TEMP`; GUC phiên
-// thì ĐỌC TRƯỚC (ba GUC vận hành, search path, TÊN ~~bốn~~ [S1.9101] năm GUC tenant/khách — cùng câu) rồi `RESET ALL` SAU, và CHỈ khi ~~bốn~~ [S1.9101] năm GUC tenant/khách
+// thì ĐỌC TRƯỚC (ba GUC vận hành, search path, TÊN ~~bốn~~ [S1.287] năm GUC tenant/khách — cùng câu) rồi `RESET ALL` SAU, và CHỈ khi ~~bốn~~ [S1.287] năm GUC tenant/khách
 // RỖNG — giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant` (khoản 87, S1.48), lớp
 // này không được xoá. Ba GUC vận hành vẫn bị PHÁN như khoản 99 vì được đọc trước khi dọn. Vai ứng dụng không gọi được `pg_advisory_lock`
 // (khoản 128 — đo 42501): đường còn lại là một hàm SECURITY DEFINER do migration dựng, dựng ở đây để đo; khoá thuộc về BACKEND nên nó ở

@@ -319,7 +319,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId/passport",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.7a1 / ADR-081] Hồ sơ Passport của một nhà cung cấp — phiên bản mới nhất ĐẦY ĐỦ (cả số tài khoản), lịch sử với cờ
+    // [S1.287 / S3.7a1 / ADR-081] Hồ sơ Passport của một nhà cung cấp — phiên bản mới nhất ĐẦY ĐỦ (cả số tài khoản), lịch sử với cờ
     // *đổi tài khoản*, link gần nhất. Cổng `supplier.qualify` TRONG hàm gói (route đọc không mang mã quyền; lời gọi thẳng vẫn phải qua);
     // mỗi lần đọc có phiên bản để một hàng `PASSPORT_VIEWED`. KHÔNG cho agent: số tài khoản và người đại diện là dữ liệu tài chính và
     // cá nhân của công ty khác (khoản 141).
@@ -1142,7 +1142,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/passport-requests",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.7a1 / ADR-081] Gửi yêu cầu hồ sơ Passport tới MỘT người liên hệ của nhà cung cấp ĐÃ XÁC MINH (K8a — chủ dự án chốt).
+    // [S1.287 / S3.7a1 / ADR-081] Gửi yêu cầu hồ sơ Passport tới MỘT người liên hệ của nhà cung cấp ĐÃ XÁC MINH (K8a — chủ dự án chốt).
     // Một giao dịch: yêu cầu (vị từ hỏi trước, trigger hỏi lại), thu hồi link và phiên Passport cũ của nhà cung cấp, đúc link mới. Link đi
     // email của người liên hệ SAU commit; gửi hỏng ⇒ thu hồi token vừa đúc (khuôn ADR-110), yêu cầu ở lại, phản hồi nói *chưa gửi* — người
     // mua gửi yêu cầu khác (trần ba yêu cầu một giờ một nhà cung cấp).

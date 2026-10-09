@@ -1,7 +1,7 @@
 // ==============================================================================================
 // apps/api/src/dispatch.ts — NƠI DUY NHẤT gắn tổ chức, gắn phiên khách, và kiểm quyền.
 //
-// [ADR-020 mục 4] ~~Ba~~ [S1.9101] Bốn tên `withTenant`, `withGuestSession`, `withPassportSession`, `requirePermission` chỉ được xuất hiện
+// [ADR-020 mục 4] ~~Ba~~ [S1.287] Bốn tên `withTenant`, `withGuestSession`, `withPassportSession`, `requirePermission` chỉ được xuất hiện
 // trong file này trên toàn `apps/api` — `routes.test.ts` đọc mã nguồn và đỏ nếu chúng mọc ở chỗ
 // khác. Lý do là hình dạng của lỗi cần chặn: một route mới quên gắn phiên khách KHÔNG viết được
 // (handler không có pool để tự mở), và một route ghi quên kiểm quyền KHÔNG biên dịch được
@@ -1063,7 +1063,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         }
 
         case "PASSPORT": {
-          // [S1.9101 / S3.7a1 / ADR-081 ⑶] Khuôn nhánh GUEST, trên cookie và bảng phiên RIÊNG: tra cookie ở giao dịch CHỈ gắn tổ
+          // [S1.287 / S3.7a1 / ADR-081 ⑶] Khuôn nhánh GUEST, trên cookie và bảng phiên RIÊNG: tra cookie ở giao dịch CHỈ gắn tổ
           // chức (`suppliers` đóng với kết nối gắn phiên khách — bối cảnh đọc ở đây), rồi đường ĐỌC qua `withPassportSession` (đặt
           // `app.guest_session_id` cộng GUC dẫn xuất, đọc lại năm trục), đường GHI qua `withTenant` không GUC — kết nối gắn phiên
           // khách không nối được chuỗi sổ (khối [S1.10.3]). Một cookie khách đưa vào đây, hay cookie Passport đưa vào nhánh GUEST,

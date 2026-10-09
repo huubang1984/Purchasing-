@@ -637,7 +637,7 @@ describe("hình dạng file migration", () => {
       "rfq_unsealed_bids",
       "sessions",
       "supplier_contacts",
-      // [S1.9101 / S3.7a1 / ADR-081] Năm bảng Passport — khoá ngoại hợp thành, policy khách đóng (phiên bản: nới theo GUC dẫn xuất).
+      // [S1.287 / S3.7a1 / ADR-081] Năm bảng Passport — khoá ngoại hợp thành, policy khách đóng (phiên bản: nới theo GUC dẫn xuất).
       "supplier_passport_requests",
       "supplier_passport_tokens",
       "supplier_passport_versions",

@@ -54,7 +54,7 @@ export const TU_CHOI_CHU_BANG_FORCE =
 
 /**
  * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
- * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, ~~bốn~~ [S1.9101] năm GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm —
+ * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, ~~bốn~~ [S1.287] năm GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm —
  * [S1.72 / lượt soi ngang 66b-7] quan hệ, KIỂU và HÀM trong `pg_temp`; [lượt soi 67a-5] cả toán tử, lớp và họ toán tử, collation, conversion
  * và bốn loại đối tượng tìm kiếm văn bản; [S1.215 / khoản 104] MỌI GUC phiên có giá trị khác giá trị nền (`pg_settings.source = 'session'`
  * và `setting` khác `reset_val`; tên và giá trị, so theo hợp của hai tập khoá — RESET thứ `migrate()` đã đặt khác nền cũng lệch), số
@@ -109,7 +109,7 @@ const TEN_GUC_VAN_HANH = ["row_security", "session_replication_role", "search_pa
  * chỉ ghép hai hằng chuỗi cách nhau bởi `+` và khoảng trắng, nên một chú thích chen giữa cắt câu thành mảnh cụt — PREPARE của
  * `qt3-cu-phap.int.test.ts` báo 42601 ở mảnh đầu. Các trục:
  *   - `session_replication_role`, `row_security` — đổi cách mọi câu sau chạy (replica bỏ trigger ENABLE thường và khoá ngoại; tắt RLS
- *     làm câu của vai thường báo lỗi); search path HIỆU LỰC — đọc qua hàm, cùng cách withTenant đọc; ~~bốn~~ [S1.9101] năm GUC tenant/khách — thu hẹp câu
+ *     làm câu của vai thường báo lỗi); search path HIỆU LỰC — đọc qua hàm, cùng cách withTenant đọc; ~~bốn~~ [S1.287] năm GUC tenant/khách — thu hẹp câu
  *     sau về một tổ chức;
  *   - [S1.66 / lượt soi 60a-5] SỐ đối tượng trong lược đồ tạm: bảng tạm che tên bảng thật cho câu tên trần ở tệp sau, trong khi
  *     `current_schemas(false)` cố ý bỏ pg_temp ngầm, và `migrate()` không `DISCARD TEMP` giữa các tệp. [S1.72 / lượt soi ngang 66b-7]
@@ -681,7 +681,7 @@ export async function migrate(
     // [S1.48 / lượt soi ngang 40a H1] Mục phán xét khoản 87 chỉ hỏi ở BƯỚC 3 — SAU khi các migration đánh số của CÙNG
     // lượt đã chạy dưới một GUC `app.*` gắn sẵn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, options= của chính chuỗi kết nối
     // này) và đã ghi checksum: một backfill dưới vai deploy N2 (FORCE RLS áp) chỉ sửa hàng của tổ chức B, COMMIT, rồi 87
-    // mới NÉM — deploy kế không chạy lại migration ấy. Nên migrate() hỏi ~~bốn~~ [S1.9101] năm GUC NGAY ĐÂY, trước lượt sửa, và từ chối:
+    // mới NÉM — deploy kế không chạy lại migration ấy. Nên migrate() hỏi ~~bốn~~ [S1.287] năm GUC NGAY ĐÂY, trước lượt sửa, và từ chối:
     // cùng phép đọc như withTenant (placeholder không có ở pg_settings — đo S1.47), không cần quyền, một round-trip.
     // Mục 87 ở BƯỚC 3 vẫn giữ làm lớp catalog (mức database/vai/pg_parameter_acl/proconfig là thứ phiên này không thấy hết).
     //

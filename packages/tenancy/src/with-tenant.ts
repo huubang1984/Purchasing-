@@ -69,7 +69,7 @@ export class TenantError extends Error {
  * Tuỳ chọn của `withTenant()`.
  *
  * [vòng fix 1 Task 10 — MỤC 2] `destroyConnectionWhenDone` tồn tại vì một phép đo, không vì sự cẩn
- * thận chung chung. ~~Khối `finally` của hàm này chỉ đọc lại MỘT trục (`app.org_id`)~~ [S1.47] nay đọc cả ~~bốn~~ [S1.9101] năm trục — trong khi
+ * thận chung chung. ~~Khối `finally` của hàm này chỉ đọc lại MỘT trục (`app.org_id`)~~ [S1.47] nay đọc cả ~~bốn~~ [S1.287] năm trục — trong khi
  * chính docstring dưới đây TỰ LIỆT KÊ `SET ROLE`, `search_path`, `statement_timeout` là những
  * thứ "cũng đi theo kết nối". Đo được trên PostgreSQL 16 / pg@8.23.0:
  *     withTenant(pool, P, fn) với fn chạy `SET search_path = doc, pg_catalog, public`
@@ -230,14 +230,14 @@ function choKetNoiCoTran(
  * Bảo đảm hiện tại, phát biểu đúng phạm vi: kết nối trả về pool KHÔNG mang theo `app.org_id`
  * — hoặc vì nó chưa bao giờ vượt ra khỏi transaction, hoặc vì kết nối đã bị huỷ thay vì trả về.
  * [S1.47 / khoản nợ 87 ⑵] Cùng bảo đảm ấy cho BA GUC khách (`app.guest_session_id`,
- * `app.guest_invitation_id`, `app.guest_rfq_id`): khối `finally` đọc cả ~~bốn~~ [S1.9101] năm trục. Và một vế MỚI ở
- * đầu giao dịch: hàm này XOÁ ba GUC khách ([S1.9101] và `app.passport_supplier_id`) về '' (phạm vi transaction) trước khi chạy `fn` — một
+ * `app.guest_invitation_id`, `app.guest_rfq_id`): khối `finally` đọc cả ~~bốn~~ [S1.287] năm trục. Và một vế MỚI ở
+ * đầu giao dịch: hàm này XOÁ ba GUC khách ([S1.287] và `app.passport_supplier_id`) về '' (phạm vi transaction) trước khi chạy `fn` — một
  * giá trị gắn sẵn ở mức database (`ALTER DATABASE … SET app.guest_session_id`, superuser hay vai được
  * GRANT SET ON PARAMETER — PG15+, đo S1.47) hay
  * trên chuỗi kết nối (`options=-c …`) không biến giao dịch của người mua thành phiên khách. Đo ở
  * with-tenant.int.test.ts "[khoản nợ 87]": trước bản vá, `withTenant(orgA)` đọc `user_login_tokens`
  * ra 0 hàng không lỗi dưới GUC ấy. [lượt soi 39 NHẸ-4] Và hơn thế: hàm này TỪ CHỐI phục vụ (TenantError,
- * trước `fn`, không thay đổi nào được ghi) khi một trong ~~bốn~~ [S1.9101] năm GUC đã có giá trị lúc mở giao dịch — tức
+ * trước `fn`, không thay đổi nào được ghi) khi một trong ~~bốn~~ [S1.287] năm GUC đã có giá trị lúc mở giao dịch — tức
  * MẶC ĐỊNH PHIÊN (placeholder không có mặt ở `pg_settings`, đo — nên đọc thẳng giá trị) khác rỗng — vì mọi câu NGOÀI withTenant của cùng tiến trình đang chạy dưới tổ chức/phiên
  * khách do người khác chọn, và xoá trong giao dịch không chữa được điều đó: ồn ào thay vì im lặng.
  * Lớp bắt ở catalog là mục phán xét khoản 87 của hardening; hàm này là lớp không chờ deploy kế.
@@ -355,7 +355,7 @@ export async function withTenant<T>(
   let truocLuocDo: string | undefined;
   try {
     // [S1.47 / khoản nợ 87 ⑵ — lượt soi 39 NHẸ-4] BEGIN và, trong CÙNG round-trip (một câu nhiều lệnh, không tham số),
-    // đọc ~~bốn~~ [S1.9101] năm GUC TRƯỚC khi hàm này đặt gì: một giá trị đã có sẵn lúc mở giao dịch là MẶC ĐỊNH PHIÊN (`ALTER
+    // đọc ~~bốn~~ [S1.287] năm GUC TRƯỚC khi hàm này đặt gì: một giá trị đã có sẵn lúc mở giao dịch là MẶC ĐỊNH PHIÊN (`ALTER
     // DATABASE/ROLE … SET`, postgresql.conf/ALTER SYSTEM, `options=-c` trên chuỗi kết nối) — ~~kết nối rò từ lần dùng
     // trước đã bị `finally` huỷ, không quay lại đây~~ [S1.48 / 40a NẶNG-1] chỉ đúng cho rò QUA withTenant; rò từ mã ngoài
     // withTenant được khối catch phân biệt bằng RESET và huỷ kết nối. Mặc định ấy khác rỗng nghĩa là MỌI câu ngoài withTenant của tiến
@@ -372,7 +372,7 @@ export async function withTenant<T>(
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END, " +
-        // [S1.9101 / S3.7a1 / ADR-081 ⑶] Trục thứ năm: GUC dẫn xuất của phiên Passport.
+        // [S1.287 / S3.7a1 / ADR-081 ⑶] Trục thứ năm: GUC dẫn xuất của phiên Passport.
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.passport_supplier_id', true), '') IS NOT NULL THEN 'app.passport_supplier_id' END) AS mac_dinh, " +
         "  pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do",
     )) as unknown as pg.QueryResult<{ mac_dinh: string | null; luoc_do: string }>[];
@@ -403,11 +403,11 @@ export async function withTenant<T>(
     // superuser hay vai được GRANT SET ON PARAMETER đặt được — đo) làm MỌI phiên mở sau nó khởi đầu như một phiên khách, và 29 policy RESTRICTIVE
     // `_khach` (một mỗi bảng tenant, khuôn 027 — hardening dựng; đếm từ catalog ở rls-coverage, S1.48) thu hẹp mọi câu của người mua về 0 hàng KHÔNG LỖI — đúng cơ chế ADR-036 đo ở
     // with-tenant.int.test.ts "[khoản nợ 87]". Hardening có mục phán xét cho catalog (S1.47 ⑴), nhưng lớp ứng
-    // dụng không tựa vào deploy kế: mỗi giao dịch của người mua tự đứng trên ~~bốn~~ [S1.9101] năm GUC nó biết. '' là "không có"
+    // dụng không tựa vào deploy kế: mỗi giao dịch của người mua tự đứng trên ~~bốn~~ [S1.287] năm GUC nó biết. '' là "không có"
     // với mọi hàm đọc của 001/027 (NULLIF(…, '')). withGuestSession đặt lại ba GUC ấy SAU câu này, trong `fn`.
-    // Không thêm round-trip: ~~bốn~~ [S1.9101] năm set_config trong một SELECT.
+    // Không thêm round-trip: ~~bốn~~ [S1.287] năm set_config trong một SELECT.
     // Câu xoá vẫn giữ làm lớp thứ hai (phép kiểm ở trên mù thì giao dịch này vẫn không là phiên khách). NÓI RA: đột biến
-    // bỏ riêng ba set_config('', true) này SỐNG (phép từ chối đứng trước bắt cùng ca) — lớp hai, không phải lớp được đo. [S1.9101] Câu thứ tư (`app.passport_supplier_id`) cùng khuôn, chưa đo riêng.
+    // bỏ riêng ba set_config('', true) này SỐNG (phép từ chối đứng trước bắt cùng ca) — lớp hai, không phải lớp được đo. [S1.287] Câu thứ tư (`app.passport_supplier_id`) cùng khuôn, chưa đo riêng.
     await client.query(
       "SELECT pg_catalog.set_config('app.org_id', $1, true), " +
         "       pg_catalog.set_config('app.guest_session_id', '', true), " +
@@ -476,7 +476,7 @@ export async function withTenant<T>(
     // phiên thật (ALTER DATABASE/ROLE/SYSTEM, options=) — hay RÒ PHẠM VI PHIÊN từ mã NGOÀI withTenant (`pool.connect()` +
     // `set_config(…, false)` rồi release). Bản S1.47 gộp hai ca vào "mặc định phiên", tắt phép kiểm ở `finally` và trả kết
     // nối nhiễm về pool — hồi quy so với I1 (trước S1.47 kết nối ấy bị huỷ sau một lượt). Phân biệt bằng chính PostgreSQL:
-    // RESET ~~bốn~~ [S1.9101] năm GUC (RESET phạm vi phiên của placeholder là USERSET, vai nào cũng làm được; ngoài giao dịch nên không bị
+    // RESET ~~bốn~~ [S1.287] năm GUC (RESET phạm vi phiên của placeholder là USERSET, vai nào cũng làm được; ngoài giao dịch nên không bị
     // hoàn) rồi đọc lại — RỖNG ⇒ là rò phiên ⇒ huỷ kết nối như I1, thông điệp nói đúng nguồn; CÒN ⇒ mặc định thật ⇒ giữ
     // kết nối (kết nối kế mang cùng mặc định — lượt soi 39 NHẸ-4).
     if (tuChoiMacDinh && loiLamHongClient === undefined) {
@@ -612,7 +612,7 @@ export async function withTenant<T>(
  *   ⑶ **ĐỌC LẠI CẢ BA GUC.** `set_config` đã ghim `pg_catalog.` nên không cướp được, nhưng một
  *     GUC KHÔNG có hiệu lực nghĩa là policy khách tương ứng của `027` thấy `NULL` và MỞ TOANG trở
  *     lại đúng khoảng trống A5. Đọc lại HAI trong ba là đủ để một lượt fail-open đi qua trên trục
- *     thứ ba, nên phép kiểm phải phủ cả ba — [S1.9101] và đòi trục thứ tư `app.passport_supplier_id` RỖNG. Fail-open trong im lặng là hướng hỏng duy nhất không
+ *     thứ ba, nên phép kiểm phải phủ cả ba — [S1.287] và đòi trục thứ tư `app.passport_supplier_id` RỖNG. Fail-open trong im lặng là hướng hỏng duy nhất không
  *     chấp nhận được ở hàm này, nên nó được ĐO chứ không được tin.
  */
 export async function withGuestSession<T>(
@@ -670,7 +670,7 @@ export async function withGuestSession<T>(
           "       NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau, " +
           "       NULLIF(pg_catalog.current_setting('app.passport_supplier_id', true), '') AS ncc_passport",
       );
-      // [S1.9101 / S3.7a1] Trục thứ tư phải RỖNG: phiên khách của lời mời không bao giờ là phiên Passport — policy
+      // [S1.287 / S3.7a1] Trục thứ tư phải RỖNG: phiên khách của lời mời không bao giờ là phiên Passport — policy
       // `supplier_passport_versions_khach` mở theo đúng GUC ấy (lượt soi hình dạng L11).
       if (
         rows[0]?.phien !== guestSessionId ||
@@ -691,7 +691,7 @@ export async function withGuestSession<T>(
 }
 
 /**
- * [S1.9101 / S3.7a1 / ADR-081 ⑶] Chạy `fn` trong một transaction gắn tổ chức VÀ một phiên Passport — khuôn ⑴–⑶ của
+ * [S1.287 / S3.7a1 / ADR-081 ⑶] Chạy `fn` trong một transaction gắn tổ chức VÀ một phiên Passport — khuôn ⑴–⑶ của
  * `withGuestSession`, trên bảng phiên RIÊNG (`passport_sessions`).
  *
  *   ⑴ **DẪN XUẤT nhà cung cấp từ hàng phiên.** Policy `supplier_passport_versions_khach` mở theo

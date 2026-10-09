@@ -28,7 +28,7 @@ export type TinHopThu =
       readonly den: string;
       readonly duongLink: string;
     }
-  // [S1.9101 / S3.7a1] Link Passport của nhà cung cấp — `/ho-so#<orgId>:<mã>`.
+  // [S1.287 / S3.7a1] Link Passport của nhà cung cấp — `/ho-so#<orgId>:<mã>`.
   | {
       readonly loai: "PASSPORT_LINK";
       readonly orgId: string;

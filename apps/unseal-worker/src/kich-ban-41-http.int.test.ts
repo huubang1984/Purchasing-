@@ -947,7 +947,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // tự đổi, lần nộp ở trên gặp 401, không phải 422 hình dạng). Không đụng phiên của kịch bản.
         case "POST /guest/logout":
           return { path: r.path, body: {}, cookie: kHy };
-        // [S1.9101 / S3.7a1 / ADR-081] Ba bước vô danh của Passport — token lạ ⇒ 422 có tên, không tiêu thụ link nào.
+        // [S1.287 / S3.7a1 / ADR-081] Ba bước vô danh của Passport — token lạ ⇒ 422 có tên, không tiêu thụ link nào.
         case "POST /guest/passport/redeem":
           return { path: r.path, body: { orgId: orgA, token: tokenGia }, cookie: "" };
         case "POST /guest/passport/otp":
@@ -1250,7 +1250,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         .replace(":itemId", trangThai.hangChuanId)
         .replace(":lineNo", "1")
         .replace(/:[A-Za-z]+/gu, UUID0);
-    // Cookie của route ĐỌC: khách ⇒ phiên khách; [S1.9101 / S3.7a1] phiên Passport ⇒ không cookie (kịch bản chưa mở phiên Passport nào,
+    // Cookie của route ĐỌC: khách ⇒ phiên khách; [S1.287 / S3.7a1] phiên Passport ⇒ không cookie (kịch bản chưa mở phiên Passport nào,
     // 401 trước nghiệp vụ); hồ sơ Passport của bên mua ⇒ phiên tài chính — cổng `supplier.qualify` nằm TRONG hàm, và đọc bằng phiên
     // `m` để lại một `PERMISSION_DENIED` ăn vào trần từ chối của phiên ấy (đo: bước 16 nhận 429 thay vì 422 ở lần tự ghi nhận).
     const cookieDoc = (r: (typeof ROUTES)[number]): string | undefined =>

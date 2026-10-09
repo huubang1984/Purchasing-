@@ -477,7 +477,7 @@ const DANH_SACH_TRANG_SUPPLIER = [
   // [S1.273 / S3.3e1] Hồ sơ xác minh của mọi nhà cung cấp cho màn `/nha-cung-cap` — trạng thái, băm hồ sơ, người liên hệ; gọi
   // `assertTenantBound` trước mọi thứ, không token, không phiên.
   "docHoSoXacMinh",
-  // [S1.9101 / S3.7a1 / ADR-081] Passport: yêu cầu hồ sơ dưới `supplier.qualify` (cổng ở hàm), nộp phiên bản dưới phiên Passport
+  // [S1.287 / S3.7a1 / ADR-081] Passport: yêu cầu hồ sơ dưới `supplier.qualify` (cổng ở hàm), nộp phiên bản dưới phiên Passport
   // (người gọi dẫn xuất từ cookie), hai lời đọc — số tài khoản chỉ ở `docHoSoPassport` sau cổng; một bộ đọc thân thuần; mã từ
   // chối và câu nói của chúng; lỗi đua của trigger. Mọi hàm gọi `assertTenantBound` trước mọi thứ.
   "CAU_TU_CHOI_PASSPORT",
@@ -680,7 +680,7 @@ const DANH_SACH_TRANG_INVITATION = [
   // [sổ nợ 55] Đếm-và-tăng bucket TOÀN CỤC theo người gọi; KHÔNG nhận orgId (bảng ngoài cây tenant).
   "tangBucketNguoiGoi",
   "verifyOtpAndStartSession",
-  // [S1.9101 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ E2: `redeemPassportLink` trả KÊNH, không trả phiên; hàm DUY NHẤT sinh
+  // [S1.287 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ E2: `redeemPassportLink` trả KÊNH, không trả phiên; hàm DUY NHẤT sinh
   // phiên là `verifyPassportOtpAndStartSession` và nó đòi mã OTP. Đúc và thu hồi link dưới phiên NGƯỜI MUA; tra và thu hồi phiên
   // theo id mà dispatcher dẫn xuất từ cookie Passport.
   "KENH_LINK_PASSPORT",
@@ -1261,7 +1261,7 @@ const DANH_SACH_TRANG_TENANCY = [
   "TenantError",
   "ngheLoiKetNoiToiMuon",
   "withGuestSession",
-  // [S1.9101 / S3.7a1 / ADR-081 ⑶] Phiên Passport: CHÍNH `app.guest_session_id` cộng GUC dẫn xuất, đọc lại năm trục.
+  // [S1.287 / S3.7a1 / ADR-081 ⑶] Phiên Passport: CHÍNH `app.guest_session_id` cộng GUC dẫn xuất, đọc lại năm trục.
   "withPassportSession",
   "withTenant",
 ];

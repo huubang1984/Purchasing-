@@ -23,7 +23,7 @@ import type { Permission, SessionActor, TotpSecretUnsealer, WrappedTotpSecret } 
 import type { Channel, PepperRing } from "@trustprocure/invitation";
 import type { ApiRequest, ApiResponse, HttpMethod } from "./http.js";
 
-// [S1.9101 / S3.7a1 / ADR-081 ⑶] `PASSPORT` — phiên của nhà cung cấp trên hồ sơ Passport, cookie RIÊNG, nhánh riêng ở bộ điều phối.
+// [S1.287 / S3.7a1 / ADR-081 ⑶] `PASSPORT` — phiên của nhà cung cấp trên hồ sơ Passport, cookie RIÊNG, nhánh riêng ở bộ điều phối.
 export type Audience = "PUBLIC" | "ANON" | "GUEST" | "BUYER" | "PASSPORT";
 
 /** Bộ gửi OTP — được TIÊM ở composition root (ADR-015 mục 3: người gọi issueOtpChallenge là handler gửi). */
@@ -99,7 +99,7 @@ export interface InvitationLinkSender {
 }
 
 /**
- * [S1.9101 / S3.7a1] Bộ gửi link Passport — đích ĐỌC TỪ `supplier_contacts` (email của người liên hệ đã xác minh), token không về
+ * [S1.287 / S3.7a1] Bộ gửi link Passport — đích ĐỌC TỪ `supplier_contacts` (email của người liên hệ đã xác minh), token không về
  * client. Gửi SAU commit, có bù (thu hồi token vừa đúc — khuôn ADR-110).
  */
 export interface PassportLinkSender {
@@ -274,7 +274,7 @@ export interface GuestContext {
 }
 
 /**
- * [S1.9101 / S3.7a1 / ADR-081 ⑶] Cửa vào CSDL của handler Passport. Route ĐỌC: `client` đã gắn phiên Passport (`withPassportSession`
+ * [S1.287 / S3.7a1 / ADR-081 ⑶] Cửa vào CSDL của handler Passport. Route ĐỌC: `client` đã gắn phiên Passport (`withPassportSession`
  * — `app.guest_session_id` cộng GUC dẫn xuất `app.passport_supplier_id`; mọi policy `_khach` cũ đóng). Route GHI: `client` chỉ gắn tổ
  * chức (khuôn route ghi của khách — `028`); handler chỉ gọi hàm gói nhận các trường dẫn xuất dưới đây.
  */
@@ -499,7 +499,7 @@ export const MIEN_TRAN_NGUOI_GOI: Readonly<Record<string, string>> = {
     "trần nằm TRONG `issueOtpChallenge` (packages/invitation) và nó CHẶT HƠN một trần theo route: " +
     "`OTP_MAX_PER_CALLER` = 10, `OTP_MAX_PER_INVITATION` = 5 (bucket kẻ tấn công không xoay được), " +
     "`OTP_MAX_PER_DEST` = 3 và `OTP_MAX_PER_DEST_TOAN_TO_CHUC` = 20 — ADR-015 §5.",
-  // [S1.9101 / S3.7a1] Cùng lý do, bucket không xoay được là NHÀ CUNG CẤP (khoá theo nhà cung cấp, không theo token — lượt soi ④).
+  // [S1.287 / S3.7a1] Cùng lý do, bucket không xoay được là NHÀ CUNG CẤP (khoá theo nhà cung cấp, không theo token — lượt soi ④).
   "/guest/passport/otp":
     "trần nằm TRONG `issuePassportOtp` (packages/invitation) và nó CHẶT HƠN một trần theo route: " +
     "`OTP_MAX_PER_CALLER` = 10, `OTP_MAX_PER_PASSPORT` = 5 (bucket theo nhà cung cấp — kẻ tấn công không xoay được), " +
@@ -534,7 +534,7 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     if (r.audience === "ANON" && !(r.path.startsWith("/guest/") || r.path.startsWith("/auth/"))) {
       viPham.push(`${khoa}: route ANON ngoài /guest/* và /auth/* — đường vô danh không được mọc ở chỗ khác`);
     }
-    // [S1.9101 / S3.7a1] Đường của phiên Passport chỉ ở `/passport` và `/passport/*` — một route PASSPORT mọc chỗ khác là một bề mặt
+    // [S1.287 / S3.7a1] Đường của phiên Passport chỉ ở `/passport` và `/passport/*` — một route PASSPORT mọc chỗ khác là một bề mặt
     // nhà cung cấp mà không ai đặt tên (lượt soi hình dạng L10(g)).
     if (r.audience === "PASSPORT" && !(r.path === "/passport" || r.path.startsWith("/passport/"))) {
       viPham.push(`${khoa}: route PASSPORT ngoài /passport và /passport/*`);

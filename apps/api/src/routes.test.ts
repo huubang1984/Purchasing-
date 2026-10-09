@@ -83,7 +83,7 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     const anon = new Set(ROUTES.filter((r) => r.audience === "ANON").map((r) => r.path));
     // Miễn trừ ở đây nói *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"* — nên một dòng trỏ
     // tới một đường không còn tồn tại là một lời khai đã thiu, đúng lớp lỗi mà S1.21 đi đóng.
-    // [S1.9101 / S3.7a1] `/guest/passport/otp` — trần trong `issuePassportOtp`, bucket theo nhà cung cấp.
+    // [S1.287 / S3.7a1] `/guest/passport/otp` — trần trong `issuePassportOtp`, bucket theo nhà cung cấp.
     expect(Object.keys(MIEN_TRAN_NGUOI_GOI)).toEqual(["/guest/otp", "/guest/passport/otp"]);
     for (const [duong, lyDo] of Object.entries(MIEN_TRAN_NGUOI_GOI)) {
       expect(anon.has(duong), `${duong} không còn là route ANON`).toBe(true);

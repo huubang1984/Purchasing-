@@ -1,11 +1,11 @@
 -- ==============================================================================================
--- 9501_passport_nha_cung_cap — [S1.9101 / S3.7a1 của spec S3] ĐƯỜNG PASSPORT CHO NHÀ CUNG CẤP
+-- 118_passport_nha_cung_cap — [S1.287 / S3.7a1 của spec S3] ĐƯỜNG PASSPORT CHO NHÀ CUNG CẤP
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.8, §5 K11, §8.6. ADR-081 ⑴ ⑶ ⑷, ADR-015,
 -- ADR-016, ADR-018. Chủ dự án chốt ngày 2026-10-08: S3.7 (trừ S3.7b — tài liệu đính kèm) chia ba PR; S3.7a1 là đường Passport —
 -- bên mua gửi yêu cầu, nhà cung cấp mở link, qua OTP khác kênh, nộp phiên bản hồ sơ. Thẩm định (K8b) là S3.7a2.
 --
--- Hai câu chốt của chủ dự án sau lượt soi hình dạng (ADR-9201):
+-- Hai câu chốt của chủ dự án sau lượt soi hình dạng (ADR-159):
 --   ⓐ số tài khoản ngân hàng được bảo vệ bằng RANH GIỚI CỘT Ở TẦNG MÃ (khuôn `don_gia`), không mã hoá — cột ở đây chỉ mang
 --     CHECK hình dạng; phép đo ranh giới là `tests/architecture/so-tai-khoan-liet-ke.test.ts`;
 --   ⓑ link Passport chỉ đi tới nhà cung cấp có XÁC MINH K8a còn hiệu lực — một người thứ hai đã xác nhận MST và MỌI đích

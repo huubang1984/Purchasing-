@@ -70,7 +70,7 @@ export {
   type VerifyOtpInput,
   type DanhSachLoiMoi,
 } from "./invitation.js";
-// [S1.9101 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ hình dạng E2 của mặt tiền: `redeemPassportLink` trả kênh, không trả phiên;
+// [S1.287 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ hình dạng E2 của mặt tiền: `redeemPassportLink` trả kênh, không trả phiên;
 // hàm DUY NHẤT sinh phiên là `verifyPassportOtpAndStartSession` và nó đòi mã OTP.
 export {
   KENH_LINK_PASSPORT,

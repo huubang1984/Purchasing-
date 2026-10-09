@@ -243,7 +243,7 @@ describe("hộp thư dev", () => {
   it("đọc đúng năm hình dạng tin, bỏ mọi thứ khác", () => {
     expect(docTin({ loai: "OTP", kenh: "SMS", den: "0912", ma: "123456", luc: "x" })).toMatchObject({ loai: "OTP", ma: "123456" });
     expect(docTin({ loai: "LOGIN_LINK", orgId: "o", den: "a@b", duongLink: "http://x/login#t" })?.loai).toBe("LOGIN_LINK");
-    // [S1.9101 / S3.7a1] Link Passport — đủ trường thì đọc được, thiếu `supplierId` thì không.
+    // [S1.287 / S3.7a1] Link Passport — đủ trường thì đọc được, thiếu `supplierId` thì không.
     expect(docTin({ loai: "PASSPORT_LINK", orgId: "o", supplierId: "s", kenh: "EMAIL", den: "a@b", duongLink: "http://x/ho-so#o:t" })?.loai).toBe("PASSPORT_LINK");
     expect(docTin({ loai: "PASSPORT_LINK", orgId: "o", kenh: "EMAIL", den: "a@b", duongLink: "http://x/ho-so#o:t" })).toBeNull();
     expect(docTin({ loai: "OTP", den: "0912" })).toBeNull();

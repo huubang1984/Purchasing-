@@ -104,7 +104,7 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.coi_kiem_xac_minh",
   "public.coi_kiem_ghi_nhan",
   "public.rfq_kiem_chu_ky_xung_dot_khi_mo",
-  // [S1.9101 / S3.7a1 / ADR-081] Năm hàm INSERT của đường Passport: luật người + hàm vị từ của yêu cầu, ràng token vào yêu cầu,
+  // [S1.287 / S3.7a1 / ADR-081] Năm hàm INSERT của đường Passport: luật người + hàm vị từ của yêu cầu, ràng token vào yêu cầu,
   // OTP khác lớp đích với kênh đã lưu, danh tính phiên dẫn xuất từ thách thức, phiên bản dưới khoá theo phiên sống. Chỉ gắn INSERT ⇒
   // không thể là hàm canh; từ chối CÓ ĐIỀU KIỆN; một hàng HỢP LỆ đi qua mỗi hàm — `dungKichBan()` đi trọn đường Passport.
   "public.passport_kiem_yeu_cau",

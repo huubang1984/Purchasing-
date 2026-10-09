@@ -46,7 +46,7 @@ const THU_MUC_APPS = "apps";
 /** Hàm ĐỔI TRẠNG THÁI — mọi lời gọi từ `apps/` phải đi kèm một phép kiểm quyền. */
 const HAM_DOI_TRANG_THAI = [
   "addRfqItem",
-  // [S1.9101 / S3.7a1 / ADR-081] Yêu cầu hồ sơ Passport — route đòi `supplier.qualify`, hàm hỏi lại cùng mã; đúc link mới (thu
+  // [S1.287 / S3.7a1 / ADR-081] Yêu cầu hồ sơ Passport — route đòi `supplier.qualify`, hàm hỏi lại cùng mã; đúc link mới (thu
   // hồi link và phiên cũ) và thu hồi link khi gửi hỏng — CÙNG route, cùng mã.
   "taoYeuCauPassport",
   "ducTokenPassport",
@@ -256,7 +256,7 @@ const HAM_DUONG_KHACH = [
   // Cùng lập luận với `submitBid` dưới đây — một cổng quyền ở đây đòi một tài khoản người mua.
   "revokeGuestSession",
   "verifyOtpAndStartSession",
-  // [S1.9101 / S3.7a1 / ADR-081] Đường Passport của NHÀ CUNG CẤP: đổi link, phát OTP, xác minh — tự chứng minh bằng token và mã;
+  // [S1.287 / S3.7a1 / ADR-081] Đường Passport của NHÀ CUNG CẤP: đổi link, phát OTP, xác minh — tự chứng minh bằng token và mã;
   // tra phiên từ cookie, thoát phiên của mình, đọc hồ sơ của mình (RLS theo GUC dẫn xuất), nộp phiên bản — người ghi là nhà cung
   // cấp, đã qua token cộng OTP; một cổng quyền ở đây đòi một tài khoản người mua (cùng lập luận `submitBid`).
   "redeemPassportLink",
@@ -301,7 +301,7 @@ const HAM_DUONG_KHACH = [
  */
 const HAM_DOC_CO_QUYEN = [
   "buildComparisonTable",
-  // [S1.9101 / S3.7a1] Hồ sơ Passport đầy đủ — số tài khoản — dưới `supplier.qualify`, lời gọi đứng THẲNG trong thân.
+  // [S1.287 / S3.7a1] Hồ sơ Passport đầy đủ — số tài khoản — dưới `supplier.qualify`, lời gọi đứng THẲNG trong thân.
   "docHoSoPassport",
   "countReceivedBids",
   // [S1.281 / S3.4a] Khai báo xung đột của CHÍNH người gọi — vẫn chịu cổng `coi.declare` (cùng mã với lần khai): người không có
@@ -347,7 +347,7 @@ const HAM_DOC_CO_QUYEN = [
  */
 const HAM_THUAN_TUY = [
   "buildReceiptText",
-  // [S1.9101 / S3.7a1] Đọc thân yêu cầu thành hồ sơ Passport — không I/O.
+  // [S1.287 / S3.7a1] Đọc thân yêu cầu thành hồ sơ Passport — không I/O.
   "docHoSoPassportNhap",
   // [S1.110] Năm hàm thuần của `@trustprocure/danh-gia`: không `client`, không `orgId`, không
   // chạm CSDL. `tinhChiPhiHieuDung` là hàm mà **J2** đòi tái lập được, nên một tham số

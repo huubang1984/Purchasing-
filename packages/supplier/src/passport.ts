@@ -4,7 +4,7 @@ import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocu
 import { SupplierError, TAX_CODE_PATTERN } from "./suppliers.js";
 
 // =============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] SUPPLIER PASSPORT — YÊU CẦU HỒ SƠ VÀ PHIÊN BẢN HỒ SƠ
+// [S1.287 / S3.7a1 / ADR-081] SUPPLIER PASSPORT — YÊU CẦU HỒ SƠ VÀ PHIÊN BẢN HỒ SƠ
 //
 // Hồ sơ THEO TỪNG TỔ CHỨC MUA (ADR-081 ⑴). Bên mua — người giữ `supplier.qualify` — gửi yêu cầu cho một người liên hệ của một
 // nhà cung cấp ĐÃ XÁC MINH (K8a, chủ dự án chốt); nhà cung cấp mở link, qua OTP khác kênh (`packages/invitation`, `passport.ts`),
@@ -18,7 +18,7 @@ import { SupplierError, TAX_CODE_PATTERN } from "./suppliers.js";
 // phải bị ĐỌC — và tráo là việc của K8b (thẩm định trỏ phiên bản MỚI NHẤT).
 // =============================================================================================
 
-/** Mã từ chối của hàm vị từ `passport_chot_yeu_cau` (`9501`) — tầng gói hỏi trước, trigger hỏi lại. */
+/** Mã từ chối của hàm vị từ `passport_chot_yeu_cau` (`118`) — tầng gói hỏi trước, trigger hỏi lại. */
 export const MA_TU_CHOI_PASSPORT = [
   "PASSPORT_TO_CHUC_CHUA_BAT",
   "PASSPORT_NCC_KHONG_HOP_LE",

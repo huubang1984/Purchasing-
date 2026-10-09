@@ -648,7 +648,7 @@ describe("bộ chạy migration", () => {
 // tệp 998 `SET session_replication_role = replica` ⇒ tệp 999 chèn được một hàng con treo khoá ngoại, CẢ BA tệp được ghi
 // checksum, lượt phán xét sau vòng mới NÉM; lần gọi kế trên pool một kết nối nhận lại đúng phiên ấy và `TU_CHOI_GUC_SOM` lặp mãi.
 // Tệp 998 `set_config('app.org_id', …, false)` ⇒ tệp 999 đọc được đúng tổ chức ấy — dưới hồ sơ N3 là "chỉ sửa hàng của tổ chức B".
-// migrate() nay chụp CÙNG LÚC với vai: `session_replication_role`, `row_security`, ~~bốn~~ [S1.9101] năm GUC tenant/khách, search path hiệu lực —
+// migrate() nay chụp CÙNG LÚC với vai: `session_replication_role`, `row_security`, ~~bốn~~ [S1.287] năm GUC tenant/khách, search path hiệu lực —
 // và so ngay trong giao dịch của tệp, trước khi ghi checksum. Lệch ⇒ ROLLBACK, từ chối, huỷ kết nối.
 // =====================================================================================
 describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với trạng thái phiên khác lúc mở vòng đánh số", () => {

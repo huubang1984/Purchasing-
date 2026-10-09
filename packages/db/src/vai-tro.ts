@@ -142,7 +142,7 @@ interface HangTrangThai {
  *     vòng đi-về nào thêm, và không tín hiệu nào của lớp khác nằm ở đó (mã sản xuất không dùng prepared statement có tên, con trỏ hay
  *     LISTEN — census bằng grep, S1.215; `DEALLOCATE ALL` vì thế không đụng bộ nhớ `parsedStatements` của driver);
  *   - GUC phiên thì ĐỌC TRƯỚC, DỌN SAU: câu đọc chạy TRƯỚC `RESET ALL`, nên ba GUC vận hành vẫn bị PHÁN theo khoản 99 (replica do hàm
- *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi ~~bốn~~ [S1.9101] năm GUC
+ *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi ~~bốn~~ [S1.287] năm GUC
  *     tenant/khách RỖNG. Giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant`
  *     (khoản 87, S1.48): xoá nó ở đây là xoá đúng thứ withTenant dùng để nói "rò từ mã ngoài withTenant, huỷ kết nối". Khi ấy lớp này
  *     KHÔNG dọn GUC phiên và KHÔNG phán — withTenant ở BEGIN kế tiếp phân biệt và huỷ; đường không qua withTenant nhận kết nối mang

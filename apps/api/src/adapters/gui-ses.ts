@@ -111,7 +111,7 @@ export function taoBoGuiSes(tuyChon: TuyChonGuiSes): HopThuDev {
         );
       },
     },
-    // [S1.9101 / S3.7a1] Link Passport — chỉ kênh EMAIL (link đi hộp thư, OTP đi máy điện thoại: ADR-015 ⑴).
+    // [S1.287 / S3.7a1] Link Passport — chỉ kênh EMAIL (link đi hộp thư, OTP đi máy điện thoại: ADR-015 ⑴).
     passportLinkSender: {
       name: TEN,
       send: async (m) => {

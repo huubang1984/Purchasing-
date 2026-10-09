@@ -143,7 +143,7 @@ describe("bề mặt tệp", () => {
         link.push({ tep: t, duong: m[1] ?? "", manh: m[2] ?? "" });
       }
     }
-    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số. [S1.9101 / S3.7a1] Cộng
+    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số. [S1.287 / S3.7a1] Cộng
     // link Passport (`/ho-so#<orgId>:<mã>`) ở hộp thư dev và ở SES: 10.
     expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(10);
     for (const l of link) {
@@ -297,7 +297,7 @@ describe("bề mặt tệp", () => {
       ...benchmarkWeb,
       // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
       ...xungDot,
-      // [S1.9101 / S3.7a1] `/lib/ho-so.js` là bản thật: kiểm form và che số tài khoản của `/ho-so`.
+      // [S1.287 / S3.7a1] `/lib/ho-so.js` là bản thật: kiểm form và che số tài khoản của `/ho-so`.
       ...hoSo,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
@@ -2963,7 +2963,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.than.filter((t) => t.lenh === "POST /suppliers/s-1/verification/revoke").at(-1)?.than).toEqual({ reason: "MST không khớp đăng ký kinh doanh" });
     });
 
-    // [S1.9101 / S3.7a1 / ADR-081] Màn hồ sơ Passport của nhà cung cấp — khuôn `nop-thau`, trên route `/guest/passport/*` và `/passport`.
+    // [S1.287 / S3.7a1 / ADR-081] Màn hồ sơ Passport của nhà cung cấp — khuôn `nop-thau`, trên route `/guest/passport/*` và `/passport`.
     const PB_CU = {
       thuTu: 1, legalName: "Thép A", taxCode: "0101010101", nguoiDaiDien: "Ông B", diaChi: "Hà Nội", nganHang: "VCB",
       soTaiKhoanCuoi: "6789", chungNhan: ["ISO 9001"], nhomHang: ["Thép"], createdAt: "2026-10-08T00:00:00Z",
@@ -2998,7 +2998,7 @@ describe("bề mặt tệp", () => {
       return p;
     };
 
-    it("[S1.9101 / S3.7a1] ho-so: link → OTP → xác minh → hồ sơ; form điền từ phiên bản cũ TRỪ số tài khoản; nộp gửi số đã chuẩn hoá rồi xoá ô ấy; mảnh link xoá", async () => {
+    it("[S1.287 / S3.7a1] ho-so: link → OTP → xác minh → hồ sơ; form điền từ phiên bản cũ TRỪ số tài khoản; nộp gửi số đã chuẩn hoá rồi xoá ô ấy; mảnh link xoá", async () => {
       const p = await moHoSo("#o-1:tok-1", false);
       expect(p.trangThai.goi, "có mã trong link thì không hỏi phiên cũ").not.toContain("GET /passport");
       await p.bam("nut-mo");
@@ -3023,7 +3023,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok3").textContent).toMatch(/phiên bản #2/u);
     });
 
-    it("[S1.9101 / S3.7a1 · lượt đi thử T4] ho-so: mã bị khoá và phiên bị thu hồi lúc nộp ⇒ câu gọi tên lý do, không in hằng 401 của máy chủ", async () => {
+    it("[S1.287 / S3.7a1 · lượt đi thử T4] ho-so: mã bị khoá và phiên bị thu hồi lúc nộp ⇒ câu gọi tên lý do, không in hằng 401 của máy chủ", async () => {
       const p = await moHoSo("#o-1:tok-1", false, (l) =>
         l === "POST /guest/passport/otp/verify" ? Promise.resolve({ status: 401, body: { ok: false, reason: "LOCKED_OUT" } }) : undefined);
       await p.bam("nut-mo");
@@ -3038,7 +3038,7 @@ describe("bề mặt tệp", () => {
       expect(q.el("loi3").textContent).not.toContain("phien khong hop le");
     });
 
-    it("[S1.9101 / S3.7a1] ho-so: thiếu số tài khoản hay MST sai hình dạng ⇒ câu lỗi gọi tên ô, KHÔNG lời gọi nộp nào", async () => {
+    it("[S1.287 / S3.7a1] ho-so: thiếu số tài khoản hay MST sai hình dạng ⇒ câu lỗi gọi tên ô, KHÔNG lời gọi nộp nào", async () => {
       const p = await moHoSo("", true);
       await p.bam("nut-dung-phien");
       p.el("so-tai-khoan").value = "";
@@ -3051,7 +3051,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).not.toContain("POST /passport/versions");
     });
 
-    it("[S1.9101 / S3.7a1] ho-so: tải trang khi còn phiên ⇒ HỎI, không tự mở; Tiếp tục mới mở; Thoát gọi /passport/logout và đóng các bước", async () => {
+    it("[S1.287 / S3.7a1] ho-so: tải trang khi còn phiên ⇒ HỎI, không tự mở; Tiếp tục mới mở; Thoát gọi /passport/logout và đóng các bước", async () => {
       const p = await moHoSo("", true);
       expect(p.el("hoi-phien").textContent).toMatch(/phiên hồ sơ còn hạn của «Thép A»/u);
       expect(p.el("b3").hidden).toBe(true);
@@ -3063,7 +3063,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok1").textContent).toMatch(/^Đã thoát phiên hồ sơ/u);
     });
 
-    it("[S1.9101 / S3.7a1] ho-so: đổi link trong cùng thẻ ⇒ đóng các bước, xoá form, rồi đọc mã mới", async () => {
+    it("[S1.287 / S3.7a1] ho-so: đổi link trong cùng thẻ ⇒ đóng các bước, xoá form, rồi đọc mã mới", async () => {
       const p = await moHoSo("", true);
       await p.bam("nut-dung-phien");
       expect(p.el("ten-phap-ly").value).toBe("Thép A");

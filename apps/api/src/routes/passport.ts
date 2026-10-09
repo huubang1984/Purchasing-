@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] ĐƯỜNG PASSPORT CỦA NHÀ CUNG CẤP QUA HTTP
+// [S1.287 / S3.7a1 / ADR-081] ĐƯỜNG PASSPORT CỦA NHÀ CUNG CẤP QUA HTTP
 //
 // Vô danh (ANON, tiền tố `/guest/` theo lớp canh `route-types.ts`) — ba bước để một link Passport thành một phiên:
 //   POST /guest/passport/redeem      {orgId, token}           → kênh của link, kênh OTP khả dụng (không phải một phiên)

@@ -26379,12 +26379,12 @@ của nó — `pnpm t0` và `pnpm test` chạy lại trên HEAD sau lượt evid
 
 ---
 
-# §S1.9101 — S3.7a1: SUPPLIER PASSPORT — BÊN MUA YÊU CẦU HỒ SƠ, LINK TỚI NGƯỜI LIÊN HỆ ĐÃ XÁC MINH (K8a), OTP KHÁC LỚP ĐÍCH, PHIÊN `PASSPORT` CHỈ THẤY HỒ SƠ CỦA MÌNH, PHIÊN BẢN HỒ SƠ CHỈ-GHI-THÊM; SỐ TÀI KHOẢN LÀ RANH GIỚI CỘT Ở TẦNG MÃ; LƯỢT ĐI THỬ T4 31/31 — ADR-9201
+# §S1.287 — S3.7a1: SUPPLIER PASSPORT — BÊN MUA YÊU CẦU HỒ SƠ, LINK TỚI NGƯỜI LIÊN HỆ ĐÃ XÁC MINH (K8a), OTP KHÁC LỚP ĐÍCH, PHIÊN `PASSPORT` CHỈ THẤY HỒ SƠ CỦA MÌNH, PHIÊN BẢN HỒ SƠ CHỈ-GHI-THÊM; SỐ TÀI KHOẢN LÀ RANH GIỚI CỘT Ở TẦNG MÃ; LƯỢT ĐI THỬ T4 31/31 — ADR-159
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — S3 chưa bật ở tổ chức thật nào (ADR-105), và mọi câu ghi mới đòi
 tổ chức đã bật (`PASSPORT_TO_CHUC_CHUA_BAT`). Thay đổi chạm mọi tổ chức: `withTenant`, `withGuestSession`, `vai-tro.ts`, `migrate.ts` đọc và
 dọn một GUC thứ năm (`app.passport_supplier_id`) — rỗng trên mọi đường cũ, nên hành vi y như trước (cụm test hiện có là đối chứng); CHECK
-`bucket_kind` của `otp_rate_limits` thêm `PASSPORT`. Migration `9501_passport_nha_cung_cap`, ADR-9201; không bất biến mới (ca mới mang nhãn
+`bucket_kind` của `otp_rate_limits` thêm `PASSPORT`. Migration `118_passport_nha_cung_cap`, ADR-159; không bất biến mới (ca mới mang nhãn
 A5, D5, E1, E2, E5), không khoản nợ mới.
 
 ## 1. Vòng này là gì
@@ -26450,7 +26450,7 @@ Ba câu, mỗi câu khuyến nghị đứng đầu; chủ dự án chọn cả b
 - **Link Passport, lần thẩm định và hiệu lực của thẩm định ĐỀU đòi K8a còn hiệu lực** — vòng này cài vế của link.
 
 ## 5. Thay đổi
-- **Migration `9501_passport_nha_cung_cap`** — năm bảng, ENABLE + FORCE RLS, `tenant_isolation` + `_khach` RESTRICTIVE, GRANT theo cột,
+- **Migration `118_passport_nha_cung_cap`** — năm bảng, ENABLE + FORCE RLS, `tenant_isolation` + `_khach` RESTRICTIVE, GRANT theo cột,
   trigger ENABLE ALWAYS: `supplier_passport_requests` (chỉ-ghi-thêm; một lý do `MANUAL`); `supplier_passport_tokens` (băm 32 byte, một mục
   đích, `link_channel`, hạn ≤ 7 ngày bằng CHECK; cột thu hồi/tiêu thụ đơn điệu); `passport_otp_challenges` (khuôn `012`/`015`/`022`/`024`;
   `failed_attempts` không giảm, gỡ khoá không xoá dấu vết); `passport_sessions` (≤ 12 giờ bằng CHECK, không GRANT INSERT cột `id`);
@@ -26471,7 +26471,7 @@ Ba câu, mỗi câu khuyến nghị đứng đầu; chủ dự án chọn cả b
   vá đã đo của `invitation.ts` (`bam`, `sinhMaOtp`, `demVaTang` thêm loại `PASSPORT`) qua `export` trong gói, mặt tiền giữ E2 (không hàm nào
   trả phiên từ token). `packages/supplier/src/passport.ts` — yêu cầu (hỏi vị từ trước, thu hồi link và phiên cũ, đúc token cùng giao dịch),
   nộp phiên bản, hai lời đọc; `PassportYeuCauError`.
-- **Số tài khoản (ADR-9201 ⑺):** cột chỉ được ĐỌC ở `packages/supplier/src/passport.ts`, đúng ba câu — bốn số cuối cho phiên Passport;
+- **Số tài khoản (ADR-159 ⑺):** cột chỉ được ĐỌC ở `packages/supplier/src/passport.ts`, đúng ba câu — bốn số cuối cho phiên Passport;
   số đầy đủ của phiên bản mới nhất sau `supplier.qualify` (cổng TRONG hàm gói), mỗi lần đọc một hàng `PASSPORT_VIEWED`; bốn số cuối và cờ
   *đổi tài khoản* của lịch sử. Cổng `tests/architecture/so-tai-khoan-liet-ke.test.ts` (mới): tệp chạm bảng đúng bằng danh sách, ba câu đọc,
   không câu đọc cả hàng, không migration/view/hàm nào nhắc cột ngoài tệp dựng bảng và tệp ghim, bộ bằng chứng không chạm bảng Passport,
@@ -26486,7 +26486,7 @@ Ba câu, mỗi câu khuyến nghị đứng đầu; chủ dự án chọn cả b
   tắt chỉ bốn số cuối đã che; mảnh link xoá khỏi thanh địa chỉ sau xác minh; trình duyệt còn phiên thì HỎI, không tự mở; *Thoát*.
 - Sổ đăng ký và cổng: `rls-coverage`, `check-an-ninh`, `migrations.int`, `hardening-suy-tu-tinh-chat`, `danh-sach-ham-canh`,
   `migration-shape`, `barrel-exports`, `cong-quyen-route`, `viec-sau-commit`, `routes.test.ts` (miễn trần, định danh), `so-khai-nhan`, kịch
-  bản 41 HTTP (thân cho vòng quét rò, §9). Tài liệu: ADR-9201, ADR-081 (trỏ trạng thái), spec §9 dòng S3.7, TEST-PLAN (ngoặc của L6), STATE.
+  bản 41 HTTP (thân cho vòng quét rò, §9). Tài liệu: ADR-159, ADR-081 (trỏ trạng thái), spec §9 dòng S3.7, TEST-PLAN (ngoặc của L6), STATE.
 
 ## 6. Phép đo
 - `apps/api/src/passport.int.test.ts` (mới), sáu khối:

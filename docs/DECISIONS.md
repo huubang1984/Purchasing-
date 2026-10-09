@@ -7276,7 +7276,7 @@ S3.x.
 
 ## ADR-081 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139); **[S1.9101 / S3.7a1]** ⑴ ⑶ ⑷ cài ở ADR-9201 (đường Passport), ⑵ thẩm định và ⑸ ở S3.7a2 · Liên quan: **ADR-013** §4, ADR-015,
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139); **[S1.287 / S3.7a1]** ⑴ ⑶ ⑷ cài ở ADR-159 (đường Passport), ⑵ thẩm định và ⑸ ở S3.7a2 · Liên quan: **ADR-013** §4, ADR-015,
 ADR-016, ADR-017, ADR-051, ADR-080, ADR-082 ⑹ · Spec S3 §2.3 (b), §4.8
 
 **Bối cảnh.** ADR-013 §4 đòi một ADR mới cho Level 2, và ADR ấy phải trả lời câu hỏi oracle MST. Chủ dự án đưa trọn
@@ -12351,19 +12351,19 @@ nói nằm ở cờ của chữ ký.
 
 ---
 
-## ADR-9201 — S3.7a1: Supplier Passport — link, OTP khác kênh và phiên của NHÀ CUNG CẤP (đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất), phiên bản hồ sơ chỉ-ghi-thêm, số tài khoản là ranh giới cột ở tầng mã; S3.7 chia ba PR
+## ADR-159 — S3.7a1: Supplier Passport — link, OTP khác kênh và phiên của NHÀ CUNG CẤP (đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất), phiên bản hồ sơ chỉ-ghi-thêm, số tài khoản là ranh giới cột ở tầng mã; S3.7 chia ba PR
 
 **Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-08: *"Làm 2 đi, S3.7 trong lúc chờ"*; chọn chia ba PR
 (⑴) và chốt hai câu sau lượt soi hình dạng (⑵ đòi K8a, ⑺ ranh giới cột ở tầng mã) — cả ba theo khuyến nghị; phần còn lại theo đề xuất
-của lượt soi · **[S1.9101]** · **Liên quan:** ADR-013, ADR-015, ADR-016, ADR-018, ADR-020, ADR-060, ADR-080, **ADR-081**, ADR-082 ⑹,
-ADR-084 ⑵, ADR-109, ADR-110 · **Spec:** S3 §4.8, §5 K11, §8.6, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+của lượt soi · **[S1.287]** · **Liên quan:** ADR-013, ADR-015, ADR-016, ADR-018, ADR-020, ADR-060, ADR-080, **ADR-081**, ADR-082 ⑹,
+ADR-084 ⑵, ADR-109, ADR-110 · **Spec:** S3 §4.8, §5 K11, §8.6, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md` §S1.287
 
 ### Bối cảnh
 
 ADR-081 chốt Passport là hồ sơ THEO TỪNG TỔ CHỨC MUA, thẩm định hai cấp, và phiên Passport đặt CHÍNH `app.guest_session_id` — vì mọi
 policy `_khach` hỏi đúng literal ấy, và bảng phiên/OTP của lời mời mang `invitation_id NOT NULL` (`010`). Tới vòng này không dòng mã nào
 của Passport tồn tại. S3.7 là hạng mục lớn nhất của S3: một đường đăng nhập mới cho người ngoài tổ chức, một cột tài chính, và K8b ở
-trao thầu. Hai lượt soi đối kháng chạy trên hình dạng CHƯA CÀI (biên bản §S1.9101 mục 2): đường Passport 0 CAO, 6 TRUNG, 10 THẤP;
+trao thầu. Hai lượt soi đối kháng chạy trên hình dạng CHƯA CÀI (biên bản §S1.287 mục 2): đường Passport 0 CAO, 6 TRUNG, 10 THẤP;
 thẩm định + K8b 2 CAO, 6 TRUNG — phần K8b để dành S3.7a2.
 
 ### Quyết định

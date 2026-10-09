@@ -160,7 +160,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
   // nhận hồ sơ nào.
-  // [S1.9101 / S3.7a1 / ADR-081] Yêu cầu và phiên bản hồ sơ Passport — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
+  // [S1.287 / S3.7a1 / ADR-081] Yêu cầu và phiên bản hồ sơ Passport — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
   // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Phiên bản là thứ thẩm định (S3.7a2) trỏ tới: sửa được một hàng là tráo tài khoản ngân hàng.
   "supplier_passport_requests",
   "supplier_passport_versions",
@@ -2087,7 +2087,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
   );
 
-  // ---- [S1.9101 / S3.7a1 / ADR-081] Đường Passport: một yêu cầu, một link, một thách thức OTP, một phiên, một phiên bản — dưới `app_api`,
+  // ---- [S1.287 / S3.7a1 / ADR-081] Đường Passport: một yêu cầu, một link, một thách thức OTP, một phiên, một phiên bản — dưới `app_api`,
   // trong CÙNG giao dịch của kịch bản (trigger token đòi yêu cầu và token cùng giao dịch). `tc` (FINANCE, `supplier.qualify`) yêu cầu
   // hồ sơ của nhà cung cấp đếm được thứ ba — đã xác minh (K8a), người liên hệ có số điện thoại. Nhân chứng của năm hàm INSERT mới,
   // của `kiem_danh_tinh_theo_phien` trên hai bảng mới, của `thu_hoi_don_dieu` trên ba bảng mới và `otp_go_khoa_khong_xoa_dau_vet`.

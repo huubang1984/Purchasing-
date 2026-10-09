@@ -45,7 +45,7 @@ import type {
 export interface HopThuDev {
   readonly loginLinkSender: LoginLinkSender;
   readonly invitationLinkSender: InvitationLinkSender;
-  /** [S1.9101 / S3.7a1] Link Passport — `/ho-so#<orgId>:<token>`. */
+  /** [S1.287 / S3.7a1] Link Passport — `/ho-so#<orgId>:<token>`. */
   readonly passportLinkSender: PassportLinkSender;
   readonly otpSender: OtpSender;
   readonly approvalNoticeSender: ApprovalNoticeSender;

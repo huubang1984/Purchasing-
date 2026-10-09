@@ -655,7 +655,7 @@ const TRAN_DON_MS = 60_000;
 /** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
 const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";
 
-// [S1.9101 / S3.7a1] Bốn hàm trên và hàm này `export` cho `passport.ts` CÙNG gói — không qua `index.ts` (mặt tiền giữ nguyên):
+// [S1.287 / S3.7a1] Bốn hàm trên và hàm này `export` cho `passport.ts` CÙNG gói — không qua `index.ts` (mặt tiền giữ nguyên):
 // đường Passport dùng lại đúng các bản vá đã đo (H4, MED-2, khoản 35) thay vì chép chúng.
 export async function demVaTang(
   client: pg.PoolClient,

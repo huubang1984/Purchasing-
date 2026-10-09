@@ -49,7 +49,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   A5: [
     "apps/api/src/api.int.test.ts",
-    // [S1.9101 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
+    // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
     "apps/api/src/guest.int.test.ts",
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
@@ -152,7 +152,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   D5: [
     "apps/api/src/api.int.test.ts",
-    // [S1.9101 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
+    // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
     // [S1.86 / khoản 128] Ai GIỮ được khoá ghi sổ của tổ chức, và giữ được bao lâu: một phiên vai ứng dụng nay KHÔNG lấy
     // được khoá mức PHIÊN (42501), nên không còn đường CỐ Ý làm mọi lần ghi sổ của một tổ chức gãy 55P03 vô thời hạn.
@@ -183,14 +183,14 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   E1: [
     "apps/api/src/auth.int.test.ts",
-    // [S1.9101 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
+    // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
     "apps/api/src/guest.int.test.ts",
     "packages/invitation/src/invitation.int.test.ts",
   ],
   E2: [
     "apps/api/src/auth.int.test.ts",
-    // [S1.9101 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
+    // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
     "apps/api/src/guest.int.test.ts",
     "packages/invitation/src/invitation.int.test.ts",
@@ -206,7 +206,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   E5: [
     "packages/invitation/src/invitation.int.test.ts",
-    // [S1.9101 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
+    // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
   ],
   E6: [

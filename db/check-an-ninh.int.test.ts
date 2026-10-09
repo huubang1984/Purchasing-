@@ -110,7 +110,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   org_procurement_policies_tco_hinh_dang: "JSON",
   org_procurement_policies_version_check: "SO",
   otp_rate_limits_bucket_kind_check: "MIEN",
-  // [S1.9101 / S3.7a1 / ADR-081] Passport: kênh và lý do là miền; băm đích, phiên bản pepper, danh sách là độ dài; số lần sai là số;
+  // [S1.287 / S3.7a1 / ADR-081] Passport: kênh và lý do là miền; băm đích, phiên bản pepper, danh sách là độ dài; số lần sai là số;
   // MST là định dạng. Mười hai ràng buộc an ninh (băm token/phiên/mã, hạn, kênh link, mục đích, số tài khoản, văn bản) ở hardening.
   passport_otp_challenges_bam_dich: "DO_DAI",
   passport_otp_challenges_kenh: "MIEN",

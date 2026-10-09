@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] MÀN HỒ SƠ NHÀ CUNG CẤP (PASSPORT) — mã này chạy trên máy NHÀ CUNG CẤP, thường là điện thoại.
+// [S1.287 / S3.7a1 / ADR-081] MÀN HỒ SƠ NHÀ CUNG CẤP (PASSPORT) — mã này chạy trên máy NHÀ CUNG CẤP, thường là điện thoại.
 //
 // Khuôn `nop-thau.js`: link `/ho-so#<orgId>:<token>` → OTP khác kênh → phiên (cookie `__Host-tp_passport`, mã phiên không đi qua
 // JavaScript) → form → mỗi lần nộp một phiên bản. Kiểm form sớm bằng `/lib/ho-so.js`; máy chủ là thẩm quyền.

@@ -140,7 +140,7 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +
     "kiểm soát của bên mua (K8a), và câu hỏi *nhà cung cấp này có được đếm vào K2 không* là của máy chủ lúc nộp duyệt, " +
     "không phải của một tác tử chỉ-đọc. Mở sau là một quyết định có tên.",
-  // [S1.9101 / S3.7a1 / ADR-081]
+  // [S1.287 / S3.7a1 / ADR-081]
   "/suppliers/:supplierId/passport":
     "HỒ SƠ PASSPORT của một nhà cung cấp — số tài khoản ngân hàng đầy đủ, người đại diện, địa chỉ, lịch sử phiên bản. Dữ liệu " +
     "tài chính và cá nhân của công ty khác, đọc dưới `supplier.qualify` và mỗi lần đọc để một hàng sổ; một tác tử chỉ-đọc không " +

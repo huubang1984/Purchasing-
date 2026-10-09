@@ -1,4 +1,4 @@
-// [S1.9101 / S3.7a1 / ADR-081] Hàm thuần của màn `/ho-so` — kiểm form trước khi gửi, che số tài khoản, dòng tóm tắt.
+// [S1.287 / S3.7a1 / ADR-081] Hàm thuần của màn `/ho-so` — kiểm form trước khi gửi, che số tài khoản, dòng tóm tắt.
 import { describe, expect, it } from "vitest";
 import { cheSoTaiKhoan, chuanHoaSoTaiKhoan, dongPhienBan, kiemHoSo, tachDanhSach, TRAN_DANH_SACH_HO_SO, type ONhap } from "./ho-so.js";
 
@@ -13,7 +13,7 @@ const DU: ONhap = {
   nhomHang: "",
 };
 
-describe("[S1.9101 / S3.7a1] ho-so — kiểm form", () => {
+describe("[S1.287 / S3.7a1] ho-so — kiểm form", () => {
   it("form đủ ⇒ thân đã cắt, số tài khoản chỉ còn chữ số, danh sách một mục mỗi dòng (bỏ dòng trống)", () => {
     expect(kiemHoSo(DU)).toEqual({
       loi: null,
@@ -55,7 +55,7 @@ describe("[S1.9101 / S3.7a1] ho-so — kiểm form", () => {
   });
 });
 
-describe("[S1.9101 / S3.7a1] ho-so — hiện phiên bản đã nộp", () => {
+describe("[S1.287 / S3.7a1] ho-so — hiện phiên bản đã nộp", () => {
   it("số tài khoản CHỈ hiện bốn số cuối đã che; giá trị lạ hiện `—`, không ném", () => {
     expect(cheSoTaiKhoan("6789")).toBe("•••• 6789");
     expect(cheSoTaiKhoan("123456789")).toBe("—");

@@ -77,7 +77,7 @@ export interface ThongBaoDaGui {
   readonly token: string | null;
 }
 
-/** [S1.9101 / S3.7a1] Một link Passport đã đi qua bộ gửi. */
+/** [S1.287 / S3.7a1] Một link Passport đã đi qua bộ gửi. */
 export interface PassportDaGui {
   readonly orgId: string;
   readonly supplierId: string;
@@ -108,7 +108,7 @@ export interface DichVuTest {
   readonly thongBaoDaGui: ThongBaoDaGui[];
   /** [khoản 154] Mọi tin báo gia hạn hạn nộp đã đi qua bộ gửi. */
   readonly hanMoiDaGui: HanMoiDaGui[];
-  /** [S1.9101 / S3.7a1] Mọi link Passport đã đi qua bộ gửi. Test đọc token ở đây — và CHỈ ở đây. */
+  /** [S1.287 / S3.7a1] Mọi link Passport đã đi qua bộ gửi. Test đọc token ở đây — và CHỈ ở đây. */
   readonly passportDaGui: PassportDaGui[];
   readonly khoaKy: ReceiptKeyPair;
 }

@@ -22,11 +22,11 @@ import {
 import type { PepperRing } from "./pepper.js";
 
 // =============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081 ⑶] ĐƯỜNG PASSPORT — LINK, OTP, PHIÊN CỦA NHÀ CUNG CẤP KHÔNG GẮN MỘT LỜI MỜI
+// [S1.287 / S3.7a1 / ADR-081 ⑶] ĐƯỜNG PASSPORT — LINK, OTP, PHIÊN CỦA NHÀ CUNG CẤP KHÔNG GẮN MỘT LỜI MỜI
 //
 // Cùng nguyên tắc của `invitation.ts`, và nó là thứ duy nhất cần nhớ khi sửa tệp này: KHÔNG HÀM NÀO KHAI một sự thật an ninh.
 // Người gọi đưa vào token dạng rõ (chỉ có nếu nhận được link) và mã OTP (chỉ có nếu giữ kênh đã đăng ký); nhà cung cấp, người liên
-// hệ, kênh, đích — đều ĐỌC RA từ hàng token. Bốn bảng riêng (`9501_passport_nha_cung_cap`): bảng phiên và bảng thách thức của lời
+// hệ, kênh, đích — đều ĐỌC RA từ hàng token. Bốn bảng riêng (`118_passport_nha_cung_cap`): bảng phiên và bảng thách thức của lời
 // mời mang `invitation_id NOT NULL` (`010`), còn Passport gắn một NHÀ CUNG CẤP.
 //
 // Mặt tiền giữ hình dạng E2 của gói: không hàm nào ở `index.ts` trả về một PHIÊN từ một TOKEN — `redeemPassportLink` trả kênh,

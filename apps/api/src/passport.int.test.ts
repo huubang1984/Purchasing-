@@ -1,7 +1,7 @@
 // =============================================================================================
-// [S1.9101 / S3.7a1 / ADR-081] ĐƯỜNG PASSPORT — đo trên Postgres 16, qua HTTP và ở tầng CSDL, dưới `app_api`
+// [S1.287 / S3.7a1 / ADR-081] ĐƯỜNG PASSPORT — đo trên Postgres 16, qua HTTP và ở tầng CSDL, dưới `app_api`
 //
-// Spec S3 §4.8, §5 K11, §8.6; ADR-081 ⑴ ⑶ ⑷; ADR-9201. Chủ dự án chốt (2026-10-08): link Passport chỉ tới nhà cung cấp ĐÃ XÁC MINH
+// Spec S3 §4.8, §5 K11, §8.6; ADR-081 ⑴ ⑶ ⑷; ADR-159. Chủ dự án chốt (2026-10-08): link Passport chỉ tới nhà cung cấp ĐÃ XÁC MINH
 // (K8a); số tài khoản là ranh giới cột ở tầng mã (phép đo tĩnh ở `tests/architecture/so-tai-khoan-liet-ke.test.ts`).
 //
 //   A  luồng trọn qua HTTP: yêu cầu (FINANCE) → link → OTP khác kênh → phiên → nộp phiên bản → nhà cung cấp thấy bốn số cuối, bên mua
@@ -234,7 +234,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9101 / S3.7a1] A — luồng Passport trọn qua HTTP", () => {
+describe("[S1.287 / S3.7a1] A — luồng Passport trọn qua HTTP", () => {
   it("[INV-E2] [INV-E5] yêu cầu → link qua email → OTP qua SMS → phiên → nộp; nhà cung cấp thấy bốn số cuối, bên mua thấy số đầy đủ và để một hàng sổ", async () => {
     const t = await taoToChuc();
     const n = await ncc(t);
@@ -308,7 +308,7 @@ describe("[S1.9101 / S3.7a1] A — luồng Passport trọn qua HTTP", () => {
   });
 });
 
-describe("[S1.9101 / S3.7a1] B — lời từ chối của yêu cầu hồ sơ", () => {
+describe("[S1.287 / S3.7a1] B — lời từ chối của yêu cầu hồ sơ", () => {
   it("mỗi vế của `passport_chot_yeu_cau` ra một mã có tên, 422, không token nào được đúc", async () => {
     const t = await taoToChuc();
     const chuaXacMinh = await ncc(t, { xacMinh: false });
@@ -366,7 +366,7 @@ describe("[S1.9101 / S3.7a1] B — lời từ chối của yêu cầu hồ sơ",
   });
 });
 
-describe("[S1.9101 / S3.7a1] C — link mới thu hồi link và phiên cũ; gửi hỏng thì thu hồi link vừa đúc", () => {
+describe("[S1.287 / S3.7a1] C — link mới thu hồi link và phiên cũ; gửi hỏng thì thu hồi link vừa đúc", () => {
   it("[INV-E1] yêu cầu mới ⇒ cookie phiên cũ thành 401, link cũ chưa dùng thành 422; sổ đếm đúng số đã thu hồi", async () => {
     const t = await taoToChuc();
     const n = await ncc(t);
@@ -396,7 +396,7 @@ describe("[S1.9101 / S3.7a1] C — link mới thu hồi link và phiên cũ; g�
   });
 });
 
-describe("[S1.9101 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () => {
+describe("[S1.287 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () => {
   it("[INV-A5] phiên Passport của A thấy phiên bản của A và 0 hàng ở MỌI bảng RLS khác; đối chứng: kết nối người mua thấy cả hai nhà cung cấp", async () => {
     const t = await taoToChuc();
     const a = await ncc(t);
@@ -475,7 +475,7 @@ describe("[S1.9101 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () 
   });
 });
 
-describe("[S1.9101 / S3.7a1] E — trigger của năm bảng, ở tầng CSDL dưới `app_api`", () => {
+describe("[S1.287 / S3.7a1] E — trigger của năm bảng, ở tầng CSDL dưới `app_api`", () => {
   const loiCua = async (p: Promise<unknown>): Promise<string> =>
     p.then(
       () => "KHONG LOI",
@@ -596,7 +596,7 @@ const tokenIdCua = async (token: string): Promise<string> =>
   (await db.pool.query<{ id: string }>("SELECT id FROM supplier_passport_tokens WHERE token_hash = $1", [createHash("sha256").update(token, "utf8").digest()])).rows[0]!
     .id;
 
-describe("[S1.9101 / S3.7a1] F — đột biến lớp CSDL", () => {
+describe("[S1.287 / S3.7a1] F — đột biến lớp CSDL", () => {
   it("vế K8a của hàm vị từ tắt ⇒ nhà cung cấp CHƯA xác minh nhận được yêu cầu (đối chứng: bật lại thì 422)", async () => {
     const t = await taoToChuc();
     const n = await ncc(t, { xacMinh: false });
