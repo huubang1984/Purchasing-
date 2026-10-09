@@ -26593,6 +26593,8 @@ Script áp từng đột biến, chạy tệp test đích, khôi phục và tự
   route khách trả tham số của mã không bật (D4), bỏ số ngày giao (D5), trả thước rỗng thay `null` (D6), không mang thước — kịch bản 41
   (D10), không lọc mã (D11); hạng giá trên mọi hàng (D7); bỏ `nguon` (D8); bỏ `maThieu` (D9); bỏ kiểm dạng `tien` (D12); `RfqRecord` mang
   lại tham số (D13) — cả mười ba ĐỎ.
+- **CSDL (1)**: trigger cạnh mở không chụp tham số — thân của `9501`, thân ghim hardening và chuỗi `$than$` cùng đổi (D1) — năm ca đỏ:
+  ảnh chụp `NULL` lệch nhóm khoá của phiên bản ghim, mọi lượt chấm TCO dừng ở L16.
 
 D7 SỐNG ở lượt đầu, và đó là phát hiện: lượt chấm ghi hàng không hạng với `components` rỗng, nên tính hạng giá trên mọi hàng cho cùng
 kết quả — vế *"chỉ hàng có hạng"* là lớp thứ hai mà không ca nào đo. Ca của THẤP-7 thêm một hàng không hạng còn thành phần giá (đường
