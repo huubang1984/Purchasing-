@@ -26588,3 +26588,12 @@ Nhánh dựng từ `master` `5ae1393a` (PR #259); giữa vòng `master` tiến m
 STATE, Handoff), gộp không xung đột. Trên cây gộp: `pnpm t0` xanh (51 s, 573 mô-đun, không vi phạm); `pnpm test` 156 tệp (2 bỏ qua),
 2708 ca đạt, 14 bỏ qua, 0 đỏ (125 s). Trước đó trên mã chưa commit: `passport.int` 20/20; tập int chạm tới — lần ba `hardening-suy-tu-tinh-chat`
 + kịch bản 41 HTTP 127/127 (38 + 89); `apps/web` (`phuc-vu` + `ho-so`) 325/325; cụm dùng một lần `migrate()` hai lần (113 tệp, lần hai 0).
+Evidence trên `b29da0d4`, hai lượt. **Lượt 1** (1896 s): `pnpm evidence` thoát 0, 89/89, *"Cổng evidence: XANH"* — nhưng vitest
+thoát mã 1: một ca đỏ trong 5048 khẳng định, `migrations.int` IM7 (*khoá tư vấn theo tổ chức: treo vô hạn thành lỗi ồn ào…*),
+`Connection terminated unexpectedly` ở `pool.connect()` đầu tiên của `migrate()` (`migrate.ts:407`) ngay sau khi `startPostgres()` dựng
+container — trước mọi SQL của vòng, ở một ca vòng này không đổi. Docker chỉ giữ lịch sử sự kiện gần nhất nên không còn dấu vết của
+container ấy; không chẩn đoán, ghi một lần. **Lượt 2** cùng HEAD, máy không lượt test nào khác (1933 s): vitest thoát mã 0, 255 tệp,
+**5048** khẳng định (5025 đạt, 23 bỏ qua, 0 đỏ), **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*;
+`migrations.int` 128/128, `passport.int` 20/20, kịch bản 41 HTTP 89/89, `phuc-vu` 321/321, `so-tai-khoan-liet-ke` 5/5.
+`evidence/INV-matrix.md` của hai lượt trùng nhau: A5 20 → 25 ca, D5 185 → 187, E1 14 → 17, E2 6 → 10, E5 3 → 4; hàng L6 đổi theo ngoặc
+của TEST-PLAN.
