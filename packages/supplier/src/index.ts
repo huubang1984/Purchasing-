@@ -40,3 +40,22 @@ export {
   type NguoiLienHeXacMinh,
   type XacMinhNhaCungCap,
 } from "./xac-minh.js";
+// [S1.287 / S3.7a1 / ADR-081] Supplier Passport — yêu cầu hồ sơ (bên mua, `supplier.qualify`), phiên bản hồ sơ (nhà cung cấp), hai
+// lời đọc. Cột số tài khoản chỉ được đọc ở `passport.ts` (ranh giới cột ở tầng mã — `tests/architecture/so-tai-khoan-liet-ke.test.ts`).
+export {
+  CAU_TU_CHOI_PASSPORT,
+  MA_TU_CHOI_PASSPORT,
+  PassportYeuCauError,
+  SO_TAI_KHOAN_PATTERN,
+  TRAN_DANH_SACH_PASSPORT,
+  docHoSoPassport,
+  docHoSoPassportNhap,
+  docPassportCuaToi,
+  nopPhienBanPassport,
+  taoYeuCauPassport,
+  type HoSoPassport,
+  type HoSoPassportBenMua,
+  type KetQuaYeuCauPassport,
+  type MaTuChoiPassport,
+  type PhienBanPassportCuaToi,
+} from "./passport.js";

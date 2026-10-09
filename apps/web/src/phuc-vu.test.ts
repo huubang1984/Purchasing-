@@ -35,6 +35,7 @@ import * as taoThau from "./tao-thau.js";
 import * as nhomHang from "./nhom-hang.js";
 import * as nhaCungCap from "./nha-cung-cap.js";
 import * as xungDot from "./xung-dot.js";
+import * as hoSo from "./ho-so.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -143,8 +144,9 @@ describe("bề mặt tệp", () => {
         link.push({ tep: t, duong: m[1] ?? "", manh: m[2] ?? "" });
       }
     }
-    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số.
-    expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(8);
+    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số. [S1.287 / S3.7a1] Cộng
+    // link Passport (`/ho-so#<orgId>:<mã>`) ở hộp thư dev và ở SES: 10.
+    expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(10);
     for (const l of link) {
       // Mọi đường — không chỉ của hộp thư dev như vế khoản 198 ở trên — phải là đường `apps/web` phục vụ.
       expect(Object.keys(TRANG), `${l.tep}: ${l.duong}`).toContain(l.duong);
@@ -299,6 +301,8 @@ describe("bề mặt tệp", () => {
       ...xungDot,
       // [S1.286 / S4.7b2] `/lib/tco.js` là bản thật: ô khai TCO của `/nop-thau` và phép tính của `/mo-thau` chạy từ nó.
       ...tcoWeb,
+      // [S1.287 / S3.7a1] `/lib/ho-so.js` là bản thật: kiểm form và che số tài khoản của `/ho-so`.
+      ...hoSo,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
@@ -3270,6 +3274,114 @@ describe("bề mặt tệp", () => {
       p.el("ly-do-thu-hoi").value = "MST không khớp đăng ký kinh doanh";
       for (const f of thuHoi?.nghe["click"] ?? []) await f();
       expect(p.trangThai.than.filter((t) => t.lenh === "POST /suppliers/s-1/verification/revoke").at(-1)?.than).toEqual({ reason: "MST không khớp đăng ký kinh doanh" });
+    });
+
+    // [S1.287 / S3.7a1 / ADR-081] Màn hồ sơ Passport của nhà cung cấp — khuôn `nop-thau`, trên route `/guest/passport/*` và `/passport`.
+    const PB_CU = {
+      thuTu: 1, legalName: "Thép A", taxCode: "0101010101", nguoiDaiDien: "Ông B", diaChi: "Hà Nội", nganHang: "VCB",
+      soTaiKhoanCuoi: "6789", chungNhan: ["ISO 9001"], nhomHang: ["Thép"], createdAt: "2026-10-08T00:00:00Z",
+    };
+    const moHoSo = async (hash: string, coPhien: boolean, thay?: (l: string) => Promise<{ status: number; body: unknown }> | undefined) => {
+      const trangThaiPhien = { co: coPhien };
+      const p = await dungTrang("ho-so", {
+        hash,
+        cookie: null,
+        thay: (l) => {
+          const t = thay?.(l);
+          if (t !== undefined) return t;
+          if (l === "POST /guest/passport/redeem") return ok200({ linkChannel: "EMAIL", otpChannels: ["SMS", "ZALO_ZNS"] });
+          if (l === "POST /guest/passport/otp") return ok200({ ok: true, channel: "SMS" });
+          if (l === "POST /guest/passport/otp/verify") {
+            trangThaiPhien.co = true;
+            return ok200({ ok: true });
+          }
+          if (l === "GET /passport") {
+            return trangThaiPhien.co
+              ? ok200({ nhaCungCap: { legalName: "Thép A", taxCode: "0101010101" }, phienBanMoiNhat: PB_CU, soPhienBan: 1 })
+              : Promise.resolve({ status: 401, body: { error: "x" } });
+          }
+          if (l === "POST /passport/versions") return Promise.resolve({ status: 201, body: { phienBan: { thuTu: 2 } } });
+          if (l === "POST /passport/logout") {
+            trangThaiPhien.co = false;
+            return ok200({ ok: true });
+          }
+          return undefined;
+        },
+      });
+      return p;
+    };
+
+    it("[S1.287 / S3.7a1] ho-so: link → OTP → xác minh → hồ sơ; form điền từ phiên bản cũ TRỪ số tài khoản; nộp gửi số đã chuẩn hoá rồi xoá ô ấy; mảnh link xoá", async () => {
+      const p = await moHoSo("#o-1:tok-1", false);
+      expect(p.trangThai.goi, "có mã trong link thì không hỏi phiên cũ").not.toContain("GET /passport");
+      await p.bam("nut-mo");
+      expect(p.trangThai.than.at(-1)).toEqual({ lenh: "POST /guest/passport/redeem", than: { orgId: "o-1", token: "tok-1" } });
+      expect(p.el("b2").hidden).toBe(false);
+      expect(p.el("kenh").con.map((o) => o.value)).toEqual(["SMS", "ZALO_ZNS"]);
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.trangThai.thayUrl, "mảnh link xoá SAU xác minh").toEqual(["/ho-so"]);
+      expect(p.el("b3").hidden).toBe(false);
+      expect([p.el("ten-phap-ly").value, p.el("mst").value, p.el("chung-nhan").value, p.el("so-tai-khoan").value]).toEqual([
+        "Thép A", "0101010101", "ISO 9001", "",
+      ]);
+      expect(p.el("tt-moi").con.map((x) => x.textContent)).toContain("•••• 6789");
+      p.el("so-tai-khoan").value = "0011 2233 4455";
+      await p.bam("nut-nop");
+      expect(p.trangThai.than.filter((t) => t.lenh === "POST /passport/versions").at(-1)?.than).toEqual({
+        legalName: "Thép A", taxCode: "0101010101", nguoiDaiDien: "Ông B", diaChi: "Hà Nội", nganHang: "VCB",
+        soTaiKhoan: "001122334455", chungNhan: ["ISO 9001"], nhomHang: ["Thép"],
+      });
+      expect(p.el("so-tai-khoan").value, "số tài khoản không ở lại trên màn").toBe("");
+      expect(p.el("ok3").textContent).toMatch(/phiên bản #2/u);
+    });
+
+    it("[S1.287 / S3.7a1 · lượt đi thử T4] ho-so: mã bị khoá và phiên bị thu hồi lúc nộp ⇒ câu gọi tên lý do, không in hằng 401 của máy chủ", async () => {
+      const p = await moHoSo("#o-1:tok-1", false, (l) =>
+        l === "POST /guest/passport/otp/verify" ? Promise.resolve({ status: 401, body: { ok: false, reason: "LOCKED_OUT" } }) : undefined);
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.el("loi2").textContent).toMatch(/^Sai quá nhiều lần — link này tạm khoá 15 phút/u);
+      const q = await moHoSo("", true, (l) => (l === "POST /passport/versions" ? Promise.resolve({ status: 401, body: { error: "phien khong hop le" } }) : undefined));
+      await q.bam("nut-dung-phien");
+      q.el("so-tai-khoan").value = "123456789";
+      await q.bam("nut-nop");
+      expect(q.el("loi3").textContent).toMatch(/^Không nộp được hồ sơ: phiên hồ sơ đã hết hạn hay đã bị thu hồi/u);
+      expect(q.el("loi3").textContent).not.toContain("phien khong hop le");
+    });
+
+    it("[S1.287 / S3.7a1] ho-so: thiếu số tài khoản hay MST sai hình dạng ⇒ câu lỗi gọi tên ô, KHÔNG lời gọi nộp nào", async () => {
+      const p = await moHoSo("", true);
+      await p.bam("nut-dung-phien");
+      p.el("so-tai-khoan").value = "";
+      await p.bam("nut-nop");
+      expect(p.el("loi3").textContent).toBe("Số tài khoản phải gồm 6–20 chữ số.");
+      p.el("so-tai-khoan").value = "123456789";
+      p.el("mst").value = "12345";
+      await p.bam("nut-nop");
+      expect(p.el("loi3").textContent).toMatch(/^Mã số thuế phải là 10 chữ số/u);
+      expect(p.trangThai.goi).not.toContain("POST /passport/versions");
+    });
+
+    it("[S1.287 / S3.7a1] ho-so: tải trang khi còn phiên ⇒ HỎI, không tự mở; Tiếp tục mới mở; Thoát gọi /passport/logout và đóng các bước", async () => {
+      const p = await moHoSo("", true);
+      expect(p.el("hoi-phien").textContent).toMatch(/phiên hồ sơ còn hạn của «Thép A»/u);
+      expect(p.el("b3").hidden).toBe(true);
+      await p.bam("nut-dung-phien");
+      expect(p.el("b3").hidden).toBe(false);
+      await p.bam("nut-thoat");
+      expect(p.trangThai.goi).toContain("POST /passport/logout");
+      expect([p.el("b3").hidden, p.el("ten-phap-ly").value]).toEqual([true, ""]);
+      expect(p.el("ok1").textContent).toMatch(/^Đã thoát phiên hồ sơ/u);
+    });
+
+    it("[S1.287 / S3.7a1] ho-so: đổi link trong cùng thẻ ⇒ đóng các bước, xoá form, rồi đọc mã mới", async () => {
+      const p = await moHoSo("", true);
+      await p.bam("nut-dung-phien");
+      expect(p.el("ten-phap-ly").value).toBe("Thép A");
+      await p.doiFragment("#o-2:tok-2");
+      expect([p.el("b3").hidden, p.el("ten-phap-ly").value, p.el("org").value, p.el("token").value]).toEqual([true, "", "o-2", "tok-2"]);
     });
 
     it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mời ở DRAFT (UNSENT) ⇒ câu nói link CHƯA đi; mời thêm ở OPEN gửi hỏng ⇒ lỗi chỉ đường Gửi lại link", async () => {
