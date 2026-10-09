@@ -231,6 +231,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
     approvalNoticeSender: hopThu.approvalNoticeSender,
     deadlineNoticeSender: hopThu.deadlineNoticeSender,
     invitationLinkSender: hopThu.invitationLinkSender,
+    passportLinkSender: hopThu.passportLinkSender,
     otpSender: hopThu.otpSender,
   }, KMS_TIMEOUT_MS_MAC_DINH);
 

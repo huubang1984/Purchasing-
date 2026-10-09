@@ -38,12 +38,15 @@ import type {
   DeadlineNoticeSender,
   InvitationLinkSender,
   LoginLinkSender,
+  PassportLinkSender,
   OtpSender,
 } from "../route-types.js";
 
 export interface HopThuDev {
   readonly loginLinkSender: LoginLinkSender;
   readonly invitationLinkSender: InvitationLinkSender;
+  /** [S1.9101 / S3.7a1] Link Passport — `/ho-so#<orgId>:<token>`. */
+  readonly passportLinkSender: PassportLinkSender;
   readonly otpSender: OtpSender;
   readonly approvalNoticeSender: ApprovalNoticeSender;
   readonly deadlineNoticeSender: DeadlineNoticeSender;
@@ -62,6 +65,15 @@ export type TinHopThuDev =
       readonly loai: "INVITATION_LINK";
       readonly orgId: string;
       readonly invitationId: string;
+      readonly kenh: string;
+      readonly den: string;
+      readonly duongLink: string;
+      readonly luc: string;
+    }
+  | {
+      readonly loai: "PASSPORT_LINK";
+      readonly orgId: string;
+      readonly supplierId: string;
       readonly kenh: string;
       readonly den: string;
       readonly duongLink: string;
@@ -135,6 +147,19 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
           kenh: m.channel,
           den: m.destination,
           duongLink: `${tuyChon.baseUrl}/i#${m.orgId}:${m.token}`,
+          luc: luc(),
+        }),
+    },
+    passportLinkSender: {
+      name: TEN,
+      send: (m) =>
+        ghi({
+          loai: "PASSPORT_LINK",
+          orgId: m.orgId,
+          supplierId: m.supplierId,
+          kenh: m.channel,
+          den: m.destination,
+          duongLink: `${tuyChon.baseUrl}/ho-so#${m.orgId}:${m.token}`,
           luc: luc(),
         }),
     },

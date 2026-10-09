@@ -70,6 +70,27 @@ export {
   type VerifyOtpInput,
   type DanhSachLoiMoi,
 } from "./invitation.js";
+// [S1.9101 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ hình dạng E2 của mặt tiền: `redeemPassportLink` trả kênh, không trả phiên;
+// hàm DUY NHẤT sinh phiên là `verifyPassportOtpAndStartSession` và nó đòi mã OTP.
+export {
+  KENH_LINK_PASSPORT,
+  OTP_MAX_PER_PASSPORT,
+  PASSPORT_LINK_MAX_TTL_SECONDS,
+  PASSPORT_SESSION_MAX_TTL_SECONDS,
+  ducTokenPassport,
+  issuePassportOtp,
+  redeemPassportLink,
+  resolvePassportSessionByToken,
+  revokePassportSession,
+  thuHoiTokenPassport,
+  verifyPassportOtpAndStartSession,
+  type LinkPassportDaDoi,
+  type PassportOtpDenial,
+  type PassportOtpOutcome,
+  type PassportVerifyResult,
+  type ResolvedPassportSession,
+  type TokenPassportDaDuc,
+} from "./passport.js";
 // [S1.265 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh — lập, rút, đọc; và hai tập đóng cùng hai trần mà route dùng lại.
 export {
   LOAI_NGOAI_LE,

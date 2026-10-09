@@ -36,6 +36,7 @@ import {
   danhDauDaGui,
   docNgoaiLe,
   ducTokenKhiMoGoi,
+  ducTokenPassport,
   issueMagicLinkToken,
   lapNgoaiLe,
   listInvitations,
@@ -43,6 +44,7 @@ import {
   revokeInvitation,
   revokeMagicLinkToken,
   rutNgoaiLe,
+  thuHoiTokenPassport,
   CHANNELS,
   CUA_SO_LINK_MOI_GIAY,
   type Channel,
@@ -74,12 +76,15 @@ import {
 } from "@trustprocure/rfq";
 import {
   addSupplierContact,
+  CAU_TU_CHOI_PASSPORT,
   createSupplier,
+  docHoSoPassport,
   docHoSoXacMinh,
   docXacMinhNhaCungCap,
   getSupplier,
   listSupplierContacts,
   listSuppliers,
+  taoYeuCauPassport,
   thuHoiXacMinhNhaCungCap,
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
@@ -308,6 +313,28 @@ const doc: readonly BuyerReadRoute[] = [
     // dữ liệu của người ở công ty khác (khoản 141), trạng thái xác minh là bề mặt chưa mở cho agent.
     agent: false,
     handler: async (ctx) => ({ status: 200, body: { hoSo: await docHoSoXacMinh(ctx.client, ctx.orgId) } }),
+  },
+  {
+    method: "GET",
+    path: "/suppliers/:supplierId/passport",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.9101 / S3.7a1 / ADR-081] Hồ sơ Passport của một nhà cung cấp — phiên bản mới nhất ĐẦY ĐỦ (cả số tài khoản), lịch sử với cờ
+    // *đổi tài khoản*, link gần nhất. Cổng `supplier.qualify` TRONG hàm gói (route đọc không mang mã quyền; lời gọi thẳng vẫn phải qua);
+    // mỗi lần đọc có phiên bản để một hàng `PASSPORT_VIEWED`. KHÔNG cho agent: số tài khoản và người đại diện là dữ liệu tài chính và
+    // cá nhân của công ty khác (khoản 141).
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        passport: await docHoSoPassport(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "GET",
@@ -1109,6 +1136,71 @@ const ghi: readonly BuyerWriteRoute[] = [
         ),
       },
     }),
+  },
+  {
+    method: "POST",
+    path: "/suppliers/:supplierId/passport-requests",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.7a1 / ADR-081] Gửi yêu cầu hồ sơ Passport tới MỘT người liên hệ của nhà cung cấp ĐÃ XÁC MINH (K8a — chủ dự án chốt).
+    // Một giao dịch: yêu cầu (vị từ hỏi trước, trigger hỏi lại), thu hồi link và phiên Passport cũ của nhà cung cấp, đúc link mới. Link đi
+    // email của người liên hệ SAU commit; gửi hỏng ⇒ thu hồi token vừa đúc (khuôn ADR-110), yêu cầu ở lại, phản hồi nói *chưa gửi* — người
+    // mua gửi yêu cầu khác (trần ba yêu cầu một giờ một nhà cung cấp).
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => {
+      const supplierId = supplierIdParam(ctx.req);
+      const contactId = uuidBody(ctx.req.body, "contactId");
+      const kq = await taoYeuCauPassport(
+        ctx.client,
+        ctx.orgId,
+        { supplierId, contactId, actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      if (!kq.ok) {
+        const quaTran = kq.ma === "PASSPORT_QUA_TRAN_YEU_CAU";
+        return {
+          status: quaTran ? 429 : 422,
+          body: { error: CAU_TU_CHOI_PASSPORT[kq.ma], ma: kq.ma },
+          ...(quaTran ? { headers: { "retry-after": "3600" } } : {}),
+        };
+      }
+      const link = await ducTokenPassport(ctx.client, ctx.orgId, {
+        requestId: kq.requestId,
+        supplierId,
+        contactId,
+        actorSessionId: ctx.actor.sessionId,
+      });
+      const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, supplierId)).find((c) => c.id === contactId);
+      if (lienHe === undefined) throw new HttpError(422, "người liên hệ không thuộc nhà cung cấp này");
+      const yeuCau = {
+        requestId: kq.requestId,
+        linkHetHanAt: link.expiresAt,
+        soLinkThuHoi: link.soLinkThuHoi,
+        soPhienThuHoi: link.soPhienThuHoi,
+      };
+      const { orgId } = ctx;
+      const phienNguoiGui = ctx.actor.sessionId;
+      const chuaGui: ApiResponse = { status: 201, body: { yeuCau: { ...yeuCau, daGui: false } } };
+      ctx.afterCommitCoBu({
+        viec: () =>
+          ctx.services.passportLinkSender.send({
+            orgId,
+            supplierId,
+            channel: link.linkChannel,
+            destination: lienHe.email,
+            token: link.token,
+          }),
+        bu: async (client) => {
+          await thuHoiTokenPassport(client, orgId, { tokenId: link.tokenId, actorSessionId: phienNguoiGui, reason: "LINK_SEND_FAILED" });
+        },
+        phanHoiKhiHong: chuaGui,
+        // Phần bù hỏng: link vừa đúc còn sống, có thể chưa tới nơi. Lối của người mua không đổi — yêu cầu mới thu hồi mọi link cũ.
+        phanHoiKhiBuHong: chuaGui,
+      });
+      return { status: 201, body: { yeuCau: { ...yeuCau, daGui: true } } };
+    },
   },
   {
     method: "POST",

@@ -135,7 +135,7 @@ export const GUEST_SESSION_MAX_TTL_SECONDS = 12 * 3600;
  * KHONG dung ham nay cho so dien thoai, email hay ma OTP: khong gian tien anh cua chung la 10^9
  * va 10^6, va phep dao nguoc DA DUOC DO — xem khoi dau `pepper.ts`.
  */
-function bam(...phan: string[]): Buffer {
+export function bam(...phan: string[]): Buffer {
   const h = createHash("sha256");
   for (const p of phan) h.update(p, "utf8");
   return h.digest();
@@ -145,11 +145,11 @@ function bam(...phan: string[]): Buffer {
  * Mã OTP sáu chữ số từ `randomInt` — CSPRNG và KHÔNG lệch phân phối. `randomBytes(3) % 1000000`
  * thì lệch: 2^24 không chia hết cho 10^6.
  */
-function sinhMaOtp(): string {
+export function sinhMaOtp(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-function tranTtl(giaTri: number | undefined, macDinh: number, tran: number, ten: string): number {
+export function tranTtl(giaTri: number | undefined, macDinh: number, tran: number, ten: string): number {
   const ttl = giaTri ?? macDinh;
   if (!Number.isInteger(ttl) || ttl <= 0 || ttl > tran) {
     throw new InvitationError(`${ten} phải là số giây dương và không vượt ${tran}`);
@@ -374,7 +374,7 @@ interface HangToken {
  * một giao dịch khác. Nên đọc lại nó ở câu thứ hai là một câu trả lời nhị phân, không phụ thuộc
  * thời gian, máy, hay tải.
  */
-async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise<void> {
+export async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise<void> {
   await client.query("SET LOCAL trustprocure.trong_giao_dich = '1'");
   const { rows } = await client.query<{ v: string | null }>(
     "SELECT pg_catalog.current_setting('trustprocure.trong_giao_dich', true) AS v",
@@ -655,10 +655,12 @@ const TRAN_DON_MS = 60_000;
 /** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
 const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";
 
-async function demVaTang(
+// [S1.9101 / S3.7a1] Bốn hàm trên và hàm này `export` cho `passport.ts` CÙNG gói — không qua `index.ts` (mặt tiền giữ nguyên):
+// đường Passport dùng lại đúng các bản vá đã đo (H4, MED-2, khoản 35) thay vì chép chúng.
+export async function demVaTang(
   client: pg.PoolClient,
   orgId: string,
-  kind: "DEST" | "DEST_ORG" | "CALLER" | "INVITATION" | "LOGIN_CALLER",
+  kind: "DEST" | "DEST_ORG" | "CALLER" | "INVITATION" | "LOGIN_CALLER" | "PASSPORT",
   khoa: string,
   pepper: PepperRing,
 ): Promise<number> {

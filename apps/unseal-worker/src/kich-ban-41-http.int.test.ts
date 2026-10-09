@@ -947,6 +947,34 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // tự đổi, lần nộp ở trên gặp 401, không phải 422 hình dạng). Không đụng phiên của kịch bản.
         case "POST /guest/logout":
           return { path: r.path, body: {}, cookie: kHy };
+        // [S1.9101 / S3.7a1 / ADR-081] Ba bước vô danh của Passport — token lạ ⇒ 422 có tên, không tiêu thụ link nào.
+        case "POST /guest/passport/redeem":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia }, cookie: "" };
+        case "POST /guest/passport/otp":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia, channel: "SMS" }, cookie: "" };
+        case "POST /guest/passport/otp/verify":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia, code: "000000" }, cookie: "" };
+        // Hai route ghi của phiên Passport: kịch bản chưa mở phiên Passport nào (S3.7a2 sẽ đi đường ấy) ⇒ 401 trước bộ đọc thân; thân
+        // vẫn đúng hình dạng để ngày có phiên thì nó chạm nghiệp vụ.
+        case "POST /passport/versions":
+          return {
+            path: r.path,
+            body: { legalName: "Quet", taxCode: "0101010101", nguoiDaiDien: "Quet", diaChi: "Quet", nganHang: "Quet", soTaiKhoan: "123456789", chungNhan: [], nhomHang: [] },
+            cookie: "",
+          };
+        case "POST /passport/logout":
+          return { path: r.path, body: {}, cookie: "" };
+        // Yêu cầu hồ sơ cho một nhà cung cấp KHÔNG tồn tại, dưới phiên tài chính (`supplier.qualify`): qua cổng, dừng ở hàm vị từ với
+        // mã có tên (chưa bật ⇒ `PASSPORT_TO_CHUC_CHUA_BAT`; đã bật ⇒ `PASSPORT_NCC_KHONG_HOP_LE`) — không link nào được đúc.
+        case "POST /suppliers/:supplierId/passport-requests":
+          return {
+            path: `/suppliers/${UUID0}/passport-requests`,
+            body: { contactId: UUID0 },
+            cookie: trangThai.taiChinh.cookie,
+            sau: (ph) => {
+              expect([ph.status, (ph.body as { ma?: string }).ma]).toEqual([422, batS3 ? "PASSPORT_NCC_KHONG_HOP_LE" : "PASSPORT_TO_CHUC_CHUA_BAT"]);
+            },
+          };
         case "POST /policy":
           // ~~[S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.~~
@@ -1222,6 +1250,14 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         .replace(":itemId", trangThai.hangChuanId)
         .replace(":lineNo", "1")
         .replace(/:[A-Za-z]+/gu, UUID0);
+    // Cookie của route ĐỌC: khách ⇒ phiên khách; [S1.9101 / S3.7a1] phiên Passport ⇒ không cookie (kịch bản chưa mở phiên Passport nào,
+    // 401 trước nghiệp vụ); hồ sơ Passport của bên mua ⇒ phiên tài chính — cổng `supplier.qualify` nằm TRONG hàm, và đọc bằng phiên
+    // `m` để lại một `PERMISSION_DENIED` ăn vào trần từ chối của phiên ấy (đo: bước 16 nhận 429 thay vì 422 ở lần tự ghi nhận).
+    const cookieDoc = (r: (typeof ROUTES)[number]): string | undefined =>
+      r.audience === "GUEST" ? k
+      : r.audience === "PASSPORT" ? undefined
+      : r.path === "/suppliers/:supplierId/passport" ? trangThai.taiChinh.cookie
+      : m;
     const phanHoiDoc = new Map<string, PhanHoi>();
     const logTruoc = logLoi.length;
     const roRi: string[] = [];
@@ -1239,7 +1275,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         r.audience === "PUBLIC" ? [{ path: thay(r.path) }]
         : hopLe !== null
           ? [{ path: hopLe.path, ...(hopLe.cookie === "" ? {} : { cookie: hopLe.cookie }), body: hopLe.body, ...(hopLe.sau === undefined ? {} : { sau: hopLe.sau }) }]
-          : [{ path: thay(r.path), cookie: r.audience === "GUEST" ? k : m }];
+          : [{ path: thay(r.path), cookie: cookieDoc(r) }];
       for (const ca of cacCa) {
         // [S1.273 / S3.3e1] Thân có thể là một lời hứa (ca xác minh đọc băm hồ sơ ngay lúc gọi) — chờ nó trước khi gửi.
         const than: unknown = r.method === "GET" ? undefined : await Promise.resolve(ca.body ?? {});

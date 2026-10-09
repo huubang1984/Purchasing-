@@ -20,6 +20,7 @@ function emailGhi(so: Lan[]): HopThuDev {
     loginLinkSender: { name: "e", send: ghi("login") },
     approvalNoticeSender: { name: "e", send: ghi("duyet") },
     invitationLinkSender: { name: "e", send: ghi("moi") },
+    passportLinkSender: { name: "e", send: ghi("passport") },
     otpSender: { name: "e", send: ghi("otp") },
     deadlineNoticeSender: { name: "e", send: ghi("han") },
   };

@@ -74,12 +74,15 @@ const HAM_TAI_CHO = ["viec", "gui", "bu", "khiXong"] as const;
 const HAM_BU_THEO_MA_QUYEN: Readonly<Record<string, readonly string[]>> = {
   RFQ_OPEN: ["danhDauDaGui", "revokeMagicLinkToken"],
   RFQ_INVITE: ["danhDauDaGui", "revokeInvitation", "revokeMagicLinkToken"],
+  // [S1.9101 / S3.7a1] `POST /suppliers/:supplierId/passport-requests`: gửi link Passport hỏng ⇒ thu hồi token vừa đúc (ADR-110).
+  SUPPLIER_QUALIFY: ["thuHoiTokenPassport"],
 };
 /** Gói xuất từng hàm của bảng trên — để bảng là một phép đo trên export thật, không phải một danh sách tên. */
 const GOI_CUA_HAM_BU: Readonly<Record<string, string>> = {
   danhDauDaGui: "@trustprocure/invitation",
   revokeInvitation: "@trustprocure/invitation",
   revokeMagicLinkToken: "@trustprocure/invitation",
+  thuHoiTokenPassport: "@trustprocure/invitation",
 };
 /** Hàm toàn cục được gọi trần trong `bu`/`khiXong` mà không phải hàm cục bộ của tệp. */
 const HAM_TOAN_CUC = new Set(["String", "Number", "Boolean", "Array", "Object", "Promise", "Symbol", "BigInt", "Date", "Error"]);
@@ -558,7 +561,8 @@ describe("[S1.209 / khoản 135] việc sau commit: closure không chạm `ctx.c
     expect(kq.choDangKy.some((c) => c.hamBu.includes("khiXong")), `không chỗ nào có \`khiXong\` — ADR-113 đăng ký ít nhất một\n${ke}`).toBe(true);
     // Đối chứng cho phép đọc mã quyền: chỗ đăng ký của lần mở gói nằm dưới `RFQ_OPEN`, chỗ của lần mời dưới `RFQ_INVITE`.
     expect(kq.choDangKy.filter((c) => c.ham === "afterCommitLoGui").map((c) => c.maQuyen)).toEqual(["RFQ_OPEN"]);
-    expect(new Set(kq.choDangKy.filter((c) => c.ham === "afterCommitCoBu").map((c) => c.maQuyen))).toEqual(new Set(["RFQ_INVITE"]));
+    // [S1.9101 / S3.7a1] …và chỗ của lần gửi link Passport dưới `SUPPLIER_QUALIFY`.
+    expect(new Set(kq.choDangKy.filter((c) => c.ham === "afterCommitCoBu").map((c) => c.maQuyen))).toEqual(new Set(["RFQ_INVITE", "SUPPLIER_QUALIFY"]));
   });
 
   describe("vế ⑴ — ĐỐI CHỨNG DƯƠNG bằng văn bản mẫu: closure với tới `ctx.client` thì ĐỎ", () => {

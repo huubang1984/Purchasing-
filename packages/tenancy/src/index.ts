@@ -3,6 +3,7 @@ export {
   TenantError,
   ngheLoiKetNoiToiMuon,
   withGuestSession,
+  withPassportSession,
   withTenant,
   type WithTenantOptions,
 } from "./with-tenant.js";

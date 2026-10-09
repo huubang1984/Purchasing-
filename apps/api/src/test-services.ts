@@ -77,6 +77,15 @@ export interface ThongBaoDaGui {
   readonly token: string | null;
 }
 
+/** [S1.9101 / S3.7a1] Một link Passport đã đi qua bộ gửi. */
+export interface PassportDaGui {
+  readonly orgId: string;
+  readonly supplierId: string;
+  readonly channel: string;
+  readonly destination: string;
+  readonly token: string;
+}
+
 /** [S1.91 / khoản 154] Một tin báo gia hạn hạn nộp đã đi qua bộ gửi. */
 export interface HanMoiDaGui {
   readonly invitationId: string;
@@ -88,7 +97,7 @@ export interface HanMoiDaGui {
 export interface DichVuTest {
   readonly services: ApiServices;
   /** Công tắc gây hỏng cho test đường 500: bật thì bộ mở bí mật TOTP ném. */
-  readonly hong: { totpUnsealer: boolean };
+  readonly hong: { totpUnsealer: boolean; passportLink: boolean };
   /** Mọi link đăng nhập đã đi qua bộ gửi. Test đọc token ở đây — và CHỈ ở đây. */
   readonly linkDaGui: LinkDaGui[];
   /** Mọi magic link mời thầu đã đi qua bộ gửi. */
@@ -99,6 +108,8 @@ export interface DichVuTest {
   readonly thongBaoDaGui: ThongBaoDaGui[];
   /** [khoản 154] Mọi tin báo gia hạn hạn nộp đã đi qua bộ gửi. */
   readonly hanMoiDaGui: HanMoiDaGui[];
+  /** [S1.9101 / S3.7a1] Mọi link Passport đã đi qua bộ gửi. Test đọc token ở đây — và CHỈ ở đây. */
+  readonly passportDaGui: PassportDaGui[];
   readonly khoaKy: ReceiptKeyPair;
 }
 
@@ -110,10 +121,11 @@ export function dichVuTest(): DichVuTest {
   };
   const otpDaGui: OtpDaGui[] = [];
   const linkDaGui: LinkDaGui[] = [];
-  const hong = { totpUnsealer: false };
+  const hong = { totpUnsealer: false, passportLink: false };
   const loiMoiDaGui: LoiMoiDaGui[] = [];
   const thongBaoDaGui: ThongBaoDaGui[] = [];
   const hanMoiDaGui: HanMoiDaGui[] = [];
+  const passportDaGui: PassportDaGui[] = [];
   // Bộ bọc/mở bí mật TOTP của test: AES-256-GCM, khoá dẫn xuất theo tổ chức, AAD ràng buộc tổ chức
   // + phiên bản — cùng fixture với `packages/identity/src/mfa.int.test.ts`, KHÔNG phải stub trả
   // thẳng plaintext (một stub như thế làm mọi khẳng định "bí mật của A không mở ở B" xanh vì lý do sai).
@@ -146,6 +158,7 @@ export function dichVuTest(): DichVuTest {
     loiMoiDaGui,
     thongBaoDaGui,
     hanMoiDaGui,
+    passportDaGui,
     khoaKy,
     services: {
       // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 THẬT (để `wrapForOrg` bọc được), khoá
@@ -167,6 +180,15 @@ export function dichVuTest(): DichVuTest {
         name: "ghi-lai-cua-test",
         send: (m) => {
           loiMoiDaGui.push({ invitationId: m.invitationId, channel: m.channel, destination: m.destination, token: m.token });
+          return Promise.resolve();
+        },
+      },
+      passportLinkSender: {
+        name: "ghi-lai-cua-test",
+        send: (m) => {
+          // Công tắc gây hỏng: đo phần bù sau commit (thu hồi token vừa đúc).
+          if (hong.passportLink) return Promise.reject(new Error("bo gui link Passport gia dang hong"));
+          passportDaGui.push({ orgId: m.orgId, supplierId: m.supplierId, channel: m.channel, destination: m.destination, token: m.token });
           return Promise.resolve();
         },
       },

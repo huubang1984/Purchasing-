@@ -28,6 +28,15 @@ export type TinHopThu =
       readonly den: string;
       readonly duongLink: string;
     }
+  // [S1.9101 / S3.7a1] Link Passport của nhà cung cấp — `/ho-so#<orgId>:<mã>`.
+  | {
+      readonly loai: "PASSPORT_LINK";
+      readonly orgId: string;
+      readonly supplierId: string;
+      readonly kenh: string;
+      readonly den: string;
+      readonly duongLink: string;
+    }
   | { readonly loai: "OTP"; readonly kenh: string; readonly den: string; readonly ma: string }
   | { readonly loai: "DEADLINE_NOTICE"; readonly orgId: string; readonly invitationId: string; readonly den: string; readonly hanNopMoi: string }
   | { readonly loai: "UNSEAL_APPROVAL_NOTICE"; readonly orgId: string; readonly den: string; readonly rfqId: string };
@@ -56,6 +65,14 @@ export function docTin(tho: unknown): TinHopThu | null {
     const duongLink = chuoi(o, "duongLink");
     if (orgId === undefined || invitationId === undefined || kenh === undefined || duongLink === undefined) return null;
     return { loai, orgId, invitationId, kenh, den, duongLink };
+  }
+  if (loai === "PASSPORT_LINK") {
+    const orgId = chuoi(o, "orgId");
+    const supplierId = chuoi(o, "supplierId");
+    const kenh = chuoi(o, "kenh");
+    const duongLink = chuoi(o, "duongLink");
+    if (orgId === undefined || supplierId === undefined || kenh === undefined || duongLink === undefined) return null;
+    return { loai, orgId, supplierId, kenh, den, duongLink };
   }
   if (loai === "OTP") {
     const kenh = chuoi(o, "kenh");

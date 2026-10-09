@@ -111,6 +111,21 @@ export function taoBoGuiSes(tuyChon: TuyChonGuiSes): HopThuDev {
         );
       },
     },
+    // [S1.9101 / S3.7a1] Link Passport — chỉ kênh EMAIL (link đi hộp thư, OTP đi máy điện thoại: ADR-015 ⑴).
+    passportLinkSender: {
+      name: TEN,
+      send: async (m) => {
+        chiEmail(m.channel);
+        await gui(
+          m.destination,
+          "TrustProcure — yêu cầu hồ sơ nhà cung cấp (Passport)",
+          `Bên mua đề nghị bạn cập nhật hồ sơ nhà cung cấp trên TrustProcure.
+` +
+            `Mở đường dẫn sau (dùng một lần, có hạn); mã xác minh sẽ đi tới số điện thoại đã đăng ký:
+${tuyChon.baseUrl}/ho-so#${m.orgId}:${m.token}${CHAN}`,
+        );
+      },
+    },
     otpSender: {
       name: TEN,
       send: async (m) => {

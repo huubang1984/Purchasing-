@@ -83,7 +83,8 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     const anon = new Set(ROUTES.filter((r) => r.audience === "ANON").map((r) => r.path));
     // Miễn trừ ở đây nói *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"* — nên một dòng trỏ
     // tới một đường không còn tồn tại là một lời khai đã thiu, đúng lớp lỗi mà S1.21 đi đóng.
-    expect(Object.keys(MIEN_TRAN_NGUOI_GOI)).toEqual(["/guest/otp"]);
+    // [S1.9101 / S3.7a1] `/guest/passport/otp` — trần trong `issuePassportOtp`, bucket theo nhà cung cấp.
+    expect(Object.keys(MIEN_TRAN_NGUOI_GOI)).toEqual(["/guest/otp", "/guest/passport/otp"]);
     for (const [duong, lyDo] of Object.entries(MIEN_TRAN_NGUOI_GOI)) {
       expect(anon.has(duong), `${duong} không còn là route ANON`).toBe(true);
       expect(lyDo).toMatch(/OTP_MAX_PER_/u);
@@ -105,7 +106,7 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     expect(vp.some((v) => v.startsWith("POST /d") && v.includes("PUBLIC chỉ được là GET"))).toBe(true);
   });
 
-  it("[INV-H17] `requirePermission` / `withTenant` / `withGuestSession` CHỈ xuất hiện ở dispatch.ts", () => {
+  it("[INV-H17] `requirePermission` / `withTenant` / `withGuestSession` / `withPassportSession` CHỈ xuất hiện ở dispatch.ts", () => {
     const tep = quetNguonApi();
     expect(tep.length, "bộ quét phải thấy mã của apps/api").toBeGreaterThan(5);
     const viPham: string[] = [];
@@ -117,7 +118,7 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
       // dispatch.ts đều là vi phạm. Chú thích của routes/buyer.ts nhắc tới nó để nói rằng nó KHÔNG
       // gọi — đã bỏ chú thích trước khi đo.
       const ma = boChuThich(readFileSync(join(GOC, t), "utf8"));
-      for (const ten of ["requirePermission", "withTenant", "withGuestSession"]) {
+      for (const ten of ["requirePermission", "withTenant", "withGuestSession", "withPassportSession"]) {
         if (new RegExp(`\\b${ten}\\b`, "u").test(ma)) viPham.push(`${t}: ${ten}`);
       }
     }
@@ -133,6 +134,7 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     expect(dispatch).toContain("requirePermission(");
     expect(dispatch).toContain("withTenant(");
     expect(dispatch).toContain("withGuestSession(");
+    expect(dispatch).toContain("withPassportSession(");
   });
 });
 

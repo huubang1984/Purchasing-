@@ -23,7 +23,8 @@ import type { Permission, SessionActor, TotpSecretUnsealer, WrappedTotpSecret } 
 import type { Channel, PepperRing } from "@trustprocure/invitation";
 import type { ApiRequest, ApiResponse, HttpMethod } from "./http.js";
 
-export type Audience = "PUBLIC" | "ANON" | "GUEST" | "BUYER";
+// [S1.9101 / S3.7a1 / ADR-081 ⑶] `PASSPORT` — phiên của nhà cung cấp trên hồ sơ Passport, cookie RIÊNG, nhánh riêng ở bộ điều phối.
+export type Audience = "PUBLIC" | "ANON" | "GUEST" | "BUYER" | "PASSPORT";
 
 /** Bộ gửi OTP — được TIÊM ở composition root (ADR-015 mục 3: người gọi issueOtpChallenge là handler gửi). */
 export interface OtpSender {
@@ -97,6 +98,21 @@ export interface InvitationLinkSender {
   }): Promise<void>;
 }
 
+/**
+ * [S1.9101 / S3.7a1] Bộ gửi link Passport — đích ĐỌC TỪ `supplier_contacts` (email của người liên hệ đã xác minh), token không về
+ * client. Gửi SAU commit, có bù (thu hồi token vừa đúc — khuôn ADR-110).
+ */
+export interface PassportLinkSender {
+  readonly name: string;
+  send(input: {
+    readonly orgId: string;
+    readonly supplierId: string;
+    readonly channel: Channel;
+    readonly destination: string;
+    readonly token: string;
+  }): Promise<void>;
+}
+
 /** Những thứ có KHOÁ hoặc có TÁC DỤNG PHỤ mà handler cần và không được tự tạo. */
 export interface ApiServices {
   /**
@@ -105,6 +121,7 @@ export interface ApiServices {
    */
   readonly orgKeyProvisioner: OrgKeyProvisioner;
   readonly invitationLinkSender: InvitationLinkSender;
+  readonly passportLinkSender: PassportLinkSender;
   readonly pepper: PepperRing;
   readonly otpSender: OtpSender;
   readonly receiptSigner: ReceiptSigner;
@@ -256,6 +273,24 @@ export interface GuestContext {
   readonly services: ApiServices;
 }
 
+/**
+ * [S1.9101 / S3.7a1 / ADR-081 ⑶] Cửa vào CSDL của handler Passport. Route ĐỌC: `client` đã gắn phiên Passport (`withPassportSession`
+ * — `app.guest_session_id` cộng GUC dẫn xuất `app.passport_supplier_id`; mọi policy `_khach` cũ đóng). Route GHI: `client` chỉ gắn tổ
+ * chức (khuôn route ghi của khách — `028`); handler chỉ gọi hàm gói nhận các trường dẫn xuất dưới đây.
+ */
+export interface PassportContext {
+  readonly req: ApiRequest;
+  readonly orgId: string;
+  readonly client: pg.PoolClient;
+  /** DẪN XUẤT từ cookie ở bước tra phiên (`resolvePassportSessionByToken`) — không đọc từ thân, không từ đường dẫn. */
+  readonly passportSessionId: string;
+  readonly supplierId: string;
+  readonly contactId: string;
+  readonly supplierLegalName: string;
+  readonly supplierTaxCode: string | null;
+  readonly services: ApiServices;
+}
+
 /** Kết nối ĐÃ gắn tổ chức (`withTenant`); `actor` dẫn xuất từ cookie, không từ thân yêu cầu. */
 export interface BuyerContext {
   readonly req: ApiRequest;
@@ -333,6 +368,13 @@ export interface GuestRoute extends RouteBase {
   readonly handler: (ctx: GuestContext) => Promise<ApiResponse>;
 }
 
+export interface PassportRoute extends RouteBase {
+  readonly audience: "PASSPORT";
+  /** Đường ghi của nhà cung cấp (nộp phiên bản, thoát) — tự chứng minh thẩm quyền bằng phiên Passport, không có mã quyền. */
+  readonly mutates: boolean;
+  readonly handler: (ctx: PassportContext) => Promise<ApiResponse>;
+}
+
 export interface BuyerReadRoute extends RouteBase {
   readonly audience: "BUYER";
   readonly mutates: false;
@@ -406,7 +448,7 @@ export interface BuyerWriteRoute extends RouteBase {
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
-export type Route = PublicRoute | AnonRoute | GuestRoute | BuyerReadRoute | BuyerSelfRoute | BuyerWriteRoute;
+export type Route = PublicRoute | AnonRoute | GuestRoute | PassportRoute | BuyerReadRoute | BuyerSelfRoute | BuyerWriteRoute;
 
 /**
  * [khoản 141 / ADR-039] Một phiên `AGENT_READONLY` gọi được route này hay không.
@@ -457,6 +499,11 @@ export const MIEN_TRAN_NGUOI_GOI: Readonly<Record<string, string>> = {
     "trần nằm TRONG `issueOtpChallenge` (packages/invitation) và nó CHẶT HƠN một trần theo route: " +
     "`OTP_MAX_PER_CALLER` = 10, `OTP_MAX_PER_INVITATION` = 5 (bucket kẻ tấn công không xoay được), " +
     "`OTP_MAX_PER_DEST` = 3 và `OTP_MAX_PER_DEST_TOAN_TO_CHUC` = 20 — ADR-015 §5.",
+  // [S1.9101 / S3.7a1] Cùng lý do, bucket không xoay được là NHÀ CUNG CẤP (khoá theo nhà cung cấp, không theo token — lượt soi ④).
+  "/guest/passport/otp":
+    "trần nằm TRONG `issuePassportOtp` (packages/invitation) và nó CHẶT HƠN một trần theo route: " +
+    "`OTP_MAX_PER_CALLER` = 10, `OTP_MAX_PER_PASSPORT` = 5 (bucket theo nhà cung cấp — kẻ tấn công không xoay được), " +
+    "`OTP_MAX_PER_DEST` = 3 và `OTP_MAX_PER_DEST_TOAN_TO_CHUC` = 20 — ADR-015 §5.",
 };
 
 export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] {
@@ -486,6 +533,11 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     // bằng POST — một GET vô danh đổi trạng thái là một link bấm-là-chết.
     if (r.audience === "ANON" && !(r.path.startsWith("/guest/") || r.path.startsWith("/auth/"))) {
       viPham.push(`${khoa}: route ANON ngoài /guest/* và /auth/* — đường vô danh không được mọc ở chỗ khác`);
+    }
+    // [S1.9101 / S3.7a1] Đường của phiên Passport chỉ ở `/passport` và `/passport/*` — một route PASSPORT mọc chỗ khác là một bề mặt
+    // nhà cung cấp mà không ai đặt tên (lượt soi hình dạng L10(g)).
+    if (r.audience === "PASSPORT" && !(r.path === "/passport" || r.path.startsWith("/passport/"))) {
+      viPham.push(`${khoa}: route PASSPORT ngoài /passport và /passport/*`);
     }
     if (r.audience === "ANON" && r.method !== "POST") {
       viPham.push(`${khoa}: route ANON chỉ được là POST — token đi trong THÂN, không trong URL (E6)`);

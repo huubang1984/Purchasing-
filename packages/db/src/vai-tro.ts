@@ -76,7 +76,7 @@ const mocLuocDo = new WeakMap<pg.PoolClient, string>();
  * [S1.215 / khoản 104] Câu đọc trạng thái phiên ở mỗi lần lấy client — MỘT hằng đứng riêng, mở đầu bằng SELECT, để hai cổng
  * [INV-H21] (`qt3-ghim-schema`, `qt3-cu-phap`) thấy và PREPARE được nó; `ganVaiChoClient` nội suy nó vào CUỐI câu nhiều lệnh
  * `SET ROLE …` nên vẫn không thêm vòng đi-về. Đọc: `current_user`, ba GUC vận hành theo tính chất và search path hiệu lực (khoản 99),
- * và TÊN của bốn GUC tenant/khách đang có giá trị — cùng phép đọc của `withTenant` (placeholder không có ở `pg_settings`, đo S1.47).
+ * và TÊN của năm GUC tenant/khách (thứ năm — `app.passport_supplier_id`, S3.7a1) đang có giá trị — cùng phép đọc của `withTenant` (placeholder không có ở `pg_settings`, đo S1.47).
  * Chỉ tên đi vào thông báo, không bao giờ giá trị.
  */
 const CAU_DOC_TRANG_THAI =
@@ -88,7 +88,8 @@ const CAU_DOC_TRANG_THAI =
   "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
   "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
   "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
-  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS guc_tenant";
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END, " +
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.passport_supplier_id', true), '') IS NOT NULL THEN 'app.passport_supplier_id' END) AS guc_tenant";
 
 /**
  * [S1.215 / khoản 104] Số kết quả mà câu nhiều lệnh của `ganVaiChoClient` PHẢI trả về (SET ROLE, DISCARD, CLOSE, DEALLOCATE,
@@ -141,7 +142,7 @@ interface HangTrangThai {
  *     vòng đi-về nào thêm, và không tín hiệu nào của lớp khác nằm ở đó (mã sản xuất không dùng prepared statement có tên, con trỏ hay
  *     LISTEN — census bằng grep, S1.215; `DEALLOCATE ALL` vì thế không đụng bộ nhớ `parsedStatements` của driver);
  *   - GUC phiên thì ĐỌC TRƯỚC, DỌN SAU: câu đọc chạy TRƯỚC `RESET ALL`, nên ba GUC vận hành vẫn bị PHÁN theo khoản 99 (replica do hàm
- *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi bốn GUC
+ *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi ~~bốn~~ [S1.9101] năm GUC
  *     tenant/khách RỖNG. Giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant`
  *     (khoản 87, S1.48): xoá nó ở đây là xoá đúng thứ withTenant dùng để nói "rò từ mã ngoài withTenant, huỷ kết nối". Khi ấy lớp này
  *     KHÔNG dọn GUC phiên và KHÔNG phán — withTenant ở BEGIN kế tiếp phân biệt và huỷ; đường không qua withTenant nhận kết nối mang
