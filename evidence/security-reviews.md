@@ -26379,6 +26379,132 @@ của nó — `pnpm t0` và `pnpm test` chạy lại trên HEAD sau lượt evid
 
 ---
 
+# §S1.284 — S4.7b1: TCO PHÍA NGƯỜI MUA — `/chinh-sach` CHỌN MÃ VÀ KHAI THAM SỐ, `POST /policy` CHUYỂN `tco`; SỐ NGÀY GIAO YÊU CẦU CÓ ROUTE, Ô Ở `/tao-thau`, DÒNG Ở MÀN DUYỆT; CẢNH BÁO TRƯỚC KHI GÓI KẸT — ADR-156
+
+## 1. Vòng này là gì
+
+Phần đầu trong hai phần của S4.7b (spec S4 §9): phía NGƯỜI MUA của TCO. S4.7a (§S1.279) đã cho lượt chấm năm mã có nguồn, nhưng không
+đường HTTP nào khai được chúng. Phía nhà cung cấp — route khách, ô khai ở `/nop-thau`, hai hạng ở `/mo-thau` — là S4.7b2. Không migration.
+
+## 2. Quyết định của chủ dự án (2026-10-08)
+
+Bốn câu, cả bốn theo đề xuất (ADR-156): ⑴ S4.7b tách HAI phần; ⑵ nhà cung cấp thấy tập mã, số ngày giao VÀ tham số quy đổi (b2 chụp
+tham số vào gói lúc mở); ⑶ ô khai BẮT BUỘC trên form (tuỳ chọn ở lượt chấm); ⑷ hạng giá chỉ trên báo giá có hạng.
+
+## 3. Đo trước
+
+- `POST /policy` (`buyer.ts`) không chuyển `tco` dù `createProcurementPolicy` nhận nó; `GET /policy/versions` đã trả `tco` nhưng màn bỏ qua.
+- `/chinh-sach` hiện thành phần CỐ ĐỊNH chỉ-đọc `[gia]`; `canhBaoTrongSo` nói *"lượt chấm chỉ đọc một thành phần giá"* — sai từ `112`;
+  ca `chinh-sach.test` *"hệ số khác 1 vẫn là vế hẹp"* khẳng định màn im trước một phiên bản mà lượt chấm đã từ chối (L8).
+- `datSoNgayGiao` không ra barrel, không route; `GET /rfqs/:rfqId` không mang `so_ngay_giao`; màn duyệt (`/tao-thau` bước 4) không hiện
+  con số mà `approved_delivery_hash` phủ.
+- Phiên khách không đọc gì của chính sách (`027` §6); phong bì niêm phong ở trình duyệt; lượt chấm không lưu giá của báo giá không hạng.
+
+## 4. Thay đổi
+
+- **`apps/api`**: `PUT /rfqs/:rfqId/delivery-days` (`rfq.create`, `resourceType` `RFQ`, khuôn route nhóm hàng) với bộ đọc
+  `soNguyenHoacNull` — `null` xoá, vắng trường hay sai kiểu là 422; `POST /policy` chuyển `tco` (`objectChuoiTuyChon`); `GET /policy/versions`
+  mang `goiChoDuyetThieuSoNgayGiao`.
+- **`packages/rfq`**: `RfqRecord.soNgayGiao` (`COT_RFQ`); `datSoNgayGiao` và `SO_NGAY_GIAO_TOI_DA` ra barrel; `lietKePhienBanChinhSach`
+  đếm gói `PENDING_APPROVAL` chưa khai số ngày giao.
+- **`packages/danh-gia`**: `MA_CO_NGUON`, `docNhomTco`, `kiemChinhSachTco` ra barrel (thuần).
+- **`apps/web`**: `/chinh-sach` — bốn ô mã, ba ô tham số (hiện theo mã, không mặc định), cột *"Tham số TCO"*, cảnh báo thiếu tham số,
+  gói chờ duyệt thiếu số ngày giao (lời ra theo loại tổ chức), câu TẠM *"màn nộp báo giá chưa có ô"*; lõi `loiTrongSo` (bản chép
+  `kiemChinhSachTco`), `thanhPhanTuMa`. `/tao-thau` — ô và nút ở DRAFT, dòng *"Số ngày giao yêu cầu"* mọi trạng thái, cảnh báo chi phí
+  trễ; lõi `docSoNgayGiao`, `canhBaoSoNgayGiao`.
+- **Sổ**: `barrel-exports` (rfq hai symbol, danh-gia ba), `cong-quyen-route` (`datSoNgayGiao` ghi; `docNhomTco`, `kiemChinhSachTco` thuần),
+  `ma-chep-api-worker` (một hàng `RIENG`), kịch bản 41 (`thanHopLe` cho route mới).
+- **Tài liệu**: ADR-156; TEST-PLAN L8, L16; spec §9 (S4.7b, S4.7b1, S4.7b2); STATE; PRODUCT; Handoff (155 ADR).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. Ô mã là ô chọn cố định trong HTML (bốn mã), giá không có ô — luôn tính; bấm một ô thì trọng số thành TẬP CHUẨN (`thanhPhanTuMa`:
+   thứ tự chính sách, hệ số `1.0000`) — thành phần lạ của một bản chép rơi đi; chưa bấm thì bản chép đi nguyên văn, như khoản 329.
+2. Thân chỉ mang khoá `tco` của mã ĐANG BẬT; không khoá nào thì `null` (`CHECK` từ chối object rỗng).
+3. Cảnh báo ở `/tao-thau` đọc lần `GET /policy/versions` sẵn có lúc đăng nhập — không thêm lời gọi; xét phiên bản hiệu lực VÀ mọi phiên
+   bản mới hơn (chờ ký) — một bản mới hơn có thể có hiệu lực trước lúc gói mở.
+4. Câu TẠM ở `/chinh-sach` cho khoảng giữa b1 và b2 — nói thật rằng nhà cung cấp chưa khai được mã ngoài giá.
+5. `GET /rfqs/:rfqId` mang `soNgayGiao` cho cả agent (route `agent: true`): con số là thuộc tính của gói như hạn nộp; danh sách trắng của
+   `GET /guest/rfq` không đổi (khách thấy nó ở b2, cùng tham số).
+
+## 6. Đo
+
+- **Đơn vị** — `chinh-sach.test` 51 ca (ca LẬT *"hệ số khác 1"* ⇒ *"bị từ chối khi chấm"*; tập chuẩn; tham số thiếu; bốn mã không nguồn
+  hay hỏng; gói chờ duyệt theo loại tổ chức VÀ bậc của phiên bản; hai mươi ba ca miền tham số; mô tả); `tao-thau.test` 63 ca (biên khoá
+  với gói; mười hai ô; ô chỉ DRAFT; cảnh báo — phiên bản hiệu lực tách khỏi phiên bản mới hơn, có bậc và không bậc);
+  `bac-mac-dinh-dong-bo` — hai bản luật L8 cùng phán quyết, CÙNG câu trên mười tám ca, tập mã cùng thứ tự, ba mẫu tham số có mặt nguyên
+  văn trong `112`.
+- **DOM** — `phuc-vu.test` sáu ca (hai sau rà soát: mẫu có bậc không cảnh báo gói chờ duyệt, tham số sai miền không gửi; đổi người hay
+  đăng xuất quên cảnh báo). Bốn ca đầu: thân gửi tập chuẩn và chỉ khoá của mã bật, bỏ chọn ⇒ `null`; chép mang mã và tham số, bảng hiện tham
+  số, cảnh báo gói chờ duyệt theo loại tổ chức; ô số ngày ở DRAFT, dòng mọi trạng thái, `null` khi trống, ngoài miền không gọi; cảnh báo
+  chi phí trễ theo trạng thái, loại tổ chức và phiên bản mới hơn.
+- **HTTP** — `buyer.int` hai ca: route số ngày giao (vắng trường, sai kiểu, ngoài miền, cổng 403, đặt, đọc lại, xoá, hai hàng sổ, gói chờ
+  duyệt 422, đếm 1, xuyên tổ chức 422 có tên và không hàng sổ); `POST /policy` với `tco` (hai 422 của cửa, một 422 của `CHECK` với thân
+  của nó, 201, trả nguyên văn, `coTco`).
+- **Không lùi**: kịch bản 41 HTTP, `man-kiem-soat.int`, `xung-dot-loi-ich.int`, `guest.int`, `tra-ve-nhap.int`, `apps/mcp` — 278/278;
+  `buyer.int` 31/31; QT3 cú pháp và ngữ pháp 8/8.
+
+## 7. Đột biến
+
+Script áp từng đột biến, chạy tệp test đích, khôi phục. Hai mươi bốn đột biến, cả hai mươi bốn ĐỎ — mười sáu ở lượt đầu, tám trên phần
+sửa sau rà soát (mục 8):
+- **Máy chủ (5)**: `POST /policy` bỏ chuyển `tco` (M1); vắng `soNgayGiao` thành `null` (M2); đếm cả gói khác `OPEN` (M3); route đổi cổng
+  (M4); `GET` không mang số ngày giao (M16).
+- **Màn (11)**: gửi tham số của mã không bật (M5); bỏ kiểm hệ số (M6); bỏ đòi giá (M7); tập chuẩn không thêm giá (M8); cảnh báo chỉ xét
+  bản hiệu lực (M9); ô số ngày ở mọi trạng thái (M10); nhận số `0` (M11); dòng số ngày chỉ ở DRAFT (M12); chép không mang tham số (M13);
+  lời ra gói chờ duyệt bỏ vế loại tổ chức (M14); bỏ câu tạm (M15).
+- **Sau rà soát (8)**: bỏ vế *"có bậc"* của cảnh báo gói chờ duyệt (M17); bỏ kiểm mẫu chi phí vốn (M18); bỏ biên trên tỉ lệ trễ (M19);
+  phiên bản mới hơn coi như hiệu lực (M20); bỏ vế *"không bậc"* (M21); không quên chính sách khi đổi người (M22); màn gửi tham số sai
+  miền (M23); đổi mẫu kỳ chuẩn ở màn (M24).
+
+M18 SỐNG ở lượt đầu, và đó là phát hiện: mọi ca sai miền của chi phí vốn đều bị bộ đọc số `sangNguyen` chặn sẵn, nên vế mẫu không được
+đo. Chuỗi mà bộ đọc nhận còn mẫu của `CHECK` thì không — số 0 đầu thừa (`"00.5"`, `"01"`, `"00.01"`) — thêm ba ca, rồi M18 đỏ.
+
+## 8. Rà soát đối kháng
+
+Một lượt soi đối kháng độc lập trên diff (`591e4ac`), đo bằng đọc mã, chạy test và một phép thử ngẫu nhiên 200 000 tổ hợp thành phần ×
+tham số trên hai bản luật L8 (màn và lượt chấm: cùng phán quyết, cùng câu ở mọi tổ hợp). Không phát hiện nào về quyền, xuyên tổ chức,
+rò rỉ hay sink HTML. Tám phát hiện:
+- **TRUNG-1** — *"chỉ còn lối huỷ"* sai ở hai chỗ. `/chinh-sach`: tổ chức chưa bật soạn từ mẫu (bốn bậc) và bật chi phí trễ — phiên bản
+  có bậc chỉ hiệu lực khi được ký, và chữ ký bật S3 bị từ chối khi còn gói chờ duyệt (`097`), nên các gói ấy không rơi vào nó. `/tao-thau`:
+  chỉ một phiên bản MỚI HƠN chưa ký tính chi phí trễ, gói chờ duyệt mở được NGAY, mà màn nói nó chỉ còn lối huỷ — lời có thể đẩy người
+  duyệt huỷ một gói lành, và huỷ không lùi được. ADR-156 ⑸ ghi *"cùng lời của `openRfq`"* — sai với ca phiên bản mới hơn. Sửa:
+  `canhBaoGoiThieuSoNgayGiao` nhận cờ có bậc và im ở ca ấy; `canhBaoSoNgayGiao` tách phiên bản hiệu lực (lời của `openRfq`) khỏi phiên
+  bản mới hơn (lời có điều kiện; ở tổ chức chưa bật chỉ phiên bản không bậc còn là nguy cơ). Ca thành test (M17, M20, M21).
+- **TRUNG-2** — `/tao-thau` nói *"nhà cung cấp thấy con số này khi nộp báo giá"*; tới b2 danh sách trắng của `GET /guest/rfq` không có nó.
+  Sửa: câu TẠM nói thật, hàng S4.7b2 của spec ghi việc gỡ.
+- **THẤP-1** — ô số ngày giao đứng trong khối TẠO gói: gõ con số rồi bấm *"Tạo gói thầu"* thì gói mới nhận `null`, con số mất im lặng. Sửa:
+  dời xuống sau bảng gói, nhãn *"của gói này"*. Vế thứ hai — đọc mã khác hỏng thì nút ghi vào gói trước — là khuôn nút nhóm hàng có từ
+  S3.6a: giới hạn (mục 9).
+- **THẤP-2** — tham số sai miền (`"0,12"`, `"12%"`, `".12"`, `"060"`, cặp thiếu một) bị `CHECK` từ chối bằng 422 chung không gọi tên ô.
+  Sửa: `loiThamSoTco` chép ba mẫu `like_regex` của `112` (khoá nguyên văn), biên kiểm bằng số nguyên; màn không gửi (M18, M19, M23, M24).
+- **THẤP-3** — thân chính sách của người trước còn trong bộ nhớ sau khi đổi người hay đăng xuất; lần đọc chính sách về SAU lần đọc gói
+  thì cảnh báo không bao giờ vẽ. Sửa: quên ở hai đường và trước mỗi lần đọc; vẽ lại sau lần đọc (M22).
+- **THẤP-4** — hai chú thích nói *"cửa HTTP nói miền bằng chính hằng này"*; route không dùng hằng. Sửa chú thích.
+- **THẤP-5** — ca `CHECK` chỉ đo mã 422; không ca xuyên tổ chức. Sửa: đo thân, thêm ca xuyên tổ chức.
+- **THẤP-6** — số gói chờ duyệt thiếu số ngày giao trên route đọc không cổng (mọi người của tổ chức, `agent: false`, không giá): nhận như
+  thiết kế. Hàng sổ ghi cả khi con số không đổi: đúng câu *"một hàng sổ mỗi lần"* của TEST-PLAN.
+
+## 9. Giới hạn, nói ra
+
+1. Giữa S4.7b1 và S4.7b2 nhà cung cấp chưa khai được ô nào ngoài giá và chưa thấy số ngày giao — hai câu TẠM nói điều ấy.
+2. Cảnh báo ở `/tao-thau` đọc chính sách lúc đăng nhập — cũ trong phiên; cạnh mở là chốt.
+3. Không chặn lúc nộp duyệt gói thiếu số ngày giao (ADR-153 ⑶ chặn ở cạnh mở).
+4. Nút *"Lưu số ngày giao"* ghi vào gói đang đọc; một lần đọc mã khác hỏng để nguyên gói trước — khuôn nút nhóm hàng (S3.6a).
+5. Thân 422 của `CHECK` vẫn là câu chung không gọi tên ô — cho người gọi API không qua màn.
+
+## 10. Đo cuối
+
+- Sau các sửa của mục 8: `pnpm t0` xanh (lượt đầu đỏ một lỗi lint — gán phần tử của mảng `any` ở `canhBaoSoNgayGiao`; định kiểu
+  `readonly unknown[]`); `pnpm test` 156 tệp / 2777 ca; `cap-so` cấp S1.284, ADR-156, `--kiem` sạch.
+- `pnpm evidence` trên `526fe5b`: vitest thoát mã 0, 5086 khẳng định; bộ sinh dừng ở bảy vấn đề CHẶN MERGE — bảy cặp nhãn ↔ tệp mới
+  (L8 ở `buyer.int`, `chinh-sach.test`, `phuc-vu.test`, `bac-mac-dinh-dong-bo`; L16 ở `buyer.int`, `phuc-vu.test`, `tao-thau.test`)
+  chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai bảy cặp kèm câu đo gì, chạy lại BƯỚC 2 (bộ sinh) trên cùng báo cáo:
+  **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận đổi đúng hai hàng: L8 24 → 49 khẳng định,
+  L16 14 → 31, tầng T3 → T1, T3.
+
+---
+
 # §S1.285 — S3.6d: K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG (`ESTIMATE_UNDERSTATED`) TÍNH Ở ĐỀ XUẤT, CHẶN CHỮ KÝ DUYỆT TRAO THẦU CHO TỚI KHI NGƯỜI GIỮ `po.approve` NGOÀI GÓI GHI NHẬN; HAI BẢNG TÍN HIỆU CỦA `088` MỞ THEO LOẠI — ADR-157, MIGRATION `116_tin_hieu_khai_thap`
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — tổ chức chưa bật S3 chạy nguyên MVP1 (`tin_hieu_khai_thap` trả

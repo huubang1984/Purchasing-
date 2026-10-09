@@ -587,3 +587,77 @@ export function nhanXacMinhNgan(verification: unknown): string {
   if (v.loai === "REVOKED") return "Xác minh đã bị thu hồi — nhà cung cấp này không được đếm cho cạnh tranh tối thiểu.";
   return "Chưa được xác minh — nhờ tài chính xác minh ở màn nhà cung cấp trước khi mời.";
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.284 / S4.7b1] SỐ NGÀY GIAO YÊU CẦU CỦA GÓI (`112_tco`, ADR-153; L16)
+// ----------------------------------------------------------------------------------------------
+// Con số là của GÓI, chỉ đổi ở DRAFT (trigger `rfq_packages_so_ngay_giao`) và nằm trong chữ ký phê duyệt (`approved_delivery_hash`):
+// người duyệt phải thấy nó ở chính màn duyệt. Nó là cơ sở của chi phí trễ giao — phiên bản ghim lúc mở tính `chi_phi_tre` mà gói không
+// khai thì cạnh mở từ chối (`tco_thieu_so_ngay_giao`), nên màn cảnh báo TRƯỚC, khi gói còn soạn hay đang chờ duyệt. Không luật nào ở
+// đây là chốt: miền là của `CHECK` `112`, cạnh mở là của trigger; màn chỉ nói trước.
+
+/** Biên trên — bản chép của `SO_NGAY_GIAO_TOI_DA` (`packages/rfq`), khoá ở `tao-thau.test.ts`. */
+export const SO_NGAY_GIAO_TOI_DA = 3650;
+
+/** Ô người gõ → số ngày; `null` khi để trống (xoá con số); `undefined` khi không đọc được — trang báo, không gửi. */
+export function docSoNgayGiao(chuoi: string): number | null | undefined {
+  const s = chuoi.trim();
+  if (s === "") return null;
+  if (!/^[1-9][0-9]{0,3}$/u.test(s)) return undefined;
+  const n = Number(s);
+  return n <= SO_NGAY_GIAO_TOI_DA ? n : undefined;
+}
+
+/** Ô và nút chỉ hiện khi gói ĐANG SOẠN — trigger từ chối mọi trạng thái khác. */
+export function hienDatSoNgayGiao(trangThaiGoi: string): boolean {
+  return trangThaiGoi === "DRAFT";
+}
+
+/** Dòng của bảng gói — mọi trạng thái, vì người duyệt ký lên nó. */
+export function nhanSoNgayGiao(v: unknown): string {
+  if (typeof v === "number") return `${String(v)} ngày`;
+  return v === null ? "chưa khai" : "—";
+}
+
+const coChiPhiTre = (p: unknown): boolean =>
+  Array.isArray((p as { evalComponents?: unknown } | null)?.evalComponents) &&
+  ((p as { evalComponents: unknown[] }).evalComponents).some((t) => (t as { ma?: unknown } | null)?.ma === "chi_phi_tre");
+
+/**
+ * Câu cảnh báo khi gói chưa khai số ngày giao mà phiên bản đang hiệu lực — hay một phiên bản MỚI HƠN, chưa có hiệu lực, có thể có hiệu
+ * lực trước lúc gói mở — tính chi phí trễ. `body` là thân `GET /policy/versions`. `null`: không có gì để nói.
+ *
+ * [rà soát §S1.284 — TRUNG-1] Bản đầu nói *"chỉ còn lối huỷ"* cả khi chỉ một phiên bản mới hơn tính chi phí trễ — sai: gói mở được
+ * ngay (cạnh mở chỉ đọc phiên bản hiệu lực), và một lời nói sai đẩy người duyệt huỷ một gói lành. Nay hai ca tách nhau:
+ * - phiên bản HIỆU LỰC tính chi phí trễ: đúng lời của `openRfq` — gói chờ duyệt ở tổ chức chưa bật chỉ còn lối huỷ;
+ * - chỉ một phiên bản MỚI HƠN tính nó: lời có điều kiện *"nếu nó có hiệu lực trước lúc gói mở"*. Ở tổ chức chưa bật, phiên bản có bậc chỉ
+ *   có hiệu lực khi được ký, và chữ ký ấy bị từ chối khi còn gói chờ duyệt (`097`) — gói chờ duyệt không rơi vào nó; chỉ phiên bản
+ *   không bậc (hiệu lực theo `effective_from`) còn là nguy cơ.
+ */
+export function canhBaoSoNgayGiao(body: unknown, soNgayGiao: unknown, trangThaiGoi: string): string | null {
+  if (soNgayGiao !== null) return null;
+  if (trangThaiGoi !== "DRAFT" && trangThaiGoi !== "PENDING_APPROVAL") return null;
+  const b = body as { phienBan?: unknown; daBat?: unknown } | null;
+  const ds: readonly unknown[] = Array.isArray(b?.phienBan) ? (b.phienBan as unknown[]) : [];
+  const daBat = b?.daBat === true;
+  const iHieuLuc = ds.findIndex((p) => (p as { hieuLuc?: unknown } | null)?.hieuLuc === true);
+  const hieuLuc = iHieuLuc < 0 ? null : ds[iHieuLuc];
+  const moiHon = (iHieuLuc < 0 ? ds : ds.slice(0, iHieuLuc)).filter(coChiPhiTre);
+  if (hieuLuc !== null && coChiPhiTre(hieuLuc)) {
+    const dau = "Chính sách đang hiệu lực tính chi phí trễ giao: gói chưa khai số ngày giao yêu cầu không mở được";
+    if (trangThaiGoi === "DRAFT") return `${dau}. Khai số ngày giao ở ô dưới trước khi nộp duyệt.`;
+    return daBat
+      ? `${dau} — trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại.`
+      : `${dau} — gói đã nộp duyệt không trả về soạn thảo được ở tổ chức chưa bật kiểm soát theo bậc, nên gói này chỉ còn lối huỷ.`;
+  }
+  if (moiHon.length === 0) return null;
+  const dau =
+    "Một phiên bản chính sách mới hơn, chưa có hiệu lực, tính chi phí trễ giao: nếu nó có hiệu lực trước lúc gói mở, gói chưa khai số " +
+    "ngày giao yêu cầu không mở được";
+  if (trangThaiGoi === "DRAFT") return `${dau}. Khai số ngày giao ở ô dưới trước khi nộp duyệt.`;
+  if (daBat) return `${dau} — khi ấy trả gói về soạn thảo để khai số ngày giao, rồi nộp duyệt lại.`;
+  const khongBac = moiHon.some((p) => (p as { tiers?: unknown } | null)?.tiers === null);
+  return khongBac
+    ? `${dau}, và ở tổ chức chưa bật kiểm soát theo bậc gói đã nộp không trả về soạn thảo được — mở gói trước lúc ấy.`
+    : null;
+}

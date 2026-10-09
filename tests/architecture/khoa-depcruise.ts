@@ -113,6 +113,33 @@
 //     họ xuống cuối hàng.
 //   • Hạn chờ giữ nguyên và vẫn NÉM; người đứng sau trong hàng kiểm hạn ở mỗi nhịp dù chưa tới lượt.
 // ==============================================================================================
+//
+// ==============================================================================================
+// ⑺ CHỖ HỎNG THỨ BẢY — `EPERM` CỦA ⑸ TÁI PHÁT TRÊN CI, VÀ PHÉP PHÂN LOẠI CỦA ⑸ TỰ CÓ MỘT KHE ĐUA. [khoản 343]
+//
+// Đo: PR #245, run 37354665496 lượt 1, job `T1+T2 (windows-latest)` ĐỎ đúng một ca — `boundaries.test.ts`
+// > *chặn import ngược từ tools/bench-keyprovider/src* — `EPERM: operation not permitted, mkdir
+// '…/depcruise.lock'`, ném từ `taoThuMucKhoa`; cùng commit, ubuntu-latest, T0, T0b, T0c đều xanh và PR
+// chỉ sửa tài liệu. Log không nói được ⑸ ném ở vế nào, và đó là lỗ thứ nhất: hai vế ném CÙNG một lỗi gốc.
+//
+// Hai đường lọt, đọc từ mã — lần đỏ ấy không phân biệt được chúng:
+//   ⒜ PHÉP PHÂN LOẠI ĐI SAU LẦN `mkdir`. `mkdir` gặp thư mục đang chờ xoá ⇒ `EPERM`; trước khi `readdir`
+//     của thư mục cha chạy, handle cuối đóng và cái tên biến mất ⇒ vế "tên KHÔNG có" ⇒ ném như lỗi quyền
+//     thật. Trạng thái chờ xoá thường chỉ dài bằng một lần `lstat` của người chờ khác — micro-giây —, tức
+//     cùng cỡ với khe giữa `mkdir` và `readdir`, nên khe này không hiếm.
+//   ⒝ Trạng thái chờ xoá kéo dài quá `CUA_SO_EPERM_MS` — cần một handle giữ lâu (trình quét của runner).
+// Không dựng lại được ở máy: trên Windows 11, `rmSync` một thư mục đang có `fs.watch` mở xong thì `mkdir`
+// ngay sau THÀNH CÔNG (xoá kiểu POSIX, tên đi ngay) — đo 2026-10-06 —, nên phép đo vẫn phải TIÊM lỗi.
+//
+// Bản vá:
+//   • ⒜ đóng: `EPERM` mà tên không có ⇒ thử `mkdir` lại NGAY một lần, không ngủ. Khe đua thì lần thử
+//     lại thành công (hay gặp `EEXIST`, hay gặp một tên đang chờ xoá — đi đúng luật cũ); lỗi quyền thật
+//     thì lần thử lại cũng hỏng ⇒ ném ngay như trước, chỉ thêm một lời gọi.
+//   • ⒝ KHÔNG nới cửa sổ — chưa có bằng chứng nào cho nó, và nâng trần theo lời mời của một thông điệp
+//     hết hạn là cách quen thuộc để giấu một lỗi. Thay vào đó, mọi lần ném `EPERM` mang CHẨN ĐOÁN trong
+//     chính thông điệp của lỗi gốc: vế nào, bao nhiêu lần `EPERM` liên tiếp, trong bao lâu. Lần tái phát
+//     kế tiếp tự nói nó là ⒜ hay ⒝.
+// ==============================================================================================
 
 import { mkdirSync, lstatSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -274,13 +301,53 @@ interface TrangThaiCho {
   readonly han: number;
   readonly hanChoMs: number;
   hanEperm: number | undefined;
+  /** [khoản 343] Chẩn đoán của chuỗi `EPERM` liên tiếp đang chạy: mốc lần đầu và số lần — xem ⑺. */
+  epermTu: number | undefined;
+  demEperm: number;
+  /** [khoản 343] Số lần thử `mkdir` lại NGAY vì `EPERM` trên một tên không có (vế ⒜ của ⑺). */
+  thuLaiNgay: number;
   /** [khoản 249] Tên dấu chờ của lượt này — có từ lần giành hỏng đầu tiên, hay ngay từ đầu nếu phải nhường. */
   dau: string | undefined;
   daThuLanDau: boolean;
 }
 
 function trangThaiMoi(cach: CachCho): TrangThaiCho {
-  return { han: Date.now() + cach.hanChoMs, hanChoMs: cach.hanChoMs, hanEperm: undefined, dau: undefined, daThuLanDau: false };
+  return {
+    han: Date.now() + cach.hanChoMs,
+    hanChoMs: cach.hanChoMs,
+    hanEperm: undefined,
+    epermTu: undefined,
+    demEperm: 0,
+    thuLaiNgay: 0,
+    dau: undefined,
+    daThuLanDau: false,
+  };
+}
+
+/**
+ * [khoản 343] Gắn chẩn đoán vào CHÍNH lỗi gốc rồi trả nó về để ném — không bọc trong một lỗi mới: người
+ * đọc log vẫn thấy `EPERM` đứng đầu (⑸), và thấy thêm vế nào ném, chuỗi `EPERM` dài bao nhiêu (⑺).
+ */
+function kemChanDoan(e: unknown, ve: string, tt: TrangThaiCho): unknown {
+  if (!(e instanceof Error)) return e;
+  const msChuoi = tt.epermTu === undefined ? 0 : Date.now() - tt.epermTu;
+  const them =
+    ` [khoá depcruise — vế ${ve}; EPERM liên tiếp: ${String(tt.demEperm)} lần trong ${String(msChuoi)} ms;` +
+    ` thử lại ngay: ${String(tt.thuLaiNgay)} lần — khoản 343, xem ⑺ trong tests/architecture/khoa-depcruise.ts]`;
+  const cu = e.message;
+  e.message = cu + them;
+  if (e.stack?.includes(cu) === true) e.stack = e.stack.replace(cu, e.message);
+  return e;
+}
+
+/** [khoản 343] Một lần gọi `tao`: `undefined` khi thành công, còn không thì lỗi nó ném. */
+function goiTao(duongKhoa: string, tao: (duong: string) => void): unknown {
+  try {
+    tao(duongKhoa);
+    return undefined;
+  } catch (e) {
+    return e ?? new Error("tao() ném một giá trị rỗng");
+  }
 }
 
 function loiHetHan(duongKhoa: string, tt: TrangThaiCho): Error {
@@ -296,24 +363,38 @@ function loiHetHan(duongKhoa: string, tt: TrangThaiCho): Error {
  * khác nhau ở CÁCH ngủ, không ở luật.
  */
 function thuGianhKhoa(duongKhoa: string, tao: (duong: string) => void, tt: TrangThaiCho): boolean {
-  try {
-    tao(duongKhoa);
-  } catch (e) {
+  let loi = goiTao(duongKhoa, tao);
+  // [khoản 343] ⑺ ⒜: `EPERM` mà tên KHÔNG có có thể là khe đua của chính phép phân loại — handle cuối
+  // của một thư mục đang chờ xoá đóng giữa `mkdir` và `readdir`. Thử lại NGAY một lần, không ngủ: khe đua
+  // thì lần này thành công hay rơi vào luật dưới; lỗi quyền thật thì hỏng lại và vẫn ném ngay.
+  if (loi !== undefined && maLoi(loi) === "EPERM" && !tenConTonTai(duongKhoa)) {
+    tt.thuLaiNgay += 1;
+    loi = goiTao(duongKhoa, tao);
+  }
+  if (loi !== undefined) {
     // Chỉ `EEXIST` mới nghĩa là "có người đang giữ" — và [khoản 222] `EPERM` trên một cái TÊN
     // ĐANG TỒN TẠI, vì đó là thư mục khoá đang chờ xoá trên Windows. Mọi mã lỗi khác (`ENOENT`
     // vì thư mục cha không tồn tại, `EACCES`, và cả `EPERM` trên một cái tên KHÔNG có) là hỏng
     // THẬT: ném ngay, mang theo lỗi gốc. Đây là chỗ `catch {}` trần của bản đầu nuốt mất chẩn
     // đoán rồi quay vòng vô hạn — xem ⑴.
-    const ma = maLoi(e);
-    if (ma !== "EEXIST" && !(ma === "EPERM" && tenConTonTai(duongKhoa))) throw e;
+    const ma = maLoi(loi);
+    if (ma === "EPERM") {
+      tt.epermTu ??= Date.now();
+      tt.demEperm += 1;
+    }
+    if (ma !== "EEXIST" && !(ma === "EPERM" && tenConTonTai(duongKhoa))) {
+      throw ma === "EPERM" ? kemChanDoan(loi, "⒜ tên không có, đã thử lại ngay", tt) : loi;
+    }
 
     // [khoản 222] Cửa sổ nhẫn nại đo các lần `EPERM` LIÊN TIẾP; hết cửa sổ thì ném lỗi GỐC,
     // không phải lỗi hạn chờ — một người đọc phải thấy `EPERM` chứ không thấy "quá 180 giây".
     if (ma === "EPERM") {
       tt.hanEperm ??= Date.now() + CUA_SO_EPERM_MS;
-      if (Date.now() > tt.hanEperm) throw e;
+      if (Date.now() > tt.hanEperm) throw kemChanDoan(loi, "⒝ quá cửa sổ EPERM", tt);
     } else {
       tt.hanEperm = undefined;
+      tt.epermTu = undefined;
+      tt.demEperm = 0;
     }
 
     // HẠN ĐỨNG TRƯỚC MỌI NHÁNH KHÁC. Không nhánh nào dưới đây được phép `continue` vượt qua nó.

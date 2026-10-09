@@ -74,6 +74,8 @@ const HAM_DOI_TRANG_THAI = [
   "createSupplier",
   // [S1.201 / S3.6a] Gán nhóm hàng cho gói đang soạn — route đòi `rfq.create`, như ngân sách và hạng mục.
   "datNhomHangChoGoi",
+  // [S1.284 / S4.7b1] Đặt số ngày giao yêu cầu cho gói đang soạn — route đòi `rfq.create`, như nhóm hàng.
+  "datSoNgayGiao",
   // [S1.188 / S3.2b2 / ADR-113] Lời mời `UNSENT→SENT` sau lần gửi được — việc *xong* của lần gửi sau commit, dưới mã quyền của route
   // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
   "danhDauDaGui",
@@ -344,6 +346,10 @@ const HAM_THUAN_TUY = [
   "chuanHoa",
   // [S1.256 / S4.5b] Bộ đọc nhóm khoá `benchmark` của phiên bản chính sách — không I/O.
   "docNhomBenchmark",
+  // [S1.284 / S4.7b1] Bộ đọc nhóm khoá `tco` và luật L8 của phiên bản ghim (S4.7a) — không I/O; ra cửa để test kiến trúc đối chiếu
+  // bản chép của màn `/chinh-sach`.
+  "docNhomTco",
+  "kiemChinhSachTco",
   // [S1.262 / S4.5c2] Nhãn của một dòng từ quan sát đã đọc (lớp ⑴ của bộ kiểm bộ bằng chứng) và phép lùi tháng UTC — không I/O.
   "nhanMotDong",
   "truThang",

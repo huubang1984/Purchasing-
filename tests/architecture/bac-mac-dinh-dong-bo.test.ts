@@ -14,10 +14,18 @@ import {
   BENCHMARK_MAC_DINH,
   MUC_MAC_DINH,
   NGUONG_KEP_MAC_DINH,
+  MAU_CHI_PHI_VON,
+  MAU_NGAY_THANH_TOAN,
+  MAU_TY_LE_TRE,
+  MA_TCO,
   TRONG_SO_MAC_DINH,
+  loiTrongSo,
+  thanhPhanTuMa,
   trongSoChamDuoc,
+  type NhomTco,
+  type ThanhPhanTrongSo,
 } from "../../apps/web/src/chinh-sach.js";
-import { MA_THANH_PHAN_GIA } from "@trustprocure/danh-gia";
+import { MA_CO_NGUON, MA_THANH_PHAN_GIA, docNhomTco, kiemChinhSachTco } from "@trustprocure/danh-gia";
 import { NHOM_BENCHMARK_MAU, docNhomBenchmark } from "@trustprocure/du-lieu-nen";
 import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "../../tools/gieo-demo/src/chinh-sach-demo.js";
 
@@ -57,3 +65,60 @@ describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:dem
     expect(trongSoChamDuoc([{ ma: `${MA_THANH_PHAN_GIA}_khac`, don_vi: "TIEN", he_so: "1" }])).toBe(false);
   });
 });
+
+// [S1.284 / S4.7b1] Màn `/chinh-sach` chép luật L8 của lượt chấm (`kiemChinhSachTco`, S4.7a) — trừ vế số ngày giao, là của gói. Hai
+// bản phải ra CÙNG phán quyết và CÙNG câu trên mọi ca: một bản chép không được đối chiếu thì trôi (ADR-029), và màn sẽ im trước một
+// phiên bản mà lượt chấm từ chối — đúng kiểm soát giả §2.5 ㉒ muốn nói ra.
+describe("[S1.284 / S4.7b1] [INV-L8] luật L8 của màn /chinh-sach là bản chép của lượt chấm", () => {
+  const g = (ma: string, don_vi = "TIEN", he_so = "1.0000"): ThanhPhanTrongSo => ({ ma, don_vi, he_so });
+  const CA: readonly (readonly [string, readonly ThanhPhanTrongSo[], NhomTco | null])[] = [
+    ["mẫu", TRONG_SO_MAC_DINH, null],
+    ["năm mã đủ tham số", thanhPhanTuMa(MA_CO_NGUON), { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" }],
+    ["năm mã thiếu tham số", thanhPhanTuMa(MA_CO_NGUON), null],
+    ["thanh toán thiếu kỳ", thanhPhanTuMa(["chi_phi_thanh_toan"]), { chi_phi_von_nam: "0.12" }],
+    ["trễ thiếu tỉ lệ", thanhPhanTuMa(["chi_phi_tre"]), { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" }],
+    ["điểm", [g("gia"), g("ky_thuat", "DIEM", "0.5")], null],
+    ["chất lượng", [g("gia"), g("chat_luong")], null],
+    ["thuế", [g("gia"), g("thue")], null],
+    ["mã lạ", [g("gia"), g("bao_hanh")], null],
+    ["constructor", [g("gia"), g("constructor")], null],
+    ["trùng", [g("gia"), g("gia")], null],
+    ["thiếu giá", [g("van_chuyen")], null],
+    ["rỗng", [], null],
+    ["hệ số 1 viết ngắn", [g("gia", "TIEN", "1")], null],
+    ["hệ số 1.0", [g("gia", "TIEN", "1.0")], null],
+    ["hệ số 2.5", [g("gia", "TIEN", "2.5")], null],
+    ["hệ số năm chữ số lẻ", [g("gia", "TIEN", "1.00000")], null],
+    ["hệ số âm", [g("gia", "TIEN", "-1")], null],
+  ];
+  it.each(CA)("%s", (_ten, tp, tco) => {
+    const mayChu = kiemChinhSachTco(
+      tp.map((t) => ({ ma: t.ma, donVi: t.don_vi as "TIEN" | "DIEM", heSo: t.he_so })),
+      docNhomTco(tco),
+      30,
+    );
+    expect(loiTrongSo(tp, tco)).toBe(mayChu === null ? null : mayChu.cau);
+    expect(trongSoChamDuoc(tp, tco)).toBe(mayChu === null);
+  });
+
+  it("tập mã của màn là tập mã có nguồn của lượt chấm, cùng thứ tự", () => {
+    expect(MA_TCO.map((m) => m.ma)).toEqual([...MA_CO_NGUON]);
+  });
+});
+
+// [rà soát §S1.284 — THẤP-2] Miền ba tham số của màn là bản chép của `CHECK` `org_procurement_policies_tco_hinh_dang`: mỗi mẫu có mặt
+// NGUYÊN VĂN trong `112_tco.sql`, đúng khoá của nó. Đổi mẫu ở một bên thì đỏ ở đây.
+describe("[S1.284 / S4.7b1] miền tham số TCO của màn là bản chép của CHECK `112`", () => {
+  it("ba mẫu like_regex có mặt nguyên văn, mỗi mẫu ở đúng khoá", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(new URL("../../db/migrations/112_tco.sql", import.meta.url), "utf8");
+    for (const [khoa, mau] of [
+      ["chi_phi_von_nam", MAU_CHI_PHI_VON],
+      ["ngay_thanh_toan_chuan", MAU_NGAY_THANH_TOAN],
+      ["ty_le_tre_ngay", MAU_TY_LE_TRE],
+    ] as const) {
+      expect(sql).toContain(`'$.${khoa} ? (!(@ like_regex "${mau}")`);
+    }
+  });
+});
+

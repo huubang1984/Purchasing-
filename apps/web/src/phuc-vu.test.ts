@@ -3504,6 +3504,146 @@ describe("bề mặt tệp", () => {
       expect(await guiQ()).toMatchObject({ evalComponents: LA, bafoTopN: 3 });
     });
 
+    // [S1.284 / S4.7b1] TCO ở `/chinh-sach`: bốn ô mã (giá luôn tính), ba ô tham số chỉ hiện khi mã cần chúng bật, thân gửi tập chuẩn
+    // và chỉ khoá của mã đang bật; chép mang tham số; bảng phiên bản có cột tham số; gói chờ duyệt thiếu số ngày giao được cảnh báo.
+    it("[S1.284 / S4.7b1] [INV-L8] chinh-sach: chọn mã TCO ⇒ thân gửi tập chuẩn (giá đầu, hệ số 1) và nhóm khoá tco chỉ của mã đang bật", async () => {
+      const { p, gui, doiO } = await moChinhSach([]);
+      expect(p.el("khoi-tco-thanh-toan").hidden).toBe(true);
+      expect(p.el("khoi-tco-tre").hidden).toBe(true);
+      expect(await gui()).toMatchObject({ evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], tco: null });
+      await doiO("ma-chi-phi-thanh-toan", true);
+      await doiO("ma-van-chuyen", true);
+      expect(p.el("khoi-tco-thanh-toan").hidden).toBe(false);
+      expect(p.el("canh-bao").textContent).toContain('"chi_phi_thanh_toan" cần chi phí vốn một năm');
+      p.el("tco-von").value = " 0.12 ";
+      p.el("tco-ky").value = "60";
+      p.el("tco-tre").value = "0.001";
+      const than = await gui();
+      expect(than?.evalComponents).toEqual([
+        { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
+        { ma: "van_chuyen", don_vi: "TIEN", he_so: "1.0000" },
+        { ma: "chi_phi_thanh_toan", don_vi: "TIEN", he_so: "1.0000" },
+      ]);
+      // Ô tỉ lệ trễ có chữ nhưng mã chi phí trễ không bật ⇒ khoá ấy không đi.
+      expect(than?.tco).toEqual({ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" });
+      await doiO("ma-chi-phi-tre", true);
+      expect(p.el("khoi-tco-tre").hidden).toBe(false);
+      expect((await gui())?.tco).toEqual({ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" });
+      expect(p.el("canh-bao").textContent).toContain("số ngày giao yêu cầu");
+      await doiO("co-trong-so", false);
+      expect(await gui()).toMatchObject({ evalComponents: null, bafoTopN: null, tco: null });
+    });
+
+    it("[S1.284 / S4.7b1] chinh-sach: chép mang mã và tham số TCO; bảng phiên bản hiện tham số; gói chờ duyệt thiếu số ngày giao ⇒ cảnh báo theo loại tổ chức", async () => {
+      const TCO = { chi_phi_von_nam: "0.1", ngay_thanh_toan_chuan: "45", ty_le_tre_ngay: "0.0005" };
+      const NAM_MA = ["gia", "van_chuyen", "nhap_khau", "chi_phi_thanh_toan", "chi_phi_tre"].map((ma) => ({ ma, don_vi: "TIEN", he_so: "1.0000" }));
+      const { p, gui } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: NAM_MA, tco: TCO }]);
+      expect(p.el("bang-pb").querySelector("tbody").con[0]?.con.map((x) => x.textContent)).toContain(
+        "vốn 0.1/năm · kỳ chuẩn 45 ngày · trễ 0.0005/ngày",
+      );
+      await p.bam("nut-chep");
+      expect(["ma-van-chuyen", "ma-nhap-khau", "ma-chi-phi-thanh-toan", "ma-chi-phi-tre"].map((id) => p.el(id).checked)).toEqual([true, true, true, true]);
+      expect(await gui()).toMatchObject({ evalComponents: NAM_MA, tco: TCO });
+      // [rà soát §S1.284 — TRUNG-1] Bản chép không bậc (`tiers: null`) ở tổ chức chưa bật ⇒ *chỉ còn lối huỷ*; đã bật ⇒ trả về soạn thảo.
+      for (const [daBat, cau] of [[false, "chỉ còn lối huỷ"], [true, "trả gói về soạn thảo"]] as const) {
+        const q = await dungTrang("chinh-sach", {
+          hash: "", cookie: A,
+          thay: (l) => (l === "GET /policy/versions"
+            ? Promise.resolve({ status: 200, body: { phienBan: [{ ...PHIEN_BAN_CO, evalComponents: NAM_MA, tco: TCO }], daBat, choKy: false, goiChoDuyetThieuSoNgayGiao: 2 } })
+            : undefined),
+        });
+        await q.bam("nut-dung-phien");
+        await q.bam("nut-chep");
+        expect(q.el("canh-bao").textContent).toContain("2 gói đang chờ duyệt chưa khai số ngày giao");
+        expect(q.el("canh-bao").textContent).toContain(cau);
+      }
+    });
+
+    it("[S1.284 / S4.7b1 — rà soát TRUNG-1, THẤP-2] chinh-sach: mẫu có bậc ở tổ chức chưa bật ⇒ không cảnh báo gói chờ duyệt; tham số sai miền ⇒ lỗi gọi tên ô, không gửi", async () => {
+      const q = await dungTrang("chinh-sach", {
+        hash: "", cookie: A,
+        thay: (l) => (l === "GET /policy/versions"
+          ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: false, choKy: false, goiChoDuyetThieuSoNgayGiao: 2 } })
+          : undefined),
+      });
+      await q.bam("nut-dung-phien");
+      q.el("ma-chi-phi-tre").checked = true;
+      for (const f of q.el("ma-chi-phi-tre").nghe["change"] ?? []) await f();
+      // Mẫu điền sẵn có bốn bậc: phiên bản chỉ có hiệu lực khi được ký, và chữ ký ấy bị từ chối khi còn gói chờ duyệt (`097`).
+      expect(q.el("canh-bao").textContent).not.toContain("gói đang chờ duyệt");
+      q.el("tco-tre").value = "0,001";
+      await q.bam("nut-tao-pb");
+      expect(q.el("loi3").textContent).toContain("Chi phí trễ mỗi ngày phải là tỉ lệ");
+      expect(q.trangThai.goi).not.toContain("POST /policy");
+    });
+
+    // [S1.284 / S4.7b1 / L16] Số ngày giao yêu cầu ở `/tao-thau`: ô và nút chỉ ở DRAFT; dòng của bảng gói ở mọi trạng thái (người duyệt
+    // ký lên nó); để trống ⇒ `null`; ngoài miền ⇒ trang nói, không gọi; cảnh báo khi chính sách hiệu lực tính chi phí trễ.
+    const moTaoThauNgay = async (trangThaiGoi: string, soNgayGiao: number | null, phienBan: unknown[] = [], daBat = false) => {
+      const p = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan, daBat, choKy: false } })
+          : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi, lanNop: 1, soNgayGiao } } })
+          : l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [] } })
+          : l === "PUT /rfqs/r-1/delivery-days" ? Promise.resolve({ status: 200, body: { soNgayGiao: 30 } })
+          : undefined,
+      });
+      await p.bam("nut-dung-phien");
+      p.el("rfq").value = "r-1";
+      await p.bam("nut-doc");
+      return p;
+    };
+    const dongBangGoi = (p: Awaited<ReturnType<typeof moTaoThauNgay>>) => p.el("tt-rfq").con.map((x) => x.textContent);
+
+    it("[S1.284 / S4.7b1] [INV-L16] tao-thau: số ngày giao — ô ở DRAFT, dòng ở mọi trạng thái; lưu gửi PUT …/delivery-days; trống ⇒ null; ngoài miền ⇒ không gọi", async () => {
+      const p = await moTaoThauNgay("DRAFT", null);
+      expect(p.el("khoi-so-ngay-giao").hidden).toBe(false);
+      expect(dongBangGoi(p)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "chưa khai"]));
+      p.el("so-ngay-giao").value = " 30 ";
+      await p.bam("nut-so-ngay-giao");
+      expect(p.trangThai.than.filter((t) => t.lenh === "PUT /rfqs/r-1/delivery-days").at(-1)?.than).toEqual({ soNgayGiao: 30 });
+      expect(p.el("ok2").textContent).toBe("Đã lưu số ngày giao yêu cầu: 30 ngày.");
+      p.el("so-ngay-giao").value = "";
+      await p.bam("nut-so-ngay-giao");
+      expect(p.trangThai.than.filter((t) => t.lenh === "PUT /rfqs/r-1/delivery-days").at(-1)?.than).toEqual({ soNgayGiao: null });
+      const truoc = p.trangThai.goi.filter((l) => l === "PUT /rfqs/r-1/delivery-days").length;
+      for (const sai of ["0", "3651", "1.5", "-3", "ba"]) {
+        p.el("so-ngay-giao").value = sai;
+        await p.bam("nut-so-ngay-giao");
+        expect(p.el("loi2").textContent).toBe("Số ngày giao yêu cầu phải là số nguyên từ 1 đến 3650, hoặc để trống.");
+      }
+      expect(p.trangThai.goi.filter((l) => l === "PUT /rfqs/r-1/delivery-days")).toHaveLength(truoc);
+      const cho = await moTaoThauNgay("PENDING_APPROVAL", 45);
+      expect(cho.el("khoi-so-ngay-giao").hidden).toBe(true);
+      expect(dongBangGoi(cho)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "45 ngày"]));
+    });
+
+    it("[S1.284 / S4.7b1] tao-thau: chính sách hiệu lực (hay mới hơn) tính chi phí trễ mà gói chưa khai số ngày giao ⇒ cảnh báo theo trạng thái và loại tổ chức", async () => {
+      const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
+      expect((await moTaoThauNgay("DRAFT", null, [TRE])).el("canh-bao-so-ngay").textContent).toContain("Khai số ngày giao ở ô dưới");
+      expect((await moTaoThauNgay("DRAFT", 30, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
+      expect((await moTaoThauNgay("DRAFT", null, [{ hieuLuc: true, evalComponents: [{ ma: "gia" }] }])).el("canh-bao-so-ngay").hidden).toBe(true);
+      // Phiên bản MỚI HƠN chờ ký tính chi phí trễ ⇒ cũng nói; phiên bản CŨ hơn bản hiệu lực thì không.
+      const MOI = [{ hieuLuc: false, evalComponents: [{ ma: "chi_phi_tre" }] }, { hieuLuc: true, evalComponents: [{ ma: "gia" }] }];
+      expect((await moTaoThauNgay("DRAFT", null, MOI)).el("canh-bao-so-ngay").hidden).toBe(false);
+      expect((await moTaoThauNgay("DRAFT", null, [...MOI].reverse())).el("canh-bao-so-ngay").hidden).toBe(true);
+      expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], false)).el("canh-bao-so-ngay").textContent).toContain("chỉ còn lối huỷ");
+      expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], true)).el("canh-bao-so-ngay").textContent).toContain("trả gói về soạn thảo");
+      expect((await moTaoThauNgay("OPEN", null, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
+    });
+
+    it("[S1.284 / S4.7b1 — rà soát THẤP-3] tao-thau: đổi người (hashchange) hay đăng xuất ⇒ cảnh báo số ngày giao của tổ chức trước biến mất", async () => {
+      const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
+      const p = await moTaoThauNgay("DRAFT", null, [TRE]);
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(false);
+      await p.doiFragment("khac:123456");
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(true);
+      const q = await moTaoThauNgay("DRAFT", null, [TRE]);
+      await q.bam("nut-dang-xuat");
+      expect(q.el("canh-bao-so-ngay").hidden).toBe(true);
+    });
+
     it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
       const { p } = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1" } } }) : undefined));
       p.el("nhom-hang").value = "";

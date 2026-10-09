@@ -54,7 +54,7 @@
       phiên bản. Một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC người khai đã ký nó.</p>
     <dl class="tt" id="tt-to-chuc"></dl>
     <table id="bang-pb">
-      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Chấm thầu</th><th>Benchmark</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
+      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Chấm thầu</th><th>Tham số TCO</th><th>Benchmark</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
       <tbody></tbody>
     </table>
     <button id="nut-doc-pb" class="phu">Đọc lại</button>
@@ -104,13 +104,38 @@
       <thead><tr><th class="so">Từ số tiền</th><th class="so">Tài chính</th><th class="so">Mua sắm</th><th class="so">Giám đốc</th><th class="so">Tổng</th></tr></thead>
       <tbody></tbody>
     </table>
-    <!-- [S1.258 / khoản 329] Trọng số chấm và BAFO top-N (`056`, `057`). Thành phần CỐ ĐỊNH, hiện chỉ-đọc — đúng vế hẹp mà lượt chấm
-         đọc được hôm nay; BAFO top-N sửa được. Bỏ chọn thì phiên bản không khai trọng số, và màn nói hậu quả. -->
+    <!-- [S1.258 / khoản 329] Trọng số chấm và BAFO top-N (`056`, `057`). ~~Thành phần CỐ ĐỊNH, hiện chỉ-đọc — đúng vế hẹp mà lượt
+         chấm đọc được hôm nay~~ [S1.284 / S4.7b1] Năm mã có nguồn của S4.7a (`112_tco`, ADR-153): giá luôn bật, bốn mã còn lại chọn
+         được, mỗi mã một ô; tham số quy đổi chỉ hiện khi mã cần nó bật. Bỏ chọn ô trên thì phiên bản không khai trọng số, và màn nói
+         hậu quả. -->
     <h3>Chấm thầu</h3>
-    <p class="ghi">Lượt chấm xếp các báo giá theo một thành phần: giá, tính bằng tiền. Gói ghim phiên bản hiệu lực lúc nó mở —
-      phiên bản không khai trọng số thì gói mở dưới nó không chấm được, và phiên bản tạo sau không cứu gói ấy.</p>
+    <p class="ghi">Lượt chấm xếp các báo giá theo chi phí hiệu dụng: tổng các thành phần đã bật, tính bằng tiền — theo LỜI KHAI của nhà
+      cung cấp, chưa đối chiếu với hoá đơn hay phiếu nhập kho. Gói ghim phiên bản hiệu lực lúc nó mở — phiên bản không khai trọng số thì
+      gói mở dưới nó không chấm được, và phiên bản tạo sau không cứu gói ấy.</p>
     <label><input type="checkbox" id="co-trong-so"> Khai trọng số chấm cho phiên bản này</label>
     <div id="khoi-trong-so" hidden>
+      <p class="ghi">Giá (tổng báo giá) luôn được tính. Bật thêm thành phần nào thì nhà cung cấp phải khai ô tương ứng khi nộp; báo giá
+        thiếu ô thì không có hạng, không ai điền thay bằng 0.</p>
+      <label><input type="checkbox" id="ma-van-chuyen"> Vận chuyển — ô nhà cung cấp khai</label>
+      <label><input type="checkbox" id="ma-nhap-khau"> Chi phí nhập khẩu — ô nhà cung cấp khai</label>
+      <label><input type="checkbox" id="ma-chi-phi-thanh-toan"> Chi phí thanh toán — quy đổi từ số ngày trả tiền nhà cung cấp khai</label>
+      <label><input type="checkbox" id="ma-chi-phi-tre"> Chi phí trễ giao — quy đổi từ số ngày giao nhà cung cấp khai, so với số ngày
+        giao yêu cầu của gói</label>
+      <div id="khoi-tco-thanh-toan" hidden>
+        <p class="ghi">Chi phí thanh toán = số ngày trả sớm hơn kỳ chuẩn × chi phí vốn năm ÷ 365 × tổng báo giá. Trả muộn hơn kỳ chuẩn
+          không được trừ tiền. Không có mặc định: tổ chức tự khai chi phí vốn của mình.</p>
+        <label for="tco-von">Chi phí vốn một năm (tỉ lệ trong khoảng (0, 1], tối đa 4 chữ số lẻ — 0.12 là 12% một năm)</label>
+        <input id="tco-von" inputmode="decimal" autocomplete="off">
+        <label for="tco-ky">Kỳ thanh toán chuẩn (số ngày, 0–365)</label>
+        <input id="tco-ky" inputmode="numeric" autocomplete="off">
+      </div>
+      <div id="khoi-tco-tre" hidden>
+        <p class="ghi">Chi phí trễ giao = số ngày giao khai vượt số ngày giao yêu cầu của gói × tỉ lệ mỗi ngày × tổng báo giá. Mỗi gói
+          phải khai số ngày giao yêu cầu ở màn Tạo gói thầu trước khi nộp duyệt.</p>
+        <label for="tco-tre">Chi phí trễ mỗi ngày (tỉ lệ của tổng báo giá trong khoảng (0, 0.1], tối đa 6 chữ số lẻ — 0.001 là 0,1% một
+          ngày)</label>
+        <input id="tco-tre" inputmode="decimal" autocomplete="off">
+      </div>
       <dl class="tt" id="tt-trong-so"></dl>
       <label for="bafo-top-n">Số nhà thầu vào vòng chào giá lại (BAFO top-N; 0 là không dùng BAFO)</label>
       <input id="bafo-top-n" inputmode="numeric" autocomplete="off" placeholder="2">

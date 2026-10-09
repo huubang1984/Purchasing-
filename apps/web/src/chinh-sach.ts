@@ -239,27 +239,194 @@ export const TRONG_SO_MAC_DINH: readonly ThanhPhanTrongSo[] = [{ ma: "gia", don_
 /** Số nhà thầu vào vòng BAFO; `0` là quy ước *"tổ chức không dùng BAFO"* (`056`). */
 export const BAFO_TOP_N_MAC_DINH = 2;
 
-/** Vế hẹp mà lượt chấm đọc được hôm nay — đúng phép kiểm của `docChinhSach` ở `luot-danh-gia.ts`. */
-export function trongSoChamDuoc(thanhPhan: readonly ThanhPhanTrongSo[]): boolean {
-  const [dau] = thanhPhan;
-  return thanhPhan.length === 1 && dau?.ma === "gia" && dau.don_vi === "TIEN";
+// ----------------------------------------------------------------------------------------------
+// [S1.284 / S4.7b1] TCO — NĂM MÃ CÓ NGUỒN VÀ NHÓM KHOÁ `tco` (spec S4 §4.8, §2.5 ㉒; ADR-153)
+// ----------------------------------------------------------------------------------------------
+// Từ S4.7a (`112_tco`) lượt chấm đọc được năm mã tiền, mỗi mã đúng một nguồn; trước vòng này màn chỉ khai được `gia` (vế hẹp của
+// khoản 329). Màn cho chọn mã — mỗi mã một ô, `gia` luôn bật, đơn vị `TIEN`, hệ số 1 — và khai ba tham số quy đổi. Phép kiểm dưới là
+// BẢN CHÉP của `kiemChinhSachTco` (`packages/danh-gia/src/tco.ts`) trừ vế số ngày giao của gói: màn không import được gói, nên
+// `tests/architecture/bac-mac-dinh-dong-bo.test.ts` đối chiếu hai bản trên một bảng ca. Cảnh báo không chặn (§2.5 ㉒): lượt chấm
+// từ chối phiên bản hỏng bằng câu của chính nó.
+
+/** Một mã thành phần có nguồn: tên trên màn và nguồn của nó — câu §8.6 *"phần nào là số đo, phần nào là số khai"*. */
+export interface MaTco {
+  readonly ma: string;
+  readonly ten: string;
+  readonly nguon: string;
+}
+
+/** Thứ tự là thứ tự chính sách — thứ tự `ma_thieu` gọi tên mã thiếu. `gia` đứng đầu và không bỏ được. */
+export const MA_TCO: readonly MaTco[] = [
+  { ma: "gia", ten: "Giá", nguon: "tổng báo giá nhà cung cấp nộp" },
+  { ma: "van_chuyen", ten: "Vận chuyển", nguon: "ô nhà cung cấp khai trong báo giá" },
+  { ma: "nhap_khau", ten: "Chi phí nhập khẩu", nguon: "ô nhà cung cấp khai trong báo giá" },
+  {
+    ma: "chi_phi_thanh_toan",
+    ten: "Chi phí thanh toán",
+    nguon: "quy đổi: số ngày trả sớm hơn kỳ chuẩn × chi phí vốn năm ÷ 365 × tổng báo giá",
+  },
+  {
+    ma: "chi_phi_tre",
+    ten: "Chi phí trễ giao",
+    nguon: "quy đổi: số ngày giao khai vượt số ngày giao yêu cầu của gói × tỉ lệ mỗi ngày × tổng báo giá",
+  },
+];
+
+/** Hệ số của mọi mã tiền — tiền cộng với tiền, không nhân hệ số (L8). */
+export const HE_SO_TIEN = "1.0000";
+
+/** Nhóm khoá `tco` như CSDL cất (`112`): mọi khoá tuỳ chọn, mọi giá trị là chuỗi. */
+export interface NhomTco {
+  readonly chi_phi_von_nam?: string;
+  readonly ngay_thanh_toan_chuan?: string;
+  readonly ty_le_tre_ngay?: string;
+}
+
+/** Mã của lượt chấm không có nguồn — bản chép của `MA_KHONG_NGUON`, cùng câu. */
+const MA_KHONG_NGUON: Readonly<Record<string, string>> = {
+  chat_luong: "chi phí chất lượng cần tỷ lệ lỗi từ phiếu nhập kho (GRN), chưa có nguồn dữ liệu tới S5",
+  thue: "thuế GTGT khấu trừ được không phải chi phí, và mã này đã bị bỏ (ADR-097 ⑻)",
+};
+
+/** Thành phần cho một tập mã bật, theo thứ tự `MA_TCO`; `gia` luôn có. Mã ngoài năm mã bị bỏ qua. */
+export function thanhPhanTuMa(ma: Iterable<string>): ThanhPhanTrongSo[] {
+  const bat = new Set(ma);
+  bat.add("gia");
+  return MA_TCO.filter((m) => bat.has(m.ma)).map((m) => ({ ma: m.ma, don_vi: "TIEN", he_so: HE_SO_TIEN }));
+}
+
+/**
+ * Lý do ĐẦU TIÊN lượt chấm sẽ từ chối trọng số này, cùng thứ tự kiểm của `kiemChinhSachTco`; `null` khi chấm được. Không gồm vế số
+ * ngày giao — đó là của gói, `/tao-thau` nói.
+ */
+export function loiTrongSo(thanhPhan: readonly ThanhPhanTrongSo[], tco: NhomTco | null): string | null {
+  const daThay = new Set<string>();
+  for (const c of thanhPhan) {
+    if (c.don_vi !== "TIEN") return `thành phần "${c.ma}" là điểm phi giá (DIEM), mà chưa có màn chấm điểm nào cho nó`;
+    const khongNguon = Object.hasOwn(MA_KHONG_NGUON, c.ma) ? MA_KHONG_NGUON[c.ma] : undefined;
+    if (khongNguon !== undefined) return `thành phần "${c.ma}" không chấm được: ${khongNguon}`;
+    if (!MA_TCO.some((m) => m.ma === c.ma)) {
+      return `thành phần "${c.ma}" không có nguồn dữ liệu; mã chấm được là ${MA_TCO.map((m) => `"${m.ma}"`).join(", ")}`;
+    }
+    if (daThay.has(c.ma)) return `thành phần "${c.ma}" khai hai lần`;
+    daThay.add(c.ma);
+    if (sangNguyen(c.he_so, 4) !== 10_000n) {
+      return `hệ số của thành phần tiền "${c.ma}" là "${c.he_so}", không phải 1 — tiền cộng với tiền, không nhân hệ số (L8)`;
+    }
+  }
+  if (!daThay.has("gia")) return 'không khai thành phần "gia" — chi phí hiệu dụng phải gồm giá';
+  const co = (k: keyof NhomTco): boolean => typeof tco?.[k] === "string";
+  if (daThay.has("chi_phi_thanh_toan") && (!co("chi_phi_von_nam") || !co("ngay_thanh_toan_chuan"))) {
+    return 'thành phần "chi_phi_thanh_toan" cần chi phí vốn một năm và kỳ thanh toán chuẩn ở nhóm khoá tco, mà phiên bản không khai';
+  }
+  if (daThay.has("chi_phi_tre") && !co("ty_le_tre_ngay")) {
+    return 'thành phần "chi_phi_tre" cần tỷ lệ chi phí trễ mỗi ngày ở nhóm khoá tco, mà phiên bản không khai';
+  }
+  return null;
+}
+
+/** [S1.258 / khoản 329] ~~Vế hẹp một thành phần `gia`~~ [S1.284 / S4.7b1] Lượt chấm đọc được trọng số này (`loiTrongSo` im). */
+export function trongSoChamDuoc(thanhPhan: readonly ThanhPhanTrongSo[], tco: NhomTco | null = null): boolean {
+  return loiTrongSo(thanhPhan, tco) === null;
 }
 
 /** Cảnh báo tĩnh cho trọng số đang soạn. `null`: phiên bản KHÔNG khai trọng số. */
-export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null): readonly string[] {
+export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tco: NhomTco | null = null): readonly string[] {
   if (thanhPhan === null) {
     return [
       "Phiên bản này KHÔNG khai trọng số chấm: mọi gói mở dưới nó không chấm được, nên cũng không đề xuất trao thầu được — " +
         "và phiên bản tạo sau lúc gói mở không áp cho gói ấy.",
     ];
   }
-  if (!trongSoChamDuoc(thanhPhan)) {
-    return [
-      "Trọng số ngoài dạng một thành phần giá (gia, đơn vị tiền): lượt chấm hôm nay chỉ đọc được dạng ấy, nên gói mở dưới " +
-        "phiên bản này bị từ chối khi chấm.",
-    ];
+  const loi = loiTrongSo(thanhPhan, tco);
+  if (loi !== null) {
+    return [`Trọng số này bị từ chối khi chấm — ${loi} — nên gói mở dưới phiên bản này không chấm được.`];
   }
-  return [];
+  const ra: string[] = [];
+  // [S1.284 / S4.7b1 — TẠM, gỡ ở S4.7b2] Màn nộp báo giá chưa có ô khai TCO: nhà cung cấp chưa khai được mã nào ngoài giá, nên mọi báo
+  // giá của gói mở dưới phiên bản ấy không có hạng (`ma_thieu`). Câu nói thật điều đó cho tới khi `/nop-thau` có ô (ADR-156 ⑴).
+  if (thanhPhan.some((t) => t.ma !== "gia")) {
+    ra.push(
+      "Màn nộp báo giá CHƯA có ô khai cho các thành phần ngoài giá (tới S4.7b2): nhà cung cấp chưa khai được chúng, nên mọi báo giá " +
+        "của gói mở dưới phiên bản này sẽ không có hạng.",
+    );
+  }
+  if (thanhPhan.some((t) => t.ma === "chi_phi_tre")) {
+    ra.push(
+      "Chi phí trễ giao bật: mỗi gói phải khai số ngày giao yêu cầu ở màn Tạo gói thầu TRƯỚC khi nộp duyệt — gói thiếu con số ấy " +
+        "không mở được dưới phiên bản này.",
+    );
+  }
+  return ra;
+}
+
+/**
+ * [ADR-153, giới hạn ⑴] Gói ĐANG CHỜ DUYỆT chưa khai số ngày giao: phiên bản đang soạn tính chi phí trễ và có hiệu lực trước lúc chúng mở
+ * thì chúng không mở được. Ở tổ chức đã bật, lối ra là trả gói về soạn thảo. Ở tổ chức chưa bật:
+ * - phiên bản KHÔNG bậc có hiệu lực ngay lúc tạo, và gói đã nộp không trả về soạn thảo được — chỉ còn lối huỷ;
+ * - phiên bản CÓ bậc chỉ có hiệu lực khi được ký, và chữ ký ấy — chữ ký bật kiểm soát theo bậc — bị từ chối khi tổ chức còn gói chờ duyệt
+ *   (`097`): các gói ấy không bao giờ rơi vào phiên bản này khi còn chờ, nên không có gì để nói (rà soát §S1.284 — TRUNG-1).
+ */
+export function canhBaoGoiThieuSoNgayGiao(
+  thanhPhan: readonly ThanhPhanTrongSo[] | null,
+  soGoi: number,
+  daBat: boolean,
+  coBac: boolean,
+): readonly string[] {
+  if (thanhPhan === null || soGoi === 0 || !thanhPhan.some((t) => t.ma === "chi_phi_tre")) return [];
+  if (!daBat && coBac) return [];
+  const dau = `${String(soGoi)} gói đang chờ duyệt chưa khai số ngày giao yêu cầu`;
+  return [
+    daBat
+      ? `${dau}: nếu phiên bản này có hiệu lực trước lúc chúng mở, chúng không mở được — trả gói về soạn thảo để khai số ngày giao, ` +
+        "rồi nộp duyệt lại."
+      : `${dau}: phiên bản này không có bậc nên có hiệu lực ngay khi tạo, và chúng sẽ không mở được — tổ chức chưa bật kiểm soát theo ` +
+        "bậc nên gói đã nộp không trả về soạn thảo được, các gói ấy chỉ còn lối huỷ. Mở hay xử lý chúng trước khi tạo phiên bản này.",
+  ];
+}
+
+// [rà soát §S1.284 — THẤP-2] Miền của ba tham số — BẢN CHÉP của `CHECK` `org_procurement_policies_tco_hinh_dang` (`112_tco`): mẫu
+// `like_regex` y nguyên văn, biên kiểm bằng số nguyên ở tỉ lệ cố định (không `double`). `bac-mac-dinh-dong-bo.test.ts` đòi ba mẫu có mặt
+// nguyên văn trong `112`. Thân sai miền thì `CHECK` từ chối bằng một 422 chung không gọi tên ô — màn nói trước, và không gửi.
+export const MAU_CHI_PHI_VON = "^[01]([.][0-9]{1,4})?$";
+export const MAU_NGAY_THANH_TOAN = "^(0|[1-9][0-9]{0,2})$";
+export const MAU_TY_LE_TRE = "^0([.][0-9]{1,6})?$";
+
+/** Lỗi đầu tiên của nhóm khoá `tco` sắp gửi mà `CHECK` sẽ từ chối; `null` khi hợp lệ hay không có nhóm khoá. */
+export function loiThamSoTco(tco: NhomTco | null): string | null {
+  if (tco === null) return null;
+  const von = tco.chi_phi_von_nam;
+  const ngay = tco.ngay_thanh_toan_chuan;
+  if ((von === undefined) !== (ngay === undefined)) {
+    return "Chi phí thanh toán cần CẢ chi phí vốn một năm lẫn kỳ thanh toán chuẩn — điền đủ hai ô, hay bỏ chọn mã ấy.";
+  }
+  if (von !== undefined) {
+    const v = new RegExp(MAU_CHI_PHI_VON, "u").test(von) ? sangNguyen(von, 4) : null;
+    if (v === null || v <= 0n || v > 10_000n) {
+      return "Chi phí vốn một năm phải là tỉ lệ trong khoảng (0, 1], viết bằng dấu chấm, tối đa 4 chữ số lẻ — 0.12 là 12% một năm.";
+    }
+  }
+  if (ngay !== undefined && (!new RegExp(MAU_NGAY_THANH_TOAN, "u").test(ngay) || Number(ngay) > 365)) {
+    return "Kỳ thanh toán chuẩn phải là số ngày nguyên từ 0 đến 365.";
+  }
+  const tre = tco.ty_le_tre_ngay;
+  if (tre !== undefined) {
+    const v = new RegExp(MAU_TY_LE_TRE, "u").test(tre) ? sangNguyen(tre, 6) : null;
+    if (v === null || v <= 0n || v > 100_000n) {
+      return "Chi phí trễ mỗi ngày phải là tỉ lệ trong khoảng (0, 0.1], viết bằng dấu chấm, tối đa 6 chữ số lẻ — 0.001 là 0,1% một ngày.";
+    }
+  }
+  return null;
+}
+
+/** Một dòng cho nhóm khoá `tco` của một phiên bản — bảng phiên bản. */
+export function moTaTco(tco: NhomTco | null): string {
+  if (tco === null) return "";
+  const ra: string[] = [];
+  if (tco.chi_phi_von_nam !== undefined) ra.push(`vốn ${tco.chi_phi_von_nam}/năm`);
+  if (tco.ngay_thanh_toan_chuan !== undefined) ra.push(`kỳ chuẩn ${tco.ngay_thanh_toan_chuan} ngày`);
+  if (tco.ty_le_tre_ngay !== undefined) ra.push(`trễ ${tco.ty_le_tre_ngay}/ngày`);
+  return ra.join(" · ");
 }
 
 /** Một dòng cho trọng số của một phiên bản — bảng phiên bản và khối trọng số dùng chung. */
