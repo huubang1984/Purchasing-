@@ -529,6 +529,8 @@ const DANH_SACH_TRANG_RFQ = [
   "RFQ_STATUSES",
   "RFQ_TRANSITIONS",
   "RfqError",
+  // [S1.284 / S4.7b1] Biên số ngày giao yêu cầu (`CHECK` của `112`) — `tao-thau.test` khoá bản chép của màn với hằng này.
+  "SO_NGAY_GIAO_TOI_DA",
   "addRfqItem",
   "approveRfq",
   "cancelRfq",
@@ -538,6 +540,8 @@ const DANH_SACH_TRANG_RFQ = [
   // [S1.201 / S3.6a] Nhóm hàng: gán cho gói đang soạn (route `rfq.create`), hai hàm quản lý hỏi `category.manage` ở chính hàm,
   // và danh sách — không giá, không phiên.
   "datNhomHangChoGoi",
+  // [S1.284 / S4.7b1] Số ngày giao yêu cầu của gói đang soạn (`112_tco`) — route đòi `rfq.create`, như nhóm hàng.
+  "datSoNgayGiao",
   "doiTrangThaiNhomHang",
   "extendRfqDeadline",
   "getActiveProcurementPolicy",
@@ -1173,12 +1177,16 @@ const DANH_SACH_TRANG_DANH_GIA = [
   // `chi-phi-hieu-dung.ts` vẫn thuần — spec §3.2 đòi đúng thế, vì J2 phải đo được bằng một lời
   // gọi hàm chứ không bằng một lượt dựng cảnh.
   "DanhGiaTuChoiError",
+  // [S1.284 / S4.7b1] Luật L8 của phiên bản ghim (thuần) — màn `/chinh-sach` chép nó, test kiến trúc đối chiếu hai bản.
+  "MA_CO_NGUON",
   "MA_THANH_PHAN_GIA",
   "SO_LE_HE_SO",
   "SO_LE_TIEN",
   "TRANG_THAI_CHAM_DUOC",
   "docBangXepHang",
+  "docNhomTco",
   "docSo",
+  "kiemChinhSachTco",
   "laTuChoi",
   "lamTron",
   "taoLuotDanhGia",

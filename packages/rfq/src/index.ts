@@ -22,6 +22,10 @@ export {
   createRfq,
   // [S1.201 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN — route đòi `rfq.create`, như ngân sách và hạng mục.
   datNhomHangChoGoi,
+  // [S1.284 / S4.7b1] Số ngày giao yêu cầu của một gói ĐANG SOẠN — route `PUT /rfqs/:rfqId/delivery-days` đòi `rfq.create`, như nhóm
+  // hàng; `SO_NGAY_GIAO_TOI_DA` là biên của `CHECK` `112` — màn `/tao-thau` chép nó, `tao-thau.test` khoá bản chép với hằng này.
+  datSoNgayGiao,
+  SO_NGAY_GIAO_TOI_DA,
   extendRfqDeadline,
   getRfq,
   listRfqItems,

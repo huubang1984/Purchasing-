@@ -1906,3 +1906,99 @@ describe("[S1.217 / khoản 250] thu hồi lời mời sau lần mở thầu qua
     expect(await hangTuChoi(rfqId)).toHaveLength(2);
   });
 });
+
+// =============================================================================================
+// [S1.284 / S4.7b1] TCO QUA HTTP — SỐ NGÀY GIAO YÊU CẦU CỦA GÓI, NHÓM KHOÁ `tco` CỦA CHÍNH SÁCH (ADR-153)
+// Trước vòng này `datSoNgayGiao` không có route, và `POST /policy` không chuyển `tco` dù gói nhận nó: không đường HTTP nào khai được
+// một phiên bản tính chi phí quy đổi, hay số ngày giao mà chi phí trễ đo theo.
+// =============================================================================================
+describe("[S1.284 / S4.7b1] TCO qua HTTP — số ngày giao của gói, nhóm khoá tco của chính sách", () => {
+  it("[INV-L16] PUT /rfqs/:rfqId/delivery-days: chỉ gói đang soạn, cổng `rfq.create`, số nguyên 1–3650 hay null, một hàng sổ mỗi lần; GET /rfqs/:rfqId mang con số; /policy/versions đếm gói chờ duyệt thiếu nó", async () => {
+    const { org, pm, rfqId: dangCho } = await goiDaNop("ngay-giao-http", false);
+    const tc = await nguoi("tc3-ngay-giao-http@vidu.vn", ["FINANCE"], org);
+    const ds = await goi("GET", "/policy/versions", pm);
+    expect(ds.status, ds.text).toBe(200);
+    expect((ds.body as { goiChoDuyetThieuSoNgayGiao: number }).goiChoDuyetThieuSoNgayGiao).toBe(1);
+
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Mua thep giao 30 ngay", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string; soNgayGiao: unknown } }).rfq.id;
+    expect((rfq.body as { rfq: { soNgayGiao: unknown } }).rfq.soNgayGiao).toBeNull();
+    const duong = `/rfqs/${rfqId}/delivery-days`;
+
+    // Vắng trường KHÔNG phải một lần xoá: 422 có tên, như `categoryId`.
+    for (const than of [{}, { soNgayGiao: "30" }, { soNgayGiao: 1.5 }]) {
+      expect(await goi("PUT", duong, pm, than)).toMatchObject({ status: 422, text: JSON.stringify({ error: 'trường "soNgayGiao" phải là số nguyên hoặc null' }) });
+    }
+    for (const n of [0, 3651, -1]) {
+      const r = await goi("PUT", duong, pm, { soNgayGiao: n });
+      expect([r.status, r.text]).toEqual([422, JSON.stringify({ error: "số ngày giao yêu cầu phải là số nguyên từ 1 đến 3650" })]);
+    }
+    expect((await goi("PUT", duong, tc, { soNgayGiao: 30 })).status).toBe(403);
+
+    const dat = await goi("PUT", duong, pm, { soNgayGiao: 30 });
+    expect([dat.status, dat.body]).toEqual([200, { soNgayGiao: 30 }]);
+    expect(((await goi("GET", `/rfqs/${rfqId}`, pm)).body as { rfq: { soNgayGiao: unknown } }).rfq.soNgayGiao).toBe(30);
+    const xoa = await goi("PUT", duong, pm, { soNgayGiao: null });
+    expect([xoa.status, xoa.body]).toEqual([200, { soNgayGiao: null }]);
+    const { rows } = await db.pool.query<{ actor: string; so: unknown }>(
+      "SELECT actor_id::text AS actor, payload->'soNgayGiao' AS so FROM audit_events WHERE org_id = $1 AND action = 'RFQ_DELIVERY_DAYS_SET' AND resource_id = $2 ORDER BY seq",
+      [org, rfqId],
+    );
+    expect(rows).toEqual([{ actor: pm.id, so: 30 }, { actor: pm.id, so: null }]);
+
+    // Gói đã nộp duyệt: lời từ chối trạng thái có tên, không 500; con số không đổi, và gói vẫn được đếm.
+    const muon = await goi("PUT", `/rfqs/${dangCho}/delivery-days`, pm, { soNgayGiao: 30 });
+    expect([muon.status, muon.text]).toEqual([
+      422,
+      JSON.stringify({ error: "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo" }),
+    ]);
+    expect(((await goi("GET", "/policy/versions", pm)).body as { goiChoDuyetThieuSoNgayGiao: number }).goiChoDuyetThieuSoNgayGiao).toBe(1);
+
+    // [rà soát §S1.284 — THẤP-5] Xuyên tổ chức: PM của tổ chức khác giữ `rfq.create` của CHÍNH họ — RLS cắt hàng, lời từ chối là câu
+    // *"không tìm thấy"* có tên (không phân biệt *không có* với *không thấy*), gói không đổi, không hàng sổ nào ở tổ chức kia.
+    const { org: orgKhac, pm: pmKhac } = await goiDaNop("ngay-giao-http-khac", false);
+    const xuyen = await goi("PUT", duong, pmKhac, { soNgayGiao: 7 });
+    expect([xuyen.status, xuyen.text]).toEqual([
+      422,
+      JSON.stringify({ error: "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo" }),
+    ]);
+    expect(((await goi("GET", `/rfqs/${rfqId}`, pm)).body as { rfq: { soNgayGiao: unknown } }).rfq.soNgayGiao).toBeNull();
+    const { rows: soKhac } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE org_id = $1 AND action = 'RFQ_DELIVERY_DAYS_SET'",
+      [orgKhac],
+    );
+    expect(soKhac).toHaveLength(0);
+  });
+
+  it("[INV-L8] POST /policy chuyển nhóm khoá `tco`: phiên bản năm mã có tham số ⇒ 201 và /policy/versions trả nguyên văn; hình dạng ngoài sai ⇒ 422 của cửa; cặp thanh toán thiếu một khoá ⇒ 422 của `CHECK`", async () => {
+    const { org, pm } = await goiDaNop("tco-http", false);
+    const tc = await nguoi("tc3-tco-http@vidu.vn", ["FINANCE"], org);
+    const NAM_MA = ["gia", "van_chuyen", "nhap_khau", "chi_phi_thanh_toan", "chi_phi_tre"].map((ma) => ({ ma, don_vi: "TIEN", he_so: "1.0000" }));
+    const TCO = { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" };
+    const than = (tco: unknown) => ({ version: 2, dualApprovalThreshold: "100000000.00", currency: "VND", evalComponents: NAM_MA, bafoTopN: 2, tco });
+
+    expect(await goi("POST", "/policy", tc, than([]))).toMatchObject({ status: 422, text: JSON.stringify({ error: 'trường "tco" phải là object' }) });
+    expect(await goi("POST", "/policy", tc, than({ chi_phi_von_nam: 0.12 }))).toMatchObject({
+      status: 422,
+      text: JSON.stringify({ error: 'mọi giá trị của trường "tco" phải là chuỗi' }),
+    });
+    // [rà soát §S1.284 — THẤP-5] Thân của 422 `CHECK`: câu chung, không tên bảng, không tên ràng buộc — màn `/chinh-sach` nói trước
+    // bằng câu gọi tên ô (`loiThamSoTco`), vì câu này không gọi tên gì.
+    expect(await goi("POST", "/policy", tc, than({ chi_phi_von_nam: "0.12" }))).toMatchObject({
+      status: 422,
+      text: JSON.stringify({ error: "du lieu vi pham rang buoc" }),
+    });
+    const tao = await goi("POST", "/policy", tc, than(TCO));
+    expect(tao.status, tao.text).toBe(201);
+    const ds = await goi("GET", "/policy/versions", pm);
+    const moiNhat = (ds.body as { phienBan: { version: number; tco: unknown; evalComponents: unknown }[] }).phienBan[0];
+    expect([moiNhat?.version, moiNhat?.tco, moiNhat?.evalComponents]).toEqual([2, TCO, NAM_MA]);
+    const { rows } = await db.pool.query<{ co: boolean }>(
+      "SELECT (payload->>'coTco')::boolean AS co FROM audit_events WHERE org_id = $1 AND action = 'PROCUREMENT_POLICY_CREATED' ORDER BY seq",
+      [org],
+    );
+    expect(rows.map((r) => r.co)).toEqual([false, true]);
+  });
+});
