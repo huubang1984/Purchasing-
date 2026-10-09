@@ -23,6 +23,7 @@ import {
   TRAN_GIAI_TRINH_BYTE,
   chiDanChot,
   cungLanNop,
+  khungTinHieuKhaiThap,
   docNhaCungCapChon,
   loaiNgoaiLeGoiY,
   loiGiaiTrinh,
@@ -495,6 +496,19 @@ describe("[S1.273 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫ
     "K7_KHONG_BAC_GHIM", "K7_LECH_TIEN_TE", "K7_DAU_THAU_CHINH_THUC", "K7_SAI_VAI", "K7_TAC_GIA_CHINH_SACH",
     "K2B_THIEU_CANH_TRANH_THUC", "K2B_NGOAI_LE_SAI_TRANG_THAI", "K5B_THIEU_CHU_KY_DOC_LAP",
   ] as const;
+  // [S1.285 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
+  it("[S1.285 / S3.6d] ba mã K10b có câu, không nhắc lại câu máy chủ, không phụ thuộc quyền mời; K10b chưa ghi nhận trỏ khối «Tín hiệu khai thấp»", () => {
+    for (const ma of ["K10B_TIN_HIEU_CHUA_GHI_NHAN", "K10B_TU_GHI_NHAN", "K10B_TAC_GIA_CHINH_SACH"] as const) {
+      expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
+      expect(chiDanChot(ma, true), ma).not.toBeNull();
+      expect(chiDanChot(ma, false), ma).toBe(chiDanChot(ma, true));
+      const may = CHOT_VAO_SO[ma].thongDiep.toLowerCase().split(/\s+/u);
+      const chiDan = (chiDanChot(ma, true) ?? "").toLowerCase();
+      for (let i = 0; i + 6 <= may.length; i += 1) expect(chiDan, `${ma}: «${may.slice(i, i + 6).join(" ")}»`).not.toContain(may.slice(i, i + 6).join(" "));
+    }
+    expect(chiDanChot("K10B_TIN_HIEU_CHUA_GHI_NHAN", true)).toMatch(/khối «Tín hiệu khai thấp» ở bước 7/u);
+  });
+
   it("[S1.282 / S3.5b] tám mã của trao thầu theo bậc có câu, không nhắc lại câu máy chủ; K2b trỏ khối «Ngoại lệ hậu kiểm» và chỉ nó nhờ người mời được", () => {
     for (const ma of MA_TRAO_THAU) {
       expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
@@ -635,3 +649,32 @@ describe("[S1.284 / S4.7b1 — rà soát TRUNG-1] cảnh báo số ngày giao: p
   });
 });
 
+describe("[S1.285 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng — thân `GET /rfqs/:rfqId/signals` phần `khaiThap`", () => {
+  const BC = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: ["r-1"] };
+  const than = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({ tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap } });
+
+  it("không tín hiệu (hienTai null), thân lạ, không khối ⇒ khung ẩn", () => {
+    expect(khungTinHieuKhaiThap(null).hien).toBe(false);
+    expect(khungTinHieuKhaiThap({ tinHieu: {} }).hien).toBe(false);
+    expect(khungTinHieuKhaiThap(than({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null })).hien).toBe(false);
+  });
+
+  it("có tín hiệu: tóm tắt là câu CSDL của hàng có bằng chứng BẰNG hiện tại, lịch sử là các lần ghi nhận của hàng ấy; chờ ghi nhận + người xem ghi nhận được ⇒ ô lý do", () => {
+    const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+    const k = khungTinHieuKhaiThap(than({ hienTai: BC, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]));
+    expect(k).toEqual({ hien: true, tomTat: hang.giaiThich, choDoc: true, lichSu: [], choGhiNhan: true, khongDuoc: null });
+    const daDoc = khungTinHieuKhaiThap(than({ hienTai: BC, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }, [
+      { ...hang, ghiNhan: [{ id: "a-1", lyDo: "Đã đọc", nguoi: "u-gd2", nguoiTen: "Nguoi duyet 2", luc: "2026-10-08T01:00:00Z" }] },
+    ]));
+    expect(daDoc.choDoc).toBe(false);
+    expect(daDoc.choGhiNhan).toBe(false);
+    expect(daDoc.lichSu).toEqual([{ luc: "2026-10-08T01:00:00Z", noiDung: "Nguoi duyet 2 đã ghi nhận: Đã đọc" }]);
+  });
+
+  it("chờ ghi nhận mà người xem không ghi nhận được ⇒ câu của máy chủ; hàng cũ có bằng chứng KHÁC không mượn câu — tóm tắt dựng từ hai mốc bậc, có dấu chấm nghìn, không số tiền trao", () => {
+    const cu = { id: "s-0", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: { ...BC, award: "aw-0" }, giaiThich: "câu cũ", ghiNhan: [] };
+    const k = khungTinHieuKhaiThap(than({ hienTai: { ...BC, vuot_nguong_kep: true }, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đề xuất không ghi nhận được." }, soNguoiGhiNhanDuoc: 1 }, [cu]));
+    expect(k.tomTat).toBe("Bậc của số tiền trao (từ 100.000.000) so với bậc của ước lượng (từ 0); số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không.");
+    expect([k.choDoc, k.choGhiNhan, k.khongDuoc]).toEqual([true, false, "Người đề xuất không ghi nhận được."]);
+  });
+});

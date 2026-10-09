@@ -1298,6 +1298,30 @@ const ghi: readonly BuyerWriteRoute[] = [
   },
   {
     method: "POST",
+    path: "/rfqs/:rfqId/award/signals/acknowledge",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.285 / S3.6d · K10b] Ghi nhận tín hiệu KHAI THẤP ƯỚC LƯỢNG hiện tại của gói đang có đề xuất trao thầu, kèm lý do — cùng cổng
+    // với chữ ký duyệt trao thầu (`po.approve`, ADR-084 ⑵). Hàm gói hỏi lại cùng mã, rồi luật người (không tạo, không nộp, không đặt
+    // ngân sách, không đề xuất, không khai phiên bản chính sách ghim) — lời từ chối vào sổ `CONTROL_DENIED`. Đề xuất rút rồi đề xuất
+    // lại làm bằng chứng đổi: lần ghi nhận trước lỗi thời, tín hiệu mới được lưu ở đây (fail-closed, ADR-082 ⒁).
+    permission: PERMISSIONS.PO_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        ghiNhan: await ghiNhanTinHieu(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId, loai: "ESTIMATE_UNDERSTATED" },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
     path: "/rfqs/:rfqId/coi-declarations",
     audience: "BUYER",
     mutates: true,
