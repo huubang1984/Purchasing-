@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_tco_tham_so_ghim — [S1.9101 / S4.7b2 của spec S4] THAM SỐ QUY ĐỔI TCO CHỤP VÀO GÓI LÚC MỞ — NHÀ CUNG CẤP THẤY CÁCH MÌNH
+-- 117_tco_tham_so_ghim — [S1.286 / S4.7b2 của spec S4] THAM SỐ QUY ĐỔI TCO CHỤP VÀO GÓI LÚC MỞ — NHÀ CUNG CẤP THẤY CÁCH MÌNH
 -- BỊ QUY ĐỔI, VÀ ĐÓ LÀ ĐÚNG THƯỚC LƯỢT CHẤM DÙNG (L16)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` §4.8, §8.6, §9 (S4.7b2). ADR-153 ⑸, ADR-156 ⑵.

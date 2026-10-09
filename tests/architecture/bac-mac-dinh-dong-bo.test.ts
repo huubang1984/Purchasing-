@@ -132,9 +132,9 @@ describe("[S1.284 / S4.7b1] miền tham số TCO của màn là bản chép củ
 });
 
 
-// [S1.9101 / S4.7b2] Phiên bản TCO của `gieo:demo --s3` là thứ màn `/chinh-sach` dựng được từ bốn ô mã và ba ô tham số, luật L8 của màn
+// [S1.286 / S4.7b2] Phiên bản TCO của `gieo:demo --s3` là thứ màn `/chinh-sach` dựng được từ bốn ô mã và ba ô tham số, luật L8 của màn
 // im với nó và lượt chấm nhận nó — một bộ demo màn không khai lại được là một demo nói dối về sản phẩm.
-describe("[S1.9101 / S4.7b2] [INV-L8] phiên bản TCO của gieo:demo --s3 là thứ màn /chinh-sach khai được", () => {
+describe("[S1.286 / S4.7b2] [INV-L8] phiên bản TCO của gieo:demo --s3 là thứ màn /chinh-sach khai được", () => {
   it("bộ trọng số là `thanhPhanTuMa` của chính các mã ấy; luật màn, miền tham số và lượt chấm đều im", () => {
     expect(TRONG_SO_TCO_DEMO).toEqual(thanhPhanTuMa(TRONG_SO_TCO_DEMO.map((t) => t.ma)));
     expect(loiTrongSo(TRONG_SO_TCO_DEMO, THAM_SO_TCO_DEMO)).toBeNull();
@@ -149,10 +149,10 @@ describe("[S1.9101 / S4.7b2] [INV-L8] phiên bản TCO của gieo:demo --s3 là 
   });
 });
 
-// [S1.9101 / S4.7b2 / L16 vế form] Bốn khoá phong bì màn `/nop-thau` viết (`truongKhai`) là đúng bốn khoá bộ đọc SQL của lượt chấm đọc
+// [S1.286 / S4.7b2 / L16 vế form] Bốn khoá phong bì màn `/nop-thau` viết (`truongKhai`) là đúng bốn khoá bộ đọc SQL của lượt chấm đọc
 // (`luot-danh-gia.ts` → `bid_so_tien`, `bid_so_ngay`). Một tên lệch là một báo giá THIẾU Ô ở lượt chấm dù nhà cung cấp đã khai — kịch bản
 // 41 đo ba khoá trên đường thật; ca này khoá cả bốn, kể cả `importCost`.
-describe("[S1.9101 / S4.7b2] [INV-L16] khoá phong bì của màn /nop-thau là khoá bộ đọc của lượt chấm", () => {
+describe("[S1.286 / S4.7b2] [INV-L16] khoá phong bì của màn /nop-thau là khoá bộ đọc của lượt chấm", () => {
   it("đủ bốn ô ⇒ bốn khoá, mỗi khoá có mặt ở câu đọc của lượt chấm qua đúng bộ đọc của nó", async () => {
     const { readFileSync } = await import("node:fs");
     const ts = readFileSync(new URL("../../packages/danh-gia/src/luot-danh-gia.ts", import.meta.url), "utf8");

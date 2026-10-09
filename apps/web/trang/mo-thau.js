@@ -729,13 +729,13 @@ function veThanhPhan(tp, maThieu, phienBan) {
   for (const t of tp) {
     const li = document.createElement("li");
     // `textContent`, không `innerHTML`: `ma` đến từ chính sách của tổ chức, tức từ người dùng.
-    // [S1.9101 / S4.7b2] Mã quy đổi mang phép tính với tham số của phiên bản ghim (§8.6) — `moTaThanhPhan`; mã khai thẳng giữ dạng cũ.
+    // [S1.286 / S4.7b2] Mã quy đổi mang phép tính với tham số của phiên bản ghim (§8.6) — `moTaThanhPhan`; mã khai thẳng giữ dạng cũ.
     li.textContent = moTaThanhPhan(t, phienBan);
     ul.append(li);
   }
   if (tp.length === 0) {
     const li = document.createElement("li");
-    // [S1.9101 / S4.7b2] Báo giá không hạng gọi tên mã thiếu (`ma_thieu`) — không lấy 0 (ADR-153 ⑷).
+    // [S1.286 / S4.7b2] Báo giá không hạng gọi tên mã thiếu (`ma_thieu`) — không lấy 0 (ADR-153 ⑷).
     li.textContent = Array.isArray(maThieu) && maThieu.length > 0
       ? moTaMaThieu(maThieu)
       : "không thành phần nào — báo giá này không đọc được số tiền";
@@ -756,7 +756,7 @@ async function veXepHang() {
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
   if (b === null) {
     phien = { ...phien, xepHang: [], xepHangLuot: "" };
-    // [rà soát §S1.9101 — THẤP-5] Bảng vừa xoá: đầu cột hạng giá của gói đọc trước không ở lại trên một bảng rỗng.
+    // [rà soát §S1.286 — THẤP-5] Bảng vừa xoá: đầu cột hạng giá của gói đọc trước không ở lại trên một bảng rỗng.
     hien($("th-hang-gia"), false);
     dienDl($("tt-luot"), [["Lượt chấm", "chưa chấm lần nào — bấm Chấm thầu"]]);
     return;
@@ -764,7 +764,7 @@ async function veXepHang() {
   phien = { ...phien, xepHang: Array.isArray(b.rows) ? b.rows : [], xepHangLuot: b.evaluationId };
   // [S1.283 / S3.4b] Ô *có xung đột với* của khối khai báo vẽ lại từ bảng vừa đọc.
   khaiBao.veNhaCungCap();
-  // [S1.9101 / S4.7b2] Bảng có thước TCO ⇒ cột hạng giá (trên đúng các báo giá có hạng — ADR-156 ⑷) và câu *"theo lời khai"* (§8.13).
+  // [S1.286 / S4.7b2] Bảng có thước TCO ⇒ cột hạng giá (trên đúng các báo giá có hạng — ADR-156 ⑷) và câu *"theo lời khai"* (§8.13).
   const tco = coThuocTco(b.rows ?? []);
   hien($("th-hang-gia"), tco);
   dienDl($("tt-luot"), [

@@ -184,7 +184,7 @@ describe("[S1.284 / S4.7b1] TCO — năm mã có nguồn, tham số, cảnh báo
     const tre = thanhPhanTuMa(["chi_phi_tre"]);
     expect(canhBaoTrongSo(tre, null)).toEqual([expect.stringContaining('"chi_phi_tre"')]);
     expect(canhBaoTrongSo(tre, { ty_le_tre_ngay: "0.001" })).toEqual([expect.stringContaining("số ngày giao yêu cầu")]);
-    // [S1.9101 / S4.7b2 — CA LẬT] ~~[TẠM tới S4.7b2] Mã ngoài giá ⇒ câu *màn nộp báo giá chưa có ô*~~ — `/nop-thau` nay có ô của mã
+    // [S1.286 / S4.7b2 — CA LẬT] ~~[TẠM tới S4.7b2] Mã ngoài giá ⇒ câu *màn nộp báo giá chưa có ô*~~ — `/nop-thau` nay có ô của mã
     // bật, bắt buộc; câu tạm gỡ. Mã ngoài giá đủ tham số ⇒ im, như giá.
     expect(canhBaoTrongSo(thanhPhanTuMa(["van_chuyen"]), null)).toEqual([]);
     expect(canhBaoTrongSo(thanhPhanTuMa([]), null)).toEqual([]);

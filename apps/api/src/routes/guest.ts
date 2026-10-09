@@ -105,13 +105,13 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // nộp thầu nêu nó trong câu hỏi phiên lúc tải, để hai nhà cung cấp của cùng một gói trên một máy phân biệt được
       // phiên của ai. Không MST, không người liên hệ, không mã nhà cung cấp.
       //
-      // [S1.9101 / S4.7b2 / L16] `rfq.soNgayGiao` — số ngày giao yêu cầu của gói, khi bên mua khai (`112`); và `tco` — THƯỚC mà lượt
-      // chấm sẽ dùng, chụp lúc gói mở từ phiên bản ghim (`112` (4), `9501`): tập mã thành phần theo thứ tự chính sách, và tham số quy
+      // [S1.286 / S4.7b2 / L16] `rfq.soNgayGiao` — số ngày giao yêu cầu của gói, khi bên mua khai (`112`); và `tco` — THƯỚC mà lượt
+      // chấm sẽ dùng, chụp lúc gói mở từ phiên bản ghim (`112` (4), `117`): tập mã thành phần theo thứ tự chính sách, và tham số quy
       // đổi CỦA MÃ BẬT (chủ dự án chốt 2026-10-08 — ADR-156 ⑵: nhà cung cấp thấy cách mình bị quy đổi). `tco` là `null` khi gói chưa
       // có ảnh chụp (mở trước S4.5a, hay phiên bản ghim không khai trọng số). Không ngưỡng, không bậc, không mã phiên bản, không
       // trọng số nào khác — bảng chính sách vẫn đóng với khách (`027`).
       //
-      // [rà soát §S1.9101 — THẤP-3, THẤP-6] Thước đọc RIÊNG (`docThuocTcoGoi`), không qua `RfqRecord` — route agent không nhận tham số; tập
+      // [rà soát §S1.286 — THẤP-3, THẤP-6] Thước đọc RIÊNG (`docThuocTcoGoi`), không qua `RfqRecord` — route agent không nhận tham số; tập
       // mã lọc theo mã CÓ NGUỒN của lượt chấm (`MA_CO_NGUON`): một mã lạ là chuỗi tự do của bên mua, phiên bản mang nó không chấm được (L8).
       const thuoc = await docThuocTcoGoi(ctx.client, ctx.orgId, ctx.rfqId);
       const ma = thuoc === null ? null : thuoc.ma.filter((m) => MA_CO_NGUON.includes(m));

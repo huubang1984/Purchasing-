@@ -78,7 +78,7 @@ export interface BoiCanhGoiTraoThau {
   readonly nhaCungCap: readonly NhaCungCapGieo[];
   readonly dong: readonly DongGieo[];
   /**
-   * [S1.9101 / S4.7b2] Gói TCO của `--s3` (`index.ts`): cùng đường đi, khác bốn chỗ — tiêu đề, ngân sách (bậc 1: không xoay vòng, nên
+   * [S1.286 / S4.7b2] Gói TCO của `--s3` (`index.ts`): cùng đường đi, khác bốn chỗ — tiêu đề, ngân sách (bậc 1: không xoay vòng, nên
    * cùng người chọn và cùng năm nhà cung cấp không vướng K3), số lượng từng dòng, và thước TCO: số ngày giao yêu cầu đặt lúc gói còn
    * soạn, mỗi phong bì mang thêm ô khai của người nộp thứ k. Vắng ⇒ gói trao thầu như trước, nguyên văn.
    */
@@ -126,7 +126,7 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
       currency: "VND",
       actorSessionId: b.soan3.sessionId,
     });
-    // [S1.9101 / S4.7b2] Số ngày giao yêu cầu — chỉ đặt được khi gói còn soạn, và nằm trong chữ ký của hai người duyệt phía dưới.
+    // [S1.286 / S4.7b2] Số ngày giao yêu cầu — chỉ đặt được khi gói còn soạn, và nằm trong chữ ký của hai người duyệt phía dưới.
     if (b.tco !== undefined) {
       await datSoNgayGiao(c, org, { rfqId: r.id, soNgayGiao: b.tco.soNgayGiao, actorSessionId: b.soan3.sessionId });
     }
@@ -209,7 +209,7 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
       return { lineNo: j + 1, unitPrice: dongThanhChuoi(donGia), amount: dongThanhChuoi(donGia * (soLuong[j] ?? 1)) };
     });
     const tong = dongThanhChuoi(lines.reduce((s, l) => s + Number(l.amount), 0));
-    // [S1.9101 / S4.7b2] Ô khai TCO của người nộp thứ k — đúng bốn khoá màn `/nop-thau` đặt (`truongKhai`).
+    // [S1.286 / S4.7b2] Ô khai TCO của người nộp thứ k — đúng bốn khoá màn `/nop-thau` đặt (`truongKhai`).
     const khai = b.tco?.khai[k] ?? {};
     const phongBi = await sealBid({
       rfqId,

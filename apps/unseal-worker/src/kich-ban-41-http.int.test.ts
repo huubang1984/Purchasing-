@@ -47,7 +47,7 @@ import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
 // [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
 import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
-// [S1.9101 / S4.7b2] Thước TCO của màn `/nop-thau` và phép tính của `/mo-thau` — khối TCO cuối tệp dựng phong bì bằng chính các hàm ấy.
+// [S1.286 / S4.7b2] Thước TCO của màn `/nop-thau` và phép tính của `/mo-thau` — khối TCO cuối tệp dựng phong bì bằng chính các hàm ấy.
 import { docThuocTco, loiOKhai, moTaThanhPhan, oCanKhai, truongKhai, type ThanhPhanXepHang } from "../../web/src/tco.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
@@ -3097,11 +3097,11 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
 });
 
 // ===============================================================================================
-// [S1.9101 / S4.7b2] TCO QUA HTTP — THƯỚC ĐI TỚI NHÀ CUNG CẤP, Ô KHAI ĐI VÀO PHONG BÌ, HAI HẠNG ĐI RA TỚI NGƯỜI MUA
+// [S1.286 / S4.7b2] TCO QUA HTTP — THƯỚC ĐI TỚI NHÀ CUNG CẤP, Ô KHAI ĐI VÀO PHONG BÌ, HAI HẠNG ĐI RA TỚI NGƯỜI MUA
 //
 // S4.7a đo lượt chấm năm mã trên hàng bản rõ dựng sẵn (`luot-danh-gia-tco.int.test.ts`); S4.7b1 cho người mua khai mã, tham số và
 // số ngày giao qua HTTP. Khối này nối hai đầu bằng đúng đường của sản phẩm: chính sách bốn mã qua `POST /policy`, số ngày giao qua
-// `PUT /rfqs/:rfqId/delivery-days`, gói mở (trigger chụp tập mã VÀ tham số — `9501`), nhà cung cấp đọc thước ở `GET /guest/rfq`,
+// `PUT /rfqs/:rfqId/delivery-days`, gói mở (trigger chụp tập mã VÀ tham số — `117`), nhà cung cấp đọc thước ở `GET /guest/rfq`,
 // dựng trường phong bì bằng CHÍNH hàm của màn `/nop-thau` (`truongKhai` của `apps/web/src/tco.ts` — import tương đối xuyên app như
 // `chinh-sach.js` ở đầu tệp), worker mở, lượt chấm đọc ô khai bằng bộ đọc SQL, và `GET /ranking` trả hạng chi phí, hạng giá, mã
 // thiếu, phép tính của mã quy đổi. Một tên khoá lệch giữa màn và bộ đọc SQL là một báo giá thiếu ô ở đây — không phải ở màn.
@@ -3114,7 +3114,7 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
 // Hạng chi phí: A 1, B 2. Hạng giá: B 1, A 2. Tổ chức RIÊNG, luồng MVP1 (TCO không phụ thuộc S3 — `112` (5) chụp ở cả hai), một chữ
 // ký mở gói, một chữ ký mở thầu: thứ đo là thước, không phải D2.
 // ===============================================================================================
-describe("[S1.9101 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và số ngày giao, ô khai của màn đi vào phong bì, người mua thấy HAI hạng và phép tính", () => {
+describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và số ngày giao, ô khai của màn đi vào phong bì, người mua thấy HAI hạng và phép tính", () => {
   /** Tham số quy đổi của phiên bản — cùng bộ GIẢ ĐỊNH của `gieo:demo` (`THAM_SO_TCO_DEMO`), viết lại ở đây để phép đo đứng một mình. */
   const THAM_SO = { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" } as const;
   const MA = ["gia", "van_chuyen", "chi_phi_thanh_toan", "chi_phi_tre"] as const;
@@ -3181,7 +3181,7 @@ describe("[S1.9101 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước v�
       tco_ma_ghim: [...MA],
       tco_tham_so_ghim: THAM_SO,
     });
-    // [rà soát §S1.9101 — THẤP-3] Ảnh chụp không nằm trong `RfqRecord`: `GET /rfqs/:rfqId` (route agent — công cụ MCP `get_rfq`) không
+    // [rà soát §S1.286 — THẤP-3] Ảnh chụp không nằm trong `RfqRecord`: `GET /rfqs/:rfqId` (route agent — công cụ MCP `get_rfq`) không
     // mang tham số quy đổi; chỉ route khách mang, lọc theo mã bật.
     const doc = await goi("GET", `/rfqs/${st.rfqId}`, m);
     expect(doc.status, doc.text).toBe(200);

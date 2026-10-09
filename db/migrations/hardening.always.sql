@@ -15464,10 +15464,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_giao_hang() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.279 / S4.7a / L16] Canh vao OPEN chup tap ma TCO cua phien ban ghim, doi so ngay giao khi phien ban tinh chi phi tre, va (to chuc chua bat S3) dem nguoi ky tren so ngay giao hien tai. Than `RETURN NEW` bo ca ba.
-    -- [S1.9101 / S4.7b2 / L16] Than doi o `9501_tco_tham_so_ghim`: chup them tham so quy doi (`tco_tham_so_ghim`) cua cung phien ban ghim — nha cung cap doc chung qua route khach.
+    -- [S1.286 / S4.7b2 / L16] Than doi o `117_tco_tham_so_ghim`: chup them tham so quy doi (`tco_tham_so_ghim`) cua cung phien ban ghim — nha cung cap doc chung qua route khach.
     ARRAY[
-      $q$hàm + trigger rfq_tco_khi_mo (9501_tco_tham_so_ghim)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tco_tham_so_ghim.sql')$q$,
+      $q$hàm + trigger rfq_tco_khi_mo (117_tco_tham_so_ghim)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '117_tco_tham_so_ghim.sql')$q$,
       $q$DO $fn289$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

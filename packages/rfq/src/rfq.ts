@@ -501,10 +501,10 @@ export async function getRfq(
 }
 
 /**
- * [S1.9101 / S4.7b2 / L16] Thước TCO chụp lúc vào OPEN (`112` (4), `9501`): tập mã thành phần của phiên bản ghim theo thứ tự chính sách,
+ * [S1.286 / S4.7b2 / L16] Thước TCO chụp lúc vào OPEN (`112` (4), `117`): tập mã thành phần của phiên bản ghim theo thứ tự chính sách,
  * và nhóm khoá `tco` của cùng phiên bản (`{}` khi phiên bản không khai). `null` khi gói chưa có ảnh chụp (chưa mở, mở trước S4.5a, hay
  * phiên bản ghim không khai trọng số). KHÔNG nằm trong `RfqRecord` — mọi route trả `RfqRecord`, kể cả route agent: tham số quy đổi chỉ đi
- * ra ở route khách, lọc theo mã bật (rà soát §S1.9101 — THẤP-3; `/policy/versions` vẫn `agent: false`).
+ * ra ở route khách, lọc theo mã bật (rà soát §S1.286 — THẤP-3; `/policy/versions` vẫn `agent: false`).
  */
 export interface ThuocTcoGoi {
   readonly ma: readonly string[];

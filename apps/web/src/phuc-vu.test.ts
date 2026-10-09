@@ -297,13 +297,13 @@ describe("bề mặt tệp", () => {
       ...benchmarkWeb,
       // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
       ...xungDot,
-      // [S1.9101 / S4.7b2] `/lib/tco.js` là bản thật: ô khai TCO của `/nop-thau` và phép tính của `/mo-thau` chạy từ nó.
+      // [S1.286 / S4.7b2] `/lib/tco.js` là bản thật: ô khai TCO của `/nop-thau` và phép tính của `/mo-thau` chạy từ nó.
       ...tcoWeb,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
-      // [S1.9101 / S4.7b2] Bản rõ mỗi lần niêm phong được giữ lại — để đo trang ĐƯA GÌ vào phong bì (ô khai TCO), không chỉ có gọi.
+      // [S1.286 / S4.7b2] Bản rõ mỗi lần niêm phong được giữ lại — để đo trang ĐƯA GÌ vào phong bì (ô khai TCO), không chỉ có gọi.
       sealBid: (a: { plaintext: Uint8Array }) => {
         banRoDaNiem.push(JSON.parse(new TextDecoder().decode(a.plaintext)) as Record<string, unknown>);
         return Promise.resolve(new Uint8Array(0));
@@ -1518,9 +1518,9 @@ describe("bề mặt tệp", () => {
         ]);
       });
 
-      // [S1.9101 / S4.7b2] Bảng có thước TCO (ADR-156 ⑷; spec S4 §8.6, §8.13): cột hạng giá, phép tính của mã quy đổi cạnh con số nó
+      // [S1.286 / S4.7b2] Bảng có thước TCO (ADR-156 ⑷; spec S4 §8.6, §8.13): cột hạng giá, phép tính của mã quy đổi cạnh con số nó
       // sinh ra, mã thiếu gọi tên, và câu *"theo lời khai"*. Bảng chỉ giá giữ nguyên sáu cột (ca khoản 334 dưới).
-      it("[INV-L16] [S1.9101 / S4.7b2] bảng có thước TCO: cột Hạng giá hiện, ô theo hàng ('—' ở báo giá không hạng); phép tính hai mã quy đổi với tham số phiên bản; mã thiếu gọi tên; câu theo lời khai", async () => {
+      it("[INV-L16] [S1.286 / S4.7b2] bảng có thước TCO: cột Hạng giá hiện, ô theo hàng ('—' ở báo giá không hạng); phép tính hai mã quy đổi với tham số phiên bản; mã thiếu gọi tên; câu theo lời khai", async () => {
         const tre = (coSo: string, ngayKhai: string, tien: string) => ({
           ma: "chi_phi_tre", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien, nguon: { coSo, ngayKhai, ngayYeuCau: "30", tyLe: "0.001" },
         });
@@ -1551,7 +1551,7 @@ describe("bề mặt tệp", () => {
         expect(thanhPhan(2)).toEqual(["không hạng — thiếu: Chi phí trễ giao (chi_phi_tre)"]);
         expect(ttChu(p, "tt-luot")).toContain("Chi phí hiệu dụng|tổng chi phí theo LỜI KHAI của nhà cung cấp — chưa đối chiếu với hoá đơn hay phiếu nhập kho");
 
-        // [rà soát §S1.9101 — THẤP-5] Đọc lại khi gói chưa chấm (`ranking: null`) ⇒ bảng rỗng và đầu cột hạng giá ẩn theo.
+        // [rà soát §S1.286 — THẤP-5] Đọc lại khi gói chưa chấm (`ranking: null`) ⇒ bảng rỗng và đầu cột hạng giá ẩn theo.
         // Thân giả được `JSON.stringify` ở MỖI lần gọi, nên `toJSON` cho cùng trang hai câu trả lời: bảng TCO, rồi `null`.
         let bangHienTai: unknown = XEP_TCO;
         const r = await dung(BM_CO, SO_SANH, DAI, { toJSON: () => bangHienTai });
@@ -2412,7 +2412,7 @@ describe("bề mặt tệp", () => {
     const GOI_NOP = { ...GOI_THAU_KHACH, publicKeys: [{ algorithm: "ECDH_P256", publicKey: "", keyVersion: "k1" }] };
     const BIEN_NHAN = { status: 201, body: { receipt: { bidVersionId: "bv-1", version: 1, submittedAt: "2026-09-27T00:00:00Z", canonicalText: "van ban", signature: "ky" } } };
 
-    // [S1.9101 / S4.7b2 / L16 vế form] Thước TCO chụp lúc gói mở: ĐÚNG ô của mã bật, lời quy đổi với chính tham số, ô bắt buộc chặn nút
+    // [S1.286 / S4.7b2 / L16 vế form] Thước TCO chụp lúc gói mở: ĐÚNG ô của mã bật, lời quy đổi với chính tham số, ô bắt buộc chặn nút
     // nộp và gọi tên ô, phong bì mang trường chuẩn của ô — và chỉ của ô cần khai.
     const GOI_TCO = {
       ...GOI_NOP,
@@ -2424,7 +2424,7 @@ describe("bề mặt tệp", () => {
       for (const f of p.el(id).nghe["input"] ?? []) await f();
     };
 
-    it("[INV-L16] [S1.9101 / S4.7b2] nop-thau: thước TCO ⇒ đúng ô của mã bật và lời quy đổi với chính tham số; ô trống chặn nút nộp, gọi tên ô; đủ ô ⇒ phong bì mang trường chuẩn", async () => {
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: thước TCO ⇒ đúng ô của mã bật và lời quy đổi với chính tham số; ô trống chặn nút nộp, gọi tên ô; đủ ô ⇒ phong bì mang trường chuẩn", async () => {
       banRoDaNiem.length = 0;
       const p = await dungTrang("nop-thau", {
         hash: "", cookie: null, khach: true,
@@ -2469,9 +2469,9 @@ describe("bề mặt tệp", () => {
       expect(Object.keys(banRoDaNiem[0] ?? {}), "không khoá `importCost` — mã nhập khẩu không bật").not.toContain("importCost");
     });
 
-    // [rà soát §S1.9101 — TRUNG-1] Bốn ô TCO là phần tử TĨNH của trang (ô đơn giá thì dựng lại mỗi lần nạp): trước bản sửa, A thoát rồi B
+    // [rà soát §S1.286 — TRUNG-1] Bốn ô TCO là phần tử TĨNH của trang (ô đơn giá thì dựng lại mỗi lần nạp): trước bản sửa, A thoát rồi B
     // mở link của mình trên cùng thẻ thì B thấy nguyên lời khai của A, câu ô thiếu im, và nút nộp niêm phong lời khai ấy vào báo giá của B.
-    it("[INV-L16] [S1.9101 / S4.7b2] nop-thau: A thoát, B mở link của mình trên cùng thẻ ⇒ bốn ô TCO rỗng, khối ẩn tới lần nạp mới, câu ô thiếu nói lại, không niêm phong lời khai của A", async () => {
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: A thoát, B mở link của mình trên cùng thẻ ⇒ bốn ô TCO rỗng, khối ẩn tới lần nạp mới, câu ô thiếu nói lại, không niêm phong lời khai của A", async () => {
       banRoDaNiem.length = 0;
       const p = await dungTrang("nop-thau", {
         hash: "", cookie: null, khach: true,
@@ -2499,7 +2499,7 @@ describe("bề mặt tệp", () => {
       expect(banRoDaNiem, "không phong bì nào mang lời khai của A").toEqual([]);
     });
 
-    it("[S1.9101 / S4.7b2] nop-thau: gói chỉ chấm theo giá (hay gói mở trước S4.7b2, `tco` null) ⇒ khối TCO ẩn, không ô nào chặn, phong bì không mang trường TCO", async () => {
+    it("[S1.286 / S4.7b2] nop-thau: gói chỉ chấm theo giá (hay gói mở trước S4.7b2, `tco` null) ⇒ khối TCO ẩn, không ô nào chặn, phong bì không mang trường TCO", async () => {
       for (const goi of [{ ...GOI_NOP, tco: { ma: ["gia"], thamSo: { chiPhiVonNam: null, ngayThanhToanChuan: null, tyLeTreNgay: null } } }, { ...GOI_NOP, tco: null }]) {
         banRoDaNiem.length = 0;
         const p = await dungTrang("nop-thau", {

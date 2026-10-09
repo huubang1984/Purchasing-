@@ -1,4 +1,4 @@
-// [S1.9101 / S4.7b2] Phép tính thuần của thước TCO ở `/nop-thau` và `/mo-thau` (`tco.ts`).
+// [S1.286 / S4.7b2] Phép tính thuần của thước TCO ở `/nop-thau` và `/mo-thau` (`tco.ts`).
 import { describe, expect, it } from "vitest";
 import {
   coThuocTco,
@@ -187,7 +187,7 @@ describe("`/mo-thau` — phép tính cạnh con số, mã thiếu, cột hạng 
     expect(coThuocTco([{ components: [{ ma: "gia" }] }, { components: [{ ma: "gia" }, { ma: "van_chuyen" }] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: ["chi_phi_tre"] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: [] }])).toBe(false);
-    // [rà soát §S1.9101 — THẤP-4] Phiên bản chỉ giá: báo giá không đọc được tổng mang `["gia"]` — bảng vẫn sáu cột.
+    // [rà soát §S1.286 — THẤP-4] Phiên bản chỉ giá: báo giá không đọc được tổng mang `["gia"]` — bảng vẫn sáu cột.
     expect(coThuocTco([{ components: [{ ma: "gia" }], maThieu: null }, { components: [], maThieu: ["gia"] }])).toBe(false);
     expect(coThuocTco([{ components: [], maThieu: ["gia", "chi_phi_tre"] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: ["TONG_VUOT_MIEN"] }])).toBe(true);

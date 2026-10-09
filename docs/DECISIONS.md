@@ -12426,15 +12426,15 @@ ghi *"không hạng — thiếu: …"*, nên việc bị loại vì thiếu ô v
 
 ### Điều ADR này KHÔNG nói
 
-- Hình dạng route khách, migration chụp tham số, bố cục ô ở `/nop-thau`, hai hạng ở `/mo-thau` (S4.7b2 — **[S1.9101]** ADR-9201).
+- Hình dạng route khách, migration chụp tham số, bố cục ô ở `/nop-thau`, hai hạng ở `/mo-thau` (S4.7b2 — **[S1.286]** ADR-158).
 - Giải trình khi hạng giá khác hạng TCO, lời khai thành cam kết (S4.7c).
 
-## ADR-9201 — S4.7b2: TCO phía nhà cung cấp và kết quả — tham số chụp lúc mở cùng tập mã; thước ở route khách; ô khai bắt buộc ở `/nop-thau`; hạng giá tính lúc đọc
+## ADR-158 — S4.7b2: TCO phía nhà cung cấp và kết quả — tham số chụp lúc mở cùng tập mã; thước ở route khách; ô khai bắt buộc ở `/nop-thau`; hạng giá tính lúc đọc
 
 **Ngày:** 2026-10-08 · **Trạng thái:** **Đã chấp nhận** — thực hiện ⑵ ⑶ ⑷ của ADR-156 (chủ dự án chốt 2026-10-08); không câu hỏi mới ·
-**[S1.9101]** · **Migration:** `9501_tco_tham_so_ghim` · **Liên quan:** ADR-156 (S4.7b1, bốn câu), ADR-153 (S4.7a), ADR-141 (phiên bản
+**[S1.286]** · **Migration:** `117_tco_tham_so_ghim` · **Liên quan:** ADR-156 (S4.7b1, bốn câu), ADR-153 (S4.7a), ADR-141 (phiên bản
 ghim lúc mở), ADR-017 (route khách là danh sách trắng), ADR-053 ⑶ (không lấy `0`) · **Spec:** S4 §4.8, §8.6, §8.13, §9 S4.7b2 ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+**Biên bản:** `evidence/security-reviews.md` §S1.286
 
 ### Bối cảnh — phép đo trước khi viết
 
@@ -12451,7 +12451,7 @@ ghim lúc mở), ADR-017 (route khách là danh sách trắng), ADR-053 ⑶ (kh�
 
 ⑴ **Tham số chụp cùng tập mã.** Cột `rfq_packages.tco_tham_so_ghim jsonb`, ngoài mọi `GRANT` ghi; trigger cạnh vào `OPEN`
 (`rfq_tco_khi_mo`) chụp NGUYÊN nhóm khoá `tco` của phiên bản ghim, cùng lúc với tập mã. Gói đã mở trước migration nhận nhóm khoá của
-chính phiên bản ghim của chúng (khuôn `112` (4)). Ghim hardening của hàm đổi nhãn sang `9501`.
+chính phiên bản ghim của chúng (khuôn `112` (4)). Ghim hardening của hàm đổi nhãn sang `117`.
 
 ⑵ **L16 vế tham số.** `docChinhSach` so `tco_tham_so_ghim IS NOT DISTINCT FROM o.tco` ở CSDL — phép so `jsonb`, thứ tự khoá không đổi
 kết quả; lệch thì không chấm, câu gọi tên L16. Cùng khuôn vế tập mã của S4.7a: lớp chụp là trigger, lớp so là lượt chấm.
@@ -12486,7 +12486,7 @@ giao 30 ở DRAFT — người demo mở chúng dưới phiên bản 2. Bộ dem
 ⑼ **Kịch bản 41** có một khối TCO riêng (tổ chức riêng, luồng MVP1 — TCO không phụ thuộc S3) đi trọn qua HTTP và dựng phong bì bằng
 hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm, `GET /ranking` (hạng chi phí, hạng giá, mã thiếu, phép tính).
 
-⑽ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 8):
+⑽ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.286 mục 8):
 - **TRUNG-1** — bốn ô TCO là phần tử TĨNH của `/nop-thau` (ô đơn giá thì dựng lại mỗi lần nạp), và lần đóng các bước không xoá chúng: A
   thoát, B mở link của mình trên cùng thẻ thì B thấy lời khai của A, câu ô thiếu im, và nút nộp niêm phong lời khai ấy vào báo giá của B.
   Sửa: `dongCacBuoc` xoá bốn ô, câu ô thiếu, lời quy đổi, ẩn khối.
@@ -12506,11 +12506,11 @@ hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm
 - **Tham số và tập mã lộ cho nhà cung cấp được mời** (ADR-156 ⑵).
 - **Cạnh mở chỉ đòi số ngày giao** (ADR-153 ⑶), không đòi tham số: một phiên bản bật mã quy đổi mà thiếu tham số (màn `/chinh-sach`
   cảnh báo, không chặn — §2.5 ㉒) vẫn mở được gói; nhà cung cấp thấy *"—"* trong lời quy đổi, vẫn phải khai ô, và lượt chấm từ chối cấu
-  hình (L8). Kéo phép kiểm tham số về cạnh mở là một quyết định riêng — có từ S4.7a, rà soát §S1.9101 nêu lại.
+  hình (L8). Kéo phép kiểm tham số về cạnh mở là một quyết định riêng — có từ S4.7a, rà soát §S1.286 nêu lại.
 - **Ảnh chụp lệch phiên bản ghim** (vế tập mã của S4.7a lẫn vế tham số) ném lỗi thường — `POST /evaluate` trả 500, không phải 422 có tên.
   Chỉ tới được qua một đường ghi thứ hai (cột ngoài mọi `GRANT`).
 - **`/mo-thau` không đo lại trên trình duyệt** trong vòng này: cột mới theo khuôn nhãn ô của khoản 334 (đo ở `phuc-vu.test`). `/nop-thau`
-  đo trên Chromium ở 375×812 và 1280×900: không cuộn ngang, không ô nào tràn khung (biên bản §S1.9101).
+  đo trên Chromium ở 375×812 và 1280×900: không cuộn ngang, không ô nào tràn khung (biên bản §S1.286).
 
 ### Điều ADR này KHÔNG nói
 

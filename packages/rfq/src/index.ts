@@ -28,7 +28,7 @@ export {
   SO_NGAY_GIAO_TOI_DA,
   extendRfqDeadline,
   getRfq,
-  // [S1.9101 / S4.7b2] Thước TCO chụp lúc mở — chỉ route khách đọc nó, lọc theo mã bật; không nằm trong `RfqRecord`.
+  // [S1.286 / S4.7b2] Thước TCO chụp lúc mở — chỉ route khách đọc nó, lọc theo mã bật; không nằm trong `RfqRecord`.
   docThuocTcoGoi,
   listRfqItems,
   openRfq,

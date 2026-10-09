@@ -200,7 +200,7 @@ const HAM_CHI_DOC = [
   // (`agent: false`), không ở đây — rổ này nói về cổng quyền, không nói về đối tượng gọi.
   "getOpenUnsealForRfq",
   "getRfq",
-  // [S1.9101 / S4.7b2] Thước TCO chụp lúc mở (tập mã, tham số) — không giá, không đổi trạng thái; route khách lọc theo mã bật.
+  // [S1.286 / S4.7b2] Thước TCO chụp lúc mở (tập mã, tham số) — không giá, không đổi trạng thái; route khách lọc theo mã bật.
   "docThuocTcoGoi",
   "getSupplier",
   "getUnsealRequest",

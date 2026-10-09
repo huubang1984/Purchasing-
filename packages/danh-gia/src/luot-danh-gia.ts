@@ -186,7 +186,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
     readonly tco_ma_ghim: readonly string[] | null;
     readonly tham_so_khop: boolean;
   }>(
-    // [S1.9101 / S4.7b2 / L16] `tham_so_khop`: ảnh chụp tham số (`9501`) bằng nhóm khoá `tco` của phiên bản ghim — so ở CSDL, trên
+    // [S1.286 / S4.7b2 / L16] `tham_so_khop`: ảnh chụp tham số (`117`) bằng nhóm khoá `tco` của phiên bản ghim — so ở CSDL, trên
     // `jsonb` (thứ tự khoá không đổi phép so).
     `SELECT o.id, o.version, o.eval_components, o.benchmark, o.tco, r.so_ngay_giao, r.tco_ma_ghim,
             r.tco_tham_so_ghim IS NOT DISTINCT FROM o.tco AS tham_so_khop
@@ -237,7 +237,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
         `(${maChinhSach.join(", ")}) — không chấm (L16).`,
     );
   }
-  // [S1.9101 / S4.7b2 / L16] Cùng luật cho THAM SỐ quy đổi: nhà cung cấp đọc ảnh chụp (`GET /guest/rfq`), lượt chấm đọc phiên bản ghim
+  // [S1.286 / S4.7b2 / L16] Cùng luật cho THAM SỐ quy đổi: nhà cung cấp đọc ảnh chụp (`GET /guest/rfq`), lượt chấm đọc phiên bản ghim
   // — hai thứ cùng sinh từ một hàng bất biến, lệch nhau thì thước nhà cung cấp thấy không phải thước lượt chấm dùng: không chấm.
   if (!hang.tham_so_khop) {
     throw new Error("Tham số quy đổi TCO chụp lúc mở gói khác nhóm khoá tco của phiên bản ghim — không chấm (L16).");
@@ -318,7 +318,7 @@ export async function docBaoGia(
  * Xếp hạng thi đấu trên các số tiền ĐỌC ĐƯỢC: 1, 2, 2, 4. Báo giá không đọc được giá không có
  * hạng, và nó KHÔNG chiếm một chỗ trong dãy — nó không tham gia thứ tự nào cả.
  */
-// [S1.9101 / S4.7b2] Xuất ra trong gói (không qua cửa): `doc-bang-xep-hang.ts` xếp hạng GIÁ bằng chính hàm này — một luật bằng nhau.
+// [S1.286 / S4.7b2] Xuất ra trong gói (không qua cửa): `doc-bang-xep-hang.ts` xếp hạng GIÁ bằng chính hàm này — một luật bằng nhau.
 export function xepHang(gia: readonly (string | null)[]): readonly (number | null)[] {
   const doc = gia
     .map((g, i) => ({ i, v: g === null ? null : BigInt(g.replace(".", "")) }))

@@ -26503,12 +26503,12 @@ rò rỉ hay sink HTML. Tám phát hiện:
   **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận đổi đúng hai hàng: L8 24 → 49 khẳng định,
   L16 14 → 31, tầng T3 → T1, T3.
 
-# §S1.9101 — S4.7b2: TCO PHÍA NHÀ CUNG CẤP VÀ KẾT QUẢ — THAM SỐ CHỤP LÚC MỞ, THƯỚC Ở ROUTE KHÁCH, Ô KHAI BẮT BUỘC Ở `/nop-thau`, HAI HẠNG VÀ PHÉP TÍNH Ở `/mo-thau` — ADR-9201
+# §S1.286 — S4.7b2: TCO PHÍA NHÀ CUNG CẤP VÀ KẾT QUẢ — THAM SỐ CHỤP LÚC MỞ, THƯỚC Ở ROUTE KHÁCH, Ô KHAI BẮT BUỘC Ở `/nop-thau`, HAI HẠNG VÀ PHÉP TÍNH Ở `/mo-thau` — ADR-158
 
 ## 1. Vòng này là gì
 
 Phần thứ hai của S4.7b (spec S4 §9): phía NHÀ CUNG CẤP và KẾT QUẢ của TCO, trên nhánh riêng sau PR của S4.7b1 (§S1.284). Một migration
-(`9501_tco_tham_so_ghim`). Không câu hỏi mới: vòng này thực hiện ⑵ ⑶ ⑷ của ADR-156 mà chủ dự án chốt 2026-10-08.
+(`117_tco_tham_so_ghim`). Không câu hỏi mới: vòng này thực hiện ⑵ ⑶ ⑷ của ADR-156 mà chủ dự án chốt 2026-10-08.
 
 ## 2. Quyết định của chủ dự án
 
@@ -26529,8 +26529,8 @@ VÀ tham số quy đổi; ô khai BẮT BUỘC trên form (tuỳ chọn ở lư�
 
 ## 4. Thay đổi
 
-- **CSDL** — `9501_tco_tham_so_ghim`: cột `rfq_packages.tco_tham_so_ghim jsonb` (ngoài mọi `GRANT` ghi), lấp cho gói đã mở bằng nhóm khoá
-  của chính phiên bản ghim, `rfq_tco_khi_mo` chụp nó cùng tập mã; ghim hardening đổi nhãn sang `9501`; `migrations.int` (bản đồ hàm, ba
+- **CSDL** — `117_tco_tham_so_ghim`: cột `rfq_packages.tco_tham_so_ghim jsonb` (ngoài mọi `GRANT` ghi), lấp cho gói đã mở bằng nhóm khoá
+  của chính phiên bản ghim, `rfq_tco_khi_mo` chụp nó cùng tập mã; ghim hardening đổi nhãn sang `117`; `migrations.int` (bản đồ hàm, ba
   danh sách).
 - **`packages/rfq`** — `RfqRecord.tcoMaGhim`, `tcoThamSoGhim`.
 - **`packages/danh-gia`** — `docChinhSach` so ảnh chụp với nhóm khoá của phiên bản ghim ở CSDL (`IS NOT DISTINCT FROM`, `jsonb`), lệch ⇒
@@ -26543,7 +26543,7 @@ VÀ tham số quy đổi; ô khai BẮT BUỘC trên form (tuỳ chọn ở lư�
   thiếu, câu *"theo lời khai"*. Gỡ hai câu tạm của S4.7b1.
 - **`gieo:demo --s3`** — phiên bản 2 (bốn mã, tham số giả định), gói *"Goi TCO"* chấm sẵn; hai gói người demo mở tay khai số ngày giao
   ở DRAFT.
-- **Tài liệu** — ADR-9201; ADR-156 trỏ sang; TEST-PLAN L8, L16; spec §9 S4.7b2; STATE; PRODUCT; Handoff (156 ADR, 113 migration).
+- **Tài liệu** — ADR-158; ADR-156 trỏ sang; TEST-PLAN L8, L16; spec §9 S4.7b2; STATE; PRODUCT; Handoff (156 ADR, 113 migration).
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -26593,7 +26593,7 @@ Script áp từng đột biến, chạy tệp test đích, khôi phục và tự
   route khách trả tham số của mã không bật (D4), bỏ số ngày giao (D5), trả thước rỗng thay `null` (D6), không mang thước — kịch bản 41
   (D10), không lọc mã (D11); hạng giá trên mọi hàng (D7); bỏ `nguon` (D8); bỏ `maThieu` (D9); bỏ kiểm dạng `tien` (D12); `RfqRecord` mang
   lại tham số (D13) — cả mười ba ĐỎ.
-- **CSDL (1)**: trigger cạnh mở không chụp tham số — thân của `9501`, thân ghim hardening và chuỗi `$than$` cùng đổi (D1) — năm ca đỏ:
+- **CSDL (1)**: trigger cạnh mở không chụp tham số — thân của `117`, thân ghim hardening và chuỗi `$than$` cùng đổi (D1) — năm ca đỏ:
   ảnh chụp `NULL` lệch nhóm khoá của phiên bản ghim, mọi lượt chấm TCO dừng ở L16.
 
 D7 SỐNG ở lượt đầu, và đó là phát hiện: lượt chấm ghi hàng không hạng với `components` rỗng, nên tính hạng giá trên mọi hàng cho cùng
@@ -26606,7 +26606,7 @@ Một lượt soi đối kháng độc lập trên diff `f8e3945..8be3a58`, đo 
 rollback, `gieo:demo --s3` trọn, mô phỏng bước tay ghi nhận tín hiệu rồi mở gói chia nhỏ thứ ba) và một test DOM tạm. Không phát hiện
 CAO. Kiểm sạch: không trường nào ngoài danh sách trắng tới phiên khách, tham số lọc theo mã bật, trang vẽ bằng `textContent`; cột mới
 ngoài mọi `GRANT` ghi, trigger chỉ chạy ở cạnh `PENDING_APPROVAL→OPEN`, thứ tự tên sau trigger ghim chính sách, `ENABLE ALWAYS`, thân
-ghim hardening khớp `9501`; backfill khớp `o.tco` trên chín gói đã mở và một gói huỷ; phép so `jsonb` (mọi giá trị là chuỗi theo `CHECK`);
+ghim hardening khớp `117`; backfill khớp `o.tco` trên chín gói đã mở và một gói huỷ; phép so `jsonb` (mọi giá trị là chuỗi theo `CHECK`);
 miền ô của màn khớp `bid_so_ngay` / `bid_so_tien`; kiểm ô bắt buộc nằm trong chính handler của nút nộp. Tám phát hiện, đã sửa:
 - **TRUNG-1** — bốn ô TCO là phần tử TĨNH của `/nop-thau` và lần đóng các bước không xoá chúng: A thoát, B mở link của mình trên cùng thẻ
   thì B thấy `1.500.000 / 30 / 45` của A, câu ô thiếu im, nút nộp bật, và phong bì niêm phong mang lời khai của A — lời khai thương mại
@@ -26619,7 +26619,7 @@ miền ô của màn khớp `bid_so_ngay` / `bid_so_tien`; kiểm ô bắt buộ
   kể cả chi phí vốn khi mã thanh toán không bật — trong khi `/policy/versions` cố ý `agent: false`. Sửa: `docThuocTcoGoi` riêng, chỉ route
   khách gọi; kịch bản 41 khẳng định `GET /rfqs/:rfqId` không mang tham số (D13).
 - **THẤP-4** — phiên bản chỉ giá ghi `ma_thieu` `["gia"]` cho báo giá không đọc được tổng, và `coThuocTco` coi bảng ấy là bảng TCO (thêm cột
-  hạng giá và câu *"theo lời khai"*, trái ADR-9201 ⑹). Sửa: chỉ mã ngoài giá bật thước (W7).
+  hạng giá và câu *"theo lời khai"*, trái ADR-158 ⑹). Sửa: chỉ mã ngoài giá bật thước (W7).
 - **THẤP-5** — đọc gói TCO rồi đọc gói chưa chấm: đầu cột *"Hạng giá"* ở lại trên bảng rỗng. Sửa: ẩn ở nhánh chưa chấm (W15).
 - **THẤP-6** — `tco.ma` trả nguyên văn chuỗi mã bên mua khai (`057` chỉ kiểm kiểu). Sửa: lọc theo `MA_CO_NGUON` (D11).
 - **THẤP-7** — hạng giá đọc `tien` bằng `BigInt` sau khi bỏ dấu chấm; `057` chỉ đòi chuỗi, nên một hàng khác dạng (đường ghi thứ hai) làm
@@ -26627,7 +26627,7 @@ miền ô của màn khớp `bid_so_ngay` / `bid_so_tien`; kiểm ô bắt buộ
 - **THẤP-8** — lời demo *"ba gói"* của lịch sử giá không kể gói trao thầu (lệch từ S1.282) và gói TCO, mà cả hai mở trên ba hàng chuẩn ấy.
   Sửa: câu nói ra.
 
-Hai quan sát ngoài phạm vi, có từ S4.7a, nêu ở ADR-9201 *Giới hạn*: cạnh mở không đòi tham số (một phiên bản bật mã quy đổi thiếu tham số
+Hai quan sát ngoài phạm vi, có từ S4.7a, nêu ở ADR-158 *Giới hạn*: cạnh mở không đòi tham số (một phiên bản bật mã quy đổi thiếu tham số
 vẫn mở được gói — nhà cung cấp thấy *"—"*, lượt chấm từ chối); ảnh chụp lệch ném lỗi thường (500, không 422 có tên). Việc thứ nhất là
 một quyết định sản phẩm — đã đề xuất thành việc riêng.
 

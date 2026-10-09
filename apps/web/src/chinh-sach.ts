@@ -343,7 +343,7 @@ export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, tc
     return [`Trọng số này bị từ chối khi chấm — ${loi} — nên gói mở dưới phiên bản này không chấm được.`];
   }
   const ra: string[] = [];
-  // [S1.284 / S4.7b1] ~~Câu TẠM *"màn nộp báo giá chưa có ô khai"*~~ [S1.9101 / S4.7b2] Gỡ: `/nop-thau` có ô của mã bật, bắt buộc.
+  // [S1.284 / S4.7b1] ~~Câu TẠM *"màn nộp báo giá chưa có ô khai"*~~ [S1.286 / S4.7b2] Gỡ: `/nop-thau` có ô của mã bật, bắt buộc.
   if (thanhPhan.some((t) => t.ma === "chi_phi_tre")) {
     ra.push(
       "Chi phí trễ giao bật: mỗi gói phải khai số ngày giao yêu cầu ở màn Tạo gói thầu TRƯỚC khi nộp duyệt — gói thiếu con số ấy " +

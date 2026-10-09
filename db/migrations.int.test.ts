@@ -2478,8 +2478,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // đếm người ký trên số ngày giao hiện tại.
     { ham: "rfq_kiem_so_ngay_giao", migration: "112_tco.sql", trigger: ["rfq_packages_so_ngay_giao"] },
     { ham: "rfq_approvals_dat_bam_giao_hang", migration: "112_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
-    // [S1.9101 / S4.7b2 / L16] Thân đổi ở `9501`: chụp thêm tham số quy đổi của cùng phiên bản ghim — nhà cung cấp đọc chúng.
-    { ham: "rfq_tco_khi_mo", migration: "9501_tco_tham_so_ghim.sql", trigger: ["rfq_packages_tco_khi_mo"] },
+    // [S1.286 / S4.7b2 / L16] Thân đổi ở `117`: chụp thêm tham số quy đổi của cùng phiên bản ghim — nhà cung cấp đọc chúng.
+    { ham: "rfq_tco_khi_mo", migration: "117_tco_tham_so_ghim.sql", trigger: ["rfq_packages_tco_khi_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
@@ -4266,8 +4266,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
-        "9501_tco_tham_so_ghim.sql",
+        // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
+        "117_tco_tham_so_ghim.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8933,8 +8933,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
-        "9501_tco_tham_so_ghim.sql",
+        // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
+        "117_tco_tham_so_ghim.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9280,8 +9280,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "114_khai_bao_xung_dot.sql",
         // [S1.283 / S3.4b / K9] Chữ ký trao thầu của người đã khai xung đột không đếm ở K7 lẫn K5b.
         "115_xung_dot_chu_ky_trao_thau.sql",
-        // [S1.9101 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
-        "9501_tco_tham_so_ghim.sql",
+        // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
+        "117_tco_tham_so_ghim.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

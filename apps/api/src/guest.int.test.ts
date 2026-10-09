@@ -1025,9 +1025,9 @@ describe("[S1.219 / khoản 230] lần nộp bị từ chối mang MÃ lý do tr
   });
 });
 
-// [S1.9101 / S4.7b2 / L16] THƯỚC TCO Ở `GET /guest/rfq` — tập mã và tham số chụp lúc gói mở (`112` (4), `9501`). Khối CUỐI tệp: nó khai
+// [S1.286 / S4.7b2 / L16] THƯỚC TCO Ở `GET /guest/rfq` — tập mã và tham số chụp lúc gói mở (`112` (4), `117`). Khối CUỐI tệp: nó khai
 // một phiên bản chính sách mới cho `orgA`, và mọi gói mở sau nó ghim phiên bản ấy (ADR-141).
-describe("[S1.9101 / S4.7b2] thước TCO của gói ở GET /guest/rfq", () => {
+describe("[S1.286 / S4.7b2] thước TCO của gói ở GET /guest/rfq", () => {
   it("[INV-L16] gói không ảnh chụp ⇒ `tco: null`, `soNgayGiao: null`; gói mở dưới phiên bản TCO ⇒ tập mã CÓ NGUỒN theo thứ tự chính sách và tham số CHỈ của mã bật — chi phí vốn không lộ khi mã thanh toán không bật, mã lạ không đi ra", async () => {
     const a = await moi("NCC thuoc cu");
     const ra = await goi("GET", "/guest/rfq", { cookie: await moPhienKhach(a) });
@@ -1043,7 +1043,7 @@ describe("[S1.9101 / S4.7b2] thước TCO của gói ở GET /guest/rfq", () => 
           "FROM org_procurement_policies WHERE org_id = $1 RETURNING id",
         [
           orgA,
-          // [rà soát §S1.9101 — THẤP-6] Mã thứ ba là chuỗi tự do không nguồn (`bao_hanh`) — phiên bản không chấm được (L8), và route khách lọc nó.
+          // [rà soát §S1.286 — THẤP-6] Mã thứ ba là chuỗi tự do không nguồn (`bao_hanh`) — phiên bản không chấm được (L8), và route khách lọc nó.
           '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"},{"ma":"bao_hanh","don_vi":"TIEN","he_so":"1.0000"}]',
           '{"chi_phi_von_nam":"0.12","ngay_thanh_toan_chuan":"60","ty_le_tre_ngay":"0.001"}',
           uA,

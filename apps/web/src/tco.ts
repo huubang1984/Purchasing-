@@ -1,7 +1,7 @@
 // ==============================================================================================
-// [S1.9101 / S4.7b2] TCO Ở MÀN NỘP THẦU VÀ MÀN MỞ THẦU (spec S4 §4.8, §8.6, §8.13; ADR-156 ⑵ ⑶ ⑷; L16 vế form)
+// [S1.286 / S4.7b2] TCO Ở MÀN NỘP THẦU VÀ MÀN MỞ THẦU (spec S4 §4.8, §8.6, §8.13; ADR-156 ⑵ ⑶ ⑷; L16 vế form)
 //
-// Hai việc, mỗi việc một nửa của cùng một thước — thước lượt chấm dùng, chụp vào gói lúc mở (`112` (4), `9501`):
+// Hai việc, mỗi việc một nửa của cùng một thước — thước lượt chấm dùng, chụp vào gói lúc mở (`112` (4), `117`):
 //   · `/nop-thau`: đọc thước từ `GET /guest/rfq` (`tco`), hiện ĐÚNG ô của mã bật — bắt buộc trên form (chủ dự án chốt 2026-10-08:
 //     không ai mất hạng vì sơ ý; không có phí thì ghi 0) — và nói bằng lời cách mỗi ô được quy đổi, với chính tham số ấy.
 //   · `/mo-thau`: phép tính của mỗi mã quy đổi cạnh con số nó sinh ra (§8.6), mã thiếu của báo giá không hạng, và cột hạng giá.
@@ -181,7 +181,7 @@ export function moTaMaThieu(maThieu: readonly string[]): string {
 
 /**
  * Bảng có thước TCO (một mã ngoài giá, hay một hàng thiếu ô của mã NGOÀI giá) ⇒ màn hiện cột hạng giá và câu *"theo lời khai"*.
- * [rà soát §S1.9101 — THẤP-4] Phiên bản chỉ giá cũng ghi `ma_thieu` `["gia"]` cho báo giá không đọc được tổng — bảng ấy vẫn là bảng chỉ giá.
+ * [rà soát §S1.286 — THẤP-4] Phiên bản chỉ giá cũng ghi `ma_thieu` `["gia"]` cho báo giá không đọc được tổng — bảng ấy vẫn là bảng chỉ giá.
  */
 export function coThuocTco(rows: readonly { readonly components?: readonly { readonly ma: string }[]; readonly maThieu?: unknown }[]): boolean {
   return rows.some(

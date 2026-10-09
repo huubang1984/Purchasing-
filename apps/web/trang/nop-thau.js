@@ -230,7 +230,7 @@ async function napGoiThau() {
     ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null,
     // [S1.181 / ADR-109] Tên doanh nghiệp được mời — máy chủ dẫn xuất từ phiên, trang chỉ in lại.
     tenNhaCungCap: typeof r.body.supplier?.legalName === "string" ? r.body.supplier.legalName : "",
-    // [S1.9101 / S4.7b2 / L16] Thước TCO chụp lúc gói mở — đúng thước lượt chấm sẽ dùng.
+    // [S1.286 / S4.7b2 / L16] Thước TCO chụp lúc gói mở — đúng thước lượt chấm sẽ dùng.
     thuocTco: docThuocTco(r.body.tco),
   };
 
@@ -255,7 +255,7 @@ async function napGoiThau() {
   }
   lechMayChu = doLechMayChu(r.body.gioMayChu, guiLuc, nhanLuc);
   if (lechMayChu !== null) dong.push(["Giờ hệ thống lúc tải", gioDoc(r.body.gioMayChu)]);
-  // [S1.9101 / S4.7b2] Số ngày giao yêu cầu của gói — khi bên mua khai; là yêu cầu của gói, kể cả khi bên mua không tính chi phí trễ.
+  // [S1.286 / S4.7b2] Số ngày giao yêu cầu của gói — khi bên mua khai; là yêu cầu của gói, kể cả khi bên mua không tính chi phí trễ.
   if (typeof phien.rfq.soNgayGiao === "number") dong.push(["Số ngày giao yêu cầu", `${phien.rfq.soNgayGiao} ngày`]);
   // [S1.165 / khoản 225] Gói đã huỷ thì nói ra VÌ SAO — người huỷ viết lý do cho chính anh/chị, kể cả
   // khi huỷ sau lúc mở thầu. Gói huỷ trước vòng ấy không có lý do lưu ở đây.
@@ -322,7 +322,7 @@ function donGiaKhongDocDuoc() {
   return null;
 }
 
-// [S1.9101 / S4.7b2 / L16] Ô khai TCO — chỉ ô của mã bật; lời quy đổi với chính tham số của thước. Ô là phần tử TĨNH của trang (ô đơn
+// [S1.286 / S4.7b2 / L16] Ô khai TCO — chỉ ô của mã bật; lời quy đổi với chính tham số của thước. Ô là phần tử TĨNH của trang (ô đơn
 // giá thì dựng lại mỗi lần nạp), nên `dongCacBuoc` xoá chúng cùng ô OTP và dòng tổng: lời khai của phiên trước không sang phiên sau.
 const O_TCO = { vanChuyen: "tco-van-chuyen", nhapKhau: "tco-nhap-khau", ngayThanhToan: "tco-ngay-thanh-toan", ngayGiao: "tco-ngay-giao" };
 const canKhai = () => oCanKhai(phien?.thuocTco ?? null);
@@ -359,7 +359,7 @@ function tinhLai() {
       : hong !== null
         ? `Đơn giá "${hong}" không đọc được. Đơn giá là số nguyên đồng, và dấu chấm chỉ dùng để nhóm nghìn — viết 1.500.000 hoặc 1500000.`
         : "Nhập đơn giá cho tất cả hạng mục để ra tổng.";
-  // [S1.9101 / S4.7b2] Ô khai TCO bắt buộc trên form (ADR-156 ⑶): ô đầu tiên còn trống hay không đọc được thì nói, và không niêm phong.
+  // [S1.286 / S4.7b2] Ô khai TCO bắt buộc trên form (ADR-156 ⑶): ô đầu tiên còn trống hay không đọc được thì nói, và không niêm phong.
   const loiTco = loiOKhai(canKhai(), oKhai());
   bao($("tco-thieu"), loiTco ?? "");
   // [S1.165 / khoản 225] Gói đã huỷ: không niêm phong một báo giá mà máy chủ chắc chắn từ chối.
@@ -443,7 +443,7 @@ $("nut-nop").addEventListener("click", async () => {
       totalAmount: tong,
       currency: $("tien-te").value.trim() || "VND",
       lines: dongTien(),
-      // [S1.9101 / S4.7b2 / L16] Ô khai TCO của mã bật — chuỗi chuẩn (`truongKhai`); lượt chấm đọc chúng bằng `bid_so_tien`, `bid_so_ngay`.
+      // [S1.286 / S4.7b2 / L16] Ô khai TCO của mã bật — chuỗi chuẩn (`truongKhai`); lượt chấm đọc chúng bằng `bid_so_tien`, `bid_so_ngay`.
       ...truongKhai(canKhai(), oKhai()),
     };
     const phongBi = await sealBid({
@@ -598,7 +598,7 @@ function dongCacBuoc() {
   $("tong").textContent = "";
   $("ma").value = "";
   $("tien-te").value = "VND";
-  // [rà soát §S1.9101 — TRUNG-1] Bốn ô khai TCO mang lời khai thương mại của người trước — đổi link hay thoát trên máy dùng chung mà
+  // [rà soát §S1.286 — TRUNG-1] Bốn ô khai TCO mang lời khai thương mại của người trước — đổi link hay thoát trên máy dùng chung mà
   // giữ chúng thì người sau niêm phong lời khai ấy vào báo giá của mình, và câu ô thiếu im vì ô không trống.
   for (const id of Object.values(O_TCO)) $(id).value = "";
   bao($("tco-thieu"), "");

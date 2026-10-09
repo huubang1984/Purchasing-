@@ -34,7 +34,7 @@ export interface ThanhPhanHien {
   readonly giaTri: string | null;
   readonly tien: string | null;
   /**
-   * [S1.9101 / S4.7b2] Phép tính của một mã QUY ĐỔI (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu
+   * [S1.286 / S4.7b2] Phép tính của một mã QUY ĐỔI (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu
    * cầu, tỷ lệ — đúng như lượt chấm lưu (`luot-danh-gia.ts`, spec §8.6: tham số hiện cạnh con số nó sinh ra). Vắng ở mã khai thẳng.
    */
   readonly nguon?: Readonly<Record<string, string>>;
@@ -52,7 +52,7 @@ export interface HangBangXepHang {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   /**
-   * [S1.9101 / S4.7b2] Hạng theo GIÁ (thành phần `gia`) trên ĐÚNG tập báo giá có hạng chi phí hiệu dụng (chủ dự án chốt 2026-10-08 —
+   * [S1.286 / S4.7b2] Hạng theo GIÁ (thành phần `gia`) trên ĐÚNG tập báo giá có hạng chi phí hiệu dụng (chủ dự án chốt 2026-10-08 —
    * ADR-156 ⑷), cùng luật bằng nhau của `rank`. Tính lúc đọc từ thành phần đã lưu; lượt chấm không đổi. `null` ở báo giá không hạng.
    */
   readonly hangGia: number | null;
@@ -188,8 +188,8 @@ export async function docBangXepHang(
     payload: { evaluationId: l.id, viewedBySessionId: input.actorSessionId },
   });
 
-  // [S1.9101 / S4.7b2] Hạng giá: tiền của thành phần `gia` ở các hàng CÓ hạng, xếp bằng `xepHang` — đúng hàm lượt chấm dùng cho `rank`.
-  // [rà soát §S1.9101 — THẤP-7] `xepHang` đọc chuỗi bằng `BigInt` sau khi bỏ dấu chấm: nó chỉ đúng trên dạng `vietSo` hai chữ số lẻ mà
+  // [S1.286 / S4.7b2] Hạng giá: tiền của thành phần `gia` ở các hàng CÓ hạng, xếp bằng `xepHang` — đúng hàm lượt chấm dùng cho `rank`.
+  // [rà soát §S1.286 — THẤP-7] `xepHang` đọc chuỗi bằng `BigInt` sau khi bỏ dấu chấm: nó chỉ đúng trên dạng `vietSo` hai chữ số lẻ mà
   // lượt chấm ghi. `CHECK` của `057` chỉ đòi `tien` là chuỗi, nên một hàng dạng khác (một đường ghi thứ hai) không có hạng giá — thay vì
   // làm cả lần đọc bảng xếp hạng ném.
   const giaCuaHang = rows.map((r) => {

@@ -4339,7 +4339,7 @@ describe("[S1.279 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên b�
     ).rejects.toThrow(/\(L16\)/u);
   });
 
-  // [S1.9101 / S4.7b2] Vế THAM SỐ của L16: nhà cung cấp đọc ảnh chụp (`GET /guest/rfq`), lượt chấm đọc phiên bản ghim — cùng một luật
+  // [S1.286 / S4.7b2] Vế THAM SỐ của L16: nhà cung cấp đọc ảnh chụp (`GET /guest/rfq`), lượt chấm đọc phiên bản ghim — cùng một luật
   // với tập mã ở trên.
   async function thamSoGhim(rfqId: string): Promise<unknown> {
     const { rows } = await db.pool.query<{ t: unknown }>("SELECT tco_tham_so_ghim AS t FROM rfq_packages WHERE id = $1", [rfqId]);
@@ -4385,13 +4385,13 @@ describe("[S1.279 / S4.7a] L16 — tập mã TCO chụp lúc mở từ phiên b�
 });
 
 // ================================================================================================
-// [S1.9101 / S4.7b2] BẢNG XẾP HẠNG ĐỌC RA HẠNG GIÁ, MÃ THIẾU, PHÉP TÍNH (ADR-156 ⑷; spec S4 §8.6)
+// [S1.286 / S4.7b2] BẢNG XẾP HẠNG ĐỌC RA HẠNG GIÁ, MÃ THIẾU, PHÉP TÍNH (ADR-156 ⑷; spec S4 §8.6)
 //
 // Hạng giá là hạng của thành phần `gia` trên ĐÚNG tập báo giá có hạng chi phí (chủ dự án chốt 2026-10-08), cùng luật bằng nhau của
 // `rank` — tính lúc đọc, lượt chấm không đổi. Bốn báo giá: hai bằng giá (cùng hạng giá 1, hạng kế là 3), một rẻ nhất nhưng thiếu ô
 // (không hạng, không hạng giá — tính nó vào thì hai báo giá bằng giá rơi xuống hạng 2).
 // ================================================================================================
-describe("[S1.9101 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá có hạng, mã thiếu, phép tính của mã quy đổi", { timeout: 300000 }, () => {
+describe("[S1.286 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá có hạng, mã thiếu, phép tính của mã quy đổi", { timeout: 300000 }, () => {
   it("[INV-L8] hạng giá ≠ hạng chi phí; bằng giá cùng hạng; báo giá không hạng không có hạng giá, gọi tên mã thiếu; mã quy đổi mang `nguon`, mã khai thẳng không", async () => {
     const tp = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
     const { rfqId, banRo } = await goiTcoDaMo(tp, '{"ty_le_tre_ngay":"0.001"}', 10, [
@@ -4426,7 +4426,7 @@ describe("[S1.9101 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá c�
     expect(Object.keys(c?.components[1] ?? {}), "mã khai thẳng KHÔNG mang khoá `nguon` — kể cả `undefined`").not.toContain("nguon");
   });
 
-  it("[rà soát §S1.9101 — THẤP-7] đường ghi thứ hai: một `tien` khác dạng hai chữ số lẻ, hay một hàng KHÔNG hạng mà còn thành phần giá ⇒ hàng ấy không có hạng giá; lần đọc KHÔNG ném", async () => {
+  it("[rà soát §S1.286 — THẤP-7] đường ghi thứ hai: một `tien` khác dạng hai chữ số lẻ, hay một hàng KHÔNG hạng mà còn thành phần giá ⇒ hàng ấy không có hạng giá; lần đọc KHÔNG ném", async () => {
     const { rfqId, banRo } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"], ["80.00", "VND"]]);
     await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
     // Vai chủ cụm — `057` chỉ đòi `tien` là chuỗi; lượt chấm luôn ghi `vietSo` hai chữ số lẻ, nên dạng này chỉ đến từ một đường ghi khác.
