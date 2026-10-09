@@ -255,7 +255,8 @@ describe("[khoản 222] `EPERM` trên một cái TÊN ĐANG TỒN TẠI là TRAN
 
     const t = taoTiemLoi("EPERM", Number.MAX_SAFE_INTEGER);
     const truoc = Date.now();
-    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/EPERM/u);
+    // [khoản 343] Thông điệp vẫn MỞ ĐẦU bằng lỗi gốc, và nay nói thêm vế nào ném — ⑺ ⒝.
+    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/^EPERM: [\s\S]*vế ⒝ quá cửa sổ EPERM; EPERM liên tiếp: \d+ lần/u);
     expect(Date.now() - truoc, "một mã lỗi được tha KHÔNG được thành một lần chờ 180 giây").toBeLessThan(30_000);
     // Và cửa sổ phải THẬT: gỡ nó đi thì lượt đầu tiên đã ném, tức `mkdir` chỉ được gọi một lần.
     expect(t.goi(), "không có cửa sổ nhẫn nại nào — bản vá đã bị gỡ").toBeGreaterThan(5);
@@ -265,8 +266,21 @@ describe("[khoản 222] `EPERM` trên một cái TÊN ĐANG TỒN TẠI là TRAN
   it("⑶ `EPERM` trên một cái tên KHÔNG tồn tại ⇒ ném NGAY — lỗi quyền thật vẫn là lỗi thật", { timeout: 20_000 }, () => {
     const duong = join(thuMuc, "eperm-khong-co-ten.lock"); // CỐ Ý không tạo
     const t = taoTiemLoi("EPERM", Number.MAX_SAFE_INTEGER);
-    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/EPERM/u);
-    expect(t.goi(), "đã chờ một cái tên không hề tồn tại").toBe(1);
+    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/^EPERM: [\s\S]*vế ⒜ tên không có, đã thử lại ngay; [\s\S]*thử lại ngay: 1 lần/u);
+    // [khoản 343] ⑺ ⒜: đúng HAI lời gọi — lần đầu và một lần thử lại ngay. Nhiều hơn là đã chờ một cái
+    // tên không hề tồn tại; một là vế ⒜ đã bị gỡ (ca ⑸ ngay dưới đỏ theo).
+    expect(t.goi(), "đã chờ một cái tên không hề tồn tại, hay đã bỏ lần thử lại ngay").toBe(2);
+  });
+
+  it("⑸ [khoản 343] `EPERM` trên một tên KHÔNG có rồi thôi ⇒ VÀO ĐƯỢC — khe đua giữa `mkdir` và `readdir`", { timeout: 20_000 }, () => {
+    // Dựng đúng hình dạng của vế ⒜ trong ⑺: `mkdir` gặp thư mục đang chờ xoá ⇒ `EPERM`, và tới lúc hỏi
+    // thư mục cha thì handle cuối đã đóng ⇒ cái tên KHÔNG còn. Trước bản vá, lượt này ném `EPERM` như một
+    // lỗi quyền thật — đó là một cách đọc ca đỏ của run 37354665496.
+    const duong = join(thuMuc, "eperm-khe-phan-loai.lock"); // CỐ Ý không tạo: tên đã biến mất
+    const t = taoTiemLoi("EPERM", 1);
+    expect(voiKhoaDepcruise(() => "vao-duoc", duong, t.tao)).toBe("vao-duoc");
+    expect(t.goi(), "phải thử lại ngay một lần chứ không ném").toBe(2);
+    expect(existsSync(duong), "nhả khoá xong mà thư mục còn đó").toBe(false);
   });
 
   it("⑷ ĐỐI CHỨNG: `EACCES` trên cái tên ĐANG TỒN TẠI vẫn ném NGAY — bản vá hẹp đúng một mã lỗi", { timeout: 20_000 }, () => {
