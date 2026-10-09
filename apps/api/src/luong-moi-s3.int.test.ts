@@ -780,8 +780,8 @@ const THONG_DIEP_THEM =
   "Danh sách mời chỉ đổi được khi gói thầu còn soạn thảo, và chỉ thêm được khi gói đã mở; gói đang chờ duyệt thì trả về soạn " +
   "thảo trước (K4a).";
 const THONG_DIEP_THU_HOI =
-  "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa thu hồi " +
-  "được (K4a).";
+  "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo, hay đang mở và có lý do; gói đang chờ duyệt thì trả về soạn thảo " +
+  "trước, gói đã đóng thì không thu hồi được (K4a).";
 
 /** Hàng `CONTROL_DENIED` trên một gói, theo thứ tự ghi. */
 async function tuChoiChot(org: string, rfqId: string): Promise<{ ma: unknown; actorId: string | null }[]> {
@@ -806,22 +806,46 @@ describe("S3.2d — K4a vào sổ: thêm hay thu hồi lời mời sai trạng t
     expect(rows[0]?.n, "lời mời lúc DRAFT còn, lần chèn lúc chờ duyệt rollback").toBe(1);
   });
 
-  it("[INV-K4a] thu hồi ở OPEN ⇒ 422 mang thông điệp của chốt; MỘT hàng CONTROL_DENIED {K4A_THU_HOI_SAI_TRANG_THAI}; lời mời và token còn sống", async () => {
+  // [S1.9101 / S3.6c / K10c] ~~Thu hồi ở OPEN ⇒ K4A_THU_HOI_SAI_TRANG_THAI~~ — ở gói đang mở, thu hồi CÓ LÝ DO đi qua khi danh sách còn đủ
+  // ngưỡng cạnh tranh của bậc và sinh tín hiệu INVITE_LIST_NARROWED; dưới ngưỡng là K10C_THU_HOI_THIEU_CANH_TRANH vào sổ.
+  it("[INV-K4a] [INV-K10c] thu hồi ở OPEN: lời mời duy nhất (ngưỡng 1) ⇒ 422 ma K10C_THU_HOI_THIEU_CANH_TRANH + MỘT hàng CONTROL_DENIED, lời mời và token còn sống; mời thêm rồi thu hồi KHÔNG lý do ⇒ 422 không hàng sổ; CÓ lý do ⇒ 200, token thu hồi, hàng INVITE_LIST_NARROWED/THU_HOI", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     const lm = await moi(t, rfqId);
     await nopVaDuyet(t, rfqId);
     const mo = await goi(goc, "POST", `/rfqs/${rfqId}/open`, t.pm.cookie);
     expect(mo.status, mo.text).toBe(200);
-    const r = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
-    expect(r.status, r.text).toBe(422);
-    expect(r.body.error).toBe(THONG_DIEP_THU_HOI);
-    expect(await tuChoiChot(t.org, rfqId), "mời ở DRAFT và mở gói không để hàng nào; lần thu hồi để đúng một").toEqual([
-      { ma: "K4A_THU_HOI_SAI_TRANG_THAI", actorId: t.pm.u },
+    const duoi = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie, { lyDo: "nha cung cap bao het hang" });
+    expect(duoi.status, duoi.text).toBe(422);
+    expect(duoi.body.ma).toBe("K10C_THU_HOI_THIEU_CANH_TRANH");
+    expect(await tuChoiChot(t.org, rfqId), "mời ở DRAFT và mở gói không để hàng nào; lần thu hồi dưới ngưỡng để đúng một").toEqual([
+      { ma: "K10C_THU_HOI_THIEU_CANH_TRANH", actorId: t.pm.u },
     ]);
     const h = await trangThai(lm.id);
     expect(h).toMatchObject({ status: "SENT", revokedAt: null });
     expect(h.tokens.map((x) => x.revokedAt)).toEqual([null]);
+
+    const lm2 = await moi(t, rfqId);
+    expect((await trangThai(lm2.id)).moiSauKhiKy).toBe(true);
+    const khong = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
+    expect(khong.status, khong.text).toBe(422);
+    expect(String(khong.body.error)).toMatch(/cần một lý do/u);
+    expect(await tuChoiChot(t.org, rfqId), "thiếu lý do là lỗi hình dạng, không phải lần từ chối của chốt").toHaveLength(1);
+    const co = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie, { lyDo: "nha cung cap bao het hang" });
+    expect(co.status, co.text).toBe(200);
+    expect(co.body).toEqual({ revoked: true });
+    const sau = await trangThai(lm.id);
+    expect(sau.status).toBe("REVOKED");
+    expect(sau.tokens.map((x) => x.revokedAt === null)).toEqual([false]);
+    const { rows } = await db.pool.query<{ loai: string; nguon: string; bang_chung: { thu_hoi: { luc: string; loi_moi: string; nguoi: string; ly_do: string }[] } }>(
+      "SELECT loai, nguon, bang_chung FROM governance_signals WHERE rfq_id = $1",
+      [rfqId],
+    );
+    expect(rows).toHaveLength(1);
+    expect([rows[0]!.loai, rows[0]!.nguon]).toEqual(["INVITE_LIST_NARROWED", "THU_HOI"]);
+    const [thuHoi] = rows[0]!.bang_chung.thu_hoi;
+    expect(thuHoi?.luc).toMatch(/Z$/u);
+    expect(rows[0]!.bang_chung.thu_hoi.map((x) => ({ loi_moi: x.loi_moi, nguoi: x.nguoi, ly_do: x.ly_do }))).toEqual([{ loi_moi: lm.id, nguoi: t.pm.u, ly_do: "nha cung cap bao het hang" }]);
   });
 
   it("[INV-K4a] thu hồi lúc gói CHỜ DUYỆT ⇒ 422 mang thông điệp của chốt; MỘT hàng CONTROL_DENIED {K4A_THU_HOI_SAI_TRANG_THAI}; lời mời còn sống, gói ở nguyên", async () => {

@@ -969,6 +969,8 @@ async function napLoiMoi() {
   // [S1.283 / S3.4b · K9] Nhà cung cấp của bảng vừa đọc — ô *có xung đột với* của khối khai báo vẽ lại từ đó.
   phien = { ...phien, nccKhai: nhaCungCapTuLoiMoi(ds) };
   khaiBao.veNhaCungCap();
+  // [S1.9101 / S3.6c / K10c] Ô lý do thu hồi chỉ khi gói đang mở ở tổ chức đã bật và còn lời mời sống để thu hồi.
+  hien($("khoi-ly-do-thu-hoi"), luong.daBat && luong.trangThaiGoi === "OPEN" && ds.some((m) => m?.revokedAt === null));
   if (luong.daBat) bao($("tom-tat-canh-tranh"), nhanCanhTranh(r.body?.canhTranh) ?? "");
   veChonNgoaiLe();
   for (const m of ds) {
@@ -1025,8 +1027,18 @@ async function napLoiMoi() {
       nut.textContent = "Thu hồi";
       nut.addEventListener("click", async () => {
         bao($("loi5"), ""); bao($("ok5"), "");
-        const th = await goi("POST", `/invitations/${m.id}/revoke`);
-        if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
+        // [S1.9101 / S3.6c / K10c] Gói đang mở ở tổ chức đã bật: lý do bắt buộc — vào tín hiệu thu hẹp danh sách và sổ kiểm toán; lời từ
+        // chối có mã của chốt (dưới ngưỡng cạnh tranh) kèm chỉ dẫn.
+        const canLyDo = luong.daBat && luong.trangThaiGoi === "OPEN";
+        const lyDo = $("ly-do-thu-hoi").value.trim();
+        if (canLyDo && lyDo === "") { bao($("loi5"), "Ghi lý do thu hồi: gói đang mở, lần thu hồi thu hẹp danh sách người duyệt đã ký và vào tín hiệu."); return; }
+        const th = await goi("POST", `/invitations/${m.id}/revoke`, canLyDo ? { lyDo } : undefined);
+        if (th.status !== 200) {
+          const chiDan = chiDanChot(th.body?.ma, true);
+          bao($("loi5"), chiDan === null ? loiCua(th, "Không thu hồi được") : `${loiCua(th, "Không thu hồi được")} ${chiDan}`);
+          return;
+        }
+        if (canLyDo) $("ly-do-thu-hoi").value = "";
         // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.181 / ADR-110] Mời lại sau thu hồi là một hồ sơ báo giá
         // MỚI, ~~và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ)~~ — nói ra, và chỉ đường gửi lại link.
         // [S1.240 / khoản 276 / ADR-128] Thu hồi LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và xếp hạng: câu nói thẳng.

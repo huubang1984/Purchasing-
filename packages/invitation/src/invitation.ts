@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, throwAuditedDenial, tuChoiTheoChot } from "@trustprocure/identity";
+import { ghiTinHieuKhiThuHoi } from "@trustprocure/kiem-soat";
 import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
@@ -1301,6 +1302,12 @@ export async function revokeInvitation(
      * `INVITATION_REVOKED`, để sổ phân biệt lần người mua bấm thu hồi với lần hệ thống thu hồi thay họ.
      */
     readonly reason?: "LINK_SEND_FAILED";
+    /**
+     * [S1.9101 / S3.6c / K10c] Lý do của NGƯỜI MUA — bắt buộc khi gói đang `OPEN` ở tổ chức đã bật (trigger K4a đòi, tên
+     * `k10c_thu_hoi_thieu_ly_do`): nó vào cột `ly_do_thu_hoi`, vào bằng chứng của tín hiệu `INVITE_LIST_NARROWED` và vào sổ. Văn bản
+     * tự do như `reason` của `closeRfq` — không lớp máy nào chặn một con số nằm trong giá trị.
+     */
+    readonly lyDo?: string;
   },
   /** [S1.194 / S3.2d / khoản 255] Pool ĐỘC LẬP của sổ — lần thu hồi sai trạng thái (K4a) để lại `CONTROL_DENIED`. */
   auditPool: pg.Pool,
@@ -1312,6 +1319,11 @@ export async function revokeInvitation(
     throw new InvitationError("Lý do thu hồi không nằm trong danh sách cho phép.");
   }
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  // [S1.9101 / S3.6c] Lý do thu hồi: cắt, không rỗng, không quá trần — cùng số và đơn vị với CHECK của cột. Lần thu hồi bù của hệ
+  // thống (`LINK_SEND_FAILED`) mang chính mã ấy làm lý do: ở gói đang mở nó cũng là một lần thu hẹp danh sách, tín hiệu phải kể.
+  const lyDo = input.lyDo === undefined ? (input.reason ?? null) : input.lyDo.trim();
+  if (lyDo !== null && lyDo === "") throw new InvitationError("Ghi lý do thu hồi lời mời.");
+  if (lyDo !== null && Buffer.byteLength(lyDo, "utf8") > 2000) throw new InvitationError("Lý do thu hồi dài quá 2000 byte.");
 
   // [ADR-016] Hai cột người thu hồi đi TRONG CÙNG câu lệnh đặt `revoked_at`, không phải một
   // câu UPDATE thứ hai: trigger `rfq_invitations_kiem_nguoi_thu_hoi` (013) chạy đúng ở lượt
@@ -1343,18 +1355,35 @@ export async function revokeInvitation(
       new InvitationError(THONG_DIEP_THU_HOI_SAU_MO_THAU),
     );
   }
+  // [S1.9101 / S3.6c / K10c] Gói đang mở: hỏi hàm vị từ `rfq_chot_thu_hoi` TRƯỚC câu ghi — thu hồi làm danh sách rơi dưới ngưỡng cạnh
+  // tranh của bậc ghim mà không ngoại lệ còn sống là `CONTROL_DENIED` ở giao dịch độc lập (khuôn `hoiChot` của `kiem-soat`); trigger
+  // K4a hỏi lại với tên `k10c_thu_hoi_thieu_canh_tranh` cho câu đi tắt (không qua bảng tên → mã, ADR-120). Tổ chức chưa bật: NULL.
+  if (goi !== undefined && goi.status === "OPEN") {
+    const { rows } = await client.query<{ ly_do: string | null }>(
+      "SELECT public.rfq_chot_thu_hoi($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS ly_do",
+      [orgId, goi.rfq_id, input.invitationId],
+    );
+    const ma = rows[0]?.ly_do ?? null;
+    if (ma === "K10C_THU_HOI_THIEU_CANH_TRANH") await tuChoiTheoChot(auditPool, orgId, actor, goi.rfq_id, ma);
+    if (ma !== null) throw new Error("hàm vị từ của lần thu hồi trả một mã không có trong CHOT_VAO_SO — hai bên đã trôi khỏi nhau");
+  }
   let loiMoi: pg.QueryResult;
   try {
     loiMoi = await client.query(
       "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
-        " revoked_by = $2, revoked_by_session_id = $3" +
+        " revoked_by = $2, revoked_by_session_id = $3, ly_do_thu_hoi = $4::pg_catalog.text" +
         " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
-      [input.invitationId, actor.id, actor.sessionId],
+      [input.invitationId, actor.id, actor.sessionId, lyDo],
     );
   } catch (loi) {
     const ma = maChotTuLoi(loi);
     const rfqId = goiCuaLoiMoi[0]?.rfq_id;
     if (ma !== null && rfqId !== undefined) await tuChoiTheoChot(auditPool, orgId, actor, rfqId, ma, loi);
+    // [S1.9101 / S3.6c] Thiếu lý do ở gói đang mở của tổ chức đã bật — lỗi hình dạng của lời gọi, trigger nói có tên.
+    const { code, constraint } = (loi ?? {}) as { code?: unknown; constraint?: unknown };
+    if (code === "23514" && constraint === "k10c_thu_hoi_thieu_ly_do") {
+      throw new InvitationError("Thu hồi lời mời ở gói thầu đang mở cần một lý do — nó vào tín hiệu thu hẹp danh sách và sổ kiểm toán (K10c).");
+    }
     throw loi;
   }
   if (loiMoi.rowCount !== 1) return false;
@@ -1374,6 +1403,9 @@ export async function revokeInvitation(
       " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
+  // [S1.9101 / S3.6c / K10c] Ảnh chụp tín hiệu thu hẹp danh sách — SAU câu thu hồi, TRƯỚC hàng sổ (hàng sổ giữ khoá chuỗi tới commit).
+  // Gói không ở OPEN hay tổ chức chưa bật thì hàm tín hiệu trả NULL và không hàng nào được ghi.
+  if (goi !== undefined && goi.status === "OPEN") await ghiTinHieuKhiThuHoi(client, orgId, goi.rfq_id, actor);
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,

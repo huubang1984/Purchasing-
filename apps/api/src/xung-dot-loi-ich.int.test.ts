@@ -680,6 +680,12 @@ describe("[S1.281 / S3.4a / K9] bốn cổng sau mở thầu, xác minh, ghi nh�
     expect(e2).toMatchObject({ name: "ChotKiemSoatError", lyDo: "K9_CO_XUNG_DOT" });
     const dx = await withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId: g.rfqId, bidVersionId: g.bidVersionId, reason: "gia tot", actorSessionId: t.pm3.s }, auditPool));
     expect(dx.status).toBe("PROPOSED");
+    // [S1.9101 / S3.6c / K10c] Fixture đóng gói SỚM khi đã có báo giá ⇒ tín hiệu đóng sớm chặn chữ ký trao thầu (hàm gói hỏi K10 TRƯỚC K9);
+    // một DIRECTOR MỚI (ngoài gói, không dùng ở ca nào dưới đây làm *người chưa khai*) khai không xung đột rồi ghi nhận — chính lần ghi
+    // nhận cũng là một cổng K9 (ADR-082 ⒄).
+    const gdDoc = await phienMoi(t.org, await nguoiMoi(t.org, "DIRECTOR"), "USER");
+    expect((await khongXungDot(g.rfqId, gdDoc)).status).toBe(201);
+    await withTenant(apiPool, t.org, (c) => ghiNhanTinHieu(c, t.org, { rfqId: g.rfqId, lyDo: "Da doc tin hieu dong som", actorSessionId: gdDoc.s, loai: "EARLY_CLOSE" }, auditPool));
     // ⑶ chữ ký duyệt — gd chưa khai.
     const e3 = await loi(withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId: g.rfqId, awardId: dx.awardId, actorSessionId: t.gd.s }, auditPool)));
     expect(e3).toMatchObject({ name: "ChotKiemSoatError", lyDo: "K9_CHUA_KHAI_XUNG_DOT" });

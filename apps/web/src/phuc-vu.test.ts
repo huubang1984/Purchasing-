@@ -1800,6 +1800,49 @@ describe("bề mặt tệp", () => {
         expect(p.el("loi-thkt").textContent).toMatch(/^Người đề xuất không ghi nhận được tín hiệu khai thấp\. Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này\.$/u);
       });
 
+      // [S1.9101 / S3.6c / K10c] Hai khối nữa trong «Tín hiệu trước chữ ký trao thầu»: thu hẹp danh sách mời (`th`) và đóng sớm (`ds`) —
+      // cùng khuôn khai thấp; nút ghi nhận gửi `loai`; khối ngoài hiện khi có ít nhất một khối trong.
+      const BC_TH = { loai: "INVITE_LIST_NARROWED", chinh_sach: "cs-1", goi: [RFQ], thu_hoi: [{ loi_moi: "i-3", nguoi: "u-pm", luc: "2026-10-09T01:00:00.000000Z", ly_do: "Hết hàng" }] };
+      const BC_DS = { loai: "EARLY_CLOSE", chinh_sach: "cs-1", goi: [RFQ], han: "2026-10-16T00:00:00.000000Z", dong_luc: "2026-10-09T02:00:00.000000Z", nguoi_dong: "u-pm", ly_do: "Đủ báo giá", so_bao_gia: 2 };
+      const phanAn = { hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null };
+      const dungTt = async (thuHep: Record<string, unknown>, dongSom: Record<string, unknown>, tinHieu: unknown[] = [], ghiNhan: { status: number; body: unknown } = { status: 201, body: { ghiNhan: {} } }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: { ...deXuat("aw-1"), chuKyCan: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/signals`) return Promise.resolve({ status: 200, body: { tinHieu: { ...thanTinHieu(phanAn, tinHieu).tinHieu, thuHep, dongSom } } });
+            if (l === `POST /rfqs/${RFQ}/award/signals/acknowledge`) return Promise.resolve(ghiNhan);
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-doc-award");
+        return p;
+      };
+
+      it("[S1.9101 / S3.6c / K10c] khối thu hẹp và đóng sớm: hiện đúng khối có tín hiệu, khối ngoài theo; câu chờ nói K10c; ghi nhận gửi đúng thân mang `loai` tới route dùng chung rồi đọc lại; khai thấp giữ thân cũ không `loai`", async () => {
+        const an = await dungTt(phanAn, phanAn);
+        expect([an.el("khoi-tin-hieu-tt").hidden, an.el("khoi-tin-hieu-th").hidden, an.el("khoi-tin-hieu-ds").hidden, an.el("khoi-tin-hieu-kt").hidden]).toEqual([true, true, true, true]);
+        const hangTh = { id: "s-1", loai: "INVITE_LIST_NARROWED", nguon: "THU_HOI", bangChung: BC_TH, giaiThich: "1 lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.", ghiNhan: [] };
+        const p = await dungTt({ hienTai: BC_TH, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 3 }, { hienTai: BC_DS, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đóng gói thầu không ghi nhận được." }, soNguoiGhiNhanDuoc: 2 }, [hangTh]);
+        expect([p.el("khoi-tin-hieu-tt").hidden, p.el("khoi-tin-hieu-th").hidden, p.el("khoi-tin-hieu-ds").hidden, p.el("khoi-tin-hieu-kt").hidden]).toEqual([false, false, false, true]);
+        expect(p.el("tom-tat-tin-hieu-th").textContent).toBe(`${hangTh.giaiThich} Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn (K10c).`);
+        expect(p.el("tom-tat-tin-hieu-ds").textContent).toMatch(/^Gói thầu đóng lúc .* khi đã có 2 luồng báo giá\. Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn \(K10c\)\.$/u);
+        expect([p.el("khoi-ghi-nhan-th").hidden, p.el("khoi-ghi-nhan-ds").hidden]).toEqual([false, true]);
+        expect(p.el("loi-thds").textContent).toBe("Người đóng gói thầu không ghi nhận được.");
+        p.el("ly-do-ghi-nhan-th").value = " Đã đọc: hết hàng thật ";
+        await p.bam("nut-ghi-nhan-th");
+        expect(p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award/signals/acknowledge`).at(-1)?.than).toEqual({ lyDo: "Đã đọc: hết hàng thật", loai: "INVITE_LIST_NARROWED" });
+        expect(p.el("ok-thth").textContent).toMatch(/^Đã ghi nhận tín hiệu thu hẹp danh sách mời .* K10c\.$/u);
+        expect(p.trangThai.goi.filter((l) => l === `GET /rfqs/${RFQ}/signals`), "đọc lại sau khi ghi nhận").toHaveLength(2);
+      });
+
       it("[S1.282 / S3.5b · S1.283 K9] M đếm như máy chủ: chữ ký `conHieuLuc: false` không vào *có M* nhưng vẫn hiện trong danh sách kèm dấu *không đếm*", async () => {
         const haiMotKhongDem = { ...deXuat("aw-1"), chuKyCan: 2, approvals: [
           { approverUserId: "u-gd1", approvedAt: "2026-10-01T02:00:00Z", conHieuLuc: true },
@@ -2825,6 +2868,37 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
+    // [S1.9101 / S3.6c / K10c] Thu hồi ở gói ĐANG MỞ của tổ chức đã bật: nút hiện, ô lý do hiện, bấm không lý do không gửi, có lý do gửi
+    // thân `{ lyDo }`; lời từ chối có mã của chốt kèm chỉ dẫn. Gói chờ duyệt: không nút, không ô.
+    it("[S1.9101 / S3.6c / K10c] tao-thau: tổ chức đã bật, gói OPEN ⇒ dòng lời mời có nút Thu hồi và ô lý do; thiếu lý do ⇒ câu báo, không gọi; có lý do ⇒ POST mang `lyDo`; 422 có mã K10C_THU_HOI_THIEU_CANH_TRANH ⇒ câu máy chủ + chỉ dẫn", async () => {
+      const nhan: unknown[] = [];
+      const { p, dongMoi } = await moTaoThau(true, "OPEN", (l) =>
+        l === "POST /invitations/i-1/revoke"
+          ? Promise.resolve(nhan.length === 0
+              ? { status: 422, body: { error: "Thu hồi lời mời này làm danh sách rơi dưới ngưỡng cạnh tranh của bậc mà gói ghim; cần một ngoại lệ cạnh tranh còn hiệu lực, hoặc giữ lời mời (K10c).", ma: "K10C_THU_HOI_THIEU_CANH_TRANH" } }
+              : { status: 200, body: { revoked: true } })
+          : undefined);
+      await p.bam("nut-doc-moi");
+      expect(p.el("khoi-ly-do-thu-hoi").hidden, "ô lý do hiện ở gói đang mở của tổ chức đã bật").toBe(false);
+      const nut = dongMoi()?.con.at(-1)?.con ?? [];
+      expect(nut.map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
+      for (const f of nut[1]?.nghe["click"] ?? []) await f();
+      expect(p.trangThai.goi).not.toContain("POST /invitations/i-1/revoke");
+      expect(p.el("loi5").textContent).toMatch(/^Ghi lý do thu hồi/u);
+      p.el("ly-do-thu-hoi").value = "  Hết hàng  ";
+      for (const f of nut[1]?.nghe["click"] ?? []) await f();
+      expect(p.trangThai.than.filter((x) => x.lenh === "POST /invitations/i-1/revoke").at(-1)?.than).toEqual({ lyDo: "Hết hàng" });
+      expect(p.el("loi5").textContent).toMatch(/dưới ngưỡng cạnh tranh.*\(K10c\)\. Giữ lời mời này, hay mời thêm nhà cung cấp đếm được ở bước 5/u);
+      nhan.push(1);
+      for (const f of nut[1]?.nghe["click"] ?? []) await f();
+      expect(p.el("ok5").textContent).toMatch(/Báo giá đã nộp theo lời mời này \(nếu có\) không dự thầu nữa/u);
+      expect(p.el("ly-do-thu-hoi").value, "ô lý do xoá sau khi thu hồi được").toBe("");
+      const cho = await moTaoThau(true, "PENDING_APPROVAL");
+      await cho.p.bam("nut-doc-moi");
+      expect(cho.p.el("khoi-ly-do-thu-hoi").hidden).toBe(true);
+      expect((cho.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual([]);
+    });
+
     // ==========================================================================================
     // [S1.283 / S3.4b · K9] KHỐI KHAI BÁO XUNG ĐỘT LỢI ÍCH — `/tao-thau` bước 4, `/mo-thau` bước 2. Tự đọc khi tổ chức đã bật và người
     // xem giữ `coi.declare` (`coQuyenKhai` của `GET /rfqs/:id`); bấm khai gửi đúng thân; lời từ chối K9 ở nút bị chặn mang câu chỉ chỗ khai.
@@ -3006,14 +3080,14 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
+    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ ~~chỉ Gửi lại link~~ [S1.9101 / S3.6c] Gửi lại link VÀ Thu hồi (có lý do); MVP1 ⇒ cả hai", async () => {
       const draft = await moTaoThau(true, "DRAFT");
       expect(draft.dongMoi()?.con[3]?.textContent).toBe("chưa gửi");
       // [S1.273 / S3.3e1] Tổ chức đã bật: hai cột *Đã xác minh*, *Đếm được* đứng trước cột nút — thân không mang cờ ⇒ «—».
       expect(draft.dongMoi()?.con.slice(4, 6).map((x) => x.textContent)).toEqual(["—", "—"]);
       expect((draft.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Thu hồi"]);
       const mo = await moTaoThau(true, "OPEN");
-      expect((mo.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link"]);
+      expect((mo.dongMoi()?.con.at(-1)?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
       const choDuyet = await moTaoThau(true, "PENDING_APPROVAL");
       expect(choDuyet.dongMoi()?.con.at(-1)?.con ?? []).toEqual([]);
       const mvp1 = await moTaoThau(false, "OPEN");

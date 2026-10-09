@@ -1175,7 +1175,21 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 // MỘT hàm SQL (`coi_chot_hanh_dong`), gói chỉ hỏi nó.
 // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc ĐỀ XUẤT trao thầu (`ghiTinHieuKhiDeXuat`): phép tính vẫn là MỘT
 // hàm SQL (`tin_hieu_khai_thap`); `ghiNhanTinHieu`/`lietKeTinHieu` nhận `loai`, không symbol riêng cho loại.
-const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "docKhaiBaoXungDot", "ghiNhanTinHieu", "ghiTinHieuKhiDeXuat", "ghiTinHieuKhiNop", "khaiBaoXungDot", "lietKeTinHieu"];
+// [S1.9101 / S3.6c · K10c] Hai ảnh chụp nữa qua cửa — lúc thu hồi lời mời ở OPEN (`ghiTinHieuKhiThuHoi`, `revokeInvitation` gọi) và lúc đóng
+// gói (`ghiTinHieuKhiDongSom`, `closeRfq` gọi); `LOAI_TIN_HIEU_TRAO_THAU` là tập ba loại mà route ghi nhận của chữ ký trao thầu nhận.
+// Phép tính vẫn là MỘT hàm SQL mỗi loại (`tin_hieu_thu_hep`, `tin_hieu_dong_som`).
+const DANH_SACH_TRANG_KIEM_SOAT = [
+  "KiemSoatError",
+  "LOAI_TIN_HIEU_TRAO_THAU",
+  "docKhaiBaoXungDot",
+  "ghiNhanTinHieu",
+  "ghiTinHieuKhiDeXuat",
+  "ghiTinHieuKhiDongSom",
+  "ghiTinHieuKhiNop",
+  "ghiTinHieuKhiThuHoi",
+  "khaiBaoXungDot",
+  "lietKeTinHieu",
+];
 
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng

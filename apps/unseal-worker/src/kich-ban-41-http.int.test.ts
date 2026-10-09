@@ -2129,7 +2129,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(aw.evaluationId, "award phải dựa trên bảng xếp hạng SAU BAFO").toBe(luot[0]?.id);
   });
 
-  it("bước 12i — PHÊ DUYỆT qua HTTP: người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {
+  it("[INV-K10c] bước 12i — PHÊ DUYỆT qua HTTP: chữ ký đầu bị chặn vì ĐÓNG SỚM chưa ghi nhận (422 K10C), giám đốc thứ hai ghi nhận qua route dùng chung; người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {
     const duong = `/rfqs/${trangThai.rfqId}/award/${trangThai.awardId}/approve`;
 
     // `pm2` vừa đề xuất, và `PROCUREMENT_MANAGER` KHÔNG giữ `po.approve` — nên họ dừng ở cổng
@@ -2138,7 +2138,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(chan.status, chan.text).toBe(403);
 
     // [S1.281 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
-    if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
+    // [S1.9101 / S3.6c / K10c] Luồng S3: bước 7 đóng gói TRƯỚC hạn khi đã có năm báo giá ⇒ tín hiệu ĐÓNG SỚM chặn chữ ký đầu có tên; giám
+    // đốc THỨ HAI (ngoài gói — không tạo, không nộp, không đóng) khai không xung đột rồi ghi nhận kèm lý do qua route dùng chung
+    // (thân mang `loai`), chữ ký mới đi qua.
+    if (batS3) {
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
+      const chanDongSom = await goi("POST", duong, trangThai.gd1.cookie);
+      expect(chanDongSom.status, chanDongSom.text).toBe(422);
+      expect((chanDongSom.body as { ma?: string }).ma).toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
+      const gn = await goi("POST", `/rfqs/${trangThai.rfqId}/award/signals/acknowledge`, trangThai.gd2.cookie, {
+        lyDo: "Da doc: dong som vi du nam bao gia theo ke hoach mua sam Q4",
+        loai: "EARLY_CLOSE",
+      });
+      expect(gn.status, gn.text).toBe(201);
+    }
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
     const sauMot = (ok.body as { award: { status: string; chuKyCan: number; approvals: unknown[] } }).award;
@@ -2149,8 +2163,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Cùng người ký lại ⇒ 422 có tên (`DA_KY_DE_XUAT_NAY`), chữ ký không nhân đôi; giám đốc THỨ HAI hoàn tất.
       const lapLai = await goi("POST", duong, trangThai.gd1.cookie);
       expect(lapLai.status, lapLai.text).toBe(422);
-      // [S1.281 / S3.4a / K9] Giám đốc thứ hai cũng khai *không xung đột* trước khi ký.
-      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
+      // [S1.281 / S3.4a / K9] Giám đốc thứ hai ~~cũng khai *không xung đột* trước khi ký~~ đã khai lúc ghi nhận tín hiệu đóng sớm (trên).
       const hai = await goi("POST", duong, trangThai.gd2.cookie);
       expect(hai.status, hai.text).toBe(201);
       expect((hai.body as { award: { status: string } }).award.status).toBe("APPROVED");

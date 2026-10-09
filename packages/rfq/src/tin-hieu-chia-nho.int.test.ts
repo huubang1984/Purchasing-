@@ -680,11 +680,11 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới 
         "'public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)'::regprocedure)",
     );
     // [S1.285 / S3.6d] `tin_hieu_chot_nguoi_ghi_nhan` nay rẽ theo `loai` và trả cả mã K10b — vế K10b đo ở
-    // `trao-thau-theo-bac.int` ([INV-K10b] [INV-K12]); ở đây chỉ bỏ những mã có dòng `chot: K10b`, mã LẠ vẫn bị bắt.
+    // `trao-thau-theo-bac.int` ([INV-K10b] [INV-K12]); ở đây chỉ bỏ những mã có dòng `chot: K10b` hay [S1.9101] `K10c`, mã LẠ vẫn bị bắt.
     const traVe = new Set(
       rows
         .flatMap((r) => [...r.src.matchAll(/RETURN '([A-Z0-9_]+)'/gu)].map((m) => m[1]!))
-        .filter((ma) => (CHOT_VAO_SO as Record<string, { chot: string } | undefined>)[ma]?.chot !== "K10b"),
+        .filter((ma) => !["K10b", "K10c"].includes((CHOT_VAO_SO as Record<string, { chot: string } | undefined>)[ma]?.chot ?? "")),
     );
     const k10a = Object.entries(CHOT_VAO_SO)
       .filter(([, v]) => v.chot === "K10a")
