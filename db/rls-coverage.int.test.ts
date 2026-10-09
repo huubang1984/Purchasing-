@@ -842,6 +842,8 @@ describe("phủ RLS", () => {
       // `TRUNCATE` riêng, nên *huỷ là một hàng mới* là một tính chất của DỮ LIỆU chứ không một
       // quy ước của ứng dụng (§2.3⑹). `app_unseal` không có dòng nào — vai giải mã không trao thầu.
       { grantee: "app_api", bang: "rfq_award_approvals", quyen: "SELECT" },
+      // [S1.288 / S4.7c1 / L8] Cam kết TCO: đọc dưới `bid.view` (`docCamKetTraoThau`); ghi chỉ hai cột khoá — xem quyền cột.
+      { grantee: "app_api", bang: "rfq_award_cam_ket", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_awards", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_bafo_rounds", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
@@ -1445,10 +1447,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_award_approvals", cot: "approver_user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_award_approvals", cot: "award_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_award_approvals", cot: "org_id", quyen: "INSERT" },
+      // [S1.288 / S4.7c1 / L8] Cam kết TCO: `app_api` ghi được ĐÚNG hai cột khoá — trigger `award_dien_cam_ket` điền mọi cột còn lại từ
+      // nguồn, nên không một giá trị nào của ứng dụng đi vào cam kết.
+      { grantee: "app_api", bang: "rfq_award_cam_ket", cot: "award_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_cam_ket", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "acted_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "acted_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "bid_version_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "evaluation_id", quyen: "INSERT" },
+      // [S1.288 / S4.7c1 / L8] Giải trình lệch hạng — chỉ hàng `PROPOSED` mang nó (`award_kiem_giai_trinh`).
+      { grantee: "app_api", bang: "rfq_awards", cot: "giai_trinh_lech_hang", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "reason", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_awards", cot: "rfq_id", quyen: "INSERT" },
@@ -2230,6 +2238,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       // nhà cung cấp thì nới nó là một quyết định có dữ liệu để trả lời — như `060` đã làm
       // cho `rfq_bafo_rounds`, và hàng ấy nay nằm ở nhóm `khachNoi` ngay dưới.
       "rfq_award_approvals", "rfq_awards",
+      // [S1.288 / S4.7c1 / L8] Cam kết TCO của đề xuất — cùng quyết định của hai bảng trên: lời khai và hai hạng của người thắng.
+      "rfq_award_cam_ket",
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",

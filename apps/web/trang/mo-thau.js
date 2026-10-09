@@ -14,7 +14,7 @@ import { tien } from "/lib/so-tien.js";
 import {
   chuCoMocNgoai, chuCotNgoai, chuDai, chuDaiNgoai, chuLech, chuMocNgoai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan,
 } from "/lib/benchmark.js";
-import { coThuocTco, moTaMaThieu, moTaThanhPhan } from "/lib/tco.js";
+import { canGiaiTrinh, coThuocTco, moTaCamKet, moTaMaThieu, moTaThanhPhan } from "/lib/tco.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 // [S1.282 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
 // ghim nó với gói.
@@ -327,6 +327,9 @@ $("nut-doc").addEventListener("click", async () => {
   const id = $("rfq").value.trim();
   if (id === "") { bao($("loi2"), "Cần mã gói thầu."); return; }
   phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "", soSanh: undefined };
+  // [S1.288 / S4.7c1] Ô giải trình của báo giá gói TRƯỚC không sống sang gói này — chữ trong ô cũng xoá.
+  hien($("khoi-giai-trinh"), false);
+  $("giai-trinh-lech-hang").value = "";
   // [S1.283 / S3.4b] Khai báo của gói TRƯỚC không sống sang gói này.
   khaiBao.an();
   // [rà soát S4.5c1] Benchmark của gói TRƯỚC không được sống sang gói này: cột Benchmark của bảng xếp hạng đọc `benchmarkHien`.
@@ -809,15 +812,19 @@ async function veXepHang() {
       nut.textContent = "Chọn";
       nut.addEventListener("click", () => {
         $("bao-gia-thang").value = h.bidVersionId;
+        capNhatGiaiTrinh();
         bao($("loi5"), "");
-        bao($("ok5"), `Đã chọn ${h.supplierName} (hạng ${String(h.rank)}). Id phiên bản báo giá đã điền ở bước 7 — ghi lý do rồi bấm ` +
-          "Đề xuất trao thầu.");
+        bao($("ok5"), `Đã chọn ${h.supplierName} (hạng ${String(h.rank)}). Id phiên bản báo giá đã điền ở bước 7 — ghi lý do ` +
+          `${canGiaiTrinh(h) ? `và giải trình lệch hạng (hạng giá ${typeof h.hangGia === "number" ? String(h.hangGia) : "—"}) ` : ""}` +
+          "rồi bấm Đề xuất trao thầu.");
       });
       chon.append(nut);
     }
     tr.append(chon);
     tbody.append(tr);
   }
+  // [rà soát §S1.288 — TRUNG-2] Bảng vừa đọc có thể đổi hạng của báo giá đang ở ô id (lượt chấm lại sau BAFO): ô giải trình theo bảng mới.
+  capNhatGiaiTrinh();
 }
 
 $("nut-cham").addEventListener("click", async () => {
@@ -884,6 +891,32 @@ $("nut-dong-bafo").addEventListener("click", async () => {
 // ngày nào con số ấy thành hai thì trang này không phải đổi một dòng — nó chỉ hiện thứ đọc được.
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * [S1.288 / S4.7c1 / L8] Ô giải trình hiện khi báo giá ở ô id là một hàng của bảng xếp hạng đang giữ có hạng giá khác hạng chi phí.
+ * Id dán tay mà bảng chưa đọc ⇒ ô ẩn; máy chủ vẫn từ chối có tên (422), và lần đọc lại bảng sau lời từ chối làm ô hiện.
+ */
+function capNhatGiaiTrinh() {
+  const bv = $("bao-gia-thang").value.trim();
+  const hang = (phien.xepHang ?? []).find((h) => h.bidVersionId === bv) ?? null;
+  hien($("khoi-giai-trinh"), canGiaiTrinh(hang));
+}
+
+$("bao-gia-thang").addEventListener("input", capNhatGiaiTrinh);
+
+/**
+ * [S1.288 / S4.7c1 / L8] Cam kết TCO của đề xuất mới nhất — chụp ở CSDL lúc đề xuất; không đọc được thì bước 7 không có các dòng ấy.
+ * [rà soát §S1.288 — THẤP-4, THẤP-5] Hai lần đọc tách nhau: cam kết chỉ hiện khi nói về ĐÚNG báo giá và lượt chấm của hàng award vừa
+ * đọc (một đề xuất mới chen giữa hai lần đọc thì bỏ); `null` khi đã có award nghĩa là đề xuất ghi trước khi có cam kết.
+ */
+async function docCamKet(a) {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/award/commitment`);
+  if (r.status !== 200) return [];
+  const k = r.body.commitment ?? null;
+  if (k === null) return [["Cam kết TCO", "không có — đề xuất ghi trước khi có cam kết (S4.7c)"]];
+  if (k.bidVersionId !== a.bidVersionId || k.evaluationId !== a.evaluationId) return [];
+  return [...moTaCamKet(k), ["Cam kết chụp lúc", new Date(k.chupLuc).toLocaleString("vi-VN")]];
+}
+
 async function veTraoThau() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/award`);
   if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return null; }
@@ -907,6 +940,7 @@ async function veTraoThau() {
   // [S1.254 / khoản 321] Id phiên bản không nói được với người duyệt là AI thắng: gọi tên từ hàng xếp hạng cùng id, của ĐÚNG
   // lượt chấm mà đề xuất dựa trên (`evaluationId`). Không có hàng ấy thì hiện id như trước — không đoán từ một lượt khác.
   const hang = timHang();
+  const camKet = await docCamKet(a);
   dienDl($("tt-award"), [
     ["Trạng thái", a.status],
     ...(hang === null ? [] : [
@@ -917,6 +951,7 @@ async function veTraoThau() {
     ["Báo giá được chọn", a.bidVersionId],
     ["Dựa trên lượt chấm", a.evaluationId],
     ["Lý do", a.reason],
+    ...camKet,
     ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
     // [S1.282 / S3.5b] *có M / cần N*: số cần là của bậc CAO HƠN trong hai bậc, máy chủ tính (`award_so_chu_ky_can`) — trang chỉ hiện; thân
     // không mang số cần (tổ chức chưa bật, hay hàng đã duyệt của luồng cũ) thì chỉ *có M*. Mốc giờ từng chữ ký theo sau.
@@ -945,11 +980,31 @@ $("nut-de-xuat").addEventListener("click", async () => {
   const bv = $("bao-gia-thang").value.trim();
   const lyDo = $("ly-do-award").value.trim();
   if (bv === "" || lyDo === "") { bao($("loi7"), "Cần cả id báo giá và lý do."); return; }
-  const r = await goi("POST", `/rfqs/${phien.rfqId}/award`, { bidVersionId: bv, reason: lyDo });
+  // [S1.288 / S4.7c1 / L8] Ô giải trình đi vào thân CHỈ khi nó đang hiện — một ô ẩn còn chữ của lần chọn trước không thành lời giải
+  // trình của một đề xuất không lệch (CSDL sẽ từ chối nó).
+  const canGt = !$("khoi-giai-trinh").hidden;
+  const giaiTrinh = $("giai-trinh-lech-hang").value.trim();
+  if (canGt && giaiTrinh === "") { bao($("loi7"), "Báo giá này có hạng giá khác hạng chi phí — viết giải trình lệch hạng trước khi đề xuất."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award`, { bidVersionId: bv, reason: lyDo, ...(canGt ? { giaiTrinhLechHang: giaiTrinh } : {}) });
   // Bốn lối từ chối có tên của lớp trao thầu đi ra dưới 422 với câu của lớp gói; ba trigger của
   // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
   // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
-  if (r.status !== 201) { bao($("loi7"), await loiChot(r, "Không đề xuất được")); return; }
+  if (r.status !== 201) {
+    // [rà soát §S1.288 — TRUNG-2] Máy chủ là nơi biết báo giá có lệch hạng: người giữ `award.recommend` mà không giữ `bid.view` không đọc
+    // được bảng xếp hạng, và bảng đang giữ có thể cũ. Mã của lời từ chối hiện hay ẩn ô — không đọc lại bảng (403 vào sổ của người ấy).
+    const ma = r.body?.ma;
+    const cau = await loiChot(r, "Không đề xuất được");
+    if (ma === "THIEU_GIAI_TRINH_LECH_HANG") {
+      hien($("khoi-giai-trinh"), true);
+      bao($("loi7"), `${cau} Viết giải trình ở ô vừa hiện rồi bấm Đề xuất lại.`);
+    } else if (ma === "GIAI_TRINH_LECH_HANG_KHONG_CAN") {
+      hien($("khoi-giai-trinh"), false);
+      bao($("loi7"), `${cau} Ô giải trình đã ẩn — bấm Đề xuất lại.`);
+    } else {
+      bao($("loi7"), cau);
+    }
+    return;
+  }
   // [S1.282 / S3.5b] Thân của lần đề xuất không mang số chữ ký cần; đọc lại rồi mới nói — trước vòng này câu luôn nói *MỘT người*.
   const a = await veTraoThau();
   const can = a?.chuKyCan;

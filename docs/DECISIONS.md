@@ -12514,4 +12514,106 @@ hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm
 
 ### Điều ADR này KHÔNG nói
 
-- Lời khai thành cam kết, lưu cùng award, giải trình khi hạng giá khác hạng TCO (S4.7c).
+- Lời khai thành cam kết, lưu cùng award, giải trình khi hạng giá khác hạng TCO (S4.7c). **[S1.288]** Đã quyết — ADR-160 (S4.7c1).
+
+## ADR-160 — S4.7c1: lời khai TCO thành cam kết lưu cùng đề xuất trao thầu — CSDL tự chụp; giải trình lệch hạng là một ô riêng do CSDL chốt
+
+**Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-10-09 (ba câu dưới) · **[S1.288]** · **Migration:**
+`119_cam_ket_trao_thau` · **Liên quan:** ADR-158 ⑸ (hạng giá tính lúc đọc), ADR-153 ⑻ (vế cam kết của L8 để S4.7c), ADR-097 ⑻,
+ADR-102 (lần đọc có giá vào sổ), ADR-108 (từ chối theo tên ràng buộc), ADR-133 (rút đề xuất) · **Spec:** S4 §2.4 ⑻, §4.8, §8.13, §9
+S4.7c1 · **Biên bản:** `evidence/security-reviews.md` §S1.288
+
+### Bối cảnh — phép đo trước khi viết
+
+1. **Lời khai không đi theo đề xuất.** Spec §2.4 ⑻ và §4.8 đòi lời khai TCO của báo giá được đề xuất lưu cùng award như một cam kết.
+   Hôm nay hàng `rfq_awards` chỉ mang `reason`; lời khai nằm ở bản rõ (`rfq_unsealed_bids.payload`) và phép tính ở hàng chấm — không gì
+   ràng chúng vào lần đề xuất, và bộ bằng chứng (`PHIEN_BAN_BUNDLE = 2`) bỏ `nguon`, tham số, số ngày giao.
+2. **Giải trình chỉ có trên giấy.** ADR-153 ghi `reason` thoả hình thức của *"giải trình khi hạng giá khác hạng TCO"* — một cột bắt buộc
+   cho MỌI đề xuất không phân biệt được đề xuất lệch hạng với đề xuất không lệch.
+3. **Hạng giá không lưu** (ADR-158 ⑸): `docBangXepHang` tính nó lúc đọc bằng `xepHang`; CSDL không có bản nào.
+4. Khối TCO của kịch bản 41 dừng ở `GET /ranking`.
+
+### Quyết định
+
+Chủ dự án chốt ba câu (2026-10-09): **hai PR** — c1 là cam kết và giải trình (CSDL, gói, route, `/mo-thau`, kịch bản 41), c2 là bộ bằng
+chứng phiên bản 3, DAC-TA và bộ kiểm ngoại tuyến tính lại phép quy đổi; **CSDL tự chụp** cam kết; **ô riêng, CSDL chốt** giải trình.
+
+⑴ **Cột `rfq_awards.giai_trinh_lech_hang`** — văn bản của người đề xuất; `CHECK` đòi ít nhất một ký tự không phải khoảng trắng — kể cả
+khoảng trắng Unicode và ký tự rộng 0, thứ `btrim` mặc định để lại — và tối đa 2000 ký tự, ở tập an ninh của hardening: trigger dưới chỉ
+đòi KHÔNG NULL, nên gỡ ràng buộc là một chuỗi khoảng trắng thoả L8. Cột vào `GRANT INSERT` theo cột của `app_api`.
+
+⑵ **`award_hang_gia(org, lượt, báo giá)`** — hạng của thành phần `gia` trên ĐÚNG tập hàng CÓ hạng của lượt chấm, luật bằng nhau thi đấu
+(1, 1, 3), chỉ `tien` dạng hai chữ số lẻ mà lượt chấm ghi, và chỉ thành phần `gia` ĐẦU của mỗi hàng (như `find`) — bản SQL của phép
+tính ADR-158 ⑸. `luot-danh-gia.int` đối chiếu hai bản
+trên cùng lượt chấm, kể cả hàng không hạng còn thành phần giá và `tien` khác dạng (hai đường ghi thứ hai).
+
+⑶ **`award_kiem_giai_trinh`** — trigger BEFORE INSERT `rfq_awards_xet_giai_trinh` của `rfq_awards`, tên xếp SAU mọi trigger kiểm của
+hàng (J3/J5, J7, bậc, K9 — cùng sự kiện chạy theo thứ tự tên): báo giá không hạng bị J5 từ chối trước, và một đề xuất bị chặn vì lý do
+khác nghe lý do ấy, vào sổ, chứ không nghe lời đòi giải trình. hàng `PROPOSED` mà `award_hang_gia IS DISTINCT FROM rank` ⇒ đòi giải trình (`award_thieu_giai_trinh_lech_hang`); không lệch
+mà có ⇒ từ chối (`award_giai_trinh_khong_can` — một câu *"vì sao lệch"* trên một đề xuất không lệch là một dòng sai trong hồ sơ); hàng
+không phải `PROPOSED` mang giải trình ⇒ từ chối (`award_giai_trinh_ngoai_de_xuat`). Ba nhánh `check_violation` có tên.
+
+⑷ **`rfq_award_cam_ket`** — chỉ-ghi-thêm (`bid_chi_ghi_them` ở `UPDATE`/`DELETE` cộng chốt `TRUNCATE`, `ENABLE ALWAYS`), một hàng mỗi
+đề xuất, khoá `(org_id, award_id)`, khoá ngoại hợp thành tới award, gói và hàng chấm; RLS tenant, policy khách ĐÓNG HẲN như hai bảng trao
+thầu. `app_api` chỉ ghi được hai cột khoá; trigger BEFORE INSERT `award_dien_cam_ket` điền MỌI cột còn lại từ nguồn: hàng award (phải
+`PROPOSED` — `cam_ket_chi_cho_de_xuat` — và ghi trong CHÍNH giao dịch của nó — `acted_at = now()`, cột `app_api` không ghi được —
+`cam_ket_ngoai_giao_dich_de_xuat`), hàng chấm (hạng, chi phí hiệu dụng, thành phần nguyên văn kèm `nguon`), hạng giá
+(`award_hang_gia`), bản rõ — bốn ô qua ĐÚNG hai bộ đọc của lượt chấm (`bid_so_tien` làm tròn hai chữ số lẻ, `bid_so_ngay`), `null` khi vắng
+hay không đọc được —, hàng gói (tập mã, nhóm khoá `tco`, số ngày giao — ảnh chụp lúc mở), giải trình. Trigger AFTER INSERT
+`award_chup_cam_ket` (`WHEN` `PROPOSED`) ghi hàng ấy trong CHÍNH giao dịch của lần đề xuất: lần ghi hỏng thì đề xuất không có. Duyệt, huỷ,
+rút không chụp; rút rồi đề xuất lại thì có cam kết mới, cam kết cũ ở lại. Đề xuất có trước migration không có cam kết — không lấp ngược:
+cam kết là lời khai LÚC đề xuất.
+
+⑸ **Lớp gói.** `deXuatTraoThau` nhận `giaiTrinhLechHang?` và KHÔNG tính lại hạng nào: hai tên ràng buộc của ⑶ thành
+`TraoThauTuChoiError` `THIEU_GIAI_TRINH_LECH_HANG` / `GIAI_TRINH_LECH_HANG_KHONG_CAN` (422) — một nguồn sự thật, cùng lý do ADR-108 bắt
+lỗi trigger thay vì chép vị từ. Hai mã KHÔNG vào sổ: lớp thứ ba của `VAO_SO` — lời gọi thiếu hay thừa một ô mà CSDL đòi, một lỗi NHẬP; lần
+đề xuất ĐƯỢC ghi để lại cờ `coGiaiTrinhLechHang` trong sổ (`RFQ_AWARD_PROPOSED`) — không văn bản: lời giải trình bàn về giá, hàng sổ
+bất biến (`audit_events_payload_khong_mang_gia`) —, văn bản ở hàng award và cam kết. `TraoThau` mang `giaiTrinhLechHang` (chín cột ở mỗi câu).
+`docCamKetTraoThau` đọc cam kết của đề xuất MỚI NHẤT — cùng hàng `PROPOSED` mà chữ ký của `docTraoThau` thuộc về — dưới cổng `bid.view`
+đứng thẳng trong thân (khoản 33), và ghi một hàng `AWARD_COMMITMENT_VIEWED` trên chính `client` (ADR-102: hàm đọc có cổng trả giá của bên
+bán sau mở thầu thì ghi); `null` khi chưa có đề xuất hay đề xuất có trước S4.7c, không hàng sổ.
+
+⑹ **Route.** `POST /rfqs/:rfqId/award` nhận `giaiTrinhLechHang` tuỳ chọn — có mặt mà chỉ khoảng trắng (kể cả ký tự rộng 0) hay quá 2000
+ký tự thì 422 gọi tên trường, không để thành 23514 không tên của `CHECK`. Lời từ chối của lớp trao thầu mang `ma` (khuôn
+`ChotKiemSoatError`). `GET /rfqs/:rfqId/award/commitment` — `agent: false`, dòng lý do ở `apps/mcp/src/cong-cu.ts`.
+
+⑺ **`/mo-thau`.** Bấm «Chọn» ở hàng có hạng giá khác hạng chi phí (hay gõ id của hàng ấy) thì ô *"Giải trình lệch hạng"* hiện; trống thì
+không gửi; thân mang giải trình CHỈ khi ô đang hiện — chữ của lần chọn trước không thành giải trình của một đề xuất không lệch. Mã của
+lời từ chối hiện (`THIEU_…`) hay ẩn (`…_KHONG_CAN`) ô — người giữ `award.recommend` mà không giữ `bid.view` không đọc được bảng xếp hạng
+—, và lần đọc lại bảng đặt lại ô theo bảng mới. Đọc gói khác xoá ô. Bước 7 đọc cam kết và hiện hai hạng lúc đề xuất, lời khai của ĐÚNG
+các mã bật, giải trình — chỉ khi cam kết nói về đúng báo giá và lượt chấm của hàng award vừa đọc; đã có award mà không cam kết thì nói
+*"đề xuất ghi trước khi có cam kết"*. Phép tính thuần ở
+`apps/web/src/tco.ts` (`canGiaiTrinh`, `moTaCamKet`).
+
+⑻ **Kịch bản 41** — khối TCO đi tiếp tới đề xuất: không giải trình ⇒ 422 gọi tên, giải trình rỗng ⇒ 422 của route, kèm giải trình ⇒ 201;
+`GET /award/commitment` trả lời khai, hai hạng, tham số, số ngày giao, giải trình — và bước 7 viết nó bằng hàm của màn.
+
+⑼ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.288 mục 8) — không CAO; sửa TRUNG-2 và sáu THẤP, TRUNG-1 nói ra dưới đây:
+- **TRUNG-2** — ô giải trình chỉ theo bảng xếp hạng đã đọc: người giữ `award.recommend` mà không giữ `bid.view` (BUYER) không bao giờ thấy
+  ô, nên không đề xuất được báo giá lệch hạng; bảng cũ cho vòng lặp *ô hiện — máy chủ nói không cần*. Sửa: mã của lời từ chối điều khiển
+  ô, lần đọc bảng đặt lại ô.
+- **THẤP-1** — trigger giải trình chạy trước J7, bậc, K9: đổi tên để xếp sau. **THẤP-2** — `btrim` để lại khoảng trắng Unicode và ký tự
+  rộng 0: `CHECK` theo lớp ký tự cộng trần 2000, route bắt ký tự rộng 0. **THẤP-3** — hàng mang hai `gia` làm bản SQL ném 21000: lấy thành
+  phần đầu. **THẤP-4, THẤP-5** — cam kết lệch award vừa đọc, và *"không cam kết"* lẫn với *"không đề xuất"*: màn so báo giá và lượt chấm,
+  nói rõ đề xuất cũ. **THẤP-6** — văn bản giải trình vào chuỗi sổ: sổ chỉ ghi cờ; hai chú thích nói hàng award *"không mang mức giá nào"*
+  sửa lời.
+- Siết trong vòng, trước khi rà soát báo: cam kết chỉ ghi trong chính giao dịch đề xuất — không ai viết sau được một cam kết cho đề xuất có
+  trước migration.
+
+### Giới hạn nói ra
+
+- **TRUNG-1 — hàng chấm ghi thêm được vào lượt cũ** (có từ `057`): `app_api` giữ `GRANT INSERT` theo cột trên `rfq_evaluation_lines`, và
+  không trigger nào buộc hàng thuộc chính giao dịch tạo lượt hay báo giá của đúng gói. Một câu ghi thẳng (đường ghi thứ hai) chèn được
+  một hàng có hạng với giá rẻ hơn, đổi hạng giá — và cả bảng xếp hạng. Vá nó đụng J1 và sáu tệp test chèn hàng chấm thẳng; đề xuất thành
+  việc riêng, chờ chủ dự án.
+- **Đề xuất trước S4.7c không có cam kết**, kể cả đề xuất còn sống trên gói TCO của S4.7a/b lệch hạng mà không giải trình — vẫn duyệt
+  được. Không lấp ngược.
+- **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.
+  Người ấy đề xuất được chính báo giá ấy, và lời từ chối nhập không vào sổ (ADR-060); chấp nhận.
+- **Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).
+- **`/mo-thau` không đo lại trên trình duyệt** — ô và các dòng mới theo khuôn có sẵn (`phuc-vu.test`).
+
+### Điều ADR này KHÔNG nói
+
+- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2).
+- Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13).

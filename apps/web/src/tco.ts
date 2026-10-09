@@ -188,3 +188,64 @@ export function coThuocTco(rows: readonly { readonly components?: readonly { rea
     (r) => (r.components ?? []).some((c) => c.ma !== "gia") || (Array.isArray(r.maThieu) && r.maThieu.some((m) => m !== "gia")),
   );
 }
+
+// ---------------------------------------------------------------------------------------------
+// [S1.288 / S4.7c1 / L8] Đề xuất trao thầu — ô giải trình lệch hạng và cam kết TCO (spec S4 §2.4 ⑻, §4.8)
+// ---------------------------------------------------------------------------------------------
+
+/** Một hàng của bảng xếp hạng như màn giữ — đủ để biết hai hạng của báo giá được chọn. */
+export interface HaiHang {
+  readonly rank: number | null;
+  readonly hangGia?: number | null;
+}
+
+/**
+ * Báo giá này có hạng giá khác hạng chi phí — màn đòi ô giải trình trước khi gửi. Cùng phép so của `award_kiem_giai_trinh`
+ * (`IS DISTINCT FROM`, hạng giá vắng là `null`); CSDL vẫn là nơi phán, câu này chỉ để người đề xuất không phải gửi hai lần.
+ * Báo giá không hạng không đề xuất được (J5), nên không đòi gì.
+ */
+export function canGiaiTrinh(h: HaiHang | null): boolean {
+  if (h === null || h.rank === null) return false;
+  return (h.hangGia ?? null) !== h.rank;
+}
+
+/** Cam kết TCO như `GET /rfqs/:rfqId/award/commitment` trả (phần màn đọc). */
+export interface CamKetHien {
+  readonly hangTco: number;
+  readonly hangGia: number | null;
+  readonly khai: {
+    readonly freight: string | null;
+    readonly importCost: string | null;
+    readonly paymentDays: number | null;
+    readonly leadTimeDays: number | null;
+  };
+  readonly tapMa: readonly string[] | null;
+  readonly soNgayGiao: number | null;
+  readonly giaiTrinhLechHang: string | null;
+}
+
+/**
+ * Cam kết thành các dòng nhãn — giá trị: hai hạng lúc đề xuất, lời khai của ĐÚNG các mã bật (ô của mã không bật không có nghĩa
+ * gì ở gói này), và lời giải trình. Lời khai giữ nguyên văn như CSDL chụp (hai chữ số lẻ của bộ đọc tiền); `—` khi ô vắng hay không
+ * đọc được.
+ */
+export function moTaCamKet(k: CamKetHien): readonly (readonly [string, string])[] {
+  const ma = k.tapMa ?? [];
+  const so = (v: number | null): string => (v === null ? "—" : String(v));
+  const ra: (readonly [string, string])[] = [
+    ["Hạng lúc đề xuất", `chi phí hiệu dụng ${String(k.hangTco)} · giá ${so(k.hangGia)}`],
+  ];
+  const khai: string[] = [];
+  if (ma.includes("van_chuyen")) khai.push(`phí vận chuyển ${k.khai.freight ?? "—"}`);
+  if (ma.includes("nhap_khau")) khai.push(`chi phí nhập khẩu ${k.khai.importCost ?? "—"}`);
+  if (ma.includes("chi_phi_thanh_toan")) khai.push(`số ngày thanh toán ${so(k.khai.paymentDays)}`);
+  if (ma.includes("chi_phi_tre")) {
+    khai.push(`số ngày giao ${so(k.khai.leadTimeDays)} (yêu cầu ${so(k.soNgayGiao)})`);
+  }
+  ra.push(["Lời khai cam kết", khai.length === 0 ? "gói chấm theo giá — không lời khai ngoài giá" : khai.join(" · ")]);
+  ra.push([
+    "Giải trình lệch hạng",
+    k.giaiTrinhLechHang ?? (k.hangGia === k.hangTco ? "không lệch hạng — không cần giải trình" : "—"),
+  ]);
+  return ra;
+}

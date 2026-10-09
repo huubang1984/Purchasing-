@@ -557,6 +557,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.284 / S4.7b1] Vế cấu hình qua HTTP và màn: `buyer.int` đo `POST /policy` chuyển `tco` (cửa, `CHECK`, trả nguyên văn);
   // `chinh-sach.test` và `phuc-vu` đo luật L8 của màn và thân nó gửi (tập chuẩn, chỉ khoá của mã bật); `bac-mac-dinh-dong-bo` khoá bản
   // chép luật L8 của màn với `kiemChinhSachTco` trên mười tám ca.
+  // [S1.288 / S4.7c1] Vế CAM KẾT: `luot-danh-gia` đo hạng giá SQL bằng hạng giá TS, lời đòi giải trình ở CSDL, cam kết chụp đúng lời khai
+  // và chỉ trong giao dịch đề xuất, quyền cột, chỉ-ghi-thêm; `phuc-vu` đo ô giải trình của `/mo-thau` (theo hàng đã chọn và theo mã).
   L8: [
     "apps/api/src/buyer.int.test.ts",
     "apps/web/src/chinh-sach.test.ts",

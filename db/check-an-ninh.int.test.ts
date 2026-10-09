@@ -176,6 +176,10 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_item_mappings_tu_dong_co_hang: "MIEN",
   procurement_categories_ten_check: "DO_DAI",
   outbox_jobs_status_check: "MIEN",
+  // [S1.288 / S4.7c1 / L8] Hình dạng cam kết TCO: thành phần là mảng, lời khai là đối tượng — trigger `award_dien_cam_ket` điền cả hai từ
+  // nguồn và `app_api` không ghi được cột nào ngoài khoá; ràng buộc giải trình không rỗng (`rfq_awards`) ở tập an ninh.
+  rfq_award_cam_ket_components_check: "JSON",
+  rfq_award_cam_ket_khai_check: "JSON",
   rfq_bafo_rounds_dong_sau_khi_mo: "MOC",
   rfq_bafo_rounds_round_no_check: "SO",
   rfq_bafo_rounds_top_n_check: "SO",

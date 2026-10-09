@@ -146,6 +146,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // đọc. `rfq_awards` chỉ-ghi-thêm là TIỀN ĐỀ của §2.3⑹ — nếu `UPDATE` đi được thì *huỷ là
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
+  // [S1.288 / S4.7c1 / L8] Cam kết TCO của đề xuất — khuôn `061`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả
+  // hai `ENABLE ALWAYS`. Sửa được một cam kết là đổi lời khai mà đề xuất đã dựa vào sau khi người duyệt đọc nó.
+  "rfq_award_cam_ket",
   "rfq_awards",
   // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
   "rfq_item_goi_y",
@@ -1569,7 +1572,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // `bid_chi_ghi_them` trên hai bảng ấy KHÔNG cần nhân chứng: nó từ chối VÔ ĐIỀU KIỆN ở
   // `UPDATE`/`DELETE`/`TRUNCATE`, nên không hàng hợp lệ nào đi qua được — đúng thứ
   // `HAM_CANH_CHI_GHI_THEM` miễn trừ.
-  const deXuat = await chenNC(
+  await chenNC(
     "public.rfq_awards",
     api(
       "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, " +
@@ -1582,6 +1585,63 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       },
     ),
   );
+  // ---- [S1.288 / S4.7c1 / L8 / `119_cam_ket_trao_thau`] Cam kết TCO: bộ ba (`award_dien_cam_ket`, `rfq_award_cam_ket`, INSERT) ----
+  // Đường sản xuất chỉ ghi cam kết qua trigger AFTER của `rfq_awards` (`award_chup_cam_ket` — đề xuất ngay trên đã đi qua nó), nên
+  // không câu nào của ứng dụng chạm thẳng bảng. Nhân chứng là ĐƯỜNG GHI THỨ HAI mà `award_dien_cam_ket` canh: người đề xuất RÚT đề xuất
+  // trên (0 chữ ký, ADR-133), đề xuất lại trong một giao dịch mà trigger chụp TẮT (chuẩn bị, dưới chủ sở hữu), rồi `app_api` tự ghi khoá
+  // cam kết trong CHÍNH giao dịch ấy — vế *"chỉ trong giao dịch đề xuất"* của trigger cho qua đúng ca này. Chữ ký và hàng `APPROVED`
+  // dưới đây thuộc đề xuất thứ hai.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_awards",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, " +
+          "acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, 'WITHDRAWN', 'rut de de xuat lai', $5, $6) " +
+          "RETURNING org_id, rfq_id, evaluation_id, bid_version_id, status, acted_by, acted_by_session_id",
+        [org, rfq1, ld, pb, pm2.u, pm2.s],
+        {
+          org_id: org, rfq_id: rfq1, evaluation_id: ld, bid_version_id: pb,
+          status: "WITHDRAWN", acted_by: pm2.u, acted_by_session_id: pm2.s,
+        },
+      ),
+    ),
+    1,
+    "rfq_awards",
+  );
+  const khaiCamKet: Record<string, unknown> = { org_id: org };
+  let deXuatLai = "";
+  const ghiCamKet = api(
+    "INSERT INTO rfq_award_cam_ket (org_id, award_id) " +
+      "SELECT $1, a.id FROM rfq_awards a WHERE a.org_id = $1 AND a.rfq_id = $2 AND a.status = 'PROPOSED' " +
+      "ORDER BY a.acted_at DESC, a.id DESC LIMIT 1 RETURNING org_id, award_id",
+    [org, rfq1],
+    khaiCamKet,
+  );
+  doiSoHang(
+    await so.chung("public.rfq_award_cam_ket", "INSERT", {
+      ...ghiCamKet,
+      // Dựng dưới chủ sở hữu (tắt rồi bật lại trigger chụp — `ALTER TABLE` đòi chủ), rồi trả về ĐÚNG bước chuẩn bị của `api()` — đặt vai
+      // `app_api` và tổ chức — để câu nhân chứng chạy dưới vai ứng dụng.
+      chuanBi: async (c) => {
+        await c.query("ALTER TABLE public.rfq_awards DISABLE TRIGGER rfq_awards_chup_cam_ket");
+        await c.query("SET LOCAL ROLE app_api");
+        await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [org]);
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_by_session_id) " +
+            "VALUES ($1, $2, $3, $4, 'PROPOSED', 'gia thap nhat', $5, $6) RETURNING id",
+          [org, rfq1, ld, pb, pm2.u, pm2.s],
+        );
+        await c.query("RESET ROLE");
+        await c.query("ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_chup_cam_ket");
+        deXuatLai = rows[0]?.id ?? "";
+        khaiCamKet["award_id"] = deXuatLai;
+        await ghiCamKet.chuanBi?.(c);
+      },
+    }),
+    1,
+    "rfq_award_cam_ket",
+  );
   doiSoHang(
     await so.chung(
       "public.rfq_award_approvals",
@@ -1589,8 +1649,8 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       api(
         "INSERT INTO rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) " +
           "VALUES ($1, $2, $3, $4) RETURNING org_id, award_id, approver_user_id, approver_session_id",
-        [org, deXuat, gd.u, gd.s],
-        { org_id: org, award_id: deXuat, approver_user_id: gd.u, approver_session_id: gd.s },
+        [org, deXuatLai, gd.u, gd.s],
+        { org_id: org, award_id: deXuatLai, approver_user_id: gd.u, approver_session_id: gd.s },
       ),
     ),
     1,

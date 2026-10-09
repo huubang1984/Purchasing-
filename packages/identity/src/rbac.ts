@@ -465,6 +465,8 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   "CHUA_CHAM_LAN_NAO",
   "DA_KY_DE_XUAT_NAY",
   "DE_XUAT_DA_CO_CHU_KY",
+  // [S1.288 / S4.7c1 / L8] Ô giải trình lệch hạng của đề xuất trao thầu — thiếu khi lệch, thừa khi không lệch.
+  "GIAI_TRINH_LECH_HANG_KHONG_CAN",
   "KHONG_CO_AWARD_CON_SONG",
   "KHONG_CO_BAO_GIA_DOC_DUOC",
   "KHONG_CO_DE_XUAT_DANG_CHO",
@@ -475,6 +477,7 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   "RFQ_KHONG_DE_XUAT_DUOC",
   "RFQ_KHONG_MO_VONG_DUOC",
   "THANH_PHAN_CHUA_CO_NGUON",
+  "THIEU_GIAI_TRINH_LECH_HANG",
   // [S1.245 / khoản 267] Lý do từ chối huỷ yêu cầu mở thầu — `LyDoTuChoiHuy` (`packages/unseal/src/requests.ts`, `UNSEAL_CANCEL_DENIED`).
   "KHONG_O_TRANG_THAI_HUY_DUOC",
   "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC",

@@ -301,6 +301,8 @@ const HAM_DOC_CO_QUYEN = [
   // của mọi thứ ADR-038 rút khỏi bề mặt MCP. Nên nó chịu đúng cổng `bid.view` mà bảng xếp
   // hạng chịu, và lời gọi đứng THẲNG trong thân `docTraoThau` (khoản 33).
   "docTraoThau",
+  // [S1.288 / S4.7c1 / L8] Cam kết TCO của đề xuất — chi phí hiệu dụng, thành phần và lời khai của người thắng; cùng cổng `bid.view`.
+  "docCamKetTraoThau",
   "listInvitations",
   // [S1.265 / S3.3b] Ngoại lệ cạnh tranh của một gói — một phần của danh sách mời, trong cùng băm người duyệt ký; cổng
   // `rfq.invite` đứng THẲNG trong thân `docNgoaiLe`, cùng cổng của `listInvitations`.

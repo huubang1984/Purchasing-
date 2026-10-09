@@ -26651,3 +26651,133 @@ một quyết định sản phẩm — đã đề xuất thành việc riêng.
   (L16 ở `guest.int` và `bac-mac-dinh-dong-bo`) chưa khai ở `tools/inv-matrix/src/so-khai-nhan.ts`. Khai hai cặp kèm câu đo gì, chạy lại
   BƯỚC 2 (bộ sinh) trên cùng báo cáo: **89/89** bất biến (67/67 nghiệp vụ + 22/22 hàng rào), *"Cổng evidence: XANH"*. Ma trận: L8 49 → 51
   khẳng định, L16 31 → 38.
+
+# §S1.288 — S4.7c1: LỜI KHAI TCO THÀNH CAM KẾT LƯU CÙNG ĐỀ XUẤT TRAO THẦU, CSDL TỰ CHỤP; HẠNG GIÁ KHÁC HẠNG CHI PHÍ THÌ PHẢI GIẢI TRÌNH — Ô RIÊNG, CSDL CHỐT — ADR-160
+
+## 1. Vòng này là gì
+
+Phần đầu của S4.7c (spec S4 §9): vế CAM KẾT của L8 — lời khai TCO của báo giá được đề xuất lưu cùng đề xuất, và lời giải trình khi hạng giá
+khác hạng chi phí. Một migration (`119_cam_ket_trao_thau`). Bộ bằng chứng phiên bản 3 và bộ kiểm ngoại tuyến là S4.7c2.
+
+## 2. Quyết định của chủ dự án
+
+Chủ dự án: *"Tiếp S4.7c"*; chọn ba khuyến nghị (2026-10-09): **hai PR** (c1 cam kết và giải trình; c2 bộ bằng chứng v3, DAC-TA, bộ kiểm
+hai lớp tính lại phép quy đổi); **CSDL tự chụp** — bảng con chỉ-ghi-thêm mỗi đề xuất, trigger chép từ hàng chấm, bản rõ và hàng gói, ứng
+dụng không gửi gì; **ô riêng, CSDL chốt** — báo giá được đề xuất có hạng giá khác hạng chi phí thì một ô giải trình riêng không rỗng là
+bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
+
+## 3. Đo trước
+
+- `rfq_awards` (`061`) chỉ mang `reason`, NOT NULL không rỗng trên MỌI hàng — không phân biệt được đề xuất lệch hạng với đề xuất không lệch;
+  ADR-153 ghi nó thoả hình thức của *"giải trình"*.
+- Lời khai nằm ở `rfq_unsealed_bids.payload`, phép tính ở `rfq_evaluation_lines.components` (`nguon`), tham số và số ngày giao ở hàng gói
+  (`112`, `117`) — không gì ràng chúng vào lần đề xuất. Bộ bằng chứng (`PHIEN_BAN_BUNDLE = 2`) bỏ `nguon`, tham số, số ngày giao.
+- Hạng giá chỉ tính lúc đọc (`docBangXepHang`, ADR-158 ⑸); CSDL không có bản nào.
+- Khối TCO của kịch bản 41 dừng ở `GET /ranking`.
+- Dữ liệu cũ: lượt chấm trước S4.7a luôn ghi `tien` hai chữ số lẻ (`vietSo`) và `gia` là mã có nguồn duy nhất, nên hạng giá bằng hạng chi
+  phí — không gói chỉ giá nào bỗng đòi giải trình (rà soát xác nhận lại ở mục 8).
+
+## 4. Thay đổi
+
+- **CSDL** — `119_cam_ket_trao_thau`: cột `rfq_awards.giai_trinh_lech_hang` (`CHECK` có ký tự không phải khoảng trắng — kể cả khoảng trắng
+  Unicode và ký tự rộng 0 —, tối đa 2000; ở `CHECK_AN_NINH_KHAI`); `award_hang_gia` (hạng `gia` trên hàng có hạng, thành phần đầu, dạng
+  hai chữ số lẻ); trigger `rfq_awards_xet_giai_trinh` → `award_kiem_giai_trinh` (ba nhánh có tên); bảng `rfq_award_cam_ket` chỉ-ghi-thêm,
+  RLS tenant + khách đóng, `app_api` chỉ `INSERT (org_id, award_id)`; `award_dien_cam_ket` điền mọi cột từ nguồn, chỉ cho hàng `PROPOSED`
+  và chỉ trong chính giao dịch đề xuất; `award_chup_cam_ket` (AFTER INSERT `WHEN` PROPOSED). Hardening: TRIGGER_DUOC_PHEP, BANG_TENANT_KHAI,
+  CHECK_AN_NINH_KHAI, khối `bid_chi_ghi_them`, bốn mục ghim hàm + trigger.
+- **Sổ đăng ký** — `migrations.int` (HAM_56, HAM_ANH_XA, ba danh sách), `danh-sach-ham-canh`, `check-an-ninh`, `rls-coverage` (quyền bảng,
+  quyền cột, policy khách), `hardening-suy-tu` (bảng chỉ-ghi-thêm, nhân chứng `rfq_award_cam_ket`/INSERT), `migration-shape`,
+  `ban-ro-liet-ke`, `barrel-exports`, `cong-quyen-route`, `so-khai-nhan`.
+- **`packages/danh-gia`** — `deXuatTraoThau` nhận `giaiTrinhLechHang`, đổi hai tên ràng buộc thành `THIEU_GIAI_TRINH_LECH_HANG` /
+  `GIAI_TRINH_LECH_HANG_KHONG_CAN` (không vào sổ), sổ ghi cờ `coGiaiTrinhLechHang`; `TraoThau.giaiTrinhLechHang`; `docCamKetTraoThau` dưới
+  `bid.view`, hàng sổ `AWARD_COMMITMENT_VIEWED`. Hai mã vào `VAO_SO` và `DANH_MUC_VE_CONG`.
+- **`apps/api`** — `POST /rfqs/:rfqId/award` nhận `giaiTrinhLechHang` (422 khi chỉ khoảng trắng hay quá 2000); `GET
+  /rfqs/:rfqId/award/commitment` (`agent: false`, dòng lý do ở MCP); lời từ chối trao thầu mang `ma`.
+- **`apps/web`** — `canGiaiTrinh`, `moTaCamKet` (`/lib/tco.js`); `/mo-thau` ô giải trình theo hàng đã chọn và theo mã lời từ chối, đọc lại
+  bảng đặt lại ô, đọc gói khác xoá ô; bước 7 hiện cam kết của đúng báo giá, nói rõ đề xuất trước S4.7c.
+- **Kịch bản 41** — khối TCO tới đề xuất (422 có tên và mã, 422 của route, 201) và `GET /award/commitment`.
+- **`gieo:demo --s3`** — lời bước 7 của gói TCO.
+- **Tài liệu** — ADR-160; ADR-158 trỏ sang; TEST-PLAN L8; spec §9 (S4.7c1, S4.7c2); STATE; PRODUCT.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. Lớp gói KHÔNG tính hạng — nó đổi tên ràng buộc của trigger thành lỗi có tên (một nguồn sự thật, khuôn ADR-108).
+2. Hai mã giải trình không vào sổ: lớp thứ ba của `VAO_SO` (lỗi nhập); sổ ghi cờ chứ không ghi văn bản (văn bản bàn về giá).
+3. Cam kết chỉ ghi được trong chính giao dịch đề xuất (`acted_at = now()`): không lấp ngược, không viết sau.
+4. `docCamKetTraoThau` ghi một hàng sổ mỗi lần đọc — nó trả chi phí và lời khai của người thắng (ADR-102).
+5. Trigger giải trình xếp sau J7, bậc, K9 — lý do khác (vào sổ) nói trước lời đòi giải trình.
+6. Kịch bản 41 đề xuất bằng `pm2` (không tạo gói, không điều phối), tổ chức riêng luồng MVP1.
+
+## 6. Đo
+
+| Hạng mục | Kết quả |
+|---|---|
+| `luot-danh-gia.int` khối S4.7c1 | 6/6 — hạng giá SQL = TS (kể cả hàng không hạng còn giá, `tien` khác dạng, hai `gia`); lệch không giải trình ⇒ `THIEU…`, không award, không cam kết, không sổ; kèm giải trình ⇒ cam kết đúng lời khai, `nguon`, tham số, sổ ghi cờ; giải trình thừa ⇒ `…KHONG_CAN`; cam kết thuộc đề xuất qua rút và đề xuất lại, `bid.view`; câu ghi thẳng dưới `app_api` (ba nhánh, `CHECK` Unicode và trần, khoá chính trong cùng giao dịch); quyền cột 42501, viết sau ⇒ `cam_ket_ngoai_giao_dich_de_xuat`, chỉ-ghi-thêm cả vai chủ |
+| Kịch bản 41 khối TCO | 5/5 — 422 có câu và mã, 422 ký tự rộng 0, 422 quá 2000, 201, `GET /award/commitment` khớp lời khai của phong bì dựng bằng hàm màn, `moTaCamKet` |
+| `hardening-suy-tu` | 38/38 — nhân chứng `award_dien_cam_ket`/`rfq_award_cam_ket`/INSERT dưới `app_api` |
+| `rls-coverage`, `check-an-ninh` | 61/61 (khối đã chạy), 4/4 |
+| `phuc-vu`, `tco.test` | xanh — ô theo hàng, theo mã, đọc lại bảng, đổi gói, cam kết lệch báo giá không hiện, đề xuất cũ |
+| `pnpm t0`, `pnpm test` | sạch; 157 tệp / 2806 ca (trước các sửa sau rà soát — số cuối ở mục 10) |
+| Hardening tự chữa | thân `RETURN NEW` ở `award_kiem_giai_trinh`, thân hằng ở `award_hang_gia`, gỡ `rfq_awards_chup_cam_ket`, tắt `rfq_award_cam_ket_chan_truncate` ⇒ `migrate()` kế dựng lại cả bốn |
+| `gieo:demo --s3` trên cụm mới | thoát 0; gói TCO: hạng 1 có hạng giá 2. `soan2` đề xuất không giải trình ⇒ `THIEU_GIAI_TRINH_LECH_HANG`; kèm giải trình ⇒ PROPOSED, cam kết `hangTco 1, hangGia 2`, lời khai `freight 500000.00, paymentDays 60, leadTimeDays 30`, tham số ba khoá, số ngày giao 30 |
+
+## 7. Đột biến
+
+35 đột biến, mỗi cái chạy lại bộ đo của nó; 35/35 đỏ — S15 sống ở lượt đầu.
+
+| Lớp | Đột biến | Đỏ ở |
+|---|---|---|
+| CSDL — giải trình | S1 lệch chỉ khi hạng giá tốt hơn · S2 hàng không PROPOSED mang giải trình · S3 giải trình thừa đi qua | `luot-danh-gia.int` |
+| CSDL — hạng giá | S4 tính trên hàng không hạng · S5 bằng giá không cùng hạng · S6 nhận `tien` khác dạng · S16 lấy `gia` cuối | `luot-danh-gia.int` (đối chiếu SQL–TS trên ba đường ghi thứ hai) |
+| CSDL — cam kết | S7 `freight` đọc `importCost` · S8 hạng giá chép hạng chi phí · S9 bỏ giải trình · S10 bỏ tham số · S11 cam kết cho hàng không đề xuất · S12 không chụp · S13 `leadTimeDays` đọc `paymentDays` · S14 `app_api` ghi mọi cột · S15 chi phí chép giá · S18 cam kết viết sau giao dịch | `luot-danh-gia.int` |
+| Lớp gói | T1 không đổi tên ràng buộc · T2 hai mã đổi chỗ · T3 câu ghi bỏ giải trình · T4 đọc cam kết không cổng · T5 lần đọc không vào sổ · T6 đọc cam kết của đề xuất cũ nhất | `luot-danh-gia.int` |
+| Route | T7 bỏ giải trình · T8 nhận chuỗi rỗng · T9 lời từ chối không mang mã · T10 bỏ ký tự rộng 0 · T11 bỏ trần 2000 | kịch bản 41 khối TCO |
+| Màn | W1 hạng giá vắng không đòi · W2 thân luôn mang giải trình · W3 đổi gói không xoá ô · W4 lời khai không lọc mã · W5 ô trống vẫn gửi · W6 mã THIEU không hiện ô · W7 đọc lại bảng không đặt lại ô | `tco.test`, `phuc-vu.test` |
+
+S15 (chi phí hiệu dụng của cam kết chép giá thay vì chép hàng chấm) sống ở lượt đầu, và đó là phát hiện: mọi ca đo cam kết dùng báo giá có
+chi phí BẰNG giá (không phí, không trễ). Đã thêm khẳng định trên hai báo giá có chi phí khác giá (110 và 104 trên giá 90).
+
+## 8. Rà soát đối kháng
+
+Một lượt soi đọc-không-sửa trên diff chưa commit. **Không CAO.** Hai TRUNG, sáu THẤP:
+
+- **TRUNG-1 — hàng chấm ghi thêm được vào lượt cũ** (có từ `057`). `app_api` giữ `GRANT INSERT` theo cột trên `rfq_evaluation_lines`, trigger
+  duy nhất của bảng chỉ kiểm hình dạng thành phần. Một câu ghi thẳng chèn được vào lượt mới nhất một hàng có hạng với `gia` rẻ hơn (phiên
+  bản vòng 1 trước BAFO, báo giá gói khác): hạng giá của báo giá được đề xuất đổi và trigger giải trình cho qua. **Không sửa ở vòng này** —
+  vá là một trigger buộc hàng thuộc chính giao dịch tạo lượt và báo giá của đúng gói; sáu tệp test chèn hàng chấm thẳng vào lượt có sẵn,
+  và vế *"phiên bản của đúng vòng"* chạm ngữ nghĩa lượt chấm sau BAFO. Đề xuất thành việc riêng, chờ chủ dự án.
+- **TRUNG-2 — ô giải trình chỉ theo bảng đã đọc.** BUYER giữ `award.recommend`, không giữ `bid.view` (`005`): không bao giờ đọc được bảng,
+  ô không bao giờ hiện, đề xuất lệch hạng không đi được; mỗi lần thử đọc lại bảng ⇒ 403 vào sổ. Bảng cũ (sau BAFO) cho vòng lặp ô hiện /
+  máy chủ nói không cần. **Sửa:** lời từ chối trao thầu mang `ma` (`dispatch`), màn hiện hay ẩn ô theo mã, không đọc lại bảng; `veXepHang`
+  đặt lại ô.
+- **THẤP-1** — trigger giải trình chạy trước J7, bậc, K9: người bị K9 chặn nghe lời đòi giải trình (không vào sổ) trước. **Sửa:** đổi tên
+  `rfq_awards_xet_giai_trinh`. Còn lại, nói ra: người giữ `award.recommend` dò được *"hạng giá bằng hạng chi phí"* qua lời đáp *không cần*.
+- **THẤP-2** — `btrim()` chỉ bỏ dấu cách ASCII; tab, NBSP, ký tự rộng 0 thoả `CHECK`. **Sửa:** `CHECK` theo lớp ký tự (`[:space:]` cộng
+  khoảng trắng Unicode và U+200B), trần 2000; route bắt ký tự rộng 0 và trần.
+- **THẤP-3** — hàng mang hai `gia` (đường ghi thứ hai): bản SQL ném 21000 trên báo giá được đề xuất, bản TS lấy cái đầu. **Sửa:** thành phần đầu
+  (`WITH ORDINALITY`, `DISTINCT ON`).
+- **THẤP-4** — cam kết của đề xuất đã chết đi ra không trạng thái; hai lần đọc tách nhau ở màn. **Sửa:** màn chỉ hiện cam kết khi báo giá và
+  lượt chấm khớp hàng award vừa đọc.
+- **THẤP-5** — đề xuất trước S4.7c không cam kết; `null` lẫn hai nghĩa. **Sửa:** màn nói *"đề xuất ghi trước khi có cam kết"*. Không lấp ngược.
+- **THẤP-6** — văn bản giải trình vào chuỗi sổ bất biến; hai chú thích nói hàng award *"không mang mức giá nào"*. **Sửa:** sổ ghi cờ
+  `coGiaiTrinhLechHang`; sửa lời hai chú thích.
+
+Lượt soi xác nhận đúng: bốn thân hàm ở migration và hardening khớp sau chuẩn hoá (cả vế `acted_at` thêm giữa lượt); ghim bắt DISABLE, REPLICA,
+sửa `WHEN`, SECURITY DEFINER; `app_api` chỉ ghi khoá cam kết, chỉ-ghi-thêm mọi vai; quyền đọc và RLS của chuỗi trigger dưới `app_api`;
+`hang_tco` không NULL trên đề xuất hợp lệ (J5 + `CHECK` của `057`); dữ liệu cũ không bỗng đòi giải trình; duyệt, huỷ, rút không chạm cột
+mới; `docCamKetTraoThau` có cổng, lọc tổ chức, `agent: false`; bộ bằng chứng đọc `rfq_awards` theo danh sách cột nên không vỡ.
+
+Siết thêm trong vòng, trước khi lượt soi báo: cam kết chỉ ghi được trong chính giao dịch đề xuất — đóng đường viết một cam kết sau cho đề
+xuất có trước migration.
+
+## 9. Giới hạn, nói ra
+
+- **TRUNG-1** ở mục 8 — mở, việc riêng.
+- **Đề xuất trước S4.7c** không có cam kết, kể cả đề xuất còn sống lệch hạng trên gói TCO của S4.7a/b; vẫn duyệt được.
+- **Dò hạng** qua lời đáp *không cần* của người giữ `award.recommend` — không hàng sổ (ADR-060).
+- **Bộ bằng chứng chưa mang cam kết** (`PHIEN_BAN_BUNDLE = 2`) — S4.7c2.
+- **`/mo-thau` không đo lại trên trình duyệt** — ô và dòng mới theo khuôn có sẵn, đo ở `phuc-vu.test`.
+
+## 10. Đo cuối
+
+(điền sau `pnpm evidence`)

@@ -48,7 +48,18 @@ import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-serv
 // [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
 import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
 // [S1.286 / S4.7b2] Thước TCO của màn `/nop-thau` và phép tính của `/mo-thau` — khối TCO cuối tệp dựng phong bì bằng chính các hàm ấy.
-import { docThuocTco, loiOKhai, moTaThanhPhan, oCanKhai, truongKhai, type ThanhPhanXepHang } from "../../web/src/tco.js";
+// [S1.288 / S4.7c1] …và ô giải trình lệch hạng cùng các dòng cam kết của bước 7 `/mo-thau`.
+import {
+  canGiaiTrinh,
+  docThuocTco,
+  loiOKhai,
+  moTaCamKet,
+  moTaThanhPhan,
+  oCanKhai,
+  truongKhai,
+  type CamKetHien,
+  type ThanhPhanXepHang,
+} from "../../web/src/tco.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
@@ -3133,6 +3144,7 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
     taiChinh: { id: "", cookie: "" } as Nguoi,
     rfqId: "",
     phien: [] as string[],
+    hang: [] as { rank: number | null; hangGia: number | null }[],
   };
 
   beforeAll(async () => {
@@ -3293,5 +3305,58 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
       "Chi phí trễ giao = max(0, 45 ngày khai − 30 ngày yêu cầu) × 0.001/ngày × 98000000.00 = 1470000.00 — tham số của chính sách phiên bản 1",
     ]);
     expect(hang[2]!.components, "báo giá không hạng không có thành phần").toEqual([]);
+    st.hang = hang.map((h) => ({ rank: h.rank, hangGia: h.hangGia }));
+  });
+
+  // [S1.288 / S4.7c1 / L8 vế cam kết] Đề xuất A — hạng chi phí 1, hạng giá 2 — đòi giải trình; cam kết là lời khai của A do CSDL chụp.
+  it("đề xuất báo giá lệch hạng: không giải trình ⇒ 422 gọi tên; giải trình rỗng ⇒ 422; kèm giải trình ⇒ 201 — `GET /award/commitment` trả lời khai, hai hạng, tham số và giải trình do CSDL chụp", async () => {
+    const m = st.mua.cookie;
+    expect(canGiaiTrinh(st.hang[0] ?? null), "màn hiện ô giải trình cho A").toBe(true);
+    expect(canGiaiTrinh(st.hang[1] ?? null)).toBe(true);
+    const bxh = await goi("GET", `/rfqs/${st.rfqId}/ranking`, m);
+    const a = (bxh.body as { ranking: { rows: { bidVersionId: string }[] } }).ranking.rows[0]!.bidVersionId;
+    const thieu = await goi("POST", `/rfqs/${st.rfqId}/award`, st.pm2.cookie, { bidVersionId: a, reason: "chi phi hieu dung thap nhat" });
+    expect(thieu.status, thieu.text).toBe(422);
+    expect(thieu.body, "câu và MÃ — màn hiện ô giải trình theo mã").toEqual({
+      error: "Báo giá được chọn có hạng giá khác hạng chi phí hiệu dụng: đề xuất trao thầu cần một lời giải trình lệch hạng.",
+      ma: "THIEU_GIAI_TRINH_LECH_HANG",
+    });
+    // Ký tự rộng 0 và khoảng trắng không ngắt — `trim` của JS để lại cái đầu, `btrim` mặc định của CSDL để lại cả hai.
+    const rong = await goi("POST", `/rfqs/${st.rfqId}/award`, st.pm2.cookie, { bidVersionId: a, reason: "chi phi", giaiTrinhLechHang: "\u200b \u00a0" });
+    expect([rong.status, (rong.body as { error: string }).error], "route chặn trước câu ghi — không phải 23514 không tên của CSDL").toEqual([
+      422,
+      'trường "giaiTrinhLechHang" rỗng — bỏ trường đi, hoặc viết giải trình',
+    ]);
+    const dai = await goi("POST", `/rfqs/${st.rfqId}/award`, st.pm2.cookie, { bidVersionId: a, reason: "chi phi", giaiTrinhLechHang: "x".repeat(2001) });
+    expect([dai.status, (dai.body as { error: string }).error]).toEqual([422, 'trường "giaiTrinhLechHang" dài quá 2000 ký tự']);
+    const giaiTrinh = "dat hon B 2 trieu theo gia nhung giao dung han va thanh toan dung ky";
+    const dx = await goi("POST", `/rfqs/${st.rfqId}/award`, st.pm2.cookie, {
+      bidVersionId: a,
+      reason: "chi phi hieu dung thap nhat",
+      giaiTrinhLechHang: giaiTrinh,
+    });
+    expect(dx.status, dx.text).toBe(201);
+    expect((dx.body as { award: { giaiTrinhLechHang: string } }).award.giaiTrinhLechHang).toBe(giaiTrinh);
+
+    const ck = await goi("GET", `/rfqs/${st.rfqId}/award/commitment`, m);
+    expect(ck.status, ck.text).toBe(200);
+    const k = (ck.body as { commitment: CamKetHien & { bidVersionId: string; effectiveCost: string; thamSo: unknown } }).commitment;
+    expect(k).toMatchObject({
+      bidVersionId: a,
+      hangTco: 1,
+      hangGia: 2,
+      effectiveCost: "100500000.00",
+      khai: { freight: "500000.00", importCost: null, paymentDays: 60, leadTimeDays: 30 },
+      tapMa: [...MA],
+      thamSo: THAM_SO,
+      soNgayGiao: SO_NGAY_GIAO,
+      giaiTrinhLechHang: giaiTrinh,
+    });
+    // Bước 7 của `/mo-thau` viết cam kết bằng hàm của chính nó, từ đúng thân ấy.
+    expect(moTaCamKet(k)).toEqual([
+      ["Hạng lúc đề xuất", "chi phí hiệu dụng 1 · giá 2"],
+      ["Lời khai cam kết", "phí vận chuyển 500000.00 · số ngày thanh toán 60 · số ngày giao 30 (yêu cầu 30)"],
+      ["Giải trình lệch hạng", giaiTrinh],
+    ]);
   });
 });

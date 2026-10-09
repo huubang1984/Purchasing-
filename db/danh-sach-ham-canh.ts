@@ -219,6 +219,14 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.award_kiem_theo_bac_khi_de_xuat",
   "public.award_kiem_theo_bac_khi_duyet",
   "public.award_kiem_vai_theo_bac",
+  // [S1.288 / S4.7c1 / L8 / `119_cam_ket_trao_thau`] BA hàm của cam kết TCO, chỉ gắn INSERT ⇒ không thể là hàm canh:
+  // `award_kiem_giai_trinh` (BEFORE INSERT của `rfq_awards`) từ chối CÓ ĐIỀU KIỆN — đề xuất lệch hạng không giải trình, giải trình trên
+  // đề xuất không lệch hay trên hàng không phải PROPOSED; `award_chup_cam_ket` (AFTER INSERT `WHEN` PROPOSED) không bao giờ từ chối — nó
+  // GHI cam kết; `award_dien_cam_ket` (BEFORE INSERT của `rfq_award_cam_ket`) điền từ nguồn và chỉ từ chối hàng không trỏ một đề xuất.
+  // Đề xuất của chuỗi trao thầu trong `dungKichBan()` (gói chỉ giá, không lệch hạng) đi qua cả ba.
+  "public.award_kiem_giai_trinh",
+  "public.award_chup_cam_ket",
+  "public.award_dien_cam_ket",
   // [S1.270 / S3.3d / K3] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_xoay_vong_khi_nop` chỉ ngoài READ COMMITTED hay khi danh sách
   // không có nhà cung cấp mới mà không ngoại lệ ROTATION; `rfq_kiem_xoay_vong_khi_mo` thêm vế `opened_at` là giờ của lần mở.
   // `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.

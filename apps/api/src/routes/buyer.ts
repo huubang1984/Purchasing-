@@ -16,6 +16,7 @@
 import {
   deXuatTraoThau,
   docBangXepHang,
+  docCamKetTraoThau,
   docTraoThau,
   docVongBafo,
   dongVongBafo,
@@ -133,6 +134,17 @@ function chuoiTuyChon(body: unknown, ten: string): string | null {
   const v = truong(body, ten);
   if (v === undefined || v === null) return null;
   if (typeof v !== "string") throw new HttpError(422, `trường "${ten}" phải là chuỗi`);
+  return v;
+}
+/**
+ * [S1.288 / S4.7c1 / L8] Giải trình lệch hạng — vắng hay `null` là không có; có mặt thì phải có một ký tự không phải khoảng trắng (kể cả
+ * ký tự rộng 0 mà `trim` để lại) và tối đa 2000 ký tự: `CHECK` của `119_cam_ket_trao_thau` sẽ từ chối nó bằng một 23514 không tên.
+ */
+function giaiTrinhTuyChon(body: unknown): string | null {
+  const v = chuoiTuyChon(body, "giaiTrinhLechHang");
+  if (v === null) return null;
+  if (/^[\s\u200b]*$/u.test(v)) throw new HttpError(422, 'trường "giaiTrinhLechHang" rỗng — bỏ trường đi, hoặc viết giải trình');
+  if ([...v].length > 2000) throw new HttpError(422, 'trường "giaiTrinhLechHang" dài quá 2000 ký tự');
   return v;
 }
 function soNguyen(body: unknown, ten: string): number {
@@ -638,6 +650,28 @@ const doc: readonly BuyerReadRoute[] = [
       },
     }),
   },
+  // [S1.288 / S4.7c1 / L8] CAM KẾT TCO của đề xuất mới nhất — lời khai bốn ô, thành phần kèm phép tính, tham số và số ngày giao chụp
+  // lúc gói mở, hai hạng và lời giải trình, tất cả chụp ở CSDL lúc đề xuất. `null` khi chưa có đề xuất (hay đề xuất có trước S4.7c).
+  // Cổng `bid.view` và hàng sổ `AWARD_COMMITMENT_VIEWED` nằm THẲNG trong `docCamKetTraoThau` (khoản 33, ADR-102). `agent: false` cùng
+  // lý do `/rfqs/:rfqId/ranking`: nó mang chi phí hiệu dụng và lời khai của người thắng.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/award/commitment",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        commitment: await docCamKetTraoThau(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
   // [mảnh 1 / màn xuất bằng chứng] BỘ BẰNG CHỨNG ĐÁNH GIÁ (S2.7, ADR-059) dưới phiên một con
   // người — đúng hai tệp mà `pnpm bang-chung xuat` ghi, cùng byte, vì cả hai đi qua cùng một
   // hàm dựng bundle trong `@trustprocure/danh-gia`. Trả VĂN BẢN của tệp chứ không trả object:
@@ -863,6 +897,8 @@ const ghi: readonly BuyerWriteRoute[] = [
             rfqId: rfqIdParam(ctx.req),
             bidVersionId: uuidBody(ctx.req.body, "bidVersionId"),
             reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            // [S1.288 / S4.7c1 / L8] Tuỳ chọn ở đây; CSDL đòi nó khi hạng giá khác hạng chi phí và cấm nó khi bằng nhau.
+            giaiTrinhLechHang: giaiTrinhTuyChon(ctx.req.body),
             actorSessionId: ctx.actor.sessionId,
           },
           ctx.auditPool,

@@ -62,16 +62,21 @@ export {
 export {
   TraoThauTuChoiError,
   deXuatTraoThau,
+  // [S1.288 / S4.7c1 / L8] Cam kết TCO chụp ở CSDL lúc đề xuất — cổng `bid.view` thẳng trong thân, hàng sổ `AWARD_COMMITMENT_VIEWED`.
+  docCamKetTraoThau,
   docTraoThau,
   duyetTraoThau,
   huyTraoThau,
   // [S1.231 / khoản 232 / ADR-133] Rút một đề xuất chưa chữ ký — hàm ghi thứ tư của trao thầu, cổng `award.recommend`.
   rutDeXuatTraoThau,
+  type CamKetTraoThau,
   type ChuKyDuyet,
   type DeXuatTraoThauInput,
+  type DocCamKetTraoThauInput,
   type DocTraoThauInput,
   type DuyetTraoThauInput,
   type HuyTraoThauInput,
+  type KhaiCamKet,
   type LyDoTuChoiTraoThau,
   type RutDeXuatTraoThauInput,
   type TraoThau,

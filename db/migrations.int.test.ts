@@ -2173,9 +2173,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // ký, hai vai) và K5b (độc lập) cùng đọc. `RETURNS TABLE (…)` — khuôn đọc dưới nhận thêm dạng ấy. Một thân bỏ vế loại trừ thì
     // chữ ký của người khai xung đột sau khi ký vẫn đếm ở cả hai chốt.
     { ham: "award_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "115_xung_dot_chu_ky_trao_thau.sql" },
+    // [S1.288 / S4.7c1 / L8] Hạng giá của báo giá trên tập hàng CÓ hạng — trigger giải trình và cam kết cùng đọc. Một thân trả hằng
+    // làm lệch hạng không bao giờ đòi giải trình, hay đòi giải trình trên đề xuất không lệch.
+    { ham: "award_hang_gia", chuKy: "uuid, uuid, uuid", migration: "119_cam_ket_trao_thau.sql" },
   ];
 
-  it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ ~~[S1.280] bốn~~ [S1.283] bảy hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực và tập loại trừ trao thầu: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ ~~[S1.280] bốn~~ ~~[S1.283] bảy~~ [S1.288] tám hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực, tập loại trừ trao thầu và hạng giá: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -2480,6 +2483,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_approvals_dat_bam_giao_hang", migration: "112_tco.sql", trigger: ["rfq_approvals_dat_bam_giao_hang"] },
     // [S1.286 / S4.7b2 / L16] Thân đổi ở `117`: chụp thêm tham số quy đổi của cùng phiên bản ghim — nhà cung cấp đọc chúng.
     { ham: "rfq_tco_khi_mo", migration: "117_tco_tham_so_ghim.sql", trigger: ["rfq_packages_tco_khi_mo"] },
+    // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất và giải trình lệch hạng. Thân `RETURN NEW` ở hàm đầu cho đề xuất lệch hạng
+    // đi qua không giải trình; ở hàm hai để cam kết NOT NULL hỏng hay mang ô khác lời khai; `RETURN NULL` ở hàm ba không ghi cam kết.
+    { ham: "award_kiem_giai_trinh", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_xet_giai_trinh"] },
+    { ham: "award_dien_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_award_cam_ket_dien"] },
+    { ham: "award_chup_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_chup_cam_ket"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
@@ -4268,6 +4276,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "115_xung_dot_chu_ky_trao_thau.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
+        "119_cam_ket_trao_thau.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8935,6 +8945,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "115_xung_dot_chu_ky_trao_thau.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
+        "119_cam_ket_trao_thau.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9282,6 +9294,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "115_xung_dot_chu_ky_trao_thau.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
+        "119_cam_ket_trao_thau.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
