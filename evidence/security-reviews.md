@@ -26793,6 +26793,7 @@ xuất có trước migration.
 | `pnpm cap-so --kiem` | sạch — S1.288, ADR-160, migration 119 |
 | `pnpm evidence` | vitest mã 0, 5133 khẳng định (5123 đạt, 10 bỏ qua có chủ đích, 0 hỏng), **89/89**, cổng XANH. Ma trận: L8 51 → 59 |
 | `migrations.int` · `luot-danh-gia.int` · `hardening-suy-tu` · kịch bản 41 · `buyer.int` · `rls-coverage` · `phuc-vu` | 128/128 · 142/142 · 38/38 · 94/94 · 31/31 · 61/61 · 328/328 |
+| `pnpm evidence` sau vá TRUNG-1 | vitest mã 0, 5134 khẳng định (5124 đạt, 10 bỏ qua, 0 hỏng), **89/89**, cổng XANH. Ma trận: J1 4 → 5, L8 59 → 60. `luot-danh-gia.int` 143/143, `lich-su-gia.int` 51/51, `benchmark.int` 78/78, `hardening-suy-tu` 38/38, `migrations.int` 128/128 |
 
 Lượt `evidence` đầu đỏ ba ca — ba sổ đăng ký chưa theo kịp, không ca nào là hành vi: tổng điều tra trigger của `migrations.int` (hai trigger
 `bid_chi_ghi_them` của bảng cam kết chưa vào mục ghim của hàm ấy), lớp CSDL của L5 ở `lich-su-gia.int` (`award_dien_cam_ket` chạm bản rõ —
