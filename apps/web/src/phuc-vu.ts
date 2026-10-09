@@ -111,6 +111,8 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  */
 export const MODULE_WEB = [
   "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap", "xung-dot",
+  // [S1.286 / S4.7b2] Thước TCO ở `/nop-thau` (ô bắt buộc, lời quy đổi) và phép tính ở `/mo-thau`.
+  "tco",
   "ho-so",
 ] as const;
 

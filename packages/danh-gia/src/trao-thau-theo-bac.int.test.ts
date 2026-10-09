@@ -26,12 +26,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
 import { CHOT_VAO_SO } from "@trustprocure/identity";
 import { lapNgoaiLe, rutNgoaiLe } from "@trustprocure/invitation";
+import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import { approveRfq } from "@trustprocure/rfq";
 import { withTenant } from "@trustprocure/tenancy";
 import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { taoLuotDanhGia } from "./luot-danh-gia.js";
-import { deXuatTraoThau, docTraoThau, duyetTraoThau } from "./trao-thau.js";
+import { deXuatTraoThau, docTraoThau, duyetTraoThau, rutDeXuatTraoThau } from "./trao-thau.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -97,12 +98,12 @@ async function nguoi(org: string, vai: string): Promise<NguoiPhien> {
 }
 
 /** Phiên bản có bậc của `tc`, ký bởi `tc2` — lần bật S3 của tổ chức. Trả id phiên bản. */
-async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">): Promise<string> {
+async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">, nguongKep = "5000000000.00"): Promise<string> {
   const v2 = await motId(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, tiers, " +
       "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id) " +
-      "VALUES ($1, 2, '5000000000.00', 'VND', $2::jsonb, 0, $3::jsonb, 30, 12, true, now(), $4, $5) RETURNING id",
-    [t.org, TP_GIA, JSON.stringify(BAC), t.tc.u, t.tc.s],
+      "VALUES ($1, 2, $6, 'VND', $2::jsonb, 0, $3::jsonb, 30, 12, true, now(), $4, $5) RETURNING id",
+    [t.org, TP_GIA, JSON.stringify(BAC), t.tc.u, t.tc.s, nguongKep],
   );
   await db.pool.query("INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)", [
     t.org,
@@ -113,7 +114,7 @@ async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">): P
   return v2;
 }
 
-async function taoToChuc(bat = true): Promise<ToChuc> {
+async function taoToChuc(bat = true, nguongKep = "5000000000.00"): Promise<ToChuc> {
   const org = await motId("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [`ct-${randomBytes(4).toString("hex")}`]);
   const [pm, pm2, gd1, gd2, tc, tc2, tc3] = await Promise.all([
     nguoi(org, "PROCUREMENT_MANAGER"),
@@ -131,7 +132,7 @@ async function taoToChuc(bat = true): Promise<ToChuc> {
   );
   const nhap = await nguoiNhapNhaCungCap(db.pool, org);
   const goc = { org, pm, pm2, gd1, gd2, tc, tc2, tc3, nhap };
-  const chinhSachId = bat ? await batS3(goc) : v1;
+  const chinhSachId = bat ? await batS3(goc, nguongKep) : v1;
   const categoryId = await motId(
     "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP', 'Thep', $2, $3) RETURNING id",
     [org, tc.u, tc.s],
@@ -343,6 +344,14 @@ async function trangThai(rfqId: string): Promise<string> {
 
 const deXuat = (t: ToChuc, rfqId: string, bidVersionId: string, ai: NguoiPhien = t.pm2) =>
   withTenant(apiPool, t.org, (c) => deXuatTraoThau(c, t.org, { rfqId, bidVersionId, reason: "gia thap nhat", actorSessionId: ai.s }, apiPool));
+/**
+ * [S1.285 / S3.6d / K10b] Ghi nhận tín hiệu khai thấp của gói — một người giữ `po.approve` ngoài gói. Các ca KHAI THẤP của K7/K5b (ước
+ * lượng bậc 0, giá trúng bậc 1) nay có tín hiệu `ESTIMATE_UNDERSTATED` chặn chữ ký cho tới khi nó được đọc: gọi trước chữ ký đầu.
+ */
+const ghiNhanKhaiThap = (t: ToChuc, rfqId: string, ai: NguoiPhien) =>
+  withTenant(apiPool, t.org, (c) =>
+    ghiNhanTinHieu(c, t.org, { rfqId, lyDo: "Da doc: gia thi truong tang sau khi uoc luong; trao dung bao gia thap nhat.", actorSessionId: ai.s, loai: "ESTIMATE_UNDERSTATED" }, apiPool),
+  );
 const duyet = (t: ToChuc, rfqId: string, awardId: string, ai: NguoiPhien) =>
   withTenant(apiPool, t.org, (c) => duyetTraoThau(c, t.org, { rfqId, awardId, actorSessionId: ai.s }, apiPool));
 const doc = (t: ToChuc, rfqId: string) => withTenant(apiPool, t.org, (c) => docTraoThau(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
@@ -447,6 +456,8 @@ describe("[S1.280 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ ký
     const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
     const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
     expect((await doc(t, g.rfqId))?.chuKyCan, "bậc cao hơn là bậc của số tiền trao").toBe(2);
+    // [S1.285 / S3.6d] Khai thấp ⇒ tín hiệu K10b: gd2 đọc trước khi ai ký.
+    await ghiNhanKhaiThap(t, g.rfqId, t.gd2);
 
     const mot = await duyet(t, g.rfqId, dx.awardId, t.gd1);
     expect([mot.status, mot.chuKyCan, mot.approvals.length], "chữ ký đầu còn đó, hàng đề xuất đứng yên").toEqual(["PROPOSED", 2, 1]);
@@ -468,6 +479,7 @@ describe("[S1.280 / S3.5a / K7] số chữ ký theo bậc cao hơn — chữ ký
     const g2 = await goiDaCham(t2, UL_BAC0, GIA_BAC1);
     await voiDotBien("public.award_bac_cao_hon(uuid, uuid, uuid)", "tu_cao := greatest(tu_trao, (bac_ul ->> 'tu_so_tien')::numeric);", "tu_cao := (bac_ul ->> 'tu_so_tien')::numeric;", async () => {
       const dx2 = await deXuat(t2, g2.rfqId, g2.banRo[0]!);
+      await ghiNhanKhaiThap(t2, g2.rfqId, t2.gd2);
       expect((await duyet(t2, g2.rfqId, dx2.awardId, t2.gd1)).status, "đột biến: bậc ước lượng ⇒ một chữ ký đủ").toBe("APPROVED");
     });
   });
@@ -733,6 +745,8 @@ describe("[S1.280 / S3.5a / K5b] chữ ký trao thầu của người ngoài t�
       [g.rfqId, t.gd2.u, t.gd2.s],
     );
     const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    // [S1.285 / S3.6d] Khai thấp ⇒ tín hiệu K10b: tc3 (ngoài gói) đọc trước khi ai ký.
+    await ghiNhanKhaiThap(t, g.rfqId, t.tc3);
     expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
     expect((await loi(duyet(t, g.rfqId, dx.awardId, t.gd2)))?.lyDo).toBe("K5B_THIEU_CHU_KY_DOC_LAP");
     await voiDotBien("public.award_chot_doc_lap(uuid, uuid)", "OR (bac ->> 'tu_so_tien')::numeric > (bac_ul ->> 'tu_so_tien')::numeric", "OR false", async () => {
@@ -751,6 +765,165 @@ describe("[S1.280 / S3.5a / K5b] chữ ký trao thầu của người ngoài t�
     await duyet(t, g0.rfqId, dx0.awardId, t.gd1);
     expect((await duyet(t, g0.rfqId, dx0.awardId, t.gd2)).status).toBe("APPROVED");
     expect(await tuChoiChot(t.org, g0.rfqId)).toEqual([]);
+  });
+});
+
+// =============================================================================================
+// ⑶b K10b — TÍN HIỆU KHAI THẤP ƯỚC LƯỢNG VÀ K10 Ở CHỮ KÝ TRAO THẦU (S3.6d, `116`)
+// =============================================================================================
+describe("[S1.285 / S3.6d / K10b] tín hiệu khai thấp ước lượng — ghi ở đề xuất, chặn chữ ký cho tới khi người độc lập ghi nhận", { timeout: 300000 }, () => {
+  const tinHieuCua = async (rfqId: string) =>
+    (
+      await db.pool.query<{ loai: string; nguon: string; bang_chung: Record<string, unknown>; giai_thich: string }>(
+        "SELECT loai, nguon, bang_chung, giai_thich FROM governance_signals WHERE rfq_id = $1 ORDER BY tinh_luc, id",
+        [rfqId],
+      )
+    ).rows;
+  const ghiNhan = ghiNhanKhaiThap;
+  const docTh = (t: ToChuc, rfqId: string, ai: NguoiPhien) => withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId, actorSessionId: ai.s }));
+
+  it("[INV-K10b] KHAI THẤP (ước lượng bậc 0, giá trúng bậc 1): đề xuất GHI một hàng ESTIMATE_UNDERSTATED/DE_XUAT mang hai mốc bậc, không số tiền; chữ ký DIRECTOR bị K10B_TIN_HIEU_CHUA_GHI_NHAN + CONTROL_DENIED, không chữ ký; gd2 ghi nhận ⇒ gd1, gd2 ký ⇒ APPROVED", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    const th = await tinHieuCua(g.rfqId);
+    expect(th).toHaveLength(1);
+    expect([th[0]!.loai, th[0]!.nguon]).toEqual(["ESTIMATE_UNDERSTATED", "DE_XUAT"]);
+    expect(th[0]!.bang_chung).toEqual({
+      loai: "ESTIMATE_UNDERSTATED", chinh_sach: t.chinhSachId, award: dx.awardId, bao_gia: g.banRo[0], bac_uoc_luong: 0, bac_trao: 100000000,
+      vuot_nguong_kep: false, goi: [g.rfqId],
+    });
+    expect(JSON.stringify(th[0]!.bang_chung), "bằng chứng không mang số tiền trao (ADR-054)").not.toContain("150000000");
+    expect(th[0]!.giai_thich).toBe("Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).");
+    expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_RECORDED", g.rfqId)).toBe(1);
+
+    // Chữ ký đầu bị chặn ở tầng gói: một hàng CONTROL_DENIED đúng người, không chữ ký, đề xuất đứng yên.
+    expect((await loi(duyet(t, g.rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
+    expect(await tuChoiChot(t.org, g.rfqId)).toEqual([{ ma: "K10B_TIN_HIEU_CHUA_GHI_NHAN", actorId: t.gd1.u }]);
+    expect(await chuKy(dx.awardId)).toEqual([]);
+    // Màn: gd2 ghi nhận được; pm (tạo gói, đặt ngân sách) không giữ po.approve — câu nói thiếu quyền.
+    const xemGd2 = (await docTh(t, g.rfqId, t.gd2)).khaiThap;
+    expect([xemGd2.canGhiNhan, xemGd2.nguoiXem, xemGd2.soNguoiGhiNhanDuoc]).toEqual([true, { ghiNhanDuoc: true, lyDo: null }, 4]);
+    expect((await docTh(t, g.rfqId, t.pm)).khaiThap.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: "Ghi nhận tín hiệu khai thấp cần quyền duyệt trao thầu." });
+
+    const gn = await ghiNhan(t, g.rfqId, t.gd2);
+    expect(gn.tinHieuMoi, "bằng chứng chưa đổi: ghi nhận lên hàng DE_XUAT, không hàng mới").toBe(false);
+    expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_ACKNOWLEDGED", g.rfqId)).toBe(1);
+    expect((await docTh(t, g.rfqId, t.gd2)).khaiThap.canGhiNhan).toBe(false);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd2)).status).toBe("APPROVED");
+    expect(await hangAward(g.rfqId)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+
+  it("[INV-K10b] LUẬT NGƯỜI: người đề xuất (tc3, giữ po.approve) ⇒ K10B_TU_GHI_NHAN; người khai phiên bản chính sách (tc) ⇒ K10B_TAC_GIA_CHINH_SACH; cả hai vào sổ; FINANCE khác (tc2) ghi nhận được", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!, t.tc3);
+    expect((await loi(ghiNhan(t, g.rfqId, t.tc3)))?.lyDo).toBe("K10B_TU_GHI_NHAN");
+    expect((await loi(ghiNhan(t, g.rfqId, t.tc)))?.lyDo).toBe("K10B_TAC_GIA_CHINH_SACH");
+    expect((await tuChoiChot(t.org, g.rfqId)).map((h) => h.ma)).toEqual(["K10B_TU_GHI_NHAN", "K10B_TAC_GIA_CHINH_SACH"]);
+    expect((await docTh(t, g.rfqId, t.tc3)).khaiThap.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10B_TU_GHI_NHAN.thongDiep });
+    expect((await ghiNhan(t, g.rfqId, t.tc2)).tinHieuMoi).toBe(false);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("PROPOSED");
+  });
+
+  it("[INV-K10b] FAIL-CLOSED: rút đề xuất rồi đề xuất báo giá KHÁC ⇒ bằng chứng mới (award, bao_gia), lần ghi nhận cũ không đếm — chữ ký lại bị chặn; ghi nhận lần hai lưu hàng GHI_NHAN mới", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    await deXuat(t, g.rfqId, g.banRo[0]!);
+    await ghiNhan(t, g.rfqId, t.gd2);
+    await withTenant(apiPool, t.org, (c) => rutDeXuatTraoThau(c, t.org, { rfqId: g.rfqId, reason: "chon lai bao gia", actorSessionId: t.pm2.s }, apiPool));
+    expect(await tinHieuCua(g.rfqId), "rút rồi: không đề xuất sống ⇒ không tín hiệu hiện tại, hàng cũ ở lại").toHaveLength(1);
+    const dx2 = await deXuat(t, g.rfqId, g.banRo[1]!);
+    const th = await tinHieuCua(g.rfqId);
+    expect(th).toHaveLength(2);
+    expect(th[1]!.bang_chung).toMatchObject({ award: dx2.awardId, bao_gia: g.banRo[1] });
+    expect((await loi(duyet(t, g.rfqId, dx2.awardId, t.gd1)))?.lyDo, "lần ghi nhận trỏ đề xuất cũ không đếm cho đề xuất mới").toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
+    expect((await ghiNhan(t, g.rfqId, t.gd2)).tinHieuMoi, "hàng DE_XUAT của đề xuất mới đã có").toBe(false);
+    expect((await duyet(t, g.rfqId, dx2.awardId, t.gd1)).status).toBe("PROPOSED");
+  });
+
+  it("[INV-K10b] VƯỢT NGƯỠNG KÉP mà ước lượng thì không (cùng bậc 1, ngưỡng 500 triệu): tín hiệu bắn với vuot_nguong_kep, câu giải thích nói ngưỡng; ĐỐI CHỨNG ÂM cùng bậc, dưới ngưỡng ⇒ không tín hiệu, hai chữ ký APPROVED, không CONTROL_DENIED", async () => {
+    const t = await taoToChuc(true, "500000000.00");
+    const g = await goiDaCham(t, UL_BAC1, ["600000000.00", "650000000.00"]);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    const th = await tinHieuCua(g.rfqId);
+    expect(th).toHaveLength(1);
+    expect(th[0]!.bang_chung).toMatchObject({ bac_uoc_luong: 100000000, bac_trao: 100000000, vuot_nguong_kep: true });
+    expect(th[0]!.giai_thich).toBe("Số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không (cùng bậc từ 100000000).");
+    expect((await loi(duyet(t, g.rfqId, dx.awardId, t.gd1)))?.lyDo).toBe("K10B_TIN_HIEU_CHUA_GHI_NHAN");
+
+    const g0 = await goiDaCham(t, UL_BAC1, GIA_BAC1);
+    const dx0 = await deXuat(t, g0.rfqId, g0.banRo[0]!);
+    expect(await tinHieuCua(g0.rfqId)).toEqual([]);
+    expect((await docTh(t, g0.rfqId, t.gd1)).khaiThap).toEqual({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null });
+    await duyet(t, g0.rfqId, dx0.awardId, t.gd1);
+    expect((await duyet(t, g0.rfqId, dx0.awardId, t.gd2)).status).toBe("APPROVED");
+    expect(await tuChoiChot(t.org, g0.rfqId)).toEqual([]);
+  });
+
+  it("[INV-K10b] TỔ CHỨC CHƯA BẬT: khai thấp mà không tín hiệu, không hàng, một chữ ký duyệt như MVP1", async () => {
+    const t = await taoToChuc(false);
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect(await tinHieuCua(g.rfqId)).toEqual([]);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status).toBe("APPROVED");
+  });
+
+  it("[INV-K10b] ĐỘT BIẾN hàm vị từ `award_chot_tin_hieu` RETURN NULL ⇒ chữ ký đi qua không ai ghi nhận; ĐỘT BIẾN `tin_hieu_khai_thap` không bao giờ bắn ⇒ đề xuất không ghi hàng nào; LỚP CHẶN CUỐI: chữ ký thô với trigger ⇒ 23514 `k10b_tin_hieu_chua_ghi_nhan`, không CONTROL_DENIED", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    await voiDotBien("public.award_chot_tin_hieu(uuid, uuid)", "RETURN 'K10B_TIN_HIEU_CHUA_GHI_NHAN';", "RETURN NULL;", async () => {
+      expect((await duyet(t, g.rfqId, dx.awardId, t.gd1)).status, "đột biến: K10b không còn hỏi").toBe("PROPOSED");
+    });
+    // Gói thứ hai ở TỔ CHỨC MỚI: hai gói 50 triệu cùng nhóm hàng trong một tổ chức chạm cận 100 triệu và K10a đòi ghi nhận trước khi mở.
+    const t2 = await taoToChuc();
+    const g2 = await goiDaCham(t2, UL_BAC0, GIA_BAC1);
+    await voiDotBien("public.tin_hieu_khai_thap(uuid, uuid)", "IF tu_trao <= tu_ul AND NOT vuot THEN", "IF true THEN", async () => {
+      await deXuat(t2, g2.rfqId, g2.banRo[0]!);
+      expect(await tinHieuCua(g2.rfqId), "đột biến: tín hiệu không bao giờ bắn").toEqual([]);
+    });
+    // Lớp chặn cuối: trên gói g2 (đã đề xuất dưới đột biến, nay hàm thật) — chữ ký thô dưới app_api đi thẳng vào trigger.
+    const dx2 = (await db.pool.query<{ id: string }>("SELECT id FROM rfq_awards WHERE rfq_id = $1 AND status = 'PROPOSED'", [g2.rfqId])).rows[0]!.id;
+    const truoc = await tuChoiChot(t2.org, g2.rfqId);
+    const tho = await loi(
+      withTenant(apiPool, t2.org, (c) =>
+        c.query(
+          "INSERT INTO public.rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)",
+          [t2.org, dx2, t2.gd2.u, t2.gd2.s],
+        ),
+      ),
+    );
+    expect([tho?.code, tho?.constraint]).toEqual(["23514", "k10b_tin_hieu_chua_ghi_nhan"]);
+    expect(await tuChoiChot(t2.org, g2.rfqId), "câu đi tắt: không hàng sổ nào thêm").toEqual(truoc);
+    expect(await chuKy(dx2)).toEqual([]);
+  });
+
+  it("[INV-K10b] ĐỘT BIẾN luật người: bỏ vế người đề xuất ⇒ người đề xuất (tc3) tự ghi nhận được; bỏ vế tác giả chính sách ⇒ tc ghi nhận được", async () => {
+    const t = await taoToChuc();
+    const g = await goiDaCham(t, UL_BAC0, GIA_BAC1);
+    await deXuat(t, g.rfqId, g.banRo[0]!, t.tc3);
+    await voiDotBien("public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)", "AND w.acted_by = p_nguoi) THEN", "AND false) THEN", async () => {
+      expect((await ghiNhan(t, g.rfqId, t.tc3)).tinHieuMoi, "đột biến: người đề xuất tự ghi nhận").toBe(false);
+    });
+    const t2 = await taoToChuc();
+    const g2 = await goiDaCham(t2, UL_BAC0, GIA_BAC1);
+    await deXuat(t2, g2.rfqId, g2.banRo[0]!);
+    await voiDotBien("public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)", "RETURN 'K10B_TAC_GIA_CHINH_SACH';", "RETURN NULL;", async () => {
+      expect((await ghiNhan(t2, g2.rfqId, t2.tc)).tinHieuMoi, "đột biến: tác giả chính sách ghi nhận được").toBe(false);
+    });
+  });
+
+  it("[INV-K10b] K12: tập mã K10b trong thân ba hàm SQL = các dòng `chot: K10b` của CHOT_VAO_SO; tên ràng buộc k10b_* KHÔNG ở CHOT_THEO_RANG_BUOC (ADR-120)", async () => {
+    const { rows } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_tin_hieu(uuid, uuid)'::regprocedure, " +
+        "'public.tin_hieu_chot_nguoi_ghi_nhan(uuid, jsonb, uuid)'::regprocedure, 'public.tin_hieu_kiem_ghi_nhan()'::regprocedure)",
+    );
+    const trongThan = [...new Set(rows.flatMap((r) => [...r.prosrc.matchAll(/'(K10B_\w+)'/gu)].map((m) => m[1])))].sort();
+    const trongBang = Object.entries(CHOT_VAO_SO).filter(([, d]) => d.chot === "K10b").map(([k]) => k).sort();
+    expect(trongThan).toEqual(trongBang);
+    expect(trongBang).toEqual(["K10B_TAC_GIA_CHINH_SACH", "K10B_TIN_HIEU_CHUA_GHI_NHAN", "K10B_TU_GHI_NHAN"]);
   });
 });
 

@@ -227,6 +227,8 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.award_kiem_theo_bac_khi_de_xuat",
   "public.award_kiem_theo_bac_khi_duyet",
   "public.award_kiem_vai_theo_bac",
+  // [S1.285 / S3.6d / K10b] `award_kiem_tin_hieu_khai_thap` (chữ ký — tín hiệu khai thấp chưa ai ghi nhận ⇒ NÉM). Tổ chức chưa bật, hay không tín hiệu, đi qua.
+  "public.award_kiem_tin_hieu_khai_thap",
   // [S1.270 / S3.3d / K3] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_xoay_vong_khi_nop` chỉ ngoài READ COMMITTED hay khi danh sách
   // không có nhà cung cấp mới mà không ngoại lệ ROTATION; `rfq_kiem_xoay_vong_khi_mo` thêm vế `opened_at` là giờ của lần mở.
   // `dungKichBan()` nộp và mở gói ở tổ chức đã bật qua cả hai.

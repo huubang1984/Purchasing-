@@ -7,10 +7,15 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
-import { RFQ_STATUSES, RFQ_TRANSITIONS } from "@trustprocure/rfq";
+import { RFQ_STATUSES, RFQ_TRANSITIONS, SO_NGAY_GIAO_TOI_DA as SO_NGAY_GIAO_TOI_DA_GOI } from "@trustprocure/rfq";
 import { CHOT_VAO_SO } from "@trustprocure/identity";
 import * as GoiNgoaiLe from "@trustprocure/invitation";
 import {
+  SO_NGAY_GIAO_TOI_DA,
+  canhBaoSoNgayGiao,
+  docSoNgayGiao,
+  hienDatSoNgayGiao,
+  nhanSoNgayGiao,
   LOAI_NGOAI_LE,
   LOAI_NGOAI_LE_HAU_KIEM,
   MA_LY_DO_NGOAI_LE,
@@ -18,6 +23,7 @@ import {
   TRAN_GIAI_TRINH_BYTE,
   chiDanChot,
   cungLanNop,
+  khungTinHieuKhaiThap,
   docNhaCungCapChon,
   loaiNgoaiLeGoiY,
   loiGiaiTrinh,
@@ -490,6 +496,19 @@ describe("[S1.273 / S3.3e1] chỉ dẫn theo mã chốt — câu máy chủ vẫ
     "K7_KHONG_BAC_GHIM", "K7_LECH_TIEN_TE", "K7_DAU_THAU_CHINH_THUC", "K7_SAI_VAI", "K7_TAC_GIA_CHINH_SACH",
     "K2B_THIEU_CANH_TRANH_THUC", "K2B_NGOAI_LE_SAI_TRANG_THAI", "K5B_THIEU_CHU_KY_DOC_LAP",
   ] as const;
+  // [S1.285 / S3.6d] Ba mã K10b — tín hiệu khai thấp ước lượng ở bước 7 của `/mo-thau`.
+  it("[S1.285 / S3.6d] ba mã K10b có câu, không nhắc lại câu máy chủ, không phụ thuộc quyền mời; K10b chưa ghi nhận trỏ khối «Tín hiệu khai thấp»", () => {
+    for (const ma of ["K10B_TIN_HIEU_CHUA_GHI_NHAN", "K10B_TU_GHI_NHAN", "K10B_TAC_GIA_CHINH_SACH"] as const) {
+      expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
+      expect(chiDanChot(ma, true), ma).not.toBeNull();
+      expect(chiDanChot(ma, false), ma).toBe(chiDanChot(ma, true));
+      const may = CHOT_VAO_SO[ma].thongDiep.toLowerCase().split(/\s+/u);
+      const chiDan = (chiDanChot(ma, true) ?? "").toLowerCase();
+      for (let i = 0; i + 6 <= may.length; i += 1) expect(chiDan, `${ma}: «${may.slice(i, i + 6).join(" ")}»`).not.toContain(may.slice(i, i + 6).join(" "));
+    }
+    expect(chiDanChot("K10B_TIN_HIEU_CHUA_GHI_NHAN", true)).toMatch(/khối «Tín hiệu khai thấp» ở bước 7/u);
+  });
+
   it("[S1.282 / S3.5b] tám mã của trao thầu theo bậc có câu, không nhắc lại câu máy chủ; K2b trỏ khối «Ngoại lệ hậu kiểm» và chỉ nó nhờ người mời được", () => {
     for (const ma of MA_TRAO_THAU) {
       expect(Object.hasOwn(CHOT_VAO_SO, ma), `${ma} là mã có thật của bảng`).toBe(true);
@@ -562,5 +581,100 @@ describe("[S1.273 / S3.3e1] ô chọn nhà cung cấp có sẵn", () => {
     expect(nhanXacMinhNgan({ loai: "REVOKED", conHieuLuc: false })).toMatch(/^Xác minh đã bị thu hồi/u);
     expect(nhanXacMinhNgan({ loai: null, conHieuLuc: false })).toMatch(/^Chưa được xác minh/u);
     expect(nhanXacMinhNgan(null)).toBe("Không đọc được trạng thái xác minh.");
+  });
+});
+
+describe("[S1.284 / S4.7b1] [INV-L16] số ngày giao yêu cầu ở /tao-thau", () => {
+  it("biên của màn là biên của gói (CHECK `112`)", () => {
+    expect(SO_NGAY_GIAO_TOI_DA).toBe(SO_NGAY_GIAO_TOI_DA_GOI);
+  });
+
+  it.each([
+    ["", null],
+    ["  ", null],
+    [" 30 ", 30],
+    ["1", 1],
+    ["3650", 3650],
+    ["3651", undefined],
+    ["0", undefined],
+    ["030", undefined],
+    ["1.5", undefined],
+    ["-3", undefined],
+    ["1e3", undefined],
+    ["ba", undefined],
+  ])("ô %j ⇒ %j", (chuoi, mong) => {
+    expect(docSoNgayGiao(chuoi)).toBe(mong);
+  });
+
+  it("ô chỉ ở DRAFT; nhãn mọi trạng thái", () => {
+    expect(RFQ_STATUSES.filter((t) => hienDatSoNgayGiao(t))).toEqual(["DRAFT"]);
+    expect([nhanSoNgayGiao(30), nhanSoNgayGiao(null), nhanSoNgayGiao(undefined)]).toEqual(["30 ngày", "chưa khai", "—"]);
+  });
+
+  it("cảnh báo chỉ khi gói chưa khai, ở DRAFT hay chờ duyệt, và một phiên bản hiệu lực hay mới hơn tính chi phí trễ", () => {
+    const tre = { phienBan: [{ hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] }], daBat: false };
+    expect(canhBaoSoNgayGiao(tre, null, "DRAFT")).toContain("Khai số ngày giao ở ô dưới");
+    expect(canhBaoSoNgayGiao(tre, 30, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, undefined, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, null, "OPEN")).toBeNull();
+    expect(canhBaoSoNgayGiao(tre, null, "PENDING_APPROVAL")).toContain("chỉ còn lối huỷ");
+    expect(canhBaoSoNgayGiao({ ...tre, daBat: true }, null, "PENDING_APPROVAL")).toContain("trả gói về soạn thảo");
+    expect(canhBaoSoNgayGiao(null, null, "DRAFT")).toBeNull();
+    expect(canhBaoSoNgayGiao({ phienBan: [{ hieuLuc: true, evalComponents: null }] }, null, "DRAFT")).toBeNull();
+    // Không phiên bản nào hiệu lực (mọi bản chờ ký) ⇒ xét mọi bản.
+    expect(canhBaoSoNgayGiao({ phienBan: [{ hieuLuc: false, evalComponents: [{ ma: "chi_phi_tre" }] }] }, null, "DRAFT")).not.toBeNull();
+  });
+});
+
+describe("[S1.284 / S4.7b1 — rà soát TRUNG-1] cảnh báo số ngày giao: phiên bản HIỆU LỰC khác phiên bản MỚI HƠN chưa hiệu lực", () => {
+  const GIA = { hieuLuc: true, tiers: null, evalComponents: [{ ma: "gia" }] };
+  const moiCoBac = { hieuLuc: false, tiers: [{}], evalComponents: [{ ma: "chi_phi_tre" }] };
+  const moiKhongBac = { hieuLuc: false, tiers: null, evalComponents: [{ ma: "chi_phi_tre" }] };
+
+  it("bản hiệu lực tính chi phí trễ ⇒ lời của openRfq; chỉ bản mới hơn ⇒ lời có điều kiện, không bao giờ *chỉ còn lối huỷ*", () => {
+    expect(canhBaoSoNgayGiao({ phienBan: [{ ...GIA, evalComponents: [{ ma: "chi_phi_tre" }] }], daBat: false }, null, "PENDING_APPROVAL")).toContain(
+      "Chính sách đang hiệu lực",
+    );
+    const draft = canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: false }, null, "DRAFT");
+    expect(draft).toContain("nếu nó có hiệu lực trước lúc gói mở");
+    expect(draft).not.toContain("lối huỷ");
+    expect(canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: true }, null, "PENDING_APPROVAL")).toContain("khi ấy trả gói về soạn thảo");
+  });
+
+  it("tổ chức chưa bật, gói chờ duyệt: bản mới hơn CÓ bậc không chạm được gói (`097`) ⇒ im; bản KHÔNG bậc ⇒ *mở gói trước lúc ấy*", () => {
+    expect(canhBaoSoNgayGiao({ phienBan: [moiCoBac, GIA], daBat: false }, null, "PENDING_APPROVAL")).toBeNull();
+    const kb = canhBaoSoNgayGiao({ phienBan: [moiKhongBac, GIA], daBat: false }, null, "PENDING_APPROVAL");
+    expect(kb).toContain("mở gói trước lúc ấy");
+    expect(kb).not.toContain("lối huỷ");
+  });
+});
+
+describe("[S1.285 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng — thân `GET /rfqs/:rfqId/signals` phần `khaiThap`", () => {
+  const BC = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: ["r-1"] };
+  const than = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({ tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap } });
+
+  it("không tín hiệu (hienTai null), thân lạ, không khối ⇒ khung ẩn", () => {
+    expect(khungTinHieuKhaiThap(null).hien).toBe(false);
+    expect(khungTinHieuKhaiThap({ tinHieu: {} }).hien).toBe(false);
+    expect(khungTinHieuKhaiThap(than({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null })).hien).toBe(false);
+  });
+
+  it("có tín hiệu: tóm tắt là câu CSDL của hàng có bằng chứng BẰNG hiện tại, lịch sử là các lần ghi nhận của hàng ấy; chờ ghi nhận + người xem ghi nhận được ⇒ ô lý do", () => {
+    const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+    const k = khungTinHieuKhaiThap(than({ hienTai: BC, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]));
+    expect(k).toEqual({ hien: true, tomTat: hang.giaiThich, choDoc: true, lichSu: [], choGhiNhan: true, khongDuoc: null });
+    const daDoc = khungTinHieuKhaiThap(than({ hienTai: BC, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }, [
+      { ...hang, ghiNhan: [{ id: "a-1", lyDo: "Đã đọc", nguoi: "u-gd2", nguoiTen: "Nguoi duyet 2", luc: "2026-10-08T01:00:00Z" }] },
+    ]));
+    expect(daDoc.choDoc).toBe(false);
+    expect(daDoc.choGhiNhan).toBe(false);
+    expect(daDoc.lichSu).toEqual([{ luc: "2026-10-08T01:00:00Z", noiDung: "Nguoi duyet 2 đã ghi nhận: Đã đọc" }]);
+  });
+
+  it("chờ ghi nhận mà người xem không ghi nhận được ⇒ câu của máy chủ; hàng cũ có bằng chứng KHÁC không mượn câu — tóm tắt dựng từ hai mốc bậc, có dấu chấm nghìn, không số tiền trao", () => {
+    const cu = { id: "s-0", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: { ...BC, award: "aw-0" }, giaiThich: "câu cũ", ghiNhan: [] };
+    const k = khungTinHieuKhaiThap(than({ hienTai: { ...BC, vuot_nguong_kep: true }, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đề xuất không ghi nhận được." }, soNguoiGhiNhanDuoc: 1 }, [cu]));
+    expect(k.tomTat).toBe("Bậc của số tiền trao (từ 100.000.000) so với bậc của ước lượng (từ 0); số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không.");
+    expect([k.choDoc, k.choGhiNhan, k.khongDuoc]).toEqual([true, false, "Người đề xuất không ghi nhận được."]);
   });
 });

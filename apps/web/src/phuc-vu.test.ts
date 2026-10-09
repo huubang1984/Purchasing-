@@ -28,6 +28,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import * as benchmarkWeb from "./benchmark.js";
 import * as chinhSach from "./chinh-sach.js";
+import * as tcoWeb from "./tco.js";
 import * as dangNhap from "./dang-nhap.js";
 import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
@@ -283,6 +284,7 @@ describe("bề mặt tệp", () => {
     };
     // `/lib/chinh-sach.js` và `/lib/tao-thau.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một
     // hàm trả chuỗi rỗng.
+    const banRoDaNiem: Record<string, unknown>[] = [];
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
       // [S1.201 / S3.6a] `/lib/nhom-hang.js` là bản thật: ô chọn nhóm hàng của `/tao-thau` và bảng của `/nhom-hang` đọc từ nó.
@@ -297,13 +299,19 @@ describe("bề mặt tệp", () => {
       ...benchmarkWeb,
       // [S1.283 / S3.4b] `/lib/xung-dot.js` là bản thật: khối khai báo xung đột lợi ích của `/tao-thau` và `/mo-thau` chạy từ nó.
       ...xungDot,
+      // [S1.286 / S4.7b2] `/lib/tco.js` là bản thật: ô khai TCO của `/nop-thau` và phép tính của `/mo-thau` chạy từ nó.
+      ...tcoWeb,
       // [S1.287 / S3.7a1] `/lib/ho-so.js` là bản thật: kiểm form và che số tài khoản của `/ho-so`.
       ...hoSo,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
-      sealBid: () => Promise.resolve(new Uint8Array(0)),
+      // [S1.286 / S4.7b2] Bản rõ mỗi lần niêm phong được giữ lại — để đo trang ĐƯA GÌ vào phong bì (ô khai TCO), không chỉ có gọi.
+      sealBid: (a: { plaintext: Uint8Array }) => {
+        banRoDaNiem.push(JSON.parse(new TextDecoder().decode(a.plaintext)) as Record<string, unknown>);
+        return Promise.resolve(new Uint8Array(0));
+      },
       chooseKeyAgreementAlgorithm: () => "ECDH_P256",
       describeEnvelope: () => ({ formatVersion: 1, algorithm: "ECDH_P256", ephemeralPublicKey: new Uint8Array(0) }),
     };
@@ -1297,7 +1305,7 @@ describe("bề mặt tệp", () => {
           { rank: 2, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [] },
         ],
       };
-      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI) => {
+      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI, xepHang: unknown = XEP_HANG) => {
         const p = await dungTrang("mo-thau", {
           hash: "", cookie: B,
           thay: (l) => {
@@ -1307,7 +1315,7 @@ describe("bề mặt tệp", () => {
             if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 200, body: { comparison: soSanh } });
             if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: bm } });
             if (l === `GET /rfqs/${RFQ}/items/1/benchmark`) return Promise.resolve({ status: 200, body: { dai } });
-            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: xepHang } });
             return undefined;
           },
         });
@@ -1514,6 +1522,58 @@ describe("bề mặt tệp", () => {
         ]);
       });
 
+      // [S1.286 / S4.7b2] Bảng có thước TCO (ADR-156 ⑷; spec S4 §8.6, §8.13): cột hạng giá, phép tính của mã quy đổi cạnh con số nó
+      // sinh ra, mã thiếu gọi tên, và câu *"theo lời khai"*. Bảng chỉ giá giữ nguyên sáu cột (ca khoản 334 dưới).
+      it("[INV-L16] [S1.286 / S4.7b2] bảng có thước TCO: cột Hạng giá hiện, ô theo hàng ('—' ở báo giá không hạng); phép tính hai mã quy đổi với tham số phiên bản; mã thiếu gọi tên; câu theo lời khai", async () => {
+        const tre = (coSo: string, ngayKhai: string, tien: string) => ({
+          ma: "chi_phi_tre", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien, nguon: { coSo, ngayKhai, ngayYeuCau: "30", tyLe: "0.001" },
+        });
+        const gia = (tien: string) => ({ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien });
+        const XEP_TCO = {
+          evaluationId: "e-2", policyVersion: 2, currency: "VND", evaluatedAt: "2026-10-01T02:00:00Z",
+          rows: [
+            { rank: 1, hangGia: 2, maThieu: null, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [gia("990.00"), tre("990.00", "40", "9.90")] },
+            { rank: 2, hangGia: 1, maThieu: null, supplierName: "Công ty Thép Hai", effectiveCost: "1099.80", bidVersionId: "bv-2", components: [gia("900.00"), tre("900.00", "252", "199.80")] },
+            { rank: null, hangGia: null, maThieu: ["chi_phi_tre"], supplierName: "Công ty Thép Ba", effectiveCost: null, bidVersionId: "bv-3", components: [] },
+          ],
+        };
+        const p = await dung(BM_CO, SO_SANH, DAI, XEP_TCO);
+        await p.bam("nut-xep-hang");
+        expect(p.el("th-hang-gia").hidden).toBe(false);
+        const tbody = p.el("bang-hang").querySelector("tbody");
+        expect(tbody.con[0]?.con.map((td) => td.dataset["nhan"] ?? "")).toEqual(["Hạng", "Hạng giá", "Nhà cung cấp", "Chi phí hiệu dụng", "Thành phần", "Benchmark", ""]);
+        expect(tbody.con.map((tr) => tr.con.slice(0, 3).map((td) => td.textContent))).toEqual([
+          ["1", "2", "Công ty Thép Một"],
+          ["2", "1", "Công ty Thép Hai"],
+          ["—", "—", "Công ty Thép Ba"],
+        ]);
+        const thanhPhan = (i: number) => (tbody.con[i]?.con[4]?.con[0]?.con ?? []).map((li) => li.textContent);
+        expect(thanhPhan(1)).toEqual([
+          "gia · 900.00 × 1.0000 = 900.00 (TIEN)",
+          "Chi phí trễ giao = max(0, 252 ngày khai − 30 ngày yêu cầu) × 0.001/ngày × 900.00 = 199.80 — tham số của chính sách phiên bản 2",
+        ]);
+        expect(thanhPhan(2)).toEqual(["không hạng — thiếu: Chi phí trễ giao (chi_phi_tre)"]);
+        expect(ttChu(p, "tt-luot")).toContain("Chi phí hiệu dụng|tổng chi phí theo LỜI KHAI của nhà cung cấp — chưa đối chiếu với hoá đơn hay phiếu nhập kho");
+
+        // [rà soát §S1.286 — THẤP-5] Đọc lại khi gói chưa chấm (`ranking: null`) ⇒ bảng rỗng và đầu cột hạng giá ẩn theo.
+        // Thân giả được `JSON.stringify` ở MỖI lần gọi, nên `toJSON` cho cùng trang hai câu trả lời: bảng TCO, rồi `null`.
+        let bangHienTai: unknown = XEP_TCO;
+        const r = await dung(BM_CO, SO_SANH, DAI, { toJSON: () => bangHienTai });
+        await r.bam("nut-xep-hang");
+        expect(r.el("th-hang-gia").hidden).toBe(false);
+        bangHienTai = null;
+        await r.bam("nut-xep-hang");
+        expect(r.el("bang-hang").querySelector("tbody").con).toEqual([]);
+        expect(r.el("th-hang-gia").hidden, "chưa chấm ⇒ bảng rỗng ⇒ đầu cột hạng giá ẩn").toBe(true);
+
+        // Bảng chỉ giá (cùng trang, lượt chấm cũ): cột ẩn, không ô thêm, không câu theo lời khai.
+        const q = await dung(BM_CO);
+        await q.bam("nut-xep-hang");
+        expect(q.el("th-hang-gia").hidden).toBe(true);
+        expect(q.el("bang-hang").querySelector("tbody").con[0]?.con).toHaveLength(6);
+        expect(ttChu(q, "tt-luot")).not.toContain("LỜI KHAI");
+      });
+
       // [S1.277 / khoản 334] Đo trên Chromium ở 375×812 (§S1.277): bảng xếp hạng rộng 870 px, bảng so sánh lố 10 px, cả trang 903 px —
       // dòng thành phần `nowrap` và bảng không xếp khối. Kho không có trình duyệt trong bộ test, nên ca này giữ BA thứ phép đo ấy dựa vào:
       // hai bảng mang lớp `xep` (luật màn hẹp đọc nó), mỗi ô mang nhãn cột, và dòng thành phần được xuống dòng dưới 480 px.
@@ -1667,6 +1727,81 @@ describe("bề mặt tệp", () => {
         const mvp1 = await dungS35b({ award: () => deXuat("aw-1") });
         await deXuatVoi(mvp1);
         expect(mvp1.el("ok7").textContent).toMatch(/nay cần một chữ ký phê duyệt của người KHÁC người đề xuất\.$/u);
+      });
+
+      // [S1.285 / S3.6d / K10b] Khối «Tín hiệu khai thấp» ở bước 7: đọc cùng đề xuất, ẩn khi không tín hiệu, ô ghi nhận chỉ
+      // khi máy chủ nói người xem ghi nhận được; lời từ chối K10b ở chữ ký kèm chỉ dẫn trỏ khối.
+      const BC_KT = { loai: "ESTIMATE_UNDERSTATED", chinh_sach: "cs-1", award: "aw-1", bao_gia: "bv-1", bac_uoc_luong: 0, bac_trao: 100000000, vuot_nguong_kep: false, goi: [RFQ] };
+      const thanTinHieu = (khaiThap: Record<string, unknown>, tinHieu: unknown[] = []) => ({
+        tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap },
+      });
+      const dungKt = async (khaiThap: Record<string, unknown> | null, tinHieu: unknown[] = [], ghiNhan: { status: number; body: unknown } = { status: 201, body: { ghiNhan: {} } }, duyet?: { status: number; body: unknown }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: { ...deXuat("aw-1"), chuKyCan: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/signals`) return Promise.resolve(khaiThap === null ? { status: 401, body: { error: "x" } } : { status: 200, body: thanTinHieu(khaiThap, tinHieu) });
+            if (l === `POST /rfqs/${RFQ}/award/signals/acknowledge`) return Promise.resolve(ghiNhan);
+            if (l.startsWith(`POST /rfqs/${RFQ}/award/`)) return Promise.resolve(duyet ?? { status: 201, body: { award: daDuyet("aw-1") } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-doc-award");
+        return p;
+      };
+
+      it("[S1.285 / S3.6d / K10b] đọc đề xuất ⇒ đọc tín hiệu; không tín hiệu (hay đọc hỏng) ⇒ khối ẩn; có tín hiệu chờ đọc ⇒ khối hiện, câu CSDL + «chữ ký đang bị chặn», ô lý do chỉ khi máy chủ cho ghi nhận", async () => {
+        const an = await dungKt({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null });
+        expect(an.trangThai.goi).toContain(`GET /rfqs/${RFQ}/signals`);
+        expect(an.el("khoi-tin-hieu-kt").hidden).toBe(true);
+        const hong = await dungKt(null);
+        expect(hong.el("khoi-tin-hieu-kt").hidden).toBe(true);
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]);
+        expect(p.el("khoi-tin-hieu-kt").hidden).toBe(false);
+        expect(p.el("tom-tat-tin-hieu-kt").textContent).toBe(`${hang.giaiThich} Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn (K10b).`);
+        expect(p.el("khoi-ghi-nhan-kt").hidden).toBe(false);
+        const khong = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đề xuất trao thầu của gói không ghi nhận được." }, soNguoiGhiNhanDuoc: 1 }, [hang]);
+        expect(khong.el("khoi-ghi-nhan-kt").hidden).toBe(true);
+        expect(khong.el("loi-thkt").textContent).toBe("Người đề xuất trao thầu của gói không ghi nhận được.");
+      });
+
+      it("[S1.285 / S3.6d / K10b] ghi nhận: thiếu lý do không gửi; gửi đúng thân tới route trao thầu; 201 ⇒ câu *đã ghi nhận* và đọc lại; đã có người đọc ⇒ lịch sử một dòng, ô ẩn", async () => {
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "Bậc của số tiền trao (từ 100000000) cao hơn bậc của ước lượng (từ 0).", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang]);
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.trangThai.goi).not.toContain(`POST /rfqs/${RFQ}/award/signals/acknowledge`);
+        expect(p.el("loi-thkt").textContent).toMatch(/Cần ghi lý do ghi nhận/u);
+        p.el("ly-do-ghi-nhan-kt").value = "  Đã đọc: giá thị trường tăng  ";
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award/signals/acknowledge`).at(-1)?.than).toEqual({ lyDo: "Đã đọc: giá thị trường tăng" });
+        expect(p.el("ok-thkt").textContent).toMatch(/^Đã ghi nhận tín hiệu khai thấp/u);
+        expect(p.trangThai.goi.filter((l) => l === `GET /rfqs/${RFQ}/signals`), "đọc lại sau khi ghi nhận").toHaveLength(2);
+        const daDoc = await dungKt({ hienTai: BC_KT, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }, [
+          { ...hang, ghiNhan: [{ id: "a-1", lyDo: "Đã đọc", nguoi: "u-gd2", nguoiTen: "Nguoi duyet 2", luc: "2026-10-08T01:00:00Z" }] },
+        ]);
+        expect(daDoc.el("tom-tat-tin-hieu-kt").textContent).toMatch(/Đã có người ghi nhận\.$/u);
+        expect(daDoc.el("lich-su-tin-hieu-kt").con.map((x) => x.textContent)).toEqual([expect.stringMatching(/Nguoi duyet 2 đã ghi nhận: Đã đọc$/u)]);
+        expect(daDoc.el("khoi-ghi-nhan-kt").hidden).toBe(true);
+      });
+
+      it("[S1.285 / S3.6d / K10b] ký khi chưa ai ghi nhận ⇒ câu máy chủ rồi chỉ dẫn trỏ khối «Tín hiệu khai thấp»; ghi nhận bị K10B_TU_GHI_NHAN ⇒ chỉ dẫn đổi người", async () => {
+        const hang = { id: "s-1", loai: "ESTIMATE_UNDERSTATED", nguon: "DE_XUAT", bangChung: BC_KT, giaiThich: "x", ghiNhan: [] };
+        const p = await dungKt({ hienTai: BC_KT, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 }, [hang],
+          { status: 422, body: { error: "Người đề xuất không ghi nhận được tín hiệu khai thấp.", ma: "K10B_TU_GHI_NHAN" } },
+          { status: 422, body: { error: "Gói thầu có tín hiệu khai thấp ước lượng chưa được ghi nhận.", ma: "K10B_TIN_HIEU_CHUA_GHI_NHAN" } });
+        await p.bam("nut-duyet-award");
+        expect(p.el("loi7").textContent).toMatch(/^Gói thầu có tín hiệu khai thấp ước lượng chưa được ghi nhận\. Trên màn: khối «Tín hiệu khai thấp» ở bước 7/u);
+        p.el("ly-do-ghi-nhan-kt").value = "Đã đọc";
+        await p.bam("nut-ghi-nhan-kt");
+        expect(p.el("loi-thkt").textContent).toMatch(/^Người đề xuất không ghi nhận được tín hiệu khai thấp\. Đổi ở bước 1 sang một người duyệt khác đứng ngoài gói này\.$/u);
       });
 
       it("[S1.282 / S3.5b · S1.283 K9] M đếm như máy chủ: chữ ký `conHieuLuc: false` không vào *có M* nhưng vẫn hiện trong danh sách kèm dấu *không đếm*", async () => {
@@ -2355,6 +2490,110 @@ describe("bề mặt tệp", () => {
     /** Gói thầu có một khoá công khai khớp thuật toán mà thư viện giả chọn — đủ để "Niêm phong và nộp" đi tới POST /guest/bids. */
     const GOI_NOP = { ...GOI_THAU_KHACH, publicKeys: [{ algorithm: "ECDH_P256", publicKey: "", keyVersion: "k1" }] };
     const BIEN_NHAN = { status: 201, body: { receipt: { bidVersionId: "bv-1", version: 1, submittedAt: "2026-09-27T00:00:00Z", canonicalText: "van ban", signature: "ky" } } };
+
+    // [S1.286 / S4.7b2 / L16 vế form] Thước TCO chụp lúc gói mở: ĐÚNG ô của mã bật, lời quy đổi với chính tham số, ô bắt buộc chặn nút
+    // nộp và gọi tên ô, phong bì mang trường chuẩn của ô — và chỉ của ô cần khai.
+    const GOI_TCO = {
+      ...GOI_NOP,
+      rfq: { ...GOI_NOP.rfq, soNgayGiao: 30 },
+      tco: { ma: ["gia", "van_chuyen", "chi_phi_thanh_toan", "chi_phi_tre"], thamSo: { chiPhiVonNam: "0.12", ngayThanhToanChuan: "60", tyLeTreNgay: "0.001" } },
+    };
+    const goTco = async (p: Awaited<ReturnType<typeof dungTrang>>, id: string, v: string) => {
+      p.el(id).value = v;
+      for (const f of p.el(id).nghe["input"] ?? []) await f();
+    };
+
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: thước TCO ⇒ đúng ô của mã bật và lời quy đổi với chính tham số; ô trống chặn nút nộp, gọi tên ô; đủ ô ⇒ phong bì mang trường chuẩn", async () => {
+      banRoDaNiem.length = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_TCO }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      expect(bangGoiThau(p)).toContain("Số ngày giao yêu cầu");
+      expect(bangGoiThau(p)).toContain("30 ngày");
+      expect(p.el("khoi-tco").hidden).toBe(false);
+      expect(["o-van-chuyen", "o-nhap-khau", "o-ngay-thanh-toan", "o-ngay-giao"].map((id) => p.el(id).hidden), "ô nhập khẩu không bật ⇒ ẩn").toEqual([
+        false, true, false, false,
+      ]);
+      const loi = p.el("ghi-tco").con.map((x) => x.textContent);
+      expect(loi).toHaveLength(4);
+      expect(loi[2]).toContain("kỳ thanh toán chuẩn của bên mua là 60 ngày");
+      expect(loi[2]).toContain("chi phí vốn 0.12 một năm");
+      expect(loi[3]).toContain("số ngày giao yêu cầu là 30 ngày");
+      expect(loi[3]).toContain("quy thành 0.001 × tổng báo giá");
+
+      // Ô trống ⇒ câu gọi tên ô đầu tiên, nút nộp tắt, bấm cũng không niêm phong.
+      expect(p.el("tco-thieu").hidden).toBe(false);
+      expect(p.el("tco-thieu").textContent).toMatch(/^Phí vận chuyển là ô bắt buộc của gói này — không có khoản ấy thì ghi 0\./u);
+      expect(p.el("nut-nop").disabled).toBe(true);
+      await goTco(p, "tco-van-chuyen", "1.500.000");
+      await goTco(p, "tco-ngay-thanh-toan", "30");
+      expect(p.el("tco-thieu").textContent).toMatch(/^Số ngày giao hàng là ô bắt buộc/u);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi, "thiếu ô ⇒ không niêm phong, không nộp").not.toContain("POST /guest/bids");
+      expect(banRoDaNiem).toEqual([]);
+      await goTco(p, "tco-ngay-giao", "045");
+      expect(p.el("tco-thieu").textContent).toBe('Số ngày giao hàng "045" không đọc được: số ngày nguyên từ 0 đến 3650.');
+      expect(p.el("nut-nop").disabled).toBe(true);
+      // Ô nhập khẩu ẨN mà có chữ (người gõ trước khi thước đổi) không chặn và không vào phong bì.
+      p.el("tco-nhap-khau").value = "999";
+      await goTco(p, "tco-ngay-giao", "45");
+      expect(p.el("tco-thieu").hidden).toBe(true);
+      expect(p.el("nut-nop").disabled).toBe(false);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi.at(-1)).toBe("POST /guest/bids");
+      expect(banRoDaNiem).toHaveLength(1);
+      expect(banRoDaNiem[0]).toMatchObject({ freight: "1500000", paymentDays: "30", leadTimeDays: "45" });
+      expect(Object.keys(banRoDaNiem[0] ?? {}), "không khoá `importCost` — mã nhập khẩu không bật").not.toContain("importCost");
+    });
+
+    // [rà soát §S1.286 — TRUNG-1] Bốn ô TCO là phần tử TĨNH của trang (ô đơn giá thì dựng lại mỗi lần nạp): trước bản sửa, A thoát rồi B
+    // mở link của mình trên cùng thẻ thì B thấy nguyên lời khai của A, câu ô thiếu im, và nút nộp niêm phong lời khai ấy vào báo giá của B.
+    it("[INV-L16] [S1.286 / S4.7b2] nop-thau: A thoát, B mở link của mình trên cùng thẻ ⇒ bốn ô TCO rỗng, khối ẩn tới lần nạp mới, câu ô thiếu nói lại, không niêm phong lời khai của A", async () => {
+      banRoDaNiem.length = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_TCO }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : REDEEM(l)),
+      });
+      await p.bam("nut-dung-phien");
+      await goTco(p, "tco-van-chuyen", "1.500.000");
+      await goTco(p, "tco-ngay-thanh-toan", "30");
+      await goTco(p, "tco-ngay-giao", "45");
+      expect(p.el("tco-thieu").hidden, "đối chứng: A đủ ô").toBe(true);
+      await p.bam("nut-thoat-khach");
+      expect(["tco-van-chuyen", "tco-nhap-khau", "tco-ngay-thanh-toan", "tco-ngay-giao"].map((id) => p.el(id).value)).toEqual(["", "", "", ""]);
+      expect([p.el("khoi-tco").hidden, p.el("tco-thieu").hidden, p.el("ghi-tco").con.length]).toEqual([true, true, 0]);
+
+      await p.doiFragment(`#${ORG}:maCuaB`);
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(moBuoc3(p)).toBe(true);
+      expect(p.el("khoi-tco").hidden).toBe(false);
+      expect(p.el("tco-thieu").textContent).toMatch(/^Phí vận chuyển là ô bắt buộc/u);
+      expect(p.el("nut-nop").disabled).toBe(true);
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi).not.toContain("POST /guest/bids");
+      expect(banRoDaNiem, "không phong bì nào mang lời khai của A").toEqual([]);
+    });
+
+    it("[S1.286 / S4.7b2] nop-thau: gói chỉ chấm theo giá (hay gói mở trước S4.7b2, `tco` null) ⇒ khối TCO ẩn, không ô nào chặn, phong bì không mang trường TCO", async () => {
+      for (const goi of [{ ...GOI_NOP, tco: { ma: ["gia"], thamSo: { chiPhiVonNam: null, ngayThanhToanChuan: null, tyLeTreNgay: null } } }, { ...GOI_NOP, tco: null }]) {
+        banRoDaNiem.length = 0;
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: goi }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined),
+        });
+        await p.bam("nut-dung-phien");
+        expect(p.el("khoi-tco").hidden).toBe(true);
+        expect(p.el("tco-thieu").hidden).toBe(true);
+        expect(bangGoiThau(p), "gói không khai số ngày giao ⇒ không dòng ấy").not.toContain("Số ngày giao yêu cầu");
+        await p.bam("nut-nop");
+        expect(p.trangThai.goi.at(-1)).toBe("POST /guest/bids");
+        expect(Object.keys(banRoDaNiem[0] ?? {}).sort()).toEqual(["currency", "lines", "totalAmount"]);
+      }
+    });
 
     it("[S1.181 / lượt soi] nop-thau: trước khi niêm phong trang hỏi lại phiên — thẻ khác đã đổi cookie sang doanh nghiệp khác ⇒ DỪNG, không POST /guest/bids", async () => {
       let lanRfq = 0;
@@ -3539,6 +3778,146 @@ describe("bề mặt tệp", () => {
       await q.bam("nut-chep");
       expect(q.el("canh-bao").textContent).toContain("bị từ chối khi chấm");
       expect(await guiQ()).toMatchObject({ evalComponents: LA, bafoTopN: 3 });
+    });
+
+    // [S1.284 / S4.7b1] TCO ở `/chinh-sach`: bốn ô mã (giá luôn tính), ba ô tham số chỉ hiện khi mã cần chúng bật, thân gửi tập chuẩn
+    // và chỉ khoá của mã đang bật; chép mang tham số; bảng phiên bản có cột tham số; gói chờ duyệt thiếu số ngày giao được cảnh báo.
+    it("[S1.284 / S4.7b1] [INV-L8] chinh-sach: chọn mã TCO ⇒ thân gửi tập chuẩn (giá đầu, hệ số 1) và nhóm khoá tco chỉ của mã đang bật", async () => {
+      const { p, gui, doiO } = await moChinhSach([]);
+      expect(p.el("khoi-tco-thanh-toan").hidden).toBe(true);
+      expect(p.el("khoi-tco-tre").hidden).toBe(true);
+      expect(await gui()).toMatchObject({ evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], tco: null });
+      await doiO("ma-chi-phi-thanh-toan", true);
+      await doiO("ma-van-chuyen", true);
+      expect(p.el("khoi-tco-thanh-toan").hidden).toBe(false);
+      expect(p.el("canh-bao").textContent).toContain('"chi_phi_thanh_toan" cần chi phí vốn một năm');
+      p.el("tco-von").value = " 0.12 ";
+      p.el("tco-ky").value = "60";
+      p.el("tco-tre").value = "0.001";
+      const than = await gui();
+      expect(than?.evalComponents).toEqual([
+        { ma: "gia", don_vi: "TIEN", he_so: "1.0000" },
+        { ma: "van_chuyen", don_vi: "TIEN", he_so: "1.0000" },
+        { ma: "chi_phi_thanh_toan", don_vi: "TIEN", he_so: "1.0000" },
+      ]);
+      // Ô tỉ lệ trễ có chữ nhưng mã chi phí trễ không bật ⇒ khoá ấy không đi.
+      expect(than?.tco).toEqual({ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60" });
+      await doiO("ma-chi-phi-tre", true);
+      expect(p.el("khoi-tco-tre").hidden).toBe(false);
+      expect((await gui())?.tco).toEqual({ chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" });
+      expect(p.el("canh-bao").textContent).toContain("số ngày giao yêu cầu");
+      await doiO("co-trong-so", false);
+      expect(await gui()).toMatchObject({ evalComponents: null, bafoTopN: null, tco: null });
+    });
+
+    it("[S1.284 / S4.7b1] chinh-sach: chép mang mã và tham số TCO; bảng phiên bản hiện tham số; gói chờ duyệt thiếu số ngày giao ⇒ cảnh báo theo loại tổ chức", async () => {
+      const TCO = { chi_phi_von_nam: "0.1", ngay_thanh_toan_chuan: "45", ty_le_tre_ngay: "0.0005" };
+      const NAM_MA = ["gia", "van_chuyen", "nhap_khau", "chi_phi_thanh_toan", "chi_phi_tre"].map((ma) => ({ ma, don_vi: "TIEN", he_so: "1.0000" }));
+      const { p, gui } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: NAM_MA, tco: TCO }]);
+      expect(p.el("bang-pb").querySelector("tbody").con[0]?.con.map((x) => x.textContent)).toContain(
+        "vốn 0.1/năm · kỳ chuẩn 45 ngày · trễ 0.0005/ngày",
+      );
+      await p.bam("nut-chep");
+      expect(["ma-van-chuyen", "ma-nhap-khau", "ma-chi-phi-thanh-toan", "ma-chi-phi-tre"].map((id) => p.el(id).checked)).toEqual([true, true, true, true]);
+      expect(await gui()).toMatchObject({ evalComponents: NAM_MA, tco: TCO });
+      // [rà soát §S1.284 — TRUNG-1] Bản chép không bậc (`tiers: null`) ở tổ chức chưa bật ⇒ *chỉ còn lối huỷ*; đã bật ⇒ trả về soạn thảo.
+      for (const [daBat, cau] of [[false, "chỉ còn lối huỷ"], [true, "trả gói về soạn thảo"]] as const) {
+        const q = await dungTrang("chinh-sach", {
+          hash: "", cookie: A,
+          thay: (l) => (l === "GET /policy/versions"
+            ? Promise.resolve({ status: 200, body: { phienBan: [{ ...PHIEN_BAN_CO, evalComponents: NAM_MA, tco: TCO }], daBat, choKy: false, goiChoDuyetThieuSoNgayGiao: 2 } })
+            : undefined),
+        });
+        await q.bam("nut-dung-phien");
+        await q.bam("nut-chep");
+        expect(q.el("canh-bao").textContent).toContain("2 gói đang chờ duyệt chưa khai số ngày giao");
+        expect(q.el("canh-bao").textContent).toContain(cau);
+      }
+    });
+
+    it("[S1.284 / S4.7b1 — rà soát TRUNG-1, THẤP-2] chinh-sach: mẫu có bậc ở tổ chức chưa bật ⇒ không cảnh báo gói chờ duyệt; tham số sai miền ⇒ lỗi gọi tên ô, không gửi", async () => {
+      const q = await dungTrang("chinh-sach", {
+        hash: "", cookie: A,
+        thay: (l) => (l === "GET /policy/versions"
+          ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: false, choKy: false, goiChoDuyetThieuSoNgayGiao: 2 } })
+          : undefined),
+      });
+      await q.bam("nut-dung-phien");
+      q.el("ma-chi-phi-tre").checked = true;
+      for (const f of q.el("ma-chi-phi-tre").nghe["change"] ?? []) await f();
+      // Mẫu điền sẵn có bốn bậc: phiên bản chỉ có hiệu lực khi được ký, và chữ ký ấy bị từ chối khi còn gói chờ duyệt (`097`).
+      expect(q.el("canh-bao").textContent).not.toContain("gói đang chờ duyệt");
+      q.el("tco-tre").value = "0,001";
+      await q.bam("nut-tao-pb");
+      expect(q.el("loi3").textContent).toContain("Chi phí trễ mỗi ngày phải là tỉ lệ");
+      expect(q.trangThai.goi).not.toContain("POST /policy");
+    });
+
+    // [S1.284 / S4.7b1 / L16] Số ngày giao yêu cầu ở `/tao-thau`: ô và nút chỉ ở DRAFT; dòng của bảng gói ở mọi trạng thái (người duyệt
+    // ký lên nó); để trống ⇒ `null`; ngoài miền ⇒ trang nói, không gọi; cảnh báo khi chính sách hiệu lực tính chi phí trễ.
+    const moTaoThauNgay = async (trangThaiGoi: string, soNgayGiao: number | null, phienBan: unknown[] = [], daBat = false) => {
+      const p = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan, daBat, choKy: false } })
+          : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi, lanNop: 1, soNgayGiao } } })
+          : l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [] } })
+          : l === "PUT /rfqs/r-1/delivery-days" ? Promise.resolve({ status: 200, body: { soNgayGiao: 30 } })
+          : undefined,
+      });
+      await p.bam("nut-dung-phien");
+      p.el("rfq").value = "r-1";
+      await p.bam("nut-doc");
+      return p;
+    };
+    const dongBangGoi = (p: Awaited<ReturnType<typeof moTaoThauNgay>>) => p.el("tt-rfq").con.map((x) => x.textContent);
+
+    it("[S1.284 / S4.7b1] [INV-L16] tao-thau: số ngày giao — ô ở DRAFT, dòng ở mọi trạng thái; lưu gửi PUT …/delivery-days; trống ⇒ null; ngoài miền ⇒ không gọi", async () => {
+      const p = await moTaoThauNgay("DRAFT", null);
+      expect(p.el("khoi-so-ngay-giao").hidden).toBe(false);
+      expect(dongBangGoi(p)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "chưa khai"]));
+      p.el("so-ngay-giao").value = " 30 ";
+      await p.bam("nut-so-ngay-giao");
+      expect(p.trangThai.than.filter((t) => t.lenh === "PUT /rfqs/r-1/delivery-days").at(-1)?.than).toEqual({ soNgayGiao: 30 });
+      expect(p.el("ok2").textContent).toBe("Đã lưu số ngày giao yêu cầu: 30 ngày.");
+      p.el("so-ngay-giao").value = "";
+      await p.bam("nut-so-ngay-giao");
+      expect(p.trangThai.than.filter((t) => t.lenh === "PUT /rfqs/r-1/delivery-days").at(-1)?.than).toEqual({ soNgayGiao: null });
+      const truoc = p.trangThai.goi.filter((l) => l === "PUT /rfqs/r-1/delivery-days").length;
+      for (const sai of ["0", "3651", "1.5", "-3", "ba"]) {
+        p.el("so-ngay-giao").value = sai;
+        await p.bam("nut-so-ngay-giao");
+        expect(p.el("loi2").textContent).toBe("Số ngày giao yêu cầu phải là số nguyên từ 1 đến 3650, hoặc để trống.");
+      }
+      expect(p.trangThai.goi.filter((l) => l === "PUT /rfqs/r-1/delivery-days")).toHaveLength(truoc);
+      const cho = await moTaoThauNgay("PENDING_APPROVAL", 45);
+      expect(cho.el("khoi-so-ngay-giao").hidden).toBe(true);
+      expect(dongBangGoi(cho)).toEqual(expect.arrayContaining(["Số ngày giao yêu cầu", "45 ngày"]));
+    });
+
+    it("[S1.284 / S4.7b1] tao-thau: chính sách hiệu lực (hay mới hơn) tính chi phí trễ mà gói chưa khai số ngày giao ⇒ cảnh báo theo trạng thái và loại tổ chức", async () => {
+      const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
+      expect((await moTaoThauNgay("DRAFT", null, [TRE])).el("canh-bao-so-ngay").textContent).toContain("Khai số ngày giao ở ô dưới");
+      expect((await moTaoThauNgay("DRAFT", 30, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
+      expect((await moTaoThauNgay("DRAFT", null, [{ hieuLuc: true, evalComponents: [{ ma: "gia" }] }])).el("canh-bao-so-ngay").hidden).toBe(true);
+      // Phiên bản MỚI HƠN chờ ký tính chi phí trễ ⇒ cũng nói; phiên bản CŨ hơn bản hiệu lực thì không.
+      const MOI = [{ hieuLuc: false, evalComponents: [{ ma: "chi_phi_tre" }] }, { hieuLuc: true, evalComponents: [{ ma: "gia" }] }];
+      expect((await moTaoThauNgay("DRAFT", null, MOI)).el("canh-bao-so-ngay").hidden).toBe(false);
+      expect((await moTaoThauNgay("DRAFT", null, [...MOI].reverse())).el("canh-bao-so-ngay").hidden).toBe(true);
+      expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], false)).el("canh-bao-so-ngay").textContent).toContain("chỉ còn lối huỷ");
+      expect((await moTaoThauNgay("PENDING_APPROVAL", null, [TRE], true)).el("canh-bao-so-ngay").textContent).toContain("trả gói về soạn thảo");
+      expect((await moTaoThauNgay("OPEN", null, [TRE])).el("canh-bao-so-ngay").hidden).toBe(true);
+    });
+
+    it("[S1.284 / S4.7b1 — rà soát THẤP-3] tao-thau: đổi người (hashchange) hay đăng xuất ⇒ cảnh báo số ngày giao của tổ chức trước biến mất", async () => {
+      const TRE = { hieuLuc: true, evalComponents: [{ ma: "gia" }, { ma: "chi_phi_tre" }] };
+      const p = await moTaoThauNgay("DRAFT", null, [TRE]);
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(false);
+      await p.doiFragment("khac:123456");
+      expect(p.el("canh-bao-so-ngay").hidden).toBe(true);
+      const q = await moTaoThauNgay("DRAFT", null, [TRE]);
+      await q.bam("nut-dang-xuat");
+      expect(q.el("canh-bao-so-ngay").hidden).toBe(true);
     });
 
     it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {

@@ -484,6 +484,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/rfq/src/tin-hieu-chia-nho.int.test.ts",
   ],
+  // K10b — [S1.285 / S3.6d] tín hiệu khai thấp ước lượng ở chữ ký trao thầu. `trao-thau-theo-bac` đo dưới `app_api`: đề xuất ghi hàng
+  // ESTIMATE_UNDERSTATED mang hai mốc bậc (không số tiền), chữ ký bị chặn tới khi người giữ po.approve ngoài gói ghi nhận, luật người
+  // (người đề xuất, tác giả chính sách), fail-closed khi rút rồi đề xuất báo giá khác, vế vượt ngưỡng kép, đối chứng âm, tổ chức chưa
+  // bật, lớp chặn cuối (chữ ký thô), và mỗi vế một đột biến; tập mã = bảng (K12).
+  K10b: ["packages/danh-gia/src/trao-thau-theo-bac.int.test.ts"],
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
@@ -564,16 +569,37 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // L8 — [S1.279 / S4.7a] TCO có nguồn. `tco` đo lõi thuần (luật kiểm phiên bản, hai công thức quy đổi chính xác, ô thiếu gọi tên);
   // `luot-danh-gia` đo lượt chấm trên Postgres thật — năm mã, bộ đọc SQL, hạng TCO khác hạng giá, ô ngoài miền, từ chối cấu hình không
   // vào sổ, luồng MVP1 không đổi, `ma_thieu` chỉ ở hàng không số; `tra-ve-nhap` đo `CHECK` của nhóm khoá `tco` qua tầng gói.
+  // [S1.284 / S4.7b1] Vế cấu hình qua HTTP và màn: `buyer.int` đo `POST /policy` chuyển `tco` (cửa, `CHECK`, trả nguyên văn);
+  // `chinh-sach.test` và `phuc-vu` đo luật L8 của màn và thân nó gửi (tập chuẩn, chỉ khoá của mã bật); `bac-mac-dinh-dong-bo` khoá bản
+  // chép luật L8 của màn với `kiemChinhSachTco` trên mười tám ca.
   L8: [
+    "apps/api/src/buyer.int.test.ts",
+    "apps/web/src/chinh-sach.test.ts",
+    "apps/web/src/phuc-vu.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/danh-gia/src/tco.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
+    "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
   ],
   // L16 — [S1.279 / S4.7a] thước TCO cố định trước khi giá lộ — vế TCO và form nhà cung cấp của L14 (số mới theo ADR-097 ⒇).
   // `luot-danh-gia` đo tập mã chụp lúc mở và lượt chấm dùng chính tập ấy (phiên bản khai sau, quyền cột, ảnh chụp lệch, đột biến);
   // `tra-ve-nhap` đo số ngày giao chỉ đổi ở DRAFT, nằm trong chữ ký (đường trả về của tổ chức đã bật, gói cấp kép đếm người, hai đột
   // biến), và cạnh mở đòi số ngày giao khi phiên bản tính chi phí trễ.
-  L16: ["packages/danh-gia/src/luot-danh-gia.int.test.ts", "packages/rfq/src/tra-ve-nhap.int.test.ts"],
+  // [S1.284 / S4.7b1] Vế NGƯỜI MUA: `buyer.int` đo route số ngày giao (chỉ gói đang soạn, cổng, miền, hàng sổ, xuyên tổ chức);
+  // `tao-thau.test` và `phuc-vu` đo ô chỉ ở DRAFT, dòng ở màn duyệt mọi trạng thái, và thân màn gửi.
+  // [S1.286 / S4.7b2] Vế THAM SỐ và vế FORM: `luot-danh-gia` đo ảnh chụp tham số và lượt chấm từ chối khi nó lệch phiên bản ghim;
+  // `guest.int` đo thước ở route khách (gói không ảnh chụp ⇒ `null`, tham số chỉ của mã bật, mã lạ lọc, không hệ số hay ngưỡng);
+  // `phuc-vu` đo ô của mã bật, ô bắt buộc chặn nút nộp, ô ẩn không vào phong bì, ô xoá khi đổi phiên; `bac-mac-dinh-dong-bo` khoá bốn khoá
+  // phong bì của màn với bốn khoá bộ đọc SQL của lượt chấm.
+  L16: [
+    "apps/api/src/buyer.int.test.ts",
+    "apps/api/src/guest.int.test.ts",
+    "apps/web/src/phuc-vu.test.ts",
+    "apps/web/src/tao-thau.test.ts",
+    "packages/danh-gia/src/luot-danh-gia.int.test.ts",
+    "packages/rfq/src/tra-ve-nhap.int.test.ts",
+    "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
+  ],
   // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở
   // tầng gói và tầng CSDL, đọc lại không giá; `bang-ngoai-liet-ke` là ranh giới tĩnh — mọi câu SQL chạm hai bảng có tên, `don_gia`

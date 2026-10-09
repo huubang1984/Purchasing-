@@ -79,6 +79,8 @@ const HAM_DOI_TRANG_THAI = [
   "createSupplier",
   // [S1.201 / S3.6a] Gán nhóm hàng cho gói đang soạn — route đòi `rfq.create`, như ngân sách và hạng mục.
   "datNhomHangChoGoi",
+  // [S1.284 / S4.7b1] Đặt số ngày giao yêu cầu cho gói đang soạn — route đòi `rfq.create`, như nhóm hàng.
+  "datSoNgayGiao",
   // [S1.188 / S3.2b2 / ADR-113] Lời mời `UNSENT→SENT` sau lần gửi được — việc *xong* của lần gửi sau commit, dưới mã quyền của route
   // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
   "danhDauDaGui",
@@ -100,6 +102,9 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.203 / S3.6b1] Ảnh chụp tín hiệu lúc nộp duyệt — người gọi duy nhất là `submitRfqForApproval`, sau cổng `rfq.create`
   // của route nộp; một module `apps/` gọi thẳng nó mà không nhắc quyền là đúng thứ lớp này bắt.
   "ghiTinHieuKhiNop",
+  // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc đề xuất trao thầu — người gọi duy nhất là `deXuatTraoThau`,
+  // sau cổng `award.recommend` của route đề xuất; cùng khuôn `ghiTinHieuKhiNop`.
+  "ghiTinHieuKhiDeXuat",
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
@@ -203,6 +208,8 @@ const HAM_CHI_DOC = [
   // (`agent: false`), không ở đây — rổ này nói về cổng quyền, không nói về đối tượng gọi.
   "getOpenUnsealForRfq",
   "getRfq",
+  // [S1.286 / S4.7b2] Thước TCO chụp lúc mở (tập mã, tham số) — không giá, không đổi trạng thái; route khách lọc theo mã bật.
+  "docThuocTcoGoi",
   "getSupplier",
   "getUnsealRequest",
   // [S1.91 / khoản 154] Kênh + địa chỉ của một lời mời còn sống. Người gọi DUY NHẤT là handler
@@ -360,6 +367,10 @@ const HAM_THUAN_TUY = [
   "chuanHoa",
   // [S1.256 / S4.5b] Bộ đọc nhóm khoá `benchmark` của phiên bản chính sách — không I/O.
   "docNhomBenchmark",
+  // [S1.284 / S4.7b1] Bộ đọc nhóm khoá `tco` và luật L8 của phiên bản ghim (S4.7a) — không I/O; ra cửa để test kiến trúc đối chiếu
+  // bản chép của màn `/chinh-sach`.
+  "docNhomTco",
+  "kiemChinhSachTco",
   // [S1.262 / S4.5c2] Nhãn của một dòng từ quan sát đã đọc (lớp ⑴ của bộ kiểm bộ bằng chứng) và phép lùi tháng UTC — không I/O.
   "nhanMotDong",
   "truThang",

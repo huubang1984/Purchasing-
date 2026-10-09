@@ -70,6 +70,16 @@
     <button id="nut-doc" class="phu">Đọc</button>
     <button id="nut-nhom-hang" class="phu" hidden>Đặt nhóm hàng cho gói này</button>
     <dl class="tt" id="tt-rfq"></dl>
+    <!-- [S1.284 / S4.7b1] Số ngày giao yêu cầu (`112_tco`) — mọi tổ chức, chỉ khi gói ĐANG ĐỌC còn soạn; nằm trong chữ ký phê duyệt.
+         [rà soát §S1.284 — THẤP-1] Đứng SAU bảng gói, không trong khối tạo: con số là của gói đang đọc, không đi cùng lần tạo. -->
+    <div class="bao luu" id="canh-bao-so-ngay" hidden></div>
+    <div id="khoi-so-ngay-giao" hidden>
+      <label for="so-ngay-giao">Số ngày giao yêu cầu của gói này (1–3650; để trống là không khai)</label>
+      <input id="so-ngay-giao" inputmode="numeric" autocomplete="off">
+      <p class="ghi">Nếu chính sách tính chi phí trễ giao, số ngày nhà cung cấp khai vượt con số này được quy thành tiền. Người duyệt
+        ký lên con số này; nó chỉ đổi được khi gói còn đang soạn. Nhà cung cấp thấy con số này ở màn nộp báo giá.</p>
+      <button id="nut-so-ngay-giao" class="phu">Lưu số ngày giao</button>
+    </div>
     <div class="bao loi" id="loi2" hidden></div>
     <div class="bao ok" id="ok2" hidden></div>
   </section>

@@ -18,9 +18,9 @@
 //   POST /guest/logout                        [S1.181 / ADR-109] thu hồi CHÍNH phiên đang gọi, xoá cookie khách
 // ==============================================================================================
 import { NopBiTuChoiError, NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
-import { docVongBafoKhach } from "@trustprocure/danh-gia";
+import { MA_CO_NGUON, docVongBafoKhach } from "@trustprocure/danh-gia";
 import { revokeGuestSession } from "@trustprocure/invitation";
-import { getRfq, listRfqItems } from "@trustprocure/rfq";
+import { docThuocTcoGoi, getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { HttpError } from "../http.js";
 import type { GuestRoute } from "../route-types.js";
@@ -104,6 +104,19 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // tra cookie (`ctx.supplierLegalName`), không đọc ở đây: `suppliers` đóng với kết nối gắn phiên khách (027). Trang
       // nộp thầu nêu nó trong câu hỏi phiên lúc tải, để hai nhà cung cấp của cùng một gói trên một máy phân biệt được
       // phiên của ai. Không MST, không người liên hệ, không mã nhà cung cấp.
+      //
+      // [S1.286 / S4.7b2 / L16] `rfq.soNgayGiao` — số ngày giao yêu cầu của gói, khi bên mua khai (`112`); và `tco` — THƯỚC mà lượt
+      // chấm sẽ dùng, chụp lúc gói mở từ phiên bản ghim (`112` (4), `117`): tập mã thành phần theo thứ tự chính sách, và tham số quy
+      // đổi CỦA MÃ BẬT (chủ dự án chốt 2026-10-08 — ADR-156 ⑵: nhà cung cấp thấy cách mình bị quy đổi). `tco` là `null` khi gói chưa
+      // có ảnh chụp (mở trước S4.5a, hay phiên bản ghim không khai trọng số). Không ngưỡng, không bậc, không mã phiên bản, không
+      // trọng số nào khác — bảng chính sách vẫn đóng với khách (`027`).
+      //
+      // [rà soát §S1.286 — THẤP-3, THẤP-6] Thước đọc RIÊNG (`docThuocTcoGoi`), không qua `RfqRecord` — route agent không nhận tham số; tập
+      // mã lọc theo mã CÓ NGUỒN của lượt chấm (`MA_CO_NGUON`): một mã lạ là chuỗi tự do của bên mua, phiên bản mang nó không chấm được (L8).
+      const thuoc = await docThuocTcoGoi(ctx.client, ctx.orgId, ctx.rfqId);
+      const ma = thuoc === null ? null : thuoc.ma.filter((m) => MA_CO_NGUON.includes(m));
+      const thamSo = thuoc?.thamSo ?? {};
+      const bat = (m: string): boolean => ma !== null && ma.includes(m);
       return {
         status: 200,
         body: {
@@ -113,7 +126,19 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
             status: rfq.status,
             deadlineAt: rfq.deadlineAt,
             cancelReason: rfq.status === "CANCELLED" ? rfq.cancelReason : null,
+            soNgayGiao: rfq.soNgayGiao,
           },
+          tco:
+            ma === null
+              ? null
+              : {
+                  ma,
+                  thamSo: {
+                    chiPhiVonNam: bat("chi_phi_thanh_toan") ? (thamSo["chi_phi_von_nam"] ?? null) : null,
+                    ngayThanhToanChuan: bat("chi_phi_thanh_toan") ? (thamSo["ngay_thanh_toan_chuan"] ?? null) : null,
+                    tyLeTreNgay: bat("chi_phi_tre") ? (thamSo["ty_le_tre_ngay"] ?? null) : null,
+                  },
+                },
           supplier: { legalName: ctx.supplierLegalName },
           gioMayChu: gio[0]?.gio ?? null,
           bafoRound: vongBafo,
