@@ -25,7 +25,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ### 0.2 Con người và địa chỉ — chốt trước, vì dữ liệu thật phụ thuộc vào chúng
 
 - [ ] **Hai người** sẽ giữ KeyAdmin (nhóm `tp-key-admins`). Một người là điều kiện chặn dữ liệu thật (ADR-062).
-- [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin.
+      **[2026-10-09] Đã có hai tài khoản** trong nhóm, tài khoản thứ hai nghiệm thu đạt (3.3; STATE khoản 15). Ai giữ
+      tài khoản thứ hai không được kiểm — chủ dự án chốt ngày 2026-10-02.
+- [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin. **[2026-10-09] Chưa:** thư ⑴
+      tới đúng một địa chỉ. **[2026-10-10]** `email_canh_bao` nay là danh sách (mỗi địa chỉ một đăng ký); bản trước là
+      một chuỗi, nên thêm người thứ ba nghĩa là bỏ người cũ. Apply lại stack 60 thì MỌI địa chỉ, kể cả địa chỉ cũ,
+      nhận lại thư xác nhận và phải bấm lại: đăng ký cũ bị xoá vì địa chỉ resource đổi.
 - [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
       khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
@@ -66,7 +71,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **1.3** Bật một lần: `aws organizations enable-aws-service-access --service-principal cloudtrail.amazonaws.com --profile tp-mgmt`
 - [ ] **1.4 `20-management`** — permission set `KeyAdmin`, CloudTrail tổ chức.
 - [ ] **1.5** Gán **cả hai người** giữ khoá vào nhóm `tp-key-admins`; tạo profile `tp-prod` (AdministratorAccess),
-      `tp-audit-keyadmin`, `tp-prod-keyadmin` (KeyAdmin) — README, "Chuẩn bị một lần".
+      `tp-audit-keyadmin`, `tp-prod-keyadmin` (KeyAdmin) — README, "Chuẩn bị một lần". **[2026-10-09] Đã làm:**
+      thành viên thứ hai chỉ thuộc nhóm ấy, hai lượt gán `KeyAdmin` đều đi qua nhóm, không apply Terraform; hai
+      profile của tài khoản thứ hai ra đúng role ở cả hai tài khoản.
 - [ ] **1.6** Commit các `.terraform.lock.hcl` sinh ra (sau `terraform providers lock -platform=windows_amd64 -platform=linux_amd64`).
       **[rà 2026-10-01]** Tám tệp của lần apply đầu (stack 00–70: `hashicorp/aws` 6.66.0; stack 60 thêm `hashicorp/archive`
       2.8.1) đã commit, có hash của cả hai nền tảng. `providers lock` đòi `terraform get` trước (module `chung`). Stack 80, 85,
@@ -112,7 +119,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **3.1 `60-canh-bao`** (`tp-audit` + `tp-prod`):
   `infra\terraform\60-canh-bao\canh-bao.tfvars` (không commit — `*.tfvars` đã bị bỏ qua):
   ```hcl
-  email_canh_bao = "<email an ninh>"
+  email_canh_bao = ["<email an ninh>", "<người nhận thứ ba>"]   # [2026-10-10] danh sách — mục 9
   email_van_hanh = ["<email van hanh>"]
   ```
   ```powershell
@@ -145,7 +152,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       tên biến và vị trí, không ghi địa chỉ). **Sau**: dòng tổng `... 0 hong`. Alarm `tp-canh-bao-dang-ky-hong` về OK ở kỳ
       6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
-      khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
+      khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại"). **[2026-10-09]** Chạy lại bằng tài khoản KeyAdmin
+      thứ hai trên `alias/tp-receipt-sign`: `PutKeyPolicy` lúc 15:00:05Z, `errorCode` rỗng, policy trước và sau trùng
+      băm, thư tới trong vài phút (STATE khoản 15).
 - [ ] **3.3b [2026-10-02 / khoản 336] Đối chứng dương ⑴ cho thao tác ghi ngoài `PutKeyPolicy`.** Apply lại stack 60 bằng lệnh
       3.1 trước: ngoài thay đổi 3.1 đã nói (concurrency Lambda khi gỡ `tam_override.tf`), plan chỉ được đổi TẠI CHỖ ba
       resource của ⑴ — `aws_cloudwatch_event_rule.put_key_policy_audit`,
@@ -327,6 +336,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       `TP_SG_KHOI_TAO` từ `terraform output bien_github_khoi_tao` (biến environment không dùng chung giữa hai environment).
       **[lượt soi]** Job `chay` kiểm KẾT QUẢ của các cài đặt ấy: lịch sử duyệt của run phải có một NGƯỜI khác người bấm duyệt
       `prod-khoi-tao`, không thì dừng trước khi lấy quyền AWS. Nên bỏ chọn admin bypass ở cả `prod-worker`.
+      **[2026-10-09 — đọc lại]** `prod-khoi-tao`: hai người duyệt, *Prevent self-review* bật, admin bypass tắt, chỉ
+      `master` (đặt 2026-10-02); hai biến `TP_SUBNETS_UNG_DUNG`, `TP_SG_KHOI_TAO` chưa có — chờ stack 90.
 - [ ] **7.2** Biến cấp **repository**: `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` (`terraform output bien_github_repo`),
       `TP_RECEIPT_FINGERPRINT` (bước 2.4).
 - [ ] **7.3** Chạy *Deploy — prod (bam tay)* với `api` ⇒ job `api` xanh (migrate không làm gì, service chạy bản mới,
@@ -410,7 +421,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 9. Trước dữ liệu thật — kiểm lại
 
-- [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ.
+- [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ. **[2026-10-09]** Vế đầu: hai tài khoản, nghiệm thu
+      đạt (0.2, 3.3). Vế sau: CHƯA — thư ⑴ tới đúng một địa chỉ.
 - [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. ~~Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.~~ **[sửa 2026-10-02]** Mã đã bắt cả 17 thao tác; khoản ấy vẫn ở rổ A tới khi stack 60 được apply lại và 3.3b có đủ sáu thư. **[2026-10-05]** Đã apply lại và đã đủ sáu thư — khoản 336 đóng.
 - [ ] **[rà 2026-10-01]** Ít nhất một kênh OTP ngoài thư (SMS hay Zalo) đã bật — `pnpm kiem-truoc-apply` hết `[VANG] kenh_otp` (0.3).
 - [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2, **[rà 2026-10-01]** 8.1 (⑼).

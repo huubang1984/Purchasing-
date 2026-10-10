@@ -508,7 +508,8 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
 
 - **KeyAdmin sửa được key policy**, nên về lý thuyết tự gỡ lệnh `Deny` rồi tự cấp `Decrypt`.
   Không khoá KMS nào tránh được điều này; giảm nhẹ là cảnh báo EventBridge/CloudTrail trên
-  `PutKeyPolicy` và có **người thứ hai** giữ KeyAdmin (ADR-062, điều kiện trước dữ liệu thật).
+  `PutKeyPolicy` và có **người thứ hai** giữ KeyAdmin (ADR-062, điều kiện trước dữ liệu thật). **[2026-10-09]** Có
+  tài khoản KeyAdmin thứ hai, đã nghiệm thu (STATE khoản 15).
   Cảnh báo ấy là stack `60-canh-bao`: email tới `email_canh_bao` cho mọi `PutKeyPolicy`, thành
   công hay bị từ chối. Truyền địa chỉ (cùng `email_van_hanh`, ADR-088) bằng tệp `canh-bao.tfvars` không commit (APPLY-LAN-DAU 3.1), rồi **bấm xác
   nhận** thư AWS gửi tới — chưa xác nhận thì chưa có cảnh báo. Người nhận không nên chỉ là người giữ

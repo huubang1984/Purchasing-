@@ -6474,6 +6474,9 @@ Hôm nay mâu thuẫn ấy không làm test nào đỏ vì adapter thật chưa 
 - **`tp-key-admin` tạm do MỘT người giữ.** Rủi ro chấp nhận có thời hạn: mất người ấy hoặc mất MFA
   của người ấy thì không ai quản trị được CMK (key policy cố ý không có statement *"Enable IAM
   policies"* cho `:root`). Điều kiện đóng: có người thứ hai trước khi có dữ liệu khách hàng thật.
+  **[2026-10-09 — ĐO]** Nhóm `tp-key-admins` có hai tài khoản, tài khoản thứ hai nghiệm thu đạt (STATE khoản 15).
+  Ai giữ nó không được kiểm, theo quyết định của chủ dự án ngày 2026-10-02 — điều kiện này nói về NGƯỜI, nên ADR
+  ghi nhận phép đo trên tài khoản chứ không tự tuyên bố điều kiện đã đóng.
 
 ### Đo bằng gì — việc của lát cắt viết adapter, ghi ra ở đây để không bị quên
 
