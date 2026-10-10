@@ -1,17 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { createPool, migrate } from "@trustprocure/db";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 // [S1.217 / khoản 250] Chỉ để suy tập trạng thái *sau lần mở* từ máy trạng thái thật và so với hằng của gói.
 import { RFQ_TRANSITIONS } from "@trustprocure/rfq";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { choQuaMocCuaSo, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   InvitationError,
   RFQ_STATUSES_AFTER_UNSEAL,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_MAX_FAILED_ATTEMPTS,
+  OTP_RATE_WINDOW_SECONDS,
   clearOtpLockout,
   createInvitation,
   donBucketNguoiGoiCu,
@@ -164,6 +165,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db?.stop();
+});
+
+// [khoản 346] Các ca của tệp này đếm tới trần của bộ đếm cửa sổ CỐ ĐỊNH (`caller_rate_limits`/`otp_rate_limits`, cửa sổ
+// `OTP_RATE_WINDOW_SECONDS` neo vào giờ CSDL) rồi đòi lần N+1 bị chặn, hay đếm hàng của một cửa sổ — đúng chỉ khi cả ca nằm
+// trong MỘT cửa sổ. Sát mốc lật thì chờ qua mốc trước khi ca chạy; biên 60 s gấp gần sáu lần ca dài nhất đo ở evidence (10,6 s).
+beforeEach(async () => {
+  await choQuaMocCuaSo(db.pool, { cuaSoGiay: OTP_RATE_WINDOW_SECONDS, bienGiay: 60 });
 });
 
 // =============================================================================================

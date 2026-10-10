@@ -21,7 +21,7 @@ import { OTP_RATE_WINDOW_SECONDS } from "@trustprocure/invitation";
 import { createRfq } from "@trustprocure/rfq";
 import { createSupplier } from "@trustprocure/supplier";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { choQuaMocCuaSo, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
 import { THAN_429_MFA, agentGoiDuoc, type Route } from "./route-types.js";
@@ -221,6 +221,13 @@ afterAll(async () => {
   await apiPool?.end().catch(() => undefined);
   await auditPool?.end().catch(() => undefined);
   await db?.stop();
+});
+
+// [khoản 346] Các ca của tệp này đếm tới trần của bộ đếm cửa sổ CỐ ĐỊNH (`caller_rate_limits`/`otp_rate_limits`, cửa sổ
+// `OTP_RATE_WINDOW_SECONDS` neo vào giờ CSDL) rồi đòi lần N+1 bị chặn, hay đếm hàng của một cửa sổ — đúng chỉ khi cả ca nằm
+// trong MỘT cửa sổ. Sát mốc lật thì chờ qua mốc trước khi ca chạy; biên 60 s gấp gần sáu lần ca dài nhất đo ở evidence (10,6 s).
+beforeEach(async () => {
+  await choQuaMocCuaSo(db.pool, { cuaSoGiay: OTP_RATE_WINDOW_SECONDS, bienGiay: 60 });
 });
 
 describe("/auth/link — không liệt kê được email", () => {
