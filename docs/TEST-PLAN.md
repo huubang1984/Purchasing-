@@ -270,9 +270,9 @@ Chạy trên Postgres thật qua Testcontainers, không dùng bản giả lập:
 - **[S1.282 / S3.5b]** Trao thầu theo bậc trên `/mo-thau`: K2b chặn đề xuất → ngoại lệ hậu kiểm → đề xuất qua → K7 từ chối người khai chính sách → hai chữ ký
   (*có 1 / cần 2* rồi APPROVED), ký lại bị từ chối có tên, 375 px không cuộn ngang — lượt đi thử MỘT LẦN trên cụm `pilot:gia-lap` + `gieo:demo --s3`,
   script ngoài kho, biên bản §S1.282 (25/25); không phải cổng
-- **[S1.9101 / S3.8b]** Màn hiệu suất `/hieu-suat` (K11): năm hàng từ `gieo:demo --s3` (ba người đủ sàn, hai người *"chưa đủ lịch sử"*), PM,
+- **[S1.292 / S3.8b]** Màn hiệu suất `/hieu-suat` (K11): năm hàng từ `gieo:demo --s3` (ba người đủ sàn, hai người *"chưa đủ lịch sử"*), PM,
   FINANCE, DIRECTOR đọc cùng bảng, người quản lý dữ liệu 403 có câu nói vai, 375 px không cuộn ngang và mỗi ô mang nhãn cột, điều hướng từ
-  `/mo-thau`, sổ một hàng `SUPPLIER_PERFORMANCE_READ` mỗi lần đọc — lượt đi thử MỘT LẦN, script ngoài kho, biên bản §S1.9101 (21/21); không
+  `/mo-thau`, sổ một hàng `SUPPLIER_PERFORMANCE_READ` mỗi lần đọc — lượt đi thử MỘT LẦN, script ngoài kho, biên bản §S1.292 (21/21); không
   phải cổng
 
 ### T5 — Bộ test đối kháng

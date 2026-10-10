@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.8b] MÀN HIỆU SUẤT NHÀ CUNG CẤP — spec S3 §4.9, K11; ADR-163
+// [S1.292 / S3.8b] MÀN HIỆU SUẤT NHÀ CUNG CẤP — spec S3 §4.9, K11; ADR-163
 //
 // Người giữ `bid.view` (mặc định mua sắm, tài chính, giám đốc) đọc `GET /supplier-performance`. Mọi luật nằm ở máy chủ và CSDL
 // (`123_hieu_suat_nha_cung_cap`, `packages/kiem-soat/src/hieu-suat.ts`): gói nào được đếm, sàn lịch sử, cổng quyền, hàng sổ. Màn không
@@ -54,7 +54,7 @@ function docLink() {
   $("token").value = h.slice(i + 1);
 }
 docLink();
-// [lượt soi §S1.9101 TRUNG-1] Số của lần nạp bảng mới nhất. Một lần nạp chỉ vẽ khi nó vẫn là lần mới nhất lúc máy chủ trả lời: «Đọc lại»
+// [lượt soi §S1.292 TRUNG-1] Số của lần nạp bảng mới nhất. Một lần nạp chỉ vẽ khi nó vẫn là lần mới nhất lúc máy chủ trả lời: «Đọc lại»
 // bấm khi lần nạp lúc vào còn chờ, bấm hai lần, đổi người hay đăng xuất giữa chừng — bản đầu xoá bảng TRƯỚC khi chờ nên hai lần chồng
 // nhau vẽ mỗi nhà cung cấp hai hàng, và lần nạp của người trước vẽ bảng của họ lên màn của người sau.
 let luotNap = 0;
@@ -167,7 +167,7 @@ async function napHieuSuat() {
   boBang();
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được hiệu suất nhà cung cấp")); return; }
   const bang = docHieuSuat(r.body);
-  // [lượt soi §S1.9101 CAO-1] Chủ ngữ là MÀN: *"máy chủ … không đọc"* là câu cấm của `cau-cam-tren-giao-dien`.
+  // [lượt soi §S1.292 CAO-1] Chủ ngữ là MÀN: *"máy chủ … không đọc"* là câu cấm của `cau-cam-tren-giao-dien`.
   if (bang === null) { bao($("loi2"), "Màn này không đọc được bảng máy chủ vừa trả — tải lại trang, rồi báo người vận hành nếu còn lặp."); return; }
   const than = $("bang-hieu-suat").querySelector("tbody");
   bao($("tom-tat"), tomTat(bang));

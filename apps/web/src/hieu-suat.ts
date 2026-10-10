@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.8b] MÀN HIỆU SUẤT NHÀ CUNG CẤP — PHÉP TÍNH CỦA `/hieu-suat`
+// [S1.292 / S3.8b] MÀN HIỆU SUẤT NHÀ CUNG CẤP — PHÉP TÍNH CỦA `/hieu-suat`
 //
 // Spec S3 §4.9, §5.1 K11; ADR-163. Người giữ `bid.view` (mua sắm, tài chính, giám đốc) đọc `GET /supplier-performance`: mỗi nhà cung
 // cấp một hàng, chỉ đếm gói ĐÃ LỘ GIÁ (chủ dự án chốt 2026-10-10). Máy chủ đã giữ lại mọi tỷ lệ và trung vị có mẫu dưới sàn
@@ -43,7 +43,7 @@ export interface HieuSuatMan {
 export interface BangHieuSuat {
   readonly sanLichSu: number;
   readonly nhaCungCap: readonly HieuSuatMan[];
-  /** [lượt soi §S1.9101 THẤP-1] Số hàng sai hình dạng bị bỏ — màn nói ra, không để số nhà cung cấp và câu «chưa ai» nói sai. */
+  /** [lượt soi §S1.292 THẤP-1] Số hàng sai hình dạng bị bỏ — màn nói ra, không để số nhà cung cấp và câu «chưa ai» nói sai. */
   readonly soHangBoQua: number;
 }
 

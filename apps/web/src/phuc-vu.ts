@@ -109,7 +109,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.287 / S3.7a1] `ho-so` — kiểm form, tách danh sách và che số tài khoản của màn hồ sơ Passport (`/ho-so`).
  *
- * [S1.9101 / S3.8b] `hieu-suat` — đọc thân `GET /supplier-performance`, phần trăm, thời lượng và ô *chưa đủ lịch sử* của màn
+ * [S1.292 / S3.8b] `hieu-suat` — đọc thân `GET /supplier-performance`, phần trăm, thời lượng và ô *chưa đủ lịch sử* của màn
  * `/hieu-suat` (spec S3 §4.9, K11).
  */
 export const MODULE_WEB = [
@@ -143,7 +143,7 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.287 / S3.7a1 / ADR-081] Màn hồ sơ Passport của NHÀ CUNG CẤP — nơi link `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`) dẫn tới.
   "/ho-so": "ho-so.html",
   "/ho-so.js": "ho-so.js",
-  // [S1.9101 / S3.8b] Màn hiệu suất nhà cung cấp của người giữ `bid.view` (spec S3 §4.9, K11; ADR-163) — chỉ đọc.
+  // [S1.292 / S3.8b] Màn hiệu suất nhà cung cấp của người giữ `bid.view` (spec S3 §4.9, K11; ADR-163) — chỉ đọc.
   "/hieu-suat": "hieu-suat.html",
   "/hieu-suat.js": "hieu-suat.js",
   "/chung.css": "chung.css",

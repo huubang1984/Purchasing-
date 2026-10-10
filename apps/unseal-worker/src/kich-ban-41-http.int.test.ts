@@ -60,7 +60,7 @@ import {
   type CamKetHien,
   type ThanhPhanXepHang,
 } from "../../web/src/tco.js";
-// [S1.9101 / S3.8b] Hàm đọc và hàm trình bày của màn `/hieu-suat` — khối K11 cuối đưa thân THẬT của route qua chính chúng.
+// [S1.292 / S3.8b] Hàm đọc và hàm trình bày của màn `/hieu-suat` — khối K11 cuối đưa thân THẬT của route qua chính chúng.
 import { docHieuSuat, oCuaHang } from "../../web/src/hieu-suat.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
@@ -2304,7 +2304,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(hs.map((h) => h?.[5])).toEqual(trangThai.loiMoi.map((l) => (l.supplierId === thang ? 1 : 0)));
   });
 
-  // [S1.9101 / S3.8b] Kịch bản 41 ĐỌC MÀN: thân thật của `GET /supplier-performance` đi qua đúng hàm đọc và hàm trình bày của `/hieu-suat`.
+  // [S1.292 / S3.8b] Kịch bản 41 ĐỌC MÀN: thân thật của `GET /supplier-performance` đi qua đúng hàm đọc và hàm trình bày của `/hieu-suat`.
   // Một trường đổi tên hay đổi kiểu ở route làm `docHieuSuat` bỏ hàng (hay trả `null`), và ca này đỏ — phép đo T1 của màn chạy trên thân
   // viết tay, nên chỉ ở đây hình dạng của màn và hình dạng của route gặp nhau.
   it("[INV-K11] MÀN /hieu-suat đọc thân thật của route — năm nhà cung cấp của gói chính, mỗi người một gói: mọi tỷ lệ và trung vị «chưa đủ lịch sử (1/5 gói)», số đếm hiện", async () => {

@@ -13046,10 +13046,10 @@ HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.
 
 ### Điều ADR này KHÔNG nói
 
-~~Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b);~~ **[S1.9101]** (nay ở ⑼ dưới) KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa
+~~Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b);~~ **[S1.292]** (nay ở ⑼ dưới) KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa
 chọn); hiệu suất từ ERP (S5, spec §10); Supplier Score (S5, ADR-100).
 
-### ⑼ [S1.9101 / S3.8b] Màn `/hieu-suat`, bộ gieo, kịch bản 41 đọc màn
+### ⑼ [S1.292 / S3.8b] Màn `/hieu-suat`, bộ gieo, kịch bản 41 đọc màn
 
 Chủ dự án, 2026-10-10: *"ok, làm theo hình dạng đó"* — hình dạng trình ở cuộc trò chuyện sau khi S3.8a mở PR.
 
@@ -13072,4 +13072,4 @@ gói đã chấm là về dưới sàn.
 qua `docHieuSuat` và `oCuaHang` (import tương đối xuyên app như `tco.ts`), nên một trường đổi tên hay đổi kiểu ở route làm nó đỏ.
 
 Đo bằng: `apps/web/src/hieu-suat.test.ts`, các ca `/hieu-suat` của `apps/web/src/phuc-vu.test.ts`, khối kịch bản 41 ở ⒡, lượt đi thử T4
-(biên bản §S1.9101).
+(biên bản §S1.292).

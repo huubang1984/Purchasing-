@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COT_HIEU_SUAT, TRUONG_DUOI_SAN, docHieuSuat, oCuaHang, phanTramTuPhanVan, thoiLuongGiay, tomTat, type HieuSuatMan } from "./hieu-suat.js";
 
-// [S1.9101 / S3.8b] Phép trình bày thuần của màn `/hieu-suat` (spec S3 §4.9, K11; ADR-163).
+// [S1.292 / S3.8b] Phép trình bày thuần của màn `/hieu-suat` (spec S3 §4.9, K11; ADR-163).
 
 const DU: HieuSuatMan = {
   supplierId: "s-1",
@@ -152,7 +152,7 @@ describe("S3.8b — màn hiệu suất nhà cung cấp", () => {
   // Spec S3 §2.2 ⑶: tín hiệu không phải phán quyết. Kho chưa có luật chung cấm chữ đánh giá (bảng §5 của `docs/PRODUCT.md` không có
   // hàng ấy), nên phép quét này chỉ đọc ba tệp của màn và chữ mà module sinh ra.
   it("ngôn ngữ mô tả: không chữ đánh giá nào trong ba tệp của màn hay trong chữ module sinh ra", () => {
-    // [lượt soi §S1.9101 THẤP-2] Thêm bảy chữ; khoảng trắng gộp về một dấu cách trước khi quét — cụm hai chữ xuống dòng trong HTML vẫn bị bắt.
+    // [lượt soi §S1.292 THẤP-2] Thêm bảy chữ; khoảng trắng gộp về một dấu cách trước khi quét — cụm hai chữ xuống dòng trong HTML vẫn bị bắt.
     const CAM = /(?<![\p{L}\p{M}\p{N}])(?:tốt|kém|xấu|yếu kém|đáng ngờ|nghi ngờ|khả nghi|bất thường|gian lận|uy tín|đáng tin|tin cậy|xuất sắc|rủi ro|cảnh báo|xếp loại|hàng đầu|điểm số|khuyến nghị|nên chọn)(?![\p{L}\p{M}\p{N}])/iu;
     const gon = (chu: string): string => chu.normalize("NFC").replace(/\s+/gu, " ");
     // Đối chứng dương và âm trên văn bản mẫu: biên chữ theo Unicode, không theo `\b` ASCII.

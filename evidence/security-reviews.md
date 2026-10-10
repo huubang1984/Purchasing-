@@ -27486,7 +27486,7 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
 
 ---
 
-# §S1.9101 — S3.8b: MÀN `/hieu-suat` CHỈ ĐỌC, BỘ GIEO CHẠM SÀN, KỊCH BẢN 41 ĐỌC MÀN, LƯỢT ĐI THỬ T4 — S3.8 KHÉP
+# §S1.292 — S3.8b: MÀN `/hieu-suat` CHỈ ĐỌC, BỘ GIEO CHẠM SÀN, KỊCH BẢN 41 ĐỌC MÀN, LƯỢT ĐI THỬ T4 — S3.8 KHÉP
 
 Ngày 2026-10-10 (giờ máy UTC+7). Nhánh `s3-8b-man-hieu-suat`, xếp chồng lên S3.8a (#271) rồi gộp `origin/master` sau khi #271 merge. Không
 migration, không route mới, không mã quyền mới. ADR-163 ⑼.

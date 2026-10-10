@@ -34,7 +34,7 @@ import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
 import * as nhomHang from "./nhom-hang.js";
 import * as nhaCungCap from "./nha-cung-cap.js";
-// [S1.9101 / S3.8b] `/lib/hieu-suat.js` — phép trình bày của `/hieu-suat`.
+// [S1.292 / S3.8b] `/lib/hieu-suat.js` — phép trình bày của `/hieu-suat`.
 import * as hieuSuatWeb from "./hieu-suat.js";
 import * as xungDot from "./xung-dot.js";
 import * as hoSo from "./ho-so.js";
@@ -222,7 +222,7 @@ describe("bề mặt tệp", () => {
       "nhom-hang": ["b2", "b3"],
       // [S1.273 / S3.3e1] Màn xác minh nhà cung cấp — cùng khuôn đăng nhập và phiên.
       "nha-cung-cap": ["b2"],
-      // [S1.9101 / S3.8b] Màn hiệu suất nhà cung cấp — cùng khuôn đăng nhập và phiên; một bước, chỉ đọc.
+      // [S1.292 / S3.8b] Màn hiệu suất nhà cung cấp — cùng khuôn đăng nhập và phiên; một bước, chỉ đọc.
       "hieu-suat": ["b2"],
     };
     /**
@@ -300,7 +300,7 @@ describe("bề mặt tệp", () => {
       ...duLieu,
       // [S1.273 / S3.3e1] `/lib/nha-cung-cap.js` là bản thật: trạng thái xác minh, người liên hệ và nút của `/nha-cung-cap`.
       ...nhaCungCap,
-      // [S1.9101 / S3.8b] `/lib/hieu-suat.js` là bản thật: đọc thân, ô số và ô *chưa đủ lịch sử* của `/hieu-suat`.
+      // [S1.292 / S3.8b] `/lib/hieu-suat.js` là bản thật: đọc thân, ô số và ô *chưa đủ lịch sử* của `/hieu-suat`.
       ...hieuSuatWeb,
       // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
       ...benchmarkWeb,
@@ -398,7 +398,7 @@ describe("bề mặt tệp", () => {
           // [S1.273 / S3.3e1] Ô chọn nhà cung cấp của `/tao-thau` và bảng hồ sơ của `/nha-cung-cap` — rỗng theo mặc định.
           if (lenh === "GET /suppliers" && trangThai.cookie !== null) return { status: 200, body: { suppliers: [] } };
           if (lenh === "GET /supplier-verifications" && trangThai.cookie !== null) return { status: 200, body: { hoSo: [] } };
-          // [S1.9101 / S3.8b] Bảng hiệu suất — rỗng theo mặc định, đúng hình dạng route thật (`{ hieuSuat: { sanLichSu, nhaCungCap } }`).
+          // [S1.292 / S3.8b] Bảng hiệu suất — rỗng theo mặc định, đúng hình dạng route thật (`{ hieuSuat: { sanLichSu, nhaCungCap } }`).
           if (lenh === "GET /supplier-performance" && trangThai.cookie !== null) return { status: 200, body: { hieuSuat: { sanLichSu: 5, nhaCungCap: [] } } };
           if (lenh === "GET /auth/login-links" && trangThai.cookie !== null) return { status: 200, body: { loginLinks: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
@@ -595,7 +595,7 @@ describe("bề mặt tệp", () => {
     // [S1.240 / khoản 282] ~~Bốn trang người mua~~ [S1.249 / khoản 291] Năm trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`),
     // cùng bộ id. ~~`BON_TRANG`~~ đổi tên theo số trang.
     // [S1.273 / S3.3e1] Sáu trang: `/nha-cung-cap` cùng bước 1 (`/lib/dang-nhap.js`) — tên hằng giữ để không đổi mọi chỗ gọi.
-    // [S1.9101 / S3.8b] Bảy trang: `/hieu-suat` cùng bước 1.
+    // [S1.292 / S3.8b] Bảy trang: `/hieu-suat` cùng bước 1.
     const NAM_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu", "nha-cung-cap", "hieu-suat"] as const;
     /** Các cặp dt/dd đã vẽ vào `link-gan-day` (khối link đăng nhập gần đây — khoản 195, 268). */
     const capLink = (p: { el: (id: string) => PhanTu }): [string, string][] => {
@@ -3413,7 +3413,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.than.filter((t) => t.lenh === "POST /suppliers/s-1/verification/revoke").at(-1)?.than).toEqual({ reason: "MST không khớp đăng ký kinh doanh" });
     });
 
-    // [S1.9101 / S3.8b] `/hieu-suat`: bảng chỉ đọc, mỗi nhà cung cấp một hàng; ô dưới sàn nói «chưa đủ lịch sử» kèm mẫu số; 403 nói vai.
+    // [S1.292 / S3.8b] `/hieu-suat`: bảng chỉ đọc, mỗi nhà cung cấp một hàng; ô dưới sàn nói «chưa đủ lịch sử» kèm mẫu số; 403 nói vai.
     const HIEU_SUAT = {
       hieuSuat: {
         sanLichSu: 5,
@@ -3427,7 +3427,7 @@ describe("bề mặt tệp", () => {
       },
     };
 
-    it("[S1.9101 / S3.8b] hieu-suat: mỗi nhà cung cấp một hàng mười hai ô có nhãn; dưới sàn nói «chưa đủ lịch sử» kèm mẫu số; Đọc lại gọi lại route", async () => {
+    it("[S1.292 / S3.8b] hieu-suat: mỗi nhà cung cấp một hàng mười hai ô có nhãn; dưới sàn nói «chưa đủ lịch sử» kèm mẫu số; Đọc lại gọi lại route", async () => {
       const p = await dungTrang("hieu-suat", { hash: "", cookie: A, thay: (l) => (l === "GET /supplier-performance" ? ok200(HIEU_SUAT) : undefined) });
       await p.bam("nut-dung-phien");
       const hang = p.el("bang-hieu-suat").querySelector("tbody").con;
@@ -3445,7 +3445,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi.filter((l) => !l.startsWith("GET ") && l !== "POST /auth/redeem" && l !== "POST /auth/totp")).toEqual([]);
     });
 
-    it("[S1.9101 / S3.8b] hieu-suat: 403 ở lần Đọc lại ⇒ câu nói vai giữ quyền xem báo giá, bảng CŨ bị xoá; thân sai hình dạng ⇒ câu của màn", async () => {
+    it("[S1.292 / S3.8b] hieu-suat: 403 ở lần Đọc lại ⇒ câu nói vai giữ quyền xem báo giá, bảng CŨ bị xoá; thân sai hình dạng ⇒ câu của màn", async () => {
       let lan = 0;
       const p = await dungTrang("hieu-suat", { hash: "", cookie: A, thay: (l) => {
         if (l !== "GET /supplier-performance") return undefined;
@@ -3463,9 +3463,9 @@ describe("bề mặt tệp", () => {
       expect(q.el("loi2").textContent).toMatch(/^Màn này không đọc được bảng máy chủ vừa trả/u);
     });
 
-    // [lượt soi §S1.9101 TRUNG-1] Hai lần nạp chồng nhau: bản đầu xoá bảng TRƯỚC khi chờ, nên mỗi lần vẽ thêm N hàng (2N); lần nạp của
+    // [lượt soi §S1.292 TRUNG-1] Hai lần nạp chồng nhau: bản đầu xoá bảng TRƯỚC khi chờ, nên mỗi lần vẽ thêm N hàng (2N); lần nạp của
     // người trước còn chờ lúc đổi người thì vẽ bảng của họ lên màn của người sau.
-    it("[S1.9101 / S3.8b · lượt soi TRUNG-1] hieu-suat: Đọc lại khi lần nạp đầu còn chờ ⇒ chỉ lần MỚI NHẤT vẽ, đúng hai hàng; đổi người giữa chừng ⇒ lần cũ không vẽ", async () => {
+    it("[S1.292 / S3.8b · lượt soi TRUNG-1] hieu-suat: Đọc lại khi lần nạp đầu còn chờ ⇒ chỉ lần MỚI NHẤT vẽ, đúng hai hàng; đổi người giữa chừng ⇒ lần cũ không vẽ", async () => {
       const cho: Array<() => void> = [];
       const hoan = () => new Promise<{ status: number; body: unknown }>((ok) => { cho.push(() => ok({ status: 200, body: HIEU_SUAT })); });
       const p = await dungTrang("hieu-suat", { hash: "", cookie: A, thay: (l) => (l === "GET /supplier-performance" ? hoan() : undefined) });
