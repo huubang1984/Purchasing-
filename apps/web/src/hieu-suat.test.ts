@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COT_HIEU_SUAT, TRUONG_DUOI_SAN, docHieuSuat, oCuaHang, phanTram, thoiLuong, tomTat, type HieuSuatMan } from "./hieu-suat.js";
+import { COT_HIEU_SUAT, TRUONG_DUOI_SAN, docHieuSuat, oCuaHang, phanTramTuPhanVan, thoiLuongGiay, tomTat, type HieuSuatMan } from "./hieu-suat.js";
 
 // [S1.9101 / S3.8b] Phép trình bày thuần của màn `/hieu-suat` (spec S3 §4.9, K11; ADR-163).
 
@@ -66,27 +66,27 @@ describe("S3.8b — màn hiệu suất nhà cung cấp", () => {
     }
   });
 
-  it("phanTram: phần vạn thành phần trăm, dấu phẩy, bỏ số 0 thừa, nhóm nghìn; trên MAX_SAFE_INTEGER nói cận dưới", () => {
-    expect(phanTram(10000)).toBe("100%");
-    expect(phanTram(0)).toBe("0%");
-    expect(phanTram(6667)).toBe("66,67%");
-    expect(phanTram(1250)).toBe("12,5%");
-    expect(phanTram(5)).toBe("0,05%");
-    expect(phanTram(123456789)).toBe("1.234.567,89%");
-    expect(phanTram(Number.MAX_SAFE_INTEGER)).toBe("90.071.992.547.409,91%");
+  it("phanTramTuPhanVan: phần vạn thành phần trăm, dấu phẩy, bỏ số 0 thừa, nhóm nghìn; trên MAX_SAFE_INTEGER nói cận dưới", () => {
+    expect(phanTramTuPhanVan(10000)).toBe("100%");
+    expect(phanTramTuPhanVan(0)).toBe("0%");
+    expect(phanTramTuPhanVan(6667)).toBe("66,67%");
+    expect(phanTramTuPhanVan(1250)).toBe("12,5%");
+    expect(phanTramTuPhanVan(5)).toBe("0,05%");
+    expect(phanTramTuPhanVan(123456789)).toBe("1.234.567,89%");
+    expect(phanTramTuPhanVan(Number.MAX_SAFE_INTEGER)).toBe("90.071.992.547.409,91%");
     // Lượt soi THẤP-6 của S3.8a: 0,01 cạnh 10 nghìn tỷ — số đi qua JSON là một double đã mất chữ số cuối.
-    expect(phanTram(9999999999999990000)).toBe("hơn 90.071.992.547.409,91%");
+    expect(phanTramTuPhanVan(9999999999999990000)).toBe("hơn 90.071.992.547.409,91%");
   });
 
-  it("thoiLuong: hai đơn vị lớn nhất, bỏ đơn vị nhỏ bằng 0", () => {
-    expect(thoiLuong(0)).toBe("0 giây");
-    expect(thoiLuong(45)).toBe("45 giây");
-    expect(thoiLuong(60)).toBe("1 phút");
-    expect(thoiLuong(125)).toBe("2 phút 5 giây");
-    expect(thoiLuong(3600)).toBe("1 giờ");
-    expect(thoiLuong(7500)).toBe("2 giờ 5 phút");
-    expect(thoiLuong(86400)).toBe("1 ngày");
-    expect(thoiLuong(93600)).toBe("1 ngày 2 giờ");
+  it("thoiLuongGiay: hai đơn vị lớn nhất, bỏ đơn vị nhỏ bằng 0", () => {
+    expect(thoiLuongGiay(0)).toBe("0 giây");
+    expect(thoiLuongGiay(45)).toBe("45 giây");
+    expect(thoiLuongGiay(60)).toBe("1 phút");
+    expect(thoiLuongGiay(125)).toBe("2 phút 5 giây");
+    expect(thoiLuongGiay(3600)).toBe("1 giờ");
+    expect(thoiLuongGiay(7500)).toBe("2 giờ 5 phút");
+    expect(thoiLuongGiay(86400)).toBe("1 ngày");
+    expect(thoiLuongGiay(93600)).toBe("1 ngày 2 giờ");
   });
 
   it("oCuaHang: đủ lịch sử ⇒ mười hai ô số mô tả, nhãn đúng thứ tự cột", () => {

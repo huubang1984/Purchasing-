@@ -90,9 +90,18 @@ export function docHieuSuat(body: unknown): BangHieuSuat | null {
   return { sanLichSu: hs.sanLichSu, nhaCungCap: ra, soHangBoQua: tatCa.length - ra.length };
 }
 
-/** Nhóm nghìn bằng dấu chấm, kiểu Việt Nam. */
+/**
+ * Nhóm nghìn bằng dấu chấm, kiểu Việt Nam — vòng lặp trên chữ số, không qua `Intl` (kết quả không phụ thuộc bộ ICU của trình duyệt)
+ * và không chép biểu thức nhóm nghìn của `tools/pilot-gia-lap` (cổng `ma-chep-api-worker`).
+ */
 function nhomNghin(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/gu, ".");
+  const chuSo = String(n);
+  let ra = "";
+  for (let i = 0; i < chuSo.length; i += 1) {
+    if (i > 0 && (chuSo.length - i) % 3 === 0) ra += ".";
+    ra += chuSo[i] ?? "";
+  }
+  return ra;
 }
 
 /**
@@ -102,8 +111,8 @@ function nhomNghin(n: number): string {
  * vạn) và đi qua JSON thành một `double`: trên `Number.MAX_SAFE_INTEGER` các chữ số cuối đã không còn là chữ số của CSDL, nên màn nói
  * cận dưới thay vì in một con số trông chính xác mà sai.
  */
-export function phanTram(phanVan: number): string {
-  if (!Number.isSafeInteger(phanVan)) return `hơn ${phanTram(Number.MAX_SAFE_INTEGER)}`;
+export function phanTramTuPhanVan(phanVan: number): string {
+  if (!Number.isSafeInteger(phanVan)) return `hơn ${phanTramTuPhanVan(Number.MAX_SAFE_INTEGER)}`;
   const nguyen = nhomNghin(Math.floor(phanVan / 100));
   const le = phanVan % 100;
   if (le === 0) return `${nguyen}%`;
@@ -111,7 +120,7 @@ export function phanTram(phanVan: number): string {
 }
 
 /** Giây thành thời lượng đọc được, hai đơn vị lớn nhất: 45 ⇒ "45 giây", 7500 ⇒ "2 giờ 5 phút", 93600 ⇒ "1 ngày 2 giờ". */
-export function thoiLuong(giay: number): string {
+export function thoiLuongGiay(giay: number): string {
   const g = Math.max(0, Math.trunc(giay));
   const hai = (lon: number, tenLon: string, nho: number, tenNho: string): string =>
     nho === 0 ? `${String(lon)} ${tenLon}` : `${String(lon)} ${tenLon} ${String(nho)} ${tenNho}`;
@@ -157,16 +166,16 @@ export function oCuaHang(h: HieuSuatMan, san: number): OHieuSuat[] {
     o(0, h.tenNhaCungCap),
     o(1, `${String(h.soGoiMoi)} gói`),
     o(2, `${String(h.soGoiNop)} gói`),
-    o(3, chiSo("tyLePhanHoiPhanVan", h.soGoiMoi, h.tyLePhanHoiPhanVan, phanTram)),
-    o(4, chiSo("trungViPhanHoiGiay", h.soGoiNop, h.trungViPhanHoiGiay, thoiLuong)),
+    o(3, chiSo("tyLePhanHoiPhanVan", h.soGoiMoi, h.tyLePhanHoiPhanVan, phanTramTuPhanVan)),
+    o(4, chiSo("trungViPhanHoiGiay", h.soGoiNop, h.trungViPhanHoiGiay, thoiLuongGiay)),
     o(5, String(h.soLanSua)),
     o(6, `${String(h.soGoiXepHang)} gói`),
     o(7, chiSo("hangTrungVi", h.soGoiXepHang, h.hangTrungVi, (v) => `hạng ${String(v)}`)),
     o(8, chiSo("khoangCachTrungViPhanVan", h.soGoiXepHang, h.khoangCachTrungViPhanVan,
-      (v) => (v === 0 ? "bằng hạng nhất" : `chi phí cao hơn hạng nhất ${phanTram(v)}`))),
+      (v) => (v === 0 ? "bằng hạng nhất" : `chi phí cao hơn hạng nhất ${phanTramTuPhanVan(v)}`))),
     o(9, `${String(h.soLanVaoBafo)} lần`),
     o(10, `${String(h.soLanThang)} gói`),
-    o(11, chiSo("tyLeThangPhanVan", h.soGoiXepHang, h.tyLeThangPhanVan, phanTram)),
+    o(11, chiSo("tyLeThangPhanVan", h.soGoiXepHang, h.tyLeThangPhanVan, phanTramTuPhanVan)),
   ];
 }
 
