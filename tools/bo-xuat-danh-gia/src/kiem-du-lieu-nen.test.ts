@@ -127,12 +127,13 @@ function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
   };
   return {
     dang: "trustprocure/bo-bang-chung-danh-gia",
-    phienBan: 2,
-    dacTaPhienBan: 2,
+    phienBan: 3,
+    dacTaPhienBan: 3,
     dacTaSha256: "khong-doc-o-tang-nay",
     orgId: "org-1",
     rfqId: "rfq-1",
     xuatLuc: { giaTri: "2026-10-02T00:00:00.000Z", nguon: "đồng hồ tiến trình xuất" },
+    goiTco: { tapMa: null, thamSo: null, soNgayGiao: null },
     luotCham: [
       {
         evaluationId: "ev-1",
@@ -149,6 +150,7 @@ function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
             effectiveCost: "1000.00",
             rank: 1,
             components: [{ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: "1000.00", tien: "1000.00" }],
+            maThieu: null,
           },
         ],
       },

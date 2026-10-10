@@ -381,6 +381,11 @@ const HAM_THUAN_TUY = [
   // bản chép của màn `/chinh-sach`.
   "docNhomTco",
   "kiemChinhSachTco",
+  // [S1.294 / S4.7c2] Hai phép quy đổi TCO và phép xếp hạng thi đấu — lớp hàm thuần của bộ kiểm bộ bằng chứng (`DAC-TA.md` §9, §10).
+  // Không I/O; J2 đòi chúng tái lập được từ đúng các đối số của chúng.
+  "chiPhiThanhToan",
+  "chiPhiTre",
+  "xepHang",
   // [S1.262 / S4.5c2] Nhãn của một dòng từ quan sát đã đọc (lớp ⑴ của bộ kiểm bộ bằng chứng) và phép lùi tháng UTC — không I/O.
   "nhanMotDong",
   "truThang",

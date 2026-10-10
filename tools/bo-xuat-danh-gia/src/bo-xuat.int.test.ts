@@ -93,25 +93,26 @@ async function taoPhien(userId: string): Promise<string> {
   return rows[0]?.id ?? "";
 }
 
-async function taoChinhSach(evalComponents: string): Promise<string> {
+async function taoChinhSach(evalComponents: string, tco: string | null = null): Promise<string> {
   const { rows: ke } = await db.pool.query<{ n: number }>(
     "SELECT coalesce(max(version), 0) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
     [org],
   );
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
-      "eval_components, bafo_top_n, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, 0, $4, $5) RETURNING id",
-    [org, ke[0]?.n ?? 1, evalComponents, uYc, sYc],
+      "eval_components, bafo_top_n, created_by, created_by_session_id, tco) " +
+      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, 0, $4, $5, $6::jsonb) RETURNING id",
+    [org, ke[0]?.n ?? 1, evalComponents, uYc, sYc, tco],
   );
   return rows[0]?.id ?? "";
 }
 
-async function taoRfqMo(policyId: string): Promise<string> {
+async function taoRfqMo(policyId: string, soNgayGiao: number | null = null): Promise<string> {
+  // [S1.294 / S4.7c2] `so_ngay_giao` chỉ khai được ở DRAFT (`112`) — nên khai ngay lúc dựng gói.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
-      "created_by, created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
-    [org, MAI_SAU, uYc, sYc],
+      "created_by, created_by_session_id, so_ngay_giao) VALUES ($1, 'Mua thep tam', $2, false, $3, $4, $5) RETURNING id",
+    [org, MAI_SAU, uYc, sYc, soNgayGiao],
   );
   const id = rows[0]?.id ?? "";
   await db.pool.query(
@@ -411,5 +412,95 @@ describe("`pnpm bang-chung kiem` — ĐẠT khi đã NGẮT KẾT NỐI", () => 
     expect(kq.loi).toContain("dac ta di kem da bi doi");
     // Không một dòng kết luận nào được in: bundle mang một luật khác thì lượt kiểm dừng ở đây.
     expect(kq.ra).not.toContain("ok=");
+  }, 120000);
+});
+
+// ================================================================================================
+// [S1.294 / S4.7c2] GÓI TCO: PHÉP QUY ĐỔI VÀ CAM KẾT TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT KẾT NỐI (`DAC-TA.md` §9, §10)
+//
+// Ba báo giá dưới một phiên bản TCO đủ bốn mã: A 100.00 đúng kỳ, đúng hạn ⇒ 100.00; B 90.00 giao trễ 100 ngày ⇒ +9.00 = 99.00; C 95.00
+// trả ngay (sớm 60 ngày so với kỳ chuẩn) ⇒ +1.87 = 96.87. Hạng chi phí C 1, B 2, A 3; hạng giá B 1, C 2, A 3 — đề xuất C lệch hạng,
+// nên đi kèm giải trình. Cả nửa CHẤM → ĐỀ XUẤT → XUẤT đi qua mã sản xuất thật; bộ kiểm chạy với `DATABASE_URL` đã xoá.
+// ================================================================================================
+describe("[S1.294 / S4.7c2] gói TCO — quy đổi và cam kết trong bộ bằng chứng v3", () => {
+  const TP_TCO =
+    '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},' +
+    '{"ma":"chi_phi_thanh_toan","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+  const THAM_SO = '{"chi_phi_von_nam":"0.12","ngay_thanh_toan_chuan":"60","ty_le_tre_ngay":"0.001"}';
+  let rfqTco = "";
+  let ra = "";
+  let bC = "";
+
+  beforeAll(async () => {
+    const csId = await taoChinhSach(TP_TCO, THAM_SO);
+    rfqTco = await taoRfqMo(csId, 14);
+    const phongBi = [
+      { totalAmount: "100.00", currency: "VND", freight: "0.00", paymentDays: "60", leadTimeDays: "14" },
+      { totalAmount: "90.00", currency: "VND", freight: "0.00", paymentDays: "60", leadTimeDays: "114" },
+      { totalAmount: "95.00", currency: "VND", freight: "0.00", paymentDays: "0", leadTimeDays: "14" },
+    ];
+    const ban: [string, unknown][] = [];
+    for (const [i, p] of phongBi.entries()) ban.push([await nopBaoGia(rfqTco, `NCC TCO ${String(i)} ${randomBytes(2).toString("hex")}`), p]);
+    await moThau(rfqTco, ban);
+    bC = ban[2]?.[0] ?? "";
+    await withTenant(apiPool, org, (c) => taoLuotDanhGia(c, org, { rfqId: rfqTco, actorSessionId: sYc }, apiPool));
+    await withTenant(apiPool, org, (c) =>
+      deXuatTraoThau(
+        c,
+        org,
+        { rfqId: rfqTco, bidVersionId: bC, reason: "chi phi hieu dung thap nhat", giaiTrinhLechHang: "chon theo chi phi", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    ra = join(thuMuc, "bo-tco");
+    const kq = chay(db.connectionString, "xuat", "--org", org, "--rfq", rfqTco, "--ra", ra);
+    expect(kq.ma, `${kq.ra}\n${kq.loi}`).toBe(0);
+  }, 240000);
+
+  it("[INV-L8] [INV-J2] bundle v3 mang `nguon`, `goiTco` và cam kết nguyên văn — kể cả lời giải trình", async () => {
+    const bo = docBo(JSON.parse(await readFile(join(ra, TEP_DU_LIEU), "utf8")));
+    expect(bo.phienBan).toBe(3);
+    expect(bo.goiTco).toEqual({
+      tapMa: ["gia", "van_chuyen", "chi_phi_thanh_toan", "chi_phi_tre"],
+      thamSo: { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" },
+      soNgayGiao: 14,
+    });
+    const c = bo.luotCham[0]?.hang.find((h) => h.bidVersionId === bC);
+    expect(c?.components.find((x) => x.ma === "chi_phi_thanh_toan")).toMatchObject({
+      giaTri: "1.87",
+      nguon: { coSo: "95.00", ngayKhai: "0", ngayChuan: "60", tyLe: "0.12" },
+    });
+    expect(bo.traoThau.map((t) => [t.status, t.camKet?.hangTco, t.camKet?.hangGia, t.camKet?.giaiTrinhLechHang])).toEqual([
+      ["PROPOSED", 1, 2, "chon theo chi phi"],
+    ]);
+    expect(bo.traoThau[0]?.camKet?.khai).toEqual({ freight: "0.00", importCost: null, paymentDays: 0, leadTimeDays: 14 });
+  });
+
+  it("[INV-J2] [INV-L8] `kiem` với `DATABASE_URL` ĐÃ XOÁ: ok=true, sáu thành phần quy đổi tính lại, một cam kết ĐẠT", () => {
+    const kq = chay(null, "kiem", "--bo", ra);
+    expect(kq.ma, `${kq.ra}\n${kq.loi}`).toBe(0);
+    expect(kq.ra).toContain("ok=true");
+    expect(kq.ra).toContain("cam-ket\tso=1\tdat=1\tde-xuat-khong-cam-ket=0\tquy-doi=6");
+  }, 120000);
+
+  it("[INV-J2] sửa tỷ lệ trong `nguon` ⇒ ĐỎ, gọi tên thước của gói", async () => {
+    const ra2 = join(thuMuc, "bo-tco-doi-ty-le");
+    expect(chay(db.connectionString, "xuat", "--org", org, "--rfq", rfqTco, "--ra", ra2).ma).toBe(0);
+    const tep = join(ra2, TEP_DU_LIEU);
+    await writeFile(tep, (await readFile(tep, "utf8")).replaceAll('"tyLe": "0.12"', '"tyLe": "0.10"'));
+    const kq = chay(null, "kiem", "--bo", ra2);
+    expect(kq.ma).toBe(1);
+    expect(kq.ra).toContain("ok=false");
+    expect(kq.ra).toContain("nguon.tyLe 0.10 khác goiTco.thamSo.chi_phi_von_nam 0.12");
+  }, 120000);
+
+  it("[INV-L8] xoá lời giải trình khỏi cam kết ⇒ ĐỎ: lệch hạng mà KHÔNG có giải trình", async () => {
+    const ra3 = join(thuMuc, "bo-tco-xoa-giai-trinh");
+    expect(chay(db.connectionString, "xuat", "--org", org, "--rfq", rfqTco, "--ra", ra3).ma).toBe(0);
+    const tep = join(ra3, TEP_DU_LIEU);
+    await writeFile(tep, (await readFile(tep, "utf8")).replace('"giaiTrinhLechHang": "chon theo chi phi"', '"giaiTrinhLechHang": null'));
+    const kq = chay(null, "kiem", "--bo", ra3);
+    expect(kq.ma).toBe(1);
+    expect(kq.ra).toMatch(/LECH-CAM-KET\t.*mà KHÔNG có giải trình \(§10 bước 5\)/u);
   }, 120000);
 });

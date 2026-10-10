@@ -3481,4 +3481,48 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
       ["Giải trình lệch hạng", giaiTrinh],
     ]);
   });
+
+  // [S1.294 / S4.7c2] Bộ bằng chứng v3 của gói TCO qua HTTP: cam kết đi vào bộ (kể cả lời giải trình nguyên văn), và bộ kiểm độc
+  // lập — chạy với `DATABASE_URL` đã xoá — tính lại phép quy đổi của MỌI hàng cùng cam kết. Đi trọn chuỗi màn → route → CSDL → bộ.
+  it("[INV-L8] [INV-J2] bộ bằng chứng v3 qua HTTP: cam kết + giải trình trong bộ; bộ kiểm độc lập tính lại phép quy đổi và cam kết", async () => {
+    const ok = await goi("GET", `/rfqs/${st.rfqId}/evidence-bundle`, st.gd1.cookie);
+    expect(ok.status, ok.text).toBe(200);
+    const tep = (ok.body as { evidenceBundle: { tep: Record<string, string> } }).evidenceBundle.tep;
+    const bo = JSON.parse(tep["bo-bang-chung.json"] ?? "") as {
+      phienBan: number;
+      goiTco: { soNgayGiao: number | null };
+      traoThau: { status: string; camKet: { hangTco: number; hangGia: number | null; giaiTrinhLechHang: string | null } | null }[];
+    };
+    expect(bo.phienBan).toBe(3);
+    expect(bo.goiTco.soNgayGiao).toBe(SO_NGAY_GIAO);
+    expect(bo.traoThau.map((t) => [t.status, t.camKet?.hangTco, t.camKet?.hangGia, t.camKet?.giaiTrinhLechHang])).toEqual([
+      ["PROPOSED", 1, 2, "dat hon B 2 trieu theo gia nhung giao dung han va thanh toan dung ky"],
+    ]);
+    const goc = fileURLToPath(new URL("../../../", import.meta.url));
+    const thuMuc = await mkdtemp(join(tmpdir(), "tp-bang-chung-tco-"));
+    try {
+      for (const [ten, noiDung] of Object.entries(tep)) await writeFile(join(thuMuc, ten), Buffer.from(noiDung, "utf8"));
+      const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "test" };
+      delete env["DATABASE_URL"];
+      const kq = spawnSync(
+        execPath,
+        [
+          "--experimental-transform-types",
+          "--import",
+          pathToFileURL(join(goc, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href,
+          join(goc, "tools", "bo-xuat-danh-gia", "src", "index.ts"),
+          "kiem",
+          "--bo",
+          thuMuc,
+        ],
+        { env, encoding: "utf8", cwd: goc },
+      );
+      expect(kq.status, `${kq.stdout}\n${kq.stderr}`).toBe(0);
+      expect(kq.stdout).toContain("ok=true");
+      // Hai báo giá có số (A, B) × hai mã quy đổi = bốn thành phần tính lại; C thiếu số ngày giao nên không hạng, không thành phần.
+      expect(kq.stdout).toContain("cam-ket\tso=1\tdat=1\tde-xuat-khong-cam-ket=0\tquy-doi=4");
+    } finally {
+      await rm(thuMuc, { recursive: true, force: true });
+    }
+  });
 });

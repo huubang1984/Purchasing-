@@ -31,8 +31,11 @@
 import type { ThanhPhanChinhSachDoc } from "./doc-lap/tinh-lai.js";
 
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
-/** [S1.262 / S4.5c2] `2`: lớp dữ liệu nền (`duLieuNen`). */
-export const PHIEN_BAN_BUNDLE = 2;
+/**
+ * [S1.262 / S4.5c2] `2`: lớp dữ liệu nền (`duLieuNen`).
+ * [S1.294 / S4.7c2] `3`: `nguon` của mã quy đổi, `maThieu`, `goiTco`, `traoThau[].camKet` — `DAC-TA.md` §9, §10.
+ */
+export const PHIEN_BAN_BUNDLE = 3;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
 export const TEP_DAC_TA = "DAC-TA.md";
 
@@ -63,6 +66,8 @@ export interface ThanhPhanLuu {
   readonly heSo?: string;
   readonly giaTri?: string;
   readonly tien: string | null;
+  /** [S1.294 / S4.7c2] Phép tính của mã quy đổi — `DAC-TA.md` §9. Vắng ở mã không quy đổi. */
+  readonly nguon?: Readonly<Record<string, string>>;
 }
 
 export interface HangBundle {
@@ -71,6 +76,8 @@ export interface HangBundle {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanLuu[];
+  /** [S1.294 / S4.7c2] Mã thiếu ô khai của hàng không hạng — §9.4. */
+  readonly maThieu: readonly string[] | null;
 }
 
 export interface LuotChamBundle {
@@ -86,6 +93,34 @@ export interface LuotChamBundle {
   readonly hang: readonly HangBundle[];
 }
 
+/** [S1.294 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Định nghĩa RIÊNG phía người kiểm (khối đầu tệp). */
+export interface GoiTcoDoc {
+  readonly tapMa: readonly string[] | null;
+  readonly thamSo: Readonly<Record<string, string>> | null;
+  readonly soNgayGiao: number | null;
+}
+
+export interface KhaiCamKetDoc {
+  readonly freight: string | null;
+  readonly importCost: string | null;
+  readonly paymentDays: number | null;
+  readonly leadTimeDays: number | null;
+}
+
+/** [S1.294 / S4.7c2] Cam kết của một đề xuất trao thầu — `DAC-TA.md` §10. */
+export interface CamKetDoc {
+  readonly hangTco: number;
+  readonly hangGia: number | null;
+  readonly effectiveCost: string;
+  readonly components: readonly ThanhPhanLuu[];
+  readonly khai: KhaiCamKetDoc;
+  readonly tapMa: readonly string[] | null;
+  readonly thamSo: Readonly<Record<string, string>> | null;
+  readonly soNgayGiao: number | null;
+  readonly giaiTrinhLechHang: string | null;
+  readonly chupLuc: MocThoiGian;
+}
+
 export interface TraoThauBundle {
   readonly awardId: string;
   readonly evaluationId: string;
@@ -93,6 +128,7 @@ export interface TraoThauBundle {
   readonly status: string;
   readonly reason: string;
   readonly actedAt: MocThoiGian;
+  readonly camKet: CamKetDoc | null;
 }
 
 export interface BoBangChung {
@@ -104,6 +140,8 @@ export interface BoBangChung {
   readonly orgId: string;
   readonly rfqId: string;
   readonly xuatLuc: MocThoiGian;
+  /** [S1.294 / S4.7c2] Ảnh chụp TCO của gói — §9. */
+  readonly goiTco: GoiTcoDoc;
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
   readonly traoThau: readonly TraoThauBundle[];
@@ -279,15 +317,36 @@ function docThanhPhanChinhSach(gt: unknown, duong: string): ThanhPhanChinhSachDo
   };
 }
 
+/** [S1.294 / S4.7c2] Một object mà MỌI giá trị là chuỗi — `nguon`, `thamSo`. Tối đa 16 khoá: một bundle độc không làm bộ kiểm treo. */
+function chuoiTheoKhoa(gt: unknown, duong: string): Readonly<Record<string, string>> {
+  const o = doiTuong(gt, duong);
+  const khoa = Object.keys(o);
+  if (khoa.length > 16) throw new BoHongError(duong, "tối đa 16 khoá");
+  const ra: Record<string, string> = {};
+  for (const k of khoa) {
+    // [rà soát §S1.294 — THẤP-3] Gán chuỗi vào `__proto__` của một object thường là no-op: khoá ấy sẽ biến mất khỏi phép đếm khoá
+    // của §9.3 bước 1 thay vì làm nó đỏ. Từ chối có tên.
+    if (k === "__proto__") throw new BoHongError(`${duong}.${k}`, "khoá không được phép");
+    ra[k] = chuoi(o, k, duong);
+  }
+  return ra;
+}
+
 function docThanhPhanLuu(gt: unknown, duong: string): ThanhPhanLuu {
   const o = doiTuong(gt, duong);
+  const nguon = o["nguon"] === undefined ? undefined : chuoiTheoKhoa(o["nguon"], `${duong}.nguon`);
   return {
     ma: chuoi(o, "ma", duong),
     donVi: chuoiTuyChon(o, "donVi", duong),
     heSo: chuoiTuyChon(o, "heSo", duong),
     giaTri: chuoiTuyChon(o, "giaTri", duong),
     tien: chuoiHayNull(o, "tien", duong),
+    ...(nguon === undefined ? {} : { nguon }),
   };
+}
+
+function mangChuoiHayNull(o: Record<string, unknown>, ten: string, duong: string): readonly string[] | null {
+  return o[ten] === null ? null : mangChuoi(o, ten, duong);
 }
 
 function docHang(gt: unknown, duong: string): HangBundle {
@@ -300,6 +359,40 @@ function docHang(gt: unknown, duong: string): HangBundle {
     components: mang(o, "components", duong).map((x, i) =>
       docThanhPhanLuu(x, `${duong}.components[${String(i)}]`),
     ),
+    maThieu: mangChuoiHayNull(o, "maThieu", duong),
+  };
+}
+
+function docGoiTco(gt: unknown, duong: string): GoiTcoDoc {
+  const o = doiTuong(gt, duong);
+  return {
+    tapMa: mangChuoiHayNull(o, "tapMa", duong),
+    thamSo: o["thamSo"] === null ? null : chuoiTheoKhoa(o["thamSo"], `${duong}.thamSo`),
+    soNgayGiao: soNguyenHayNull(o, "soNgayGiao", duong),
+  };
+}
+
+function docCamKet(gt: unknown, duong: string): CamKetDoc | null {
+  if (gt === null) return null;
+  const o = doiTuong(gt, duong);
+  const k = doiTuong(o["khai"], `${duong}.khai`);
+  const pk = `${duong}.khai`;
+  return {
+    hangTco: soNguyen(o, "hangTco", duong),
+    hangGia: soNguyenHayNull(o, "hangGia", duong),
+    effectiveCost: chuoi(o, "effectiveCost", duong),
+    components: mang(o, "components", duong).map((x, i) => docThanhPhanLuu(x, `${duong}.components[${String(i)}]`)),
+    khai: {
+      freight: chuoiHayNull(k, "freight", pk),
+      importCost: chuoiHayNull(k, "importCost", pk),
+      paymentDays: soNguyenHayNull(k, "paymentDays", pk),
+      leadTimeDays: soNguyenHayNull(k, "leadTimeDays", pk),
+    },
+    tapMa: mangChuoiHayNull(o, "tapMa", duong),
+    thamSo: o["thamSo"] === null ? null : chuoiTheoKhoa(o["thamSo"], `${duong}.thamSo`),
+    soNgayGiao: soNguyenHayNull(o, "soNgayGiao", duong),
+    giaiTrinhLechHang: chuoiHayNull(o, "giaiTrinhLechHang", duong),
+    chupLuc: docMoc(o["chupLuc"], `${duong}.chupLuc`),
   };
 }
 
@@ -328,6 +421,7 @@ function docTraoThau(gt: unknown, duong: string): TraoThauBundle {
     status: chuoi(o, "status", duong),
     reason: chuoi(o, "reason", duong),
     actedAt: docMoc(o["actedAt"], `${duong}.actedAt`),
+    camKet: docCamKet(o["camKet"], `${duong}.camKet`),
   };
 }
 
@@ -551,6 +645,7 @@ export function docBo(raw: unknown): BoBangChung {
     orgId: chuoi(o, "orgId", "$"),
     rfqId: chuoi(o, "rfqId", "$"),
     xuatLuc: docMoc(o["xuatLuc"], "$.xuatLuc"),
+    goiTco: docGoiTco(o["goiTco"], "$.goiTco"),
     luotCham: mang(o, "luotCham", "$").map((x, i) => docLuotCham(x, `$.luotCham[${String(i)}]`)),
     traoThau: mang(o, "traoThau", "$").map((x, i) => docTraoThau(x, `$.traoThau[${String(i)}]`)),
     duLieuNen: docDuLieuNen(o["duLieuNen"], "$.duLieuNen"),
