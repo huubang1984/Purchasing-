@@ -11275,11 +11275,15 @@ Giới hạn nói thêm:
   commit sau câu ấy có thể đứng TRƯỚC hàng `BENCHMARK_READ`/`BENCHMARK_BAND_READ` của lượt đọc. Bảng so sánh, chuẩn *"bảng so sánh
   mở"* của L6, đã chấp nhận đúng điều ấy cho dữ liệu nhạy hơn (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi
   `COMPARISON_VIEWED`); không ai dựa vào thứ tự sổ của hai hàng ấy. Khoá còn lại ở đường ghi mở MỘT cửa sổ cho mỗi lần mở thầu (bản
-  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; xấu nhất ở
-  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.
+  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; ~~xấu nhất ở
+  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.~~
+  **[2026-10-11 / khoản 342 — ĐO]** mỗi lần chỉ giữ từ câu khoá tới commit (ghi hay gặp bản lưu, một hàng sổ), không suốt phép tính.
+  Ở 5.000 gói, tám lần đọc đầu dồn hay trải 2,4 s, cạnh thử mỗi 100 ms ⇒ chờ hàng lâu nhất 22,0 ms, 0/317 lần hỏng.
   Đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126). Đo, cạnh trọn (khoá hàng gói, một hàng sổ,
   COMMIT), `UNSEALED`: sáu luồng đọc liên tục ⇒ lâu nhất 11,6 ms (trước 13,0 s, 6/30 hỏng), mười hai ⇒ 26,6 ms (trước 30/30 hỏng);
-  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274.
+  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274. **[2026-10-11]** Qua HTTP thật
+  (`GET /rfqs/:id/benchmark`, phiên người mua thật), mười hai vòng đọc liên tục ⇒ cạnh lâu nhất 27,2 ms, 0/60 hỏng; khi hai đường đọc
+  khoá lại như trước ⇒ 29/30 hỏng. Biên bản §S1.274 mục 8.
 
 ---
 
