@@ -1313,6 +1313,8 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   // người giữ `supplier.qualify` do bên gọi truyền vào xác minh — câu thô trên pool chủ cụm.
   "nguoiNhapNhaCungCap",
   "nhaCungCapDemDuoc",
+  // [khoản 346] Chờ qua mốc lật của bộ đếm cửa sổ cố định, đọc giờ CSDL qua `doLechDongHo` — không câu SQL mới.
+  "choQuaMocCuaSo",
 ];
 
 describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
