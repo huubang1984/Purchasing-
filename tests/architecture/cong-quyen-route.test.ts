@@ -381,7 +381,7 @@ const HAM_THUAN_TUY = [
   // bản chép của màn `/chinh-sach`.
   "docNhomTco",
   "kiemChinhSachTco",
-  // [S1.9101 / S4.7c2] Hai phép quy đổi TCO và phép xếp hạng thi đấu — lớp hàm thuần của bộ kiểm bộ bằng chứng (`DAC-TA.md` §9, §10).
+  // [S1.294 / S4.7c2] Hai phép quy đổi TCO và phép xếp hạng thi đấu — lớp hàm thuần của bộ kiểm bộ bằng chứng (`DAC-TA.md` §9, §10).
   // Không I/O; J2 đòi chúng tái lập được từ đúng các đối số của chúng.
   "chiPhiThanhToan",
   "chiPhiTre",

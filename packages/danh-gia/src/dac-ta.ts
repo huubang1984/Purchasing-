@@ -23,7 +23,7 @@
 
 /** [S1.262 / S4.5c2] `2`: thêm §8 — lớp dữ liệu nền (benchmark giá); §6 nói rõ lớp ấy CÓ đọc mốc thời gian. */
 /**
- * [S1.9101 / S4.7c2] `3`: thêm §9 — phép quy đổi TCO tính lại được từ `nguon` và ảnh chụp của gói — và §10 — cam kết của đề xuất
+ * [S1.294 / S4.7c2] `3`: thêm §9 — phép quy đổi TCO tính lại được từ `nguon` và ảnh chụp của gói — và §10 — cam kết của đề xuất
  * trao thầu; §3 trỏ sang §9 cho hai mã quy đổi.
  */
 export const DAC_TA_PHIEN_BAN = 3;

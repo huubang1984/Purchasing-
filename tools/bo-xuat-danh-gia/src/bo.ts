@@ -33,7 +33,7 @@ import type { ThanhPhanChinhSachDoc } from "./doc-lap/tinh-lai.js";
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
 /**
  * [S1.262 / S4.5c2] `2`: lớp dữ liệu nền (`duLieuNen`).
- * [S1.9101 / S4.7c2] `3`: `nguon` của mã quy đổi, `maThieu`, `goiTco`, `traoThau[].camKet` — `DAC-TA.md` §9, §10.
+ * [S1.294 / S4.7c2] `3`: `nguon` của mã quy đổi, `maThieu`, `goiTco`, `traoThau[].camKet` — `DAC-TA.md` §9, §10.
  */
 export const PHIEN_BAN_BUNDLE = 3;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
@@ -66,7 +66,7 @@ export interface ThanhPhanLuu {
   readonly heSo?: string;
   readonly giaTri?: string;
   readonly tien: string | null;
-  /** [S1.9101 / S4.7c2] Phép tính của mã quy đổi — `DAC-TA.md` §9. Vắng ở mã không quy đổi. */
+  /** [S1.294 / S4.7c2] Phép tính của mã quy đổi — `DAC-TA.md` §9. Vắng ở mã không quy đổi. */
   readonly nguon?: Readonly<Record<string, string>>;
 }
 
@@ -76,7 +76,7 @@ export interface HangBundle {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanLuu[];
-  /** [S1.9101 / S4.7c2] Mã thiếu ô khai của hàng không hạng — §9.4. */
+  /** [S1.294 / S4.7c2] Mã thiếu ô khai của hàng không hạng — §9.4. */
   readonly maThieu: readonly string[] | null;
 }
 
@@ -93,7 +93,7 @@ export interface LuotChamBundle {
   readonly hang: readonly HangBundle[];
 }
 
-/** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Định nghĩa RIÊNG phía người kiểm (khối đầu tệp). */
+/** [S1.294 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Định nghĩa RIÊNG phía người kiểm (khối đầu tệp). */
 export interface GoiTcoDoc {
   readonly tapMa: readonly string[] | null;
   readonly thamSo: Readonly<Record<string, string>> | null;
@@ -107,7 +107,7 @@ export interface KhaiCamKetDoc {
   readonly leadTimeDays: number | null;
 }
 
-/** [S1.9101 / S4.7c2] Cam kết của một đề xuất trao thầu — `DAC-TA.md` §10. */
+/** [S1.294 / S4.7c2] Cam kết của một đề xuất trao thầu — `DAC-TA.md` §10. */
 export interface CamKetDoc {
   readonly hangTco: number;
   readonly hangGia: number | null;
@@ -140,7 +140,7 @@ export interface BoBangChung {
   readonly orgId: string;
   readonly rfqId: string;
   readonly xuatLuc: MocThoiGian;
-  /** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói — §9. */
+  /** [S1.294 / S4.7c2] Ảnh chụp TCO của gói — §9. */
   readonly goiTco: GoiTcoDoc;
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
@@ -317,14 +317,14 @@ function docThanhPhanChinhSach(gt: unknown, duong: string): ThanhPhanChinhSachDo
   };
 }
 
-/** [S1.9101 / S4.7c2] Một object mà MỌI giá trị là chuỗi — `nguon`, `thamSo`. Tối đa 16 khoá: một bundle độc không làm bộ kiểm treo. */
+/** [S1.294 / S4.7c2] Một object mà MỌI giá trị là chuỗi — `nguon`, `thamSo`. Tối đa 16 khoá: một bundle độc không làm bộ kiểm treo. */
 function chuoiTheoKhoa(gt: unknown, duong: string): Readonly<Record<string, string>> {
   const o = doiTuong(gt, duong);
   const khoa = Object.keys(o);
   if (khoa.length > 16) throw new BoHongError(duong, "tối đa 16 khoá");
   const ra: Record<string, string> = {};
   for (const k of khoa) {
-    // [rà soát §S1.9101 — THẤP-3] Gán chuỗi vào `__proto__` của một object thường là no-op: khoá ấy sẽ biến mất khỏi phép đếm khoá
+    // [rà soát §S1.294 — THẤP-3] Gán chuỗi vào `__proto__` của một object thường là no-op: khoá ấy sẽ biến mất khỏi phép đếm khoá
     // của §9.3 bước 1 thay vì làm nó đỏ. Từ chối có tên.
     if (k === "__proto__") throw new BoHongError(`${duong}.${k}`, "khoá không được phép");
     ra[k] = chuoi(o, k, duong);

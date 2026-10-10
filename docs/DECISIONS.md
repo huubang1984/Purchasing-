@@ -12797,14 +12797,14 @@ giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham
   được. Không lấp ngược.
 - **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.
   Người ấy đề xuất được chính báo giá ấy, và lời từ chối nhập không vào sổ (ADR-060); chấp nhận.
-- ~~**Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).~~ **[S1.9101]** Đóng ở
-  ADR-9201: bộ v3 mang cam kết và lời giải trình nguyên văn.
+- ~~**Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).~~ **[S1.294]** Đóng ở
+  ADR-165: bộ v3 mang cam kết và lời giải trình nguyên văn.
 - **`/mo-thau` không đo lại trên trình duyệt** — ô và các dòng mới theo khuôn có sẵn (`phuc-vu.test`).
 
 ### Điều ADR này KHÔNG nói
 
-- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2). **[S1.9101]** Đã quyết —
-  ADR-9201.
+- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2). **[S1.294]** Đã quyết —
+  ADR-165.
 - Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13).
 
 ## ADR-161 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
@@ -13051,12 +13051,12 @@ HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.
 Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b); KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa chọn); hiệu suất từ ERP (S5, spec §10);
 Supplier Score (S5, ADR-100).
 
-## ADR-9201 — S4.7c2: bộ bằng chứng phiên bản 3 — phép quy đổi TCO tính lại được ở mọi hàng mọi lượt, cam kết của đề xuất là điều khoản của bộ, bộ kiểm ngoại tuyến hai lớp phán cả khớp lẫn luật giải trình
+## ADR-165 — S4.7c2: bộ bằng chứng phiên bản 3 — phép quy đổi TCO tính lại được ở mọi hàng mọi lượt, cam kết của đề xuất là điều khoản của bộ, bộ kiểm ngoại tuyến hai lớp phán cả khớp lẫn luật giải trình
 
 **Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất:
 ⑴ tính lại phép quy đổi ở MỌI hàng mọi lượt chấm, không chỉ báo giá được đề xuất; ⑵ bộ kiểm phán cam kết cả vế khớp lẫn luật có giải
-trình ⇔ lệch hạng; ⑶ lời giải trình vào bộ nguyên văn · **[S1.9101]** · **Migration:** không · **Liên quan:** ADR-059, ADR-144,
-ADR-153, ADR-158, ADR-160, ADR-162 · **Spec:** S4 §2.4 ⑻, §4.8, §9 (S4.7c2) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+trình ⇔ lệch hạng; ⑶ lời giải trình vào bộ nguyên văn · **[S1.294]** · **Migration:** không · **Liên quan:** ADR-059, ADR-144,
+ADR-153, ADR-158, ADR-160, ADR-162 · **Spec:** S4 §2.4 ⑻, §4.8, §9 (S4.7c2) · **Biên bản:** `evidence/security-reviews.md` §S1.294
 
 ### Bối cảnh
 
@@ -13092,7 +13092,7 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 ⑸ **Lời giải trình nguyên văn trong bộ.** Bộ đã sau hai cổng `audit.read` + `bid.view` và đã mang giá; giải trình là lý do của quyết
 định, người kiểm toán cần đọc nó. Sổ vẫn chỉ ghi cờ (ADR-160 ⑸).
 
-⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 6) — không CAO; hai TRUNG, bốn THẤP:
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.294 mục 6) — không CAO; hai TRUNG, bốn THẤP:
 - **TRUNG-1** — xoá cả `camKet` khỏi một đề xuất thì bộ kiểm chỉ đếm *"đề xuất không cam kết"* và vẫn ĐẠT. Sửa: §10 bước 6 — `chupLuc`
   bằng `actedAt` của chính hàng (trigger `121` chụp trong giao dịch đề xuất), và một đề xuất không cam kết mà `actedAt` ≥ cam kết chụp
   sớm nhất của bộ là bộ sai. Dư lượng nói ra: bộ không còn cam kết nào thì không phân biệt được với đề xuất cũ.

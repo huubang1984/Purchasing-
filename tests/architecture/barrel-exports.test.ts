@@ -1263,7 +1263,7 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "rutDeXuatTraoThau",
   // [S1.288 / S4.7c1 / L8] Đọc cam kết TCO chụp lúc đề xuất — cổng `bid.view` thẳng trong thân; route `…/award/commitment`.
   "docCamKetTraoThau",
-  // [S1.9101 / S4.7c2] Ba hàm THUẦN cho lớp hàm thuần của bộ kiểm bộ bằng chứng (`tools/bo-xuat-danh-gia`): hai phép quy đổi TCO
+  // [S1.294 / S4.7c2] Ba hàm THUẦN cho lớp hàm thuần của bộ kiểm bộ bằng chứng (`tools/bo-xuat-danh-gia`): hai phép quy đổi TCO
   // (`DAC-TA.md` §9) và phép xếp hạng thi đấu dùng cho hạng giá (§10). Không kết nối, không cổng — chúng chỉ tính.
   "chiPhiThanhToan",
   "chiPhiTre",

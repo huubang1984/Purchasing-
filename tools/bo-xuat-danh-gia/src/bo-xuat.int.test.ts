@@ -108,7 +108,7 @@ async function taoChinhSach(evalComponents: string, tco: string | null = null): 
 }
 
 async function taoRfqMo(policyId: string, soNgayGiao: number | null = null): Promise<string> {
-  // [S1.9101 / S4.7c2] `so_ngay_giao` chỉ khai được ở DRAFT (`112`) — nên khai ngay lúc dựng gói.
+  // [S1.294 / S4.7c2] `so_ngay_giao` chỉ khai được ở DRAFT (`112`) — nên khai ngay lúc dựng gói.
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
       "created_by, created_by_session_id, so_ngay_giao) VALUES ($1, 'Mua thep tam', $2, false, $3, $4, $5) RETURNING id",
@@ -416,13 +416,13 @@ describe("`pnpm bang-chung kiem` — ĐẠT khi đã NGẮT KẾT NỐI", () => 
 });
 
 // ================================================================================================
-// [S1.9101 / S4.7c2] GÓI TCO: PHÉP QUY ĐỔI VÀ CAM KẾT TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT KẾT NỐI (`DAC-TA.md` §9, §10)
+// [S1.294 / S4.7c2] GÓI TCO: PHÉP QUY ĐỔI VÀ CAM KẾT TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT KẾT NỐI (`DAC-TA.md` §9, §10)
 //
 // Ba báo giá dưới một phiên bản TCO đủ bốn mã: A 100.00 đúng kỳ, đúng hạn ⇒ 100.00; B 90.00 giao trễ 100 ngày ⇒ +9.00 = 99.00; C 95.00
 // trả ngay (sớm 60 ngày so với kỳ chuẩn) ⇒ +1.87 = 96.87. Hạng chi phí C 1, B 2, A 3; hạng giá B 1, C 2, A 3 — đề xuất C lệch hạng,
 // nên đi kèm giải trình. Cả nửa CHẤM → ĐỀ XUẤT → XUẤT đi qua mã sản xuất thật; bộ kiểm chạy với `DATABASE_URL` đã xoá.
 // ================================================================================================
-describe("[S1.9101 / S4.7c2] gói TCO — quy đổi và cam kết trong bộ bằng chứng v3", () => {
+describe("[S1.294 / S4.7c2] gói TCO — quy đổi và cam kết trong bộ bằng chứng v3", () => {
   const TP_TCO =
     '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},' +
     '{"ma":"chi_phi_thanh_toan","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';

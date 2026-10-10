@@ -1,11 +1,11 @@
 // ==============================================================================================
-// [S1.9101 / S4.7c2] KIỂM PHÉP QUY ĐỔI TCO VÀ CAM KẾT CỦA ĐỀ XUẤT — `DAC-TA.md` §9, §10
+// [S1.294 / S4.7c2] KIỂM PHÉP QUY ĐỔI TCO VÀ CAM KẾT CỦA ĐỀ XUẤT — `DAC-TA.md` §9, §10
 //
 // Hai lớp như `kiem.ts`: lớp ⑵ (`doc-lap/quy-doi-lai.ts`, viết từ đặc tả, mảng chữ số) là CHỦ THỂ của bảo đảm; lớp ⑴ gọi CHÍNH ba
 // hàm lượt chấm dùng (`chiPhiThanhToan`, `chiPhiTre`, `xepHang` của `@trustprocure/danh-gia`) — rẻ, và để bắt chính nó bất đồng
 // với lớp ⑵. Hai lớp bất đồng ⇒ ĐỎ và nói ra (ADR-059).
 //
-// Chủ dự án chốt 2026-10-10 (ADR-9201): tính lại phép quy đổi ở MỌI hàng của MỌI lượt chấm, không chỉ báo giá được đề xuất; phán
+// Chủ dự án chốt 2026-10-10 (ADR-165): tính lại phép quy đổi ở MỌI hàng của MỌI lượt chấm, không chỉ báo giá được đề xuất; phán
 // cam kết cả vế khớp lẫn luật giải trình (có ⇔ lệch hạng); văn bản giải trình vào bộ nguyên văn. KHÔNG phán ai được trao là đúng
 // (§7 giữ nguyên).
 // ==============================================================================================
@@ -207,7 +207,7 @@ interface HangGiaLuot {
 }
 
 /**
- * [rà soát §S1.9101 — THẤP-2] Giải trình có mặt phải là thứ `121` (1) nhận: có ít nhất một ký tự không phải khoảng trắng (kể cả khoảng
+ * [rà soát §S1.294 — THẤP-2] Giải trình có mặt phải là thứ `121` (1) nhận: có ít nhất một ký tự không phải khoảng trắng (kể cả khoảng
  * trắng Unicode và ký tự rộng 0) và tối đa 2000 ký tự — chuỗi rỗng không phải một lời giải trình.
  */
 const KY_TU_KHONG_TRANG = /[^\s\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]/u;
@@ -278,7 +278,7 @@ export function kiemCamKet(bo: BoBangChung, hamThuan: QuyDoiHamThuan = QUY_DOI_T
   let soCamKet = 0;
   let soDat = 0;
   let soDeXuatKhongCamKet = 0;
-  // [rà soát §S1.9101 — TRUNG-2] Chỉ mục một lần: lượt theo id, hàng theo (lượt, báo giá), bảng hạng giá dựng lười mỗi lượt.
+  // [rà soát §S1.294 — TRUNG-2] Chỉ mục một lần: lượt theo id, hàng theo (lượt, báo giá), bảng hạng giá dựng lười mỗi lượt.
   const luotTheoId = new Map(bo.luotCham.map((l) => [l.evaluationId, l]));
   const hangTheoLuot = new Map(bo.luotCham.map((l) => [l.evaluationId, new Map(l.hang.map((h) => [h.bidVersionId, h]))]));
   const hangGiaTheoLuot = new Map<string, HangGiaLuot>();
@@ -292,7 +292,7 @@ export function kiemCamKet(bo: BoBangChung, hamThuan: QuyDoiHamThuan = QUY_DOI_T
     hangGiaTheoLuot.set(luot.evaluationId, moi);
     return moi;
   };
-  // [rà soát §S1.9101 — TRUNG-1] Cam kết chụp SỚM NHẤT của bundle — từ mốc ấy hệ thống đã chụp cam kết cho MỌI đề xuất (§10 bước 6).
+  // [rà soát §S1.294 — TRUNG-1] Cam kết chụp SỚM NHẤT của bundle — từ mốc ấy hệ thống đã chụp cam kết cho MỌI đề xuất (§10 bước 6).
   let chupSomNhat: string | null = null;
   for (const t of bo.traoThau) {
     const c = t.camKet?.chupLuc.giaTri;

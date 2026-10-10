@@ -1,4 +1,4 @@
-// [S1.9101 / S4.7c2] Phép quy đổi TCO (`DAC-TA.md` §9) và cam kết của đề xuất (§10) trong bộ kiểm — hai lớp, mỗi chỗ lệch gọi tên.
+// [S1.294 / S4.7c2] Phép quy đổi TCO (`DAC-TA.md` §9) và cam kết của đề xuất (§10) trong bộ kiểm — hai lớp, mỗi chỗ lệch gọi tên.
 import { describe, expect, it } from "vitest";
 import { DAC_TA, chiPhiThanhToan, chiPhiTre } from "@trustprocure/danh-gia";
 import { BoHongError, docBo, type BoBangChung, type CamKetDoc, type HangBundle, type ThanhPhanLuu, type TraoThauBundle } from "./bo.js";
@@ -116,7 +116,7 @@ function suaThanhPhan(hang: readonly HangBundle[], bid: string, ma: string, sua:
   return hang.map((h) => (h.bidVersionId !== bid ? h : { ...h, components: h.components.map((c) => (c.ma === ma ? sua(c) : c)) }));
 }
 
-describe("[S1.9101 / S4.7c2] lớp độc lập của phép quy đổi — §9.1, §9.2", () => {
+describe("[S1.294 / S4.7c2] lớp độc lập của phép quy đổi — §9.1, §9.2", () => {
   it("[INV-J2] ca tay: 30 ngày sớm × 12 %/năm × 100.00 ÷ 365 = 0.9863… ⇒ 0.99; trễ 100 ngày × 0.001 × 100.00 = 10.00; sớm/đúng hạn ⇒ 0.00", () => {
     expect(chiPhiThanhToanLai("100.00", "30", "60", "0.12")).toBe("0.99");
     expect(chiPhiTreLai("100.00", "110", "10", "0.001")).toBe("10.00");
@@ -181,7 +181,7 @@ describe("[S1.9101 / S4.7c2] lớp độc lập của phép quy đổi — §9.1
   });
 });
 
-describe("[S1.9101 / S4.7c2] bộ kiểm trên bundle TCO — §9", () => {
+describe("[S1.294 / S4.7c2] bộ kiểm trên bundle TCO — §9", () => {
   it("[INV-J2] bundle lành lặn ĐẠT; sáu thành phần quy đổi được tính lại", () => {
     const kq = kiemBo(bo(hangMau()), DAC_TA);
     expect(kq.loiBo).toEqual([]);
@@ -248,7 +248,7 @@ describe("[S1.9101 / S4.7c2] bộ kiểm trên bundle TCO — §9", () => {
   });
 });
 
-describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
+describe("[S1.294 / S4.7c2] cam kết của đề xuất — §10", () => {
   /** Báo giá có hạng chi phí khác hạng giá — đề xuất nó phải có giải trình. */
   function lech(): { hang: HangBundle[]; bid: string } {
     const hang = hangMau();
@@ -313,7 +313,7 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
     expect(kq.camKet.loi.join("\n")).toMatch(/ở trạng thái APPROVED mà mang cam kết/u);
   });
 
-  it("[INV-L8] [rà soát §S1.9101 — TRUNG-1] cam kết bị XOÁ khỏi một đề xuất SAU mốc chụp sớm nhất ⇒ ĐỎ; cam kết chụp lúc khác lúc đề xuất ⇒ ĐỎ (§10 bước 6)", () => {
+  it("[INV-L8] [rà soát §S1.294 — TRUNG-1] cam kết bị XOÁ khỏi một đề xuất SAU mốc chụp sớm nhất ⇒ ĐỎ; cam kết chụp lúc khác lúc đề xuất ⇒ ĐỎ (§10 bước 6)", () => {
     const { hang, bid } = lech();
     const h = hang.find((x) => x.bidVersionId === bid) as HangBundle;
     const xoa = kiemBo(
@@ -329,7 +329,7 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
     expect(lechLuc.camKet.loi.join("\n")).toMatch(/chụp lúc 2026-10-10T03:00:00\.000Z, khác lúc đề xuất/u);
   });
 
-  it("[INV-L8] [rà soát §S1.9101 — THẤP-2] giải trình chỉ khoảng trắng (kể cả ký tự rộng 0) hay dài quá 2000 ký tự ⇒ ĐỎ (§10 bước 5)", () => {
+  it("[INV-L8] [rà soát §S1.294 — THẤP-2] giải trình chỉ khoảng trắng (kể cả ký tự rộng 0) hay dài quá 2000 ký tự ⇒ ĐỎ (§10 bước 5)", () => {
     const { hang, bid } = lech();
     const h = hang.find((x) => x.bidVersionId === bid) as HangBundle;
     for (const g of [" \u200b\u00a0", "x".repeat(2001)]) {
@@ -338,7 +338,7 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
     }
   });
 
-  it("[rà soát §S1.9101 — TRUNG-2] bundle 3 000 hàng, 3 000 đề xuất mang cam kết: hạng giá dựng MỘT lần mỗi lượt — kiểm xong dưới 5 giây", () => {
+  it("[rà soát §S1.294 — TRUNG-2] bundle 3 000 hàng, 3 000 đề xuất mang cam kết: hạng giá dựng MỘT lần mỗi lượt — kiểm xong dưới 5 giây", () => {
     const mot = hangMau()[0] as HangBundle;
     const nhieu: HangBundle[] = Array.from({ length: 3000 }, (_, i) => ({ ...mot, bidVersionId: `b${String(i)}`, rank: 1 }));
     const dx = nhieu.map((x) => deXuat(x.bidVersionId, { ...camKetDung(x, [x], null), hangTco: 1, hangGia: 1 }));
@@ -348,7 +348,7 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
     expect(kq.camKet.soCamKet).toBe(3000);
   });
 
-  it("[rà soát §S1.9101 — THẤP-3] bộ đọc từ chối khoá `__proto__` trong `nguon` — gán chuỗi vào nó là no-op và sẽ lách phép đếm khoá", () => {
+  it("[rà soát §S1.294 — THẤP-3] bộ đọc từ chối khoá `__proto__` trong `nguon` — gán chuỗi vào nó là no-op và sẽ lách phép đếm khoá", () => {
     const json = JSON.stringify(bo(hangMau())).replace('"nguon":{', '"nguon":{"__proto__":"x",');
     expect(() => docBo(JSON.parse(json))).toThrow(BoHongError);
     expect(() => docBo(JSON.parse(json))).toThrow(/nguon\.__proto__`: khoá không được phép/u);

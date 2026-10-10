@@ -3482,7 +3482,7 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
     ]);
   });
 
-  // [S1.9101 / S4.7c2] Bộ bằng chứng v3 của gói TCO qua HTTP: cam kết đi vào bộ (kể cả lời giải trình nguyên văn), và bộ kiểm độc
+  // [S1.294 / S4.7c2] Bộ bằng chứng v3 của gói TCO qua HTTP: cam kết đi vào bộ (kể cả lời giải trình nguyên văn), và bộ kiểm độc
   // lập — chạy với `DATABASE_URL` đã xoá — tính lại phép quy đổi của MỌI hàng cùng cam kết. Đi trọn chuỗi màn → route → CSDL → bộ.
   it("[INV-L8] [INV-J2] bộ bằng chứng v3 qua HTTP: cam kết + giải trình trong bộ; bộ kiểm độc lập tính lại phép quy đổi và cam kết", async () => {
     const ok = await goi("GET", `/rfqs/${st.rfqId}/evidence-bundle`, st.gd1.cookie);

@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.7c2] PHÉP QUY ĐỔI TCO VÀ HẠNG GIÁ, TÍNH LẠI ĐỘC LẬP — `DAC-TA.md` §9, §10 bước 4
+// [S1.294 / S4.7c2] PHÉP QUY ĐỔI TCO VÀ HẠNG GIÁ, TÍNH LẠI ĐỘC LẬP — `DAC-TA.md` §9, §10 bước 4
 //
 // Cùng ranh giới với `tinh-lai.ts`: viết TỪ văn bản đặc tả, không import một symbol nào của `@trustprocure/danh-gia` (quy tắc
 // `g17-kiem-doc-lap-khong-cham-danh-gia` canh cả thư mục).
@@ -97,7 +97,7 @@ export function hangGiaLai(hang: readonly HangChoHangGia[], bidVersionId: string
 }
 
 /**
- * Hạng giá của MỌI báo giá có hạng của một lượt chấm, một lần — [rà soát §S1.9101 — TRUNG-2] tính lại cả phép xếp cho TỪNG cam kết
+ * Hạng giá của MỌI báo giá có hạng của một lượt chấm, một lần — [rà soát §S1.294 — TRUNG-2] tính lại cả phép xếp cho TỪNG cam kết
  * là O(cam kết × hàng × log hàng), và một bundle độc nhiều đề xuất làm bộ kiểm treo.
  */
 export function bangHangGiaLai(hang: readonly HangChoHangGia[]): ReadonlyMap<string, number | null> {

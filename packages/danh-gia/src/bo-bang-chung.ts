@@ -55,7 +55,7 @@ import { docLopDuLieuNen, type DuLieuNenBundle } from "./lop-du-lieu-nen.js";
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
 /**
  * [S1.262 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài.
- * [S1.9101 / S4.7c2] `3`: phép quy đổi TCO tính lại được (`nguon` của mã quy đổi, `maThieu`, `goiTco`) và cam kết của mỗi đề xuất
+ * [S1.294 / S4.7c2] `3`: phép quy đổi TCO tính lại được (`nguon` của mã quy đổi, `maThieu`, `goiTco`) và cam kết của mỗi đề xuất
  * trao thầu (`traoThau[].camKet`) — `DAC-TA.md` §9, §10.
  */
 export const PHIEN_BAN_BUNDLE = 3;
@@ -83,7 +83,7 @@ export interface ThanhPhanLuu {
   readonly giaTri?: string;
   readonly tien: string | null;
   /**
-   * [S1.9101 / S4.7c2] Phép tính của mã quy đổi (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ
+   * [S1.294 / S4.7c2] Phép tính của mã quy đổi (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ
    * lệ — chép nguyên văn như lượt chấm ghi (`luot-danh-gia.ts`); vắng ở mã không quy đổi. `DAC-TA.md` §9.
    */
   readonly nguon?: Readonly<Record<string, string>>;
@@ -95,7 +95,7 @@ export interface HangBundle {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanLuu[];
-  /** [S1.9101 / S4.7c2] Mã thiếu ô khai của hàng không hạng (`ma_thieu`, `112`) — `null` khi hàng đủ ô. */
+  /** [S1.294 / S4.7c2] Mã thiếu ô khai của hàng không hạng (`ma_thieu`, `112`) — `null` khi hàng đủ ô. */
   readonly maThieu: readonly string[] | null;
 }
 
@@ -115,7 +115,7 @@ export interface LuotChamBundle {
 }
 
 /**
- * [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở (`112` (5), `117`): tập mã và nhóm khoá `tco` của phiên bản ghim, số ngày giao yêu
+ * [S1.294 / S4.7c2] Ảnh chụp TCO của gói lúc mở (`112` (5), `117`): tập mã và nhóm khoá `tco` của phiên bản ghim, số ngày giao yêu
  * cầu. Thước mà mọi `nguon` của mọi lượt chấm phải khớp — `DAC-TA.md` §9.
  */
 export interface GoiTcoBundle {
@@ -125,7 +125,7 @@ export interface GoiTcoBundle {
   readonly soNgayGiao: number | null;
 }
 
-/** [S1.9101 / S4.7c2] Bốn ô khai của báo giá được đề xuất, qua đúng bộ đọc của lượt chấm (`121`). */
+/** [S1.294 / S4.7c2] Bốn ô khai của báo giá được đề xuất, qua đúng bộ đọc của lượt chấm (`121`). */
 export interface KhaiCamKetBundle {
   readonly freight: string | null;
   readonly importCost: string | null;
@@ -133,7 +133,7 @@ export interface KhaiCamKetBundle {
   readonly leadTimeDays: number | null;
 }
 
-/** [S1.9101 / S4.7c2] Cam kết TCO CSDL chụp lúc đề xuất (`rfq_award_cam_ket`, `121`) — điều khoản cam kết của bộ, `DAC-TA.md` §10. */
+/** [S1.294 / S4.7c2] Cam kết TCO CSDL chụp lúc đề xuất (`rfq_award_cam_ket`, `121`) — điều khoản cam kết của bộ, `DAC-TA.md` §10. */
 export interface CamKetBundle {
   readonly hangTco: number;
   readonly hangGia: number | null;
@@ -155,7 +155,7 @@ export interface TraoThauBundle {
   readonly status: string;
   readonly reason: string;
   readonly actedAt: MocThoiGian;
-  /** [S1.9101 / S4.7c2] `null` ở mọi hàng không phải đề xuất, và ở đề xuất có trước S4.7c1 (không lấp ngược). */
+  /** [S1.294 / S4.7c2] `null` ở mọi hàng không phải đề xuất, và ở đề xuất có trước S4.7c1 (không lấp ngược). */
   readonly camKet: CamKetBundle | null;
 }
 
@@ -168,7 +168,7 @@ export interface BoBangChung {
   readonly orgId: string;
   readonly rfqId: string;
   readonly xuatLuc: MocThoiGian;
-  /** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. */
+  /** [S1.294 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. */
   readonly goiTco: GoiTcoBundle;
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
@@ -215,7 +215,7 @@ interface HangAward {
   readonly status: string;
   readonly reason: string;
   readonly acted_at: Date;
-  // [S1.9101 / S4.7c2] Cam kết của hàng (LEFT JOIN) — `ck_co` false khi không có.
+  // [S1.294 / S4.7c2] Cam kết của hàng (LEFT JOIN) — `ck_co` false khi không có.
   readonly ck_co: boolean;
   readonly ck_hang_tco: number | null;
   readonly ck_hang_gia: number | null;
@@ -247,7 +247,7 @@ function chepThanhPhan(tho: Record<string, unknown>): ThanhPhanLuu {
     return typeof gt === "string" ? gt : undefined;
   };
   const tien = tho["tien"];
-  // [S1.9101 / S4.7c2] `nguon` của mã quy đổi đi kèm — vắng thì KHÔNG có khoá (bundle v2 không có khoá này ở mọi hàng).
+  // [S1.294 / S4.7c2] `nguon` của mã quy đổi đi kèm — vắng thì KHÔNG có khoá (bundle v2 không có khoá này ở mọi hàng).
   const nguon = tho["nguon"] === undefined ? null : chepChuoiTheoKhoa(tho["nguon"]);
   return {
     ma: lay("ma") ?? "",
@@ -348,7 +348,7 @@ export async function docMoiTraoThau(
   orgId: string,
   rfqId: string,
 ): Promise<readonly TraoThauBundle[]> {
-  // [S1.9101 / S4.7c2] Cam kết của hàng — chỉ hàng `PROPOSED` có (`121`), và đề xuất có trước S4.7c1 thì không (không lấp ngược).
+  // [S1.294 / S4.7c2] Cam kết của hàng — chỉ hàng `PROPOSED` có (`121`), và đề xuất có trước S4.7c1 thì không (không lấp ngược).
   const { rows } = await client.query<HangAward>(
     `SELECT a.id,
             a.evaluation_id,
@@ -416,7 +416,7 @@ function camKetCuaHang(r: HangAward): CamKetBundle {
   };
 }
 
-/** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Gói không mở (bất khả khi đã có lượt chấm) cho ba `null`. */
+/** [S1.294 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Gói không mở (bất khả khi đã có lượt chấm) cho ba `null`. */
 export async function docGoiTco(client: pg.PoolClient, orgId: string, rfqId: string): Promise<GoiTcoBundle> {
   const { rows } = await client.query<{
     readonly tco_ma_ghim: readonly string[] | null;

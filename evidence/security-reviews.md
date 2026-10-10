@@ -27486,12 +27486,12 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
 
 ---
 
-# §S1.9101 — S4.7c2: BỘ BẰNG CHỨNG PHIÊN BẢN 3 — PHÉP QUY ĐỔI TCO TÍNH LẠI ĐƯỢC Ở MỌI HÀNG, CAM KẾT CỦA ĐỀ XUẤT LÀ ĐIỀU KHOẢN CỦA BỘ
+# §S1.294 — S4.7c2: BỘ BẰNG CHỨNG PHIÊN BẢN 3 — PHÉP QUY ĐỔI TCO TÍNH LẠI ĐƯỢC Ở MỌI HÀNG, CAM KẾT CỦA ĐỀ XUẤT LÀ ĐIỀU KHOẢN CỦA BỘ
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi hành vi của hệ thống ghi — vòng này chỉ đổi thứ bộ bằng chứng
 mang và thứ bộ kiểm ngoại tuyến phán. Đổi ở bề mặt: bộ xuất qua `GET /rfqs/:rfqId/evidence-bundle` và `pnpm bang-chung xuat` nay mang
 thêm lời khai ngày, tham số TCO của gói và lời giải trình lệch hạng nguyên văn — sau đúng hai cổng cũ (`audit.read` + `bid.view`).
-Không migration. ADR-9201. Không bất biến mới (J2, L8), không khoản mới.
+Không migration. ADR-165. Không bất biến mới (J2, L8), không khoản mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất — tính lại phép quy đổi ở MỌI hàng mọi lượt; bộ kiểm phán cam kết
@@ -27515,7 +27515,7 @@ cả khớp lẫn luật giải trình; lời giải trình vào bộ nguyên v�
 - **Test**: `kiem-tco.test` (ca tay, nửa xu, tỷ lệ nguyên, 20 000 bộ ngẫu nhiên hai lớp bằng nhau, bundle sửa đúng một chỗ ⇒ đỏ gọi tên,
   hai lớp bất đồng, cam kết, các ca của rà soát); `bo-xuat.int` (gói TCO thật → đề xuất lệch hạng có giải trình → xuất → kiểm khi đã xoá
   `DATABASE_URL`; sửa tỷ lệ, xoá giải trình ⇒ đỏ); kịch bản 41 (bộ v3 qua HTTP, kiểm ngoại tuyến ok, `quy-doi=4`).
-- **Tài liệu**: ADR-9201; ADR-160 hai dòng gạch tại chỗ; TEST-PLAN J2, L8; spec §9 S4.7c2; STATE.
+- **Tài liệu**: ADR-165; ADR-160 hai dòng gạch tại chỗ; TEST-PLAN J2, L8; spec §9 S4.7c2; STATE.
 
 ## 4. Đột biến
 
@@ -27541,7 +27541,7 @@ cả khớp lẫn luật giải trình; lời giải trình vào bộ nguyên v�
 - `g17-`: `doc-lap/quy-doi-lai.ts` chỉ import `./tinh-lai.js`; `depcruise` sạch.
 
 ## 6. Rà soát đối kháng (một lượt soi đọc-không-sửa trên diff `9f14db8..HEAD`)
-**Không CAO.** Hai TRUNG, bốn THẤP — xử lý ở ADR-9201 ⑹:
+**Không CAO.** Hai TRUNG, bốn THẤP — xử lý ở ADR-165 ⑹:
 - **TRUNG-1 — xoá `camKet` né được §10.** Một hàng `PROPOSED` mất cam kết chỉ được đếm. **Sửa:** §10 bước 6 (`chupLuc` = `actedAt`;
   đề xuất không cam kết sau cam kết chụp sớm nhất ⇒ đỏ); dư lượng khi bộ không còn cam kết nào nói ra.
 - **TRUNG-2 — bộ độc làm treo:** hạng giá dựng lại mỗi cam kết. **Sửa:** một bảng mỗi lượt, chỉ mục `Map`; ca 3 000 × 3 000 < 5 s.
@@ -27553,4 +27553,8 @@ cả khớp lẫn luật giải trình; lời giải trình vào bộ nguyên v�
 
 ## 7. Số đo
 - `pnpm t0` sạch; các bộ `tools/bo-xuat-danh-gia` 153/153 (gồm `bo-xuat.int` 13/13); kịch bản 41 + `benchmark.int` 187/187.
+- `pnpm evidence` trên cây của vòng: vitest thoát mã 0, 5286 khẳng định, **92/92** (70/70 nghiệp vụ + 22/22 hàng rào). Lượt đầu cổng
+  ĐỎ sáu cặp nhãn chưa khai (`[INV-J2]`, `[INV-L8]`, `[INV-L16]` ở `kiem-tco.test`, `bo-xuat.int`, kịch bản 41) — các tệp ấy THẬT đo
+  bất biến ấy (§9 là vế quy đổi của J2, §10 là vế kiểm lại cam kết của L8, `kiemTapMa` là tập mã ghim của L16), nên thêm cặp vào
+  `so-khai-nhan.ts` kèm lời; dựng lại ma trận, cổng XANH. Ma trận: J2 9 → 22 ca, L8 60 → 71, L16 38 → 39.
 

@@ -78,7 +78,7 @@ function boVoi(
     orgId: "org-1",
     rfqId: "rfq-1",
     xuatLuc: { giaTri: "2026-09-23T00:00:00.000Z", nguon: "đồng hồ tiến trình xuất" },
-    // [S1.9101 / S4.7c2] Gói không TCO: không ảnh chụp tập mã — §9.3 đoạn cuối không áp.
+    // [S1.294 / S4.7c2] Gói không TCO: không ảnh chụp tập mã — §9.3 đoạn cuối không áp.
     goiTco: { tapMa: null, thamSo: null, soNgayGiao: null },
     luotCham: [
       {
