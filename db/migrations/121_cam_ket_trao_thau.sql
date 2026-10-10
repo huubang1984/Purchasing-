@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 119_cam_ket_trao_thau — [S1.288 / S4.7c1 của spec S4] LỜI KHAI TCO THÀNH CAM KẾT LƯU CÙNG ĐỀ XUẤT TRAO THẦU; HẠNG GIÁ KHÁC
+-- 121_cam_ket_trao_thau — [S1.288 / S4.7c1 của spec S4] LỜI KHAI TCO THÀNH CAM KẾT LƯU CÙNG ĐỀ XUẤT TRAO THẦU; HẠNG GIÁ KHÁC
 -- HẠNG CHI PHÍ THÌ ĐỀ XUẤT PHẢI GIẢI TRÌNH (L8, vế cam kết)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` §2.4 ⑻, §4.8, §8.13, §9 (S4.7c). ADR-097 ⑻,

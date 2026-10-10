@@ -19,7 +19,7 @@ import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.j
 // [S1.282 / S3.5b] Nhãn loại và mã lý do, luật giải trình và câu chỉ dẫn theo mã chốt dùng CHUNG với `/tao-thau` — một bản, `tao-thau.test.ts`
 // ghim nó với gói.
 import {
-  MA_LY_DO_NGOAI_LE, chiDanChot, khungTinHieuKhaiThap, loiGiaiTrinh, loiLyDo, loiLyDoGhiNhan, nhanLoaiNgoaiLe, nhanMaLyDo, vanBanAnToan,
+  MA_LY_DO_NGOAI_LE, chiDanChot, khungTinHieuTraoThau, loiGiaiTrinh, loiLyDo, loiLyDoGhiNhan, nhanLoaiNgoaiLe, nhanMaLyDo, vanBanAnToan,
 } from "/lib/tao-thau.js";
 import { chiDanK9, ganKhaiBao, gopNhaCungCap, nhaCungCapTuSoSanh, nhaCungCapTuXepHang } from "/lib/xung-dot.js";
 
@@ -927,7 +927,8 @@ async function veTraoThau() {
     phien = { ...phien, awardDaDoc: "" };
     dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
     hien($("nut-rut-de-xuat"), false);
-    hien($("khoi-tin-hieu-kt"), false);
+    hien($("khoi-tin-hieu-tt"), false);
+    for (const h of Object.keys(TIN_HIEU_TT)) hien($(`khoi-tin-hieu-${h}`), false);
     return null;
   }
   // Cùng cổng `bid.view` với lời đọc vừa qua, nên bảng xếp hạng đọc được; hỏng thì bước 5 nói lý do, đề xuất vẫn hiện id.
@@ -965,54 +966,68 @@ async function veTraoThau() {
       : ` — ${a.approvals.map((c) => `${new Date(c.approvedAt).toLocaleString("vi-VN")}${c.conHieuLuc === false ? " (không đếm — người ký đã khai có xung đột)" : ""}`).join(" · ")}`}`],
   ]);
   phien = { ...phien, awardDaDoc: a.awardId };
-  // [S1.285 / S3.6d / K10b] Có đề xuất thì đọc tín hiệu khai thấp của nó — khối chỉ hiện khi có tín hiệu; đọc hỏng thì khối ẩn.
-  await napTinHieuKt();
+  // [S1.285 / S3.6d / K10b · S1.289 / S3.6c / K10c] Có đề xuất thì đọc ba tín hiệu trước chữ ký — mỗi khối chỉ hiện khi có tín hiệu.
+  await napTinHieuTraoThau();
   return a;
 }
 
 /**
- * [S1.285 / S3.6d / K10b] Khối «Tín hiệu khai thấp ước lượng»: `GET /rfqs/:rfqId/signals` (cùng route của tín hiệu chia nhỏ ở `/tao-thau`;
- * phần `khaiThap`). Trang không tự quyết ai ghi nhận được — máy chủ nói (`nguoiXem`), và nói vì sao không.
+ * [S1.285 / S3.6d / K10b · S1.289 / S3.6c / K10c] Ba khối «Tín hiệu trước chữ ký trao thầu»: `GET /rfqs/:rfqId/signals` (cùng route của
+ * tín hiệu chia nhỏ ở `/tao-thau`; phần `khaiThap` / `thuHep` / `dongSom`). Trang không tự quyết ai ghi nhận được — máy chủ nói
+ * (`nguoiXem`), và nói vì sao không. Route ghi nhận dùng chung, thân mang `loai` cho hai loại mới (khai thấp giữ thân cũ).
  */
-async function napTinHieuKt() {
+const TIN_HIEU_TT = {
+  kt: { loai: "ESTIMATE_UNDERSTATED", than: (lyDo) => ({ lyDo }), chot: "K10b", ten: "tín hiệu khai thấp" },
+  th: { loai: "INVITE_LIST_NARROWED", than: (lyDo) => ({ lyDo, loai: "INVITE_LIST_NARROWED" }), chot: "K10c", ten: "tín hiệu thu hẹp danh sách mời" },
+  ds: { loai: "EARLY_CLOSE", than: (lyDo) => ({ lyDo, loai: "EARLY_CLOSE" }), chot: "K10c", ten: "tín hiệu đóng sớm" },
+};
+
+async function napTinHieuTraoThau() {
   const id = phien.rfqId;
   const r = await goi("GET", `/rfqs/${id}/signals`);
   if (phien.rfqId !== id) return;
-  const k = r.status === 200 ? khungTinHieuKhaiThap(r.body) : khungTinHieuKhaiThap(null);
-  hien($("khoi-tin-hieu-kt"), k.hien);
-  if (!k.hien) { hien($("khoi-ghi-nhan-kt"), false); return; }
-  $("tom-tat-tin-hieu-kt").textContent = `${k.tomTat} ${k.choDoc ? "Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn (K10b)." : "Đã có người ghi nhận."}`;
-  const ul = $("lich-su-tin-hieu-kt");
-  ul.replaceChildren();
-  for (const d of k.lichSu) {
-    const li = document.createElement("li");
-    li.textContent = `${d.luc === null ? "—" : new Date(d.luc).toLocaleString("vi-VN")}: ${d.noiDung}`;
-    ul.append(li);
+  let coKhoi = false;
+  for (const [h, c] of Object.entries(TIN_HIEU_TT)) {
+    const k = r.status === 200 ? khungTinHieuTraoThau(r.body, c.loai) : khungTinHieuTraoThau(null, c.loai);
+    hien($(`khoi-tin-hieu-${h}`), k.hien);
+    if (!k.hien) { hien($(`khoi-ghi-nhan-${h}`), false); continue; }
+    coKhoi = true;
+    $(`tom-tat-tin-hieu-${h}`).textContent = `${k.tomTat} ${k.choDoc ? `Chưa ai ghi nhận — chữ ký duyệt trao thầu đang bị chặn (${c.chot}).` : "Đã có người ghi nhận."}`;
+    const ul = $(`lich-su-tin-hieu-${h}`);
+    ul.replaceChildren();
+    for (const d of k.lichSu) {
+      const li = document.createElement("li");
+      li.textContent = `${d.luc === null ? "—" : new Date(d.luc).toLocaleString("vi-VN")}: ${d.noiDung}`;
+      ul.append(li);
+    }
+    hien($(`khoi-ghi-nhan-${h}`), k.choGhiNhan);
+    if (k.khongDuoc !== null) bao($(`loi-th${h}`), k.khongDuoc);
   }
-  hien($("khoi-ghi-nhan-kt"), k.choGhiNhan);
-  if (k.khongDuoc !== null) bao($("loi-thkt"), k.khongDuoc);
+  hien($("khoi-tin-hieu-tt"), coKhoi);
 }
 
-$("nut-ghi-nhan-kt").addEventListener("click", async () => {
-  bao($("loi-thkt"), ""); bao($("ok-thkt"), "");
-  const lyDo = $("ly-do-ghi-nhan-kt").value;
-  const sai = loiLyDoGhiNhan(lyDo);
-  if (sai !== null) { bao($("loi-thkt"), sai); return; }
-  const id = phien.rfqId;
-  $("nut-ghi-nhan-kt").disabled = true;
-  try {
-    const r = await goi("POST", `/rfqs/${id}/award/signals/acknowledge`, { lyDo: lyDo.trim() });
-    if (phien.rfqId !== id) return;
-    if (r.status !== 201) { bao($("loi-thkt"), await loiChot(r, "Không ghi nhận được tín hiệu")); return; }
-    $("ly-do-ghi-nhan-kt").value = "";
-    bao($("ok-thkt"), "Đã ghi nhận tín hiệu khai thấp — lý do và tên bạn vào sổ kiểm toán; chữ ký duyệt trao thầu nay đi qua K10b.");
-    await napTinHieuKt();
-  } catch {
-    bao($("loi-thkt"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
-  } finally {
-    $("nut-ghi-nhan-kt").disabled = false;
-  }
-});
+for (const [h, c] of Object.entries(TIN_HIEU_TT)) {
+  $(`nut-ghi-nhan-${h}`).addEventListener("click", async () => {
+    bao($(`loi-th${h}`), ""); bao($(`ok-th${h}`), "");
+    const lyDo = $(`ly-do-ghi-nhan-${h}`).value;
+    const sai = loiLyDoGhiNhan(lyDo);
+    if (sai !== null) { bao($(`loi-th${h}`), sai); return; }
+    const id = phien.rfqId;
+    $(`nut-ghi-nhan-${h}`).disabled = true;
+    try {
+      const r = await goi("POST", `/rfqs/${id}/award/signals/acknowledge`, c.than(lyDo.trim()));
+      if (phien.rfqId !== id) return;
+      if (r.status !== 201) { bao($(`loi-th${h}`), await loiChot(r, "Không ghi nhận được tín hiệu")); return; }
+      $(`ly-do-ghi-nhan-${h}`).value = "";
+      bao($(`ok-th${h}`), `Đã ghi nhận ${c.ten} — lý do và tên bạn vào sổ kiểm toán; chữ ký duyệt trao thầu nay đi qua ${c.chot}.`);
+      await napTinHieuTraoThau();
+    } catch {
+      bao($(`loi-th${h}`), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+    } finally {
+      $(`nut-ghi-nhan-${h}`).disabled = false;
+    }
+  });
+}
 
 /**
  * [S1.282 / S3.5b] Câu máy chủ rồi MỘT câu chỉ dẫn theo mã chốt — K9 qua `loiK9` (nạp lại khối khai báo, S3.4b), K7/K2b/K5b qua

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Hồ sơ nhà cung cấp — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Hồ sơ nhà cung cấp</h1>
+    <span class="vai">Nhà cung cấp</span>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Mở yêu cầu hồ sơ</h2>
+    <p class="ghi">Bên mua đề nghị doanh nghiệp của anh/chị cập nhật hồ sơ (Passport). Mở bằng đúng link trong thư thì hai ô
+      này tự điền.</p>
+    <label for="org">Mã tổ chức bên mua</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã yêu cầu</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <button id="nut-mo">Mở yêu cầu</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục cập nhật hồ sơ</button>
+    <button id="nut-thoat" class="phu" hidden>Thoát phiên hồ sơ</button>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Xác minh danh tính</h2>
+    <p class="ghi">Mã dùng một lần đi tới số điện thoại đã đăng ký với bên mua — kênh khác với thư chứa link, để một người chỉ
+      cầm được một trong hai thứ thì không vào được.</p>
+    <label for="kenh">Kênh nhận mã</label>
+    <select id="kenh"></select>
+    <button id="nut-gui" class="phu">Gửi mã</button>
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-xac">Xác minh</button>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Hồ sơ</h2>
+    <p class="ghi" id="ncc-ten"></p>
+    <dl class="tt" id="tt-moi" hidden></dl>
+    <p class="ghi">Mỗi lần nộp là một phiên bản MỚI; bên mua thẩm định phiên bản mới nhất. Số tài khoản phải gõ lại đủ mỗi lần —
+      trang chỉ hiện bốn số cuối của lần trước.</p>
+    <label for="ten-phap-ly">Tên pháp lý</label>
+    <input id="ten-phap-ly" autocomplete="organization">
+    <label for="mst">Mã số thuế</label>
+    <input id="mst" inputmode="numeric" autocomplete="off" placeholder="0123456789">
+    <label for="nguoi-dai-dien">Người đại diện theo pháp luật</label>
+    <input id="nguoi-dai-dien" autocomplete="name">
+    <label for="dia-chi">Địa chỉ</label>
+    <input id="dia-chi" autocomplete="street-address">
+    <label for="ngan-hang">Ngân hàng</label>
+    <input id="ngan-hang" autocomplete="off">
+    <label for="so-tai-khoan">Số tài khoản</label>
+    <input id="so-tai-khoan" inputmode="numeric" autocomplete="off">
+    <label for="chung-nhan">Chứng nhận (mỗi dòng một mục)</label>
+    <textarea id="chung-nhan" rows="3"></textarea>
+    <label for="nhom-hang">Nhóm hàng cung cấp (mỗi dòng một mục)</label>
+    <textarea id="nhom-hang" rows="3"></textarea>
+    <button id="nut-nop">Nộp hồ sơ</button>
+    <div class="bao loi" id="loi3" hidden></div>
+    <div class="bao ok" id="ok3" hidden></div>
+  </section>
+</main>
+<script type="module" src="/ho-so.js"></script>
+</body>
+</html>

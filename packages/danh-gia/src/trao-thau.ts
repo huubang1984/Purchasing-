@@ -338,7 +338,7 @@ function rangBuocCua(loi: unknown): string | null {
   return typeof c === "string" ? c : null;
 }
 
-/** [S1.288 / S4.7c1 / L8] Hai nhánh có tên của `award_kiem_giai_trinh` (`119_cam_ket_trao_thau`) — câu người đề xuất đọc. */
+/** [S1.288 / S4.7c1 / L8] Hai nhánh có tên của `award_kiem_giai_trinh` (`121_cam_ket_trao_thau`) — câu người đề xuất đọc. */
 const LOI_GIAI_TRINH = new Map<string, { readonly lyDo: LyDoTuChoiTraoThau; readonly thongDiep: string }>([
   [
     "award_thieu_giai_trinh_lech_hang",
@@ -1227,7 +1227,7 @@ export interface DocCamKetTraoThauInput {
 
 /**
  * [S1.288 / S4.7c1 / L8] Cam kết của đề xuất MỚI NHẤT của gói — cùng hàng `PROPOSED` mà chữ ký của `docTraoThau` thuộc về. `null`
- * khi gói chưa có đề xuất, hay đề xuất có trước `119_cam_ket_trao_thau` (không lấp ngược — cam kết là lời khai LÚC đề xuất).
+ * khi gói chưa có đề xuất, hay đề xuất có trước `121_cam_ket_trao_thau` (không lấp ngược — cam kết là lời khai LÚC đề xuất).
  *
  * Cổng `bid.view` đứng thẳng ở đây (khoản 33), và lần đọc có cam kết để lại một hàng `AWARD_COMMITMENT_VIEWED` trên chính `client` —
  * cùng luật của ADR-102: hàm đọc có cổng trả GIÁ của bên bán sau mở thầu thì ghi.

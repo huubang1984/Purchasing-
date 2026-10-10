@@ -110,6 +110,16 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   org_procurement_policies_tco_hinh_dang: "JSON",
   org_procurement_policies_version_check: "SO",
   otp_rate_limits_bucket_kind_check: "MIEN",
+  // [S1.287 / S3.7a1 / ADR-081] Passport: kênh và lý do là miền; băm đích, phiên bản pepper, danh sách là độ dài; số lần sai là số;
+  // MST là định dạng. Mười hai ràng buộc an ninh (băm token/phiên/mã, hạn, kênh link, mục đích, số tài khoản, văn bản) ở hardening.
+  passport_otp_challenges_bam_dich: "DO_DAI",
+  passport_otp_challenges_kenh: "MIEN",
+  passport_otp_challenges_phien_ban_pepper: "DO_DAI",
+  passport_otp_challenges_so_lan_sai: "SO",
+  passport_sessions_kenh: "MIEN",
+  supplier_passport_requests_ly_do_check: "MIEN",
+  supplier_passport_versions_danh_sach: "DO_DAI",
+  supplier_passport_versions_mst: "DINH_DANG",
   otp_rate_limits_hits_check: "SO",
   outbox_jobs_attempts_check: "SO",
   outbox_jobs_check: "MOC",
@@ -200,6 +210,10 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   rfq_invitations_link_channel_check: "MIEN",
   rfq_invitations_status_check: "MIEN",
   rfq_invitations_thu_hoi_co_moc: "MOC",
+  // [S1.289 / S3.6c / K10c] Lý do thu hồi: độ dài, và chỉ đi kèm một lần thu hồi — hình dạng và mốc. Luật chịu lực (gói OPEN thì
+  // BẮT BUỘC có lý do; ngưỡng cạnh tranh) nằm ở trigger K4a `rfq_invitations_kiem_danh_sach` và hàm vị từ `rfq_chot_thu_hoi`.
+  rfq_invitations_ly_do_di_kem_thu_hoi: "MOC",
+  rfq_invitations_ly_do_thu_hoi_check: "DO_DAI",
   rfq_items_description_check: "DO_DAI",
   rfq_items_line_no_check: "SO",
   rfq_items_quantity_check: "SO",

@@ -809,6 +809,9 @@ describe("phủ RLS", () => {
       // `sessions.expires_at`). Vì KHÔNG cấp gì, file 007 cũng KHÔNG làm khoản [NỢ ADR-006] xanh
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
+      // [S1.287 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
+      { grantee: "app_api", bang: "passport_otp_challenges", quyen: "SELECT" },
+      { grantee: "app_api", bang: "passport_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
       // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột (không `id`, không
       // `ghi_luc`), không UPDATE/DELETE. `app_unseal` không có dòng nào.
@@ -875,6 +878,10 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
+      // [S1.287 / S3.7a1 / ADR-081] Bảng Passport: CHỈ ĐỌC ở mức bảng; ghi bằng quyền theo cột (bảng sau).
+      { grantee: "app_api", bang: "supplier_passport_requests", quyen: "SELECT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", quyen: "SELECT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", quyen: "SELECT" },
       // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
@@ -1330,6 +1337,27 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
+      // [S1.287 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
+      // các cột đơn điệu (`revoked_at`, `consumed_at`, `failed_attempts`, `locked_until`) — khuôn bảng lời mời.
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "code_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "destination_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "failed_attempts", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "locked_until", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "pepper_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_otp_challenges", cot: "token_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "challenge_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "supplier_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "passport_sessions", cot: "verified_channel", quyen: "INSERT" },
       // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cua_luot_cham_fk`).
       { grantee: "app_api", bang: "price_benchmark_inputs", cot: "anh_xa_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_inputs", cot: "bid_version_id", quyen: "INSERT" },
@@ -1515,6 +1543,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "link_channel", quyen: "INSERT" },
+      // [S1.289 / S3.6c / K10c] Lý do thu hồi: đi trong CÙNG câu với `revoked_at`; ở gói đang mở trigger K4a đòi nó, nó vào bằng chứng
+      // của tín hiệu thu hẹp danh sách mời.
+      { grantee: "app_api", bang: "rfq_invitations", cot: "ly_do_thu_hoi", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_at", quyen: "UPDATE" },
       // [ADR-016 / 013] UPDATE, khong phai INSERT: thu hoi la mot lan sua hang co san. Khong co
@@ -1679,6 +1710,37 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
+      // [S1.287 / S3.7a1 / ADR-081] Passport: không `id`, không cột do trigger đặt (`thu_tu`), không `created_at`; UPDATE chỉ ở
+      // các cột đơn điệu (`revoked_at`, `consumed_at`, `failed_attempts`, `locked_until`) — khuôn bảng lời mời.
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "requested_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "requested_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "supplier_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "issued_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "issued_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "link_channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "purpose", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "request_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "supplier_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_tokens", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "chung_nhan", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "dia_chi", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "legal_name", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "ngan_hang", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "nguoi_dai_dien", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "nhom_hang", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "passport_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "so_tai_khoan", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "supplier_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_passport_versions", cot: "tax_code", quyen: "INSERT" },
       // [S1.196 / S3.3a / K8a] Xác minh: CHỈ INSERT — `thu_tu`, `bam_ho_so`, `het_han_at`, `created_at` do CSDL đặt, người xác
       // minh là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
       { grantee: "app_api", bang: "supplier_verifications", cot: "created_by", quyen: "INSERT" },
@@ -2222,6 +2284,9 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",
+      // [S1.287 / S3.7a1 / ADR-081] Thách thức OTP, phiên, yêu cầu và link Passport ĐÓNG với mọi phiên khách — kể cả phiên
+      // Passport (lần tra phiên chạy trước khi đặt GUC).
+      "passport_otp_challenges", "passport_sessions", "supplier_passport_requests", "supplier_passport_tokens",
       // [S1.256 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
       "price_benchmark_inputs", "price_benchmark_results",
       // [S1.260 / S4.5c1] L6: không phiên khách nào đọc bản lưu benchmark. [S1.276 / S4.6b] Kể cả nhãn ngoài của nó.
@@ -2266,6 +2331,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     khachNoi("rfq_items", khachHoac(veGuest("rfq_id", "app.guest_rfq_id"))),
     khachNoi("rfq_key_material", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),
     khachNoi("rfq_packages", khachHoac(veGuest("id", "app.guest_rfq_id"))),
+    // [S1.287 / S3.7a1 / ADR-081 ⑶] Phiên Passport đọc phiên bản của CHÍNH nhà cung cấp mình (GUC dẫn xuất); ghi thì đóng.
+    khachNoi("supplier_passport_versions", khachHoac(veGuest("supplier_id", "app.passport_supplier_id")), KHACH_NULL),
     khachNoi("vendor_bid_versions", khachHoac("(bid_id IN ( SELECT b.id\n   FROM vendor_bids b))")),
     khachNoi("vendor_bids", khachHoac(veGuest("invitation_id", "app.guest_invitation_id"))),
     // [S1.233 / khoản 158] Hai policy theo `kind` của 095 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.

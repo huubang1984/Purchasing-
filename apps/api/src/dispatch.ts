@@ -1,7 +1,7 @@
 // ==============================================================================================
 // apps/api/src/dispatch.ts — NƠI DUY NHẤT gắn tổ chức, gắn phiên khách, và kiểm quyền.
 //
-// [ADR-020 mục 4] Ba tên `withTenant`, `withGuestSession`, `requirePermission` chỉ được xuất hiện
+// [ADR-020 mục 4] ~~Ba~~ [S1.287] Bốn tên `withTenant`, `withGuestSession`, `withPassportSession`, `requirePermission` chỉ được xuất hiện
 // trong file này trên toàn `apps/api` — `routes.test.ts` đọc mã nguồn và đỏ nếu chúng mọc ở chỗ
 // khác. Lý do là hình dạng của lỗi cần chặn: một route mới quên gắn phiên khách KHÔNG viết được
 // (handler không có pool để tự mở), và một route ghi quên kiểm quyền KHÔNG biên dịch được
@@ -93,10 +93,10 @@ import {
   throwAuditedDenial,
   type SessionActor,
 } from "@trustprocure/identity";
-import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
+import { InvitationError, resolveGuestSessionByToken, resolvePassportSessionByToken } from "@trustprocure/invitation";
 import { OTP_RATE_WINDOW_SECONDS, tangBucketNguoiGoi } from "@trustprocure/invitation";
 import { layDauXepViec } from "@trustprocure/outbox";
-import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
+import { TenantError, withGuestSession, withPassportSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
 import { diaChiPhanGiaiDuoc, khoaNguoiGoi } from "./dia-chi.js";
@@ -181,6 +181,7 @@ class VuotTranTuChoiError extends Error {
 import { THAN_429_MFA, agentGoiDuoc } from "./route-types.js";
 import type { ApiServices, LoGuiSauCommit, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
+import { COOKIE_PHIEN_PASSPORT } from "./routes/passport.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 
@@ -1064,6 +1065,56 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           // Đường ĐỌC: `withGuestSession` tự đọc lại hàng phiên, từ chối phiên thu hồi/hết hạn, và
           // đặt CẢ BA GUC. Handler nhận `client` khi mọi việc ấy đã xong — hoặc không nhận gì cả.
           return await handler.giaoDich(withGuestSession(deps.pool, cookie.orgId, phien.guestSessionId, goiHandler));
+        }
+
+        case "PASSPORT": {
+          // [S1.287 / S3.7a1 / ADR-081 ⑶] Khuôn nhánh GUEST, trên cookie và bảng phiên RIÊNG: tra cookie ở giao dịch CHỈ gắn tổ
+          // chức (`suppliers` đóng với kết nối gắn phiên khách — bối cảnh đọc ở đây), rồi đường ĐỌC qua `withPassportSession` (đặt
+          // `app.guest_session_id` cộng GUC dẫn xuất, đọc lại năm trục), đường GHI qua `withTenant` không GUC — kết nối gắn phiên
+          // khách không nối được chuỗi sổ (khối [S1.10.3]). Một cookie khách đưa vào đây, hay cookie Passport đưa vào nhánh GUEST,
+          // không tìm thấy phiên: hai bảng, hai tên cookie.
+          const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_PASSPORT]);
+          if (cookie === null) return { status: 401, body: THAN_401 };
+          let phien: { passportSessionId: string; supplierId: string; contactId: string; supplierLegalName: string; supplierTaxCode: string | null };
+          try {
+            phien = await withTenant(deps.pool, cookie.orgId, (client) =>
+              resolvePassportSessionByToken(client, cookie.orgId, cookie.token),
+            );
+          } catch (e) {
+            if (e instanceof InvitationError || (e instanceof TenantError && e.kind === "input")) throw new LoiXacThuc({ cause: e });
+            throw e;
+          }
+          const handler = nguonHandler();
+          const goiHandler = (client: pg.PoolClient): Promise<ApiResponse> =>
+            handler.chay(() =>
+              route.handler({
+                req,
+                orgId: cookie.orgId,
+                client,
+                passportSessionId: phien.passportSessionId,
+                supplierId: phien.supplierId,
+                contactId: phien.contactId,
+                supplierLegalName: phien.supplierLegalName,
+                supplierTaxCode: phien.supplierTaxCode,
+                services: deps.services,
+              }),
+            );
+          if (route.mutates) {
+            // Cùng lý do với nhánh khách: hôm nay không route Passport nào xếp việc; nhánh vẫn đọc dấu (khoản 156).
+            let daXepViec = false;
+            const phanHoi = await handler.giaoDich(
+              withTenant(deps.pool, cookie.orgId, async (client) => {
+                try {
+                  return await goiHandler(client);
+                } finally {
+                  daXepViec = layDauXepViec(client);
+                }
+              }),
+            );
+            if (daXepViec && phanHoi.status < 400) deps.outboxNudge?.(cookie.orgId);
+            return phanHoi;
+          }
+          return await handler.giaoDich(withPassportSession(deps.pool, cookie.orgId, phien.passportSessionId, goiHandler));
         }
       }
     } catch (err) {

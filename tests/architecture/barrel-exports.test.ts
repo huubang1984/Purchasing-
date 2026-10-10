@@ -477,6 +477,19 @@ const DANH_SACH_TRANG_SUPPLIER = [
   // [S1.273 / S3.3e1] Hồ sơ xác minh của mọi nhà cung cấp cho màn `/nha-cung-cap` — trạng thái, băm hồ sơ, người liên hệ; gọi
   // `assertTenantBound` trước mọi thứ, không token, không phiên.
   "docHoSoXacMinh",
+  // [S1.287 / S3.7a1 / ADR-081] Passport: yêu cầu hồ sơ dưới `supplier.qualify` (cổng ở hàm), nộp phiên bản dưới phiên Passport
+  // (người gọi dẫn xuất từ cookie), hai lời đọc — số tài khoản chỉ ở `docHoSoPassport` sau cổng; một bộ đọc thân thuần; mã từ
+  // chối và câu nói của chúng; lỗi đua của trigger. Mọi hàm gọi `assertTenantBound` trước mọi thứ.
+  "CAU_TU_CHOI_PASSPORT",
+  "MA_TU_CHOI_PASSPORT",
+  "PassportYeuCauError",
+  "SO_TAI_KHOAN_PATTERN",
+  "TRAN_DANH_SACH_PASSPORT",
+  "docHoSoPassport",
+  "docHoSoPassportNhap",
+  "docPassportCuaToi",
+  "nopPhienBanPassport",
+  "taoYeuCauPassport",
 ];
 
 const SUPPLIER_PACKAGE_JSON_URL = new URL("../../packages/supplier/package.json", import.meta.url);
@@ -674,6 +687,20 @@ const DANH_SACH_TRANG_INVITATION = [
   // [sổ nợ 55] Đếm-và-tăng bucket TOÀN CỤC theo người gọi; KHÔNG nhận orgId (bảng ngoài cây tenant).
   "tangBucketNguoiGoi",
   "verifyOtpAndStartSession",
+  // [S1.287 / S3.7a1 / ADR-081 ⑶] Đường Passport — giữ E2: `redeemPassportLink` trả KÊNH, không trả phiên; hàm DUY NHẤT sinh
+  // phiên là `verifyPassportOtpAndStartSession` và nó đòi mã OTP. Đúc và thu hồi link dưới phiên NGƯỜI MUA; tra và thu hồi phiên
+  // theo id mà dispatcher dẫn xuất từ cookie Passport.
+  "KENH_LINK_PASSPORT",
+  "OTP_MAX_PER_PASSPORT",
+  "PASSPORT_LINK_MAX_TTL_SECONDS",
+  "PASSPORT_SESSION_MAX_TTL_SECONDS",
+  "ducTokenPassport",
+  "issuePassportOtp",
+  "redeemPassportLink",
+  "resolvePassportSessionByToken",
+  "revokePassportSession",
+  "thuHoiTokenPassport",
+  "verifyPassportOtpAndStartSession",
 ];
 
 const INVITATION_PACKAGE_JSON_URL = new URL(
@@ -1175,7 +1202,21 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 // MỘT hàm SQL (`coi_chot_hanh_dong`), gói chỉ hỏi nó.
 // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc ĐỀ XUẤT trao thầu (`ghiTinHieuKhiDeXuat`): phép tính vẫn là MỘT
 // hàm SQL (`tin_hieu_khai_thap`); `ghiNhanTinHieu`/`lietKeTinHieu` nhận `loai`, không symbol riêng cho loại.
-const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "docKhaiBaoXungDot", "ghiNhanTinHieu", "ghiTinHieuKhiDeXuat", "ghiTinHieuKhiNop", "khaiBaoXungDot", "lietKeTinHieu"];
+// [S1.289 / S3.6c · K10c] Hai ảnh chụp nữa qua cửa — lúc thu hồi lời mời ở OPEN (`ghiTinHieuKhiThuHoi`, `revokeInvitation` gọi) và lúc đóng
+// gói (`ghiTinHieuKhiDongSom`, `closeRfq` gọi); `LOAI_TIN_HIEU_TRAO_THAU` là tập ba loại mà route ghi nhận của chữ ký trao thầu nhận.
+// Phép tính vẫn là MỘT hàm SQL mỗi loại (`tin_hieu_thu_hep`, `tin_hieu_dong_som`).
+const DANH_SACH_TRANG_KIEM_SOAT = [
+  "KiemSoatError",
+  "LOAI_TIN_HIEU_TRAO_THAU",
+  "docKhaiBaoXungDot",
+  "ghiNhanTinHieu",
+  "ghiTinHieuKhiDeXuat",
+  "ghiTinHieuKhiDongSom",
+  "ghiTinHieuKhiNop",
+  "ghiTinHieuKhiThuHoi",
+  "khaiBaoXungDot",
+  "lietKeTinHieu",
+];
 
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
@@ -1249,6 +1290,8 @@ const DANH_SACH_TRANG_TENANCY = [
   "TenantError",
   "ngheLoiKetNoiToiMuon",
   "withGuestSession",
+  // [S1.287 / S3.7a1 / ADR-081 ⑶] Phiên Passport: CHÍNH `app.guest_session_id` cộng GUC dẫn xuất, đọc lại năm trục.
+  "withPassportSession",
   "withTenant",
 ];
 

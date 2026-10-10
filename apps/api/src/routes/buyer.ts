@@ -30,13 +30,14 @@ import {
 } from "@trustprocure/danh-gia";
 import { chuanHoaGoi, coHangChuanDangDung } from "@trustprocure/du-lieu-nen";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, listUserIdsWithPermission, requestMfaReset } from "@trustprocure/identity";
-import { docKhaiBaoXungDot, ghiNhanTinHieu, khaiBaoXungDot, lietKeTinHieu } from "@trustprocure/kiem-soat";
+import { LOAI_TIN_HIEU_TRAO_THAU, docKhaiBaoXungDot, ghiNhanTinHieu, khaiBaoXungDot, lietKeTinHieu, type LoaiTinHieu } from "@trustprocure/kiem-soat";
 import {
   clearOtpLockout,
   createInvitation,
   danhDauDaGui,
   docNgoaiLe,
   ducTokenKhiMoGoi,
+  ducTokenPassport,
   issueMagicLinkToken,
   lapNgoaiLe,
   listInvitations,
@@ -44,6 +45,7 @@ import {
   revokeInvitation,
   revokeMagicLinkToken,
   rutNgoaiLe,
+  thuHoiTokenPassport,
   CHANNELS,
   CUA_SO_LINK_MOI_GIAY,
   type Channel,
@@ -76,12 +78,15 @@ import {
 } from "@trustprocure/rfq";
 import {
   addSupplierContact,
+  CAU_TU_CHOI_PASSPORT,
   createSupplier,
+  docHoSoPassport,
   docHoSoXacMinh,
   docXacMinhNhaCungCap,
   getSupplier,
   listSupplierContacts,
   listSuppliers,
+  taoYeuCauPassport,
   thuHoiXacMinhNhaCungCap,
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
@@ -130,6 +135,15 @@ function booleanBatBuoc(body: unknown, ten: string): boolean {
   if (typeof v !== "boolean") throw new HttpError(422, `trường "${ten}" phải là boolean`);
   return v;
 }
+/** [S1.289 / S3.6c] Loại tín hiệu ở chữ ký trao thầu trong thân — vắng là khai thấp (hợp đồng S3.6d); có mặt thì phải là một trong ba. */
+function loaiTinHieuTraoThau(body: unknown): LoaiTinHieu {
+  const v = truong(body, "loai");
+  if (v === undefined || v === null) return "ESTIMATE_UNDERSTATED";
+  if (typeof v !== "string" || !(LOAI_TIN_HIEU_TRAO_THAU as ReadonlySet<string>).has(v)) {
+    throw new HttpError(422, `trường "loai" phải là một trong ${[...LOAI_TIN_HIEU_TRAO_THAU].join(", ")}`);
+  }
+  return v as LoaiTinHieu;
+}
 function chuoiTuyChon(body: unknown, ten: string): string | null {
   const v = truong(body, ten);
   if (v === undefined || v === null) return null;
@@ -138,7 +152,7 @@ function chuoiTuyChon(body: unknown, ten: string): string | null {
 }
 /**
  * [S1.288 / S4.7c1 / L8] Giải trình lệch hạng — vắng hay `null` là không có; có mặt thì phải có một ký tự không phải khoảng trắng (kể cả
- * ký tự rộng 0 mà `trim` để lại) và tối đa 2000 ký tự: `CHECK` của `119_cam_ket_trao_thau` sẽ từ chối nó bằng một 23514 không tên.
+ * ký tự rộng 0 mà `trim` để lại) và tối đa 2000 ký tự: `CHECK` của `121_cam_ket_trao_thau` sẽ từ chối nó bằng một 23514 không tên.
  */
 function giaiTrinhTuyChon(body: unknown): string | null {
   const v = chuoiTuyChon(body, "giaiTrinhLechHang");
@@ -331,6 +345,28 @@ const doc: readonly BuyerReadRoute[] = [
     // dữ liệu của người ở công ty khác (khoản 141), trạng thái xác minh là bề mặt chưa mở cho agent.
     agent: false,
     handler: async (ctx) => ({ status: 200, body: { hoSo: await docHoSoXacMinh(ctx.client, ctx.orgId) } }),
+  },
+  {
+    method: "GET",
+    path: "/suppliers/:supplierId/passport",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.287 / S3.7a1 / ADR-081] Hồ sơ Passport của một nhà cung cấp — phiên bản mới nhất ĐẦY ĐỦ (cả số tài khoản), lịch sử với cờ
+    // *đổi tài khoản*, link gần nhất. Cổng `supplier.qualify` TRONG hàm gói (route đọc không mang mã quyền; lời gọi thẳng vẫn phải qua);
+    // mỗi lần đọc có phiên bản để một hàng `PASSPORT_VIEWED`. KHÔNG cho agent: số tài khoản và người đại diện là dữ liệu tài chính và
+    // cá nhân của công ty khác (khoản 141).
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        passport: await docHoSoPassport(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "GET",
@@ -1173,6 +1209,71 @@ const ghi: readonly BuyerWriteRoute[] = [
   },
   {
     method: "POST",
+    path: "/suppliers/:supplierId/passport-requests",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.287 / S3.7a1 / ADR-081] Gửi yêu cầu hồ sơ Passport tới MỘT người liên hệ của nhà cung cấp ĐÃ XÁC MINH (K8a — chủ dự án chốt).
+    // Một giao dịch: yêu cầu (vị từ hỏi trước, trigger hỏi lại), thu hồi link và phiên Passport cũ của nhà cung cấp, đúc link mới. Link đi
+    // email của người liên hệ SAU commit; gửi hỏng ⇒ thu hồi token vừa đúc (khuôn ADR-110), yêu cầu ở lại, phản hồi nói *chưa gửi* — người
+    // mua gửi yêu cầu khác (trần ba yêu cầu một giờ một nhà cung cấp).
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => {
+      const supplierId = supplierIdParam(ctx.req);
+      const contactId = uuidBody(ctx.req.body, "contactId");
+      const kq = await taoYeuCauPassport(
+        ctx.client,
+        ctx.orgId,
+        { supplierId, contactId, actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      if (!kq.ok) {
+        const quaTran = kq.ma === "PASSPORT_QUA_TRAN_YEU_CAU";
+        return {
+          status: quaTran ? 429 : 422,
+          body: { error: CAU_TU_CHOI_PASSPORT[kq.ma], ma: kq.ma },
+          ...(quaTran ? { headers: { "retry-after": "3600" } } : {}),
+        };
+      }
+      const link = await ducTokenPassport(ctx.client, ctx.orgId, {
+        requestId: kq.requestId,
+        supplierId,
+        contactId,
+        actorSessionId: ctx.actor.sessionId,
+      });
+      const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, supplierId)).find((c) => c.id === contactId);
+      if (lienHe === undefined) throw new HttpError(422, "người liên hệ không thuộc nhà cung cấp này");
+      const yeuCau = {
+        requestId: kq.requestId,
+        linkHetHanAt: link.expiresAt,
+        soLinkThuHoi: link.soLinkThuHoi,
+        soPhienThuHoi: link.soPhienThuHoi,
+      };
+      const { orgId } = ctx;
+      const phienNguoiGui = ctx.actor.sessionId;
+      const chuaGui: ApiResponse = { status: 201, body: { yeuCau: { ...yeuCau, daGui: false } } };
+      ctx.afterCommitCoBu({
+        viec: () =>
+          ctx.services.passportLinkSender.send({
+            orgId,
+            supplierId,
+            channel: link.linkChannel,
+            destination: lienHe.email,
+            token: link.token,
+          }),
+        bu: async (client) => {
+          await thuHoiTokenPassport(client, orgId, { tokenId: link.tokenId, actorSessionId: phienNguoiGui, reason: "LINK_SEND_FAILED" });
+        },
+        phanHoiKhiHong: chuaGui,
+        // Phần bù hỏng: link vừa đúc còn sống, có thể chưa tới nơi. Lối của người mua không đổi — yêu cầu mới thu hồi mọi link cũ.
+        phanHoiKhiBuHong: chuaGui,
+      });
+      return { status: 201, body: { yeuCau: { ...yeuCau, daGui: true } } };
+    },
+  },
+  {
+    method: "POST",
     path: "/rfqs",
     audience: "BUYER",
     mutates: true,
@@ -1341,6 +1442,8 @@ const ghi: readonly BuyerWriteRoute[] = [
     // với chữ ký duyệt trao thầu (`po.approve`, ADR-084 ⑵). Hàm gói hỏi lại cùng mã, rồi luật người (không tạo, không nộp, không đặt
     // ngân sách, không đề xuất, không khai phiên bản chính sách ghim) — lời từ chối vào sổ `CONTROL_DENIED`. Đề xuất rút rồi đề xuất
     // lại làm bằng chứng đổi: lần ghi nhận trước lỗi thời, tín hiệu mới được lưu ở đây (fail-closed, ADR-082 ⒁).
+    // [S1.289 / S3.6c · K10c] Cùng route cho ba loại ở chữ ký trao thầu — thân mang `loai` (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`;
+    // vắng là khai thấp): cùng quyền, cùng cạnh bị chặn, cùng luật người — một route hai quyền mới là cổng nói dối với H17.
     permission: PERMISSIONS.PO_APPROVE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
@@ -1350,7 +1453,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         ghiNhan: await ghiNhanTinHieu(
           ctx.client,
           ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId, loai: "ESTIMATE_UNDERSTATED" },
+          { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId, loai: loaiTinHieuTraoThau(ctx.req.body) },
           ctx.auditPool,
         ),
       },
@@ -1673,10 +1776,15 @@ const ghi: readonly BuyerWriteRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: {
+        // [S1.289 / S3.6c / K10c] `lyDo` tuỳ chọn trong thân: gói đang mở ở tổ chức đã bật thì hàm gói và trigger K4a đòi nó.
         revoked: await revokeInvitation(
           ctx.client,
           ctx.orgId,
-          { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          {
+            invitationId: invitationIdParam(ctx.req),
+            actorSessionId: ctx.actor.sessionId,
+            ...(chuoiTuyChon(ctx.req.body, "lyDo") === null ? {} : { lyDo: chuoiTuyChon(ctx.req.body, "lyDo") as string }),
+          },
           ctx.auditPool,
         ),
       },

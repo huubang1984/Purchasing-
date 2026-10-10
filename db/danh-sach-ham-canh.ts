@@ -104,6 +104,14 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.coi_kiem_xac_minh",
   "public.coi_kiem_ghi_nhan",
   "public.rfq_kiem_chu_ky_xung_dot_khi_mo",
+  // [S1.287 / S3.7a1 / ADR-081] Năm hàm INSERT của đường Passport: luật người + hàm vị từ của yêu cầu, ràng token vào yêu cầu,
+  // OTP khác lớp đích với kênh đã lưu, danh tính phiên dẫn xuất từ thách thức, phiên bản dưới khoá theo phiên sống. Chỉ gắn INSERT ⇒
+  // không thể là hàm canh; từ chối CÓ ĐIỀU KIỆN; một hàng HỢP LỆ đi qua mỗi hàm — `dungKichBan()` đi trọn đường Passport.
+  "public.passport_kiem_yeu_cau",
+  "public.passport_kiem_token",
+  "public.passport_otp_kiem_kenh",
+  "public.passport_phien_kiem_danh_tinh",
+  "public.passport_kiem_phien_ban",
   // [S1.201 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",
@@ -219,7 +227,7 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.award_kiem_theo_bac_khi_de_xuat",
   "public.award_kiem_theo_bac_khi_duyet",
   "public.award_kiem_vai_theo_bac",
-  // [S1.288 / S4.7c1 / L8 / `119_cam_ket_trao_thau`] BA hàm của cam kết TCO, chỉ gắn INSERT ⇒ không thể là hàm canh:
+  // [S1.288 / S4.7c1 / L8 / `121_cam_ket_trao_thau`] BA hàm của cam kết TCO, chỉ gắn INSERT ⇒ không thể là hàm canh:
   // `award_kiem_giai_trinh` (BEFORE INSERT của `rfq_awards`) từ chối CÓ ĐIỀU KIỆN — đề xuất lệch hạng không giải trình, giải trình trên
   // đề xuất không lệch hay trên hàng không phải PROPOSED; `award_chup_cam_ket` (AFTER INSERT `WHEN` PROPOSED) không bao giờ từ chối — nó
   // GHI cam kết; `award_dien_cam_ket` (BEFORE INSERT của `rfq_award_cam_ket`) điền từ nguồn và chỉ từ chối hàng không trỏ một đề xuất.

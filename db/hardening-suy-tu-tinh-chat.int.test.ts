@@ -163,6 +163,10 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
   // nhận hồ sơ nào.
+  // [S1.287 / S3.7a1 / ADR-081] Yêu cầu và phiên bản hồ sơ Passport — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
+  // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Phiên bản là thứ thẩm định (S3.7a2) trỏ tới: sửa được một hàng là tráo tài khoản ngân hàng.
+  "supplier_passport_requests",
+  "supplier_passport_versions",
   "supplier_verifications",
   // [S1.192 / S4.1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức (L1) và hai danh mục toàn cục — khuôn `047`/`061`:
   // `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Danh mục toàn cục là THƯỚC:
@@ -1600,7 +1604,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       },
     ),
   );
-  // ---- [S1.288 / S4.7c1 / L8 / `119_cam_ket_trao_thau`] Cam kết TCO: bộ ba (`award_dien_cam_ket`, `rfq_award_cam_ket`, INSERT) ----
+  // ---- [S1.288 / S4.7c1 / L8 / `121_cam_ket_trao_thau`] Cam kết TCO: bộ ba (`award_dien_cam_ket`, `rfq_award_cam_ket`, INSERT) ----
   // Đường sản xuất chỉ ghi cam kết qua trigger AFTER của `rfq_awards` (`award_chup_cam_ket` — đề xuất ngay trên đã đi qua nó), nên
   // không câu nào của ứng dụng chạm thẳng bảng. Nhân chứng là ĐƯỜNG GHI THỨ HAI mà `award_dien_cam_ket` canh: người đề xuất RÚT đề xuất
   // trên (0 chữ ký, ADR-133), đề xuất lại trong một giao dịch mà trigger chụp TẮT (chuẩn bị, dưới chủ sở hữu), rồi `app_api` tự ghi khoá
@@ -2156,6 +2160,105 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       [org, hc, ql.u, ql.s],
       { org_id: org, canonical_item_id: hc, don_vi: "kg", tien_te: "VND", nha_cung_cap_text: "Cong ty Thep A", nguon: "so mua hang 2025", tac_gia: ql.u, session_id: ql.s },
     ),
+  );
+
+  // ---- [S1.287 / S3.7a1 / ADR-081] Đường Passport: một yêu cầu, một link, một thách thức OTP, một phiên, một phiên bản — dưới `app_api`,
+  // trong CÙNG giao dịch của kịch bản (trigger token đòi yêu cầu và token cùng giao dịch). `tc` (FINANCE, `supplier.qualify`) yêu cầu
+  // hồ sơ của nhà cung cấp đếm được thứ ba — đã xác minh (K8a), người liên hệ có số điện thoại. Nhân chứng của năm hàm INSERT mới,
+  // của `kiem_danh_tinh_theo_phien` trên hai bảng mới, của `thu_hoi_don_dieu` trên ba bảng mới và `otp_go_khoa_khong_xoa_dau_vet`.
+  const nccPp = nccDemDuoc[2]!;
+  const ycPp = await chenNC(
+    "public.supplier_passport_requests",
+    api(
+      "INSERT INTO supplier_passport_requests (org_id, supplier_id, contact_id, ly_do, requested_by, requested_by_session_id) " +
+        "VALUES ($1, $2, $3, 'MANUAL', $4, $5) RETURNING id, org_id, supplier_id, contact_id, requested_by, requested_by_session_id",
+      [org, nccPp.ncc, nccPp.lh, tc.u, tc.s],
+      { org_id: org, supplier_id: nccPp.ncc, contact_id: nccPp.lh, requested_by: tc.u, requested_by_session_id: tc.s },
+    ),
+  );
+  // Token chỉ đúc được trong CÙNG giao dịch với yêu cầu của nó (trigger `passport_kiem_token`), mà mỗi nhân chứng là một giao dịch
+  // riêng: `chuanBi` — cùng giao dịch, TRƯỚC cửa sổ đo — ghi một yêu cầu thứ hai dưới `app_api`, và câu nhân chứng đúc token cho chính
+  // yêu cầu ấy (yêu cầu của giao dịch này: `created_at = now()`). Đúng đường `POST /suppliers/:id/passport-requests` đi.
+  void ycPp;
+  const tkPp = await chenNC("public.supplier_passport_tokens", {
+    ...cauSauKhi(
+      async (cc) => {
+        await cc.query("SET LOCAL ROLE app_api");
+        await cc.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [org]);
+        await cc.query(
+          "INSERT INTO supplier_passport_requests (org_id, supplier_id, contact_id, ly_do, requested_by, requested_by_session_id) " +
+            "VALUES ($1, $2, $3, 'MANUAL', $4, $5)",
+          [org, nccPp.ncc, nccPp.lh, tc.u, tc.s],
+        );
+      },
+      "INSERT INTO supplier_passport_tokens (org_id, request_id, supplier_id, contact_id, token_hash, purpose, link_channel, expires_at, " +
+        "issued_by, issued_by_session_id) SELECT $1, r.id, $2, $3, $4, 'PASSPORT_SUBMISSION', 'EMAIL', now() + interval '1 day', $5, $6 " +
+        "FROM supplier_passport_requests r WHERE r.org_id = $1 AND r.supplier_id = $2 AND r.created_at = now() " +
+        "RETURNING id, org_id, issued_by, issued_by_session_id",
+      [org, nccPp.ncc, nccPp.lh, randomBytes(32), tc.u, tc.s],
+    ),
+    khai: { org_id: org, issued_by: tc.u, issued_by_session_id: tc.s },
+  });
+  const ttPp = await chenNC(
+    "public.passport_otp_challenges",
+    api(
+      "INSERT INTO passport_otp_challenges (org_id, token_id, contact_id, channel, code_hash, destination_hash, pepper_version, expires_at) " +
+        "VALUES ($1, $2, $3, 'SMS', $4, $5, 'v1', now() + interval '5 minutes') RETURNING id, org_id, token_id, contact_id, channel",
+      [org, tkPp, nccPp.lh, randomBytes(32), randomBytes(32)],
+      { org_id: org, token_id: tkPp, contact_id: nccPp.lh, channel: "SMS" },
+    ),
+  );
+  // Một lần đoán sai (đếm tăng — `otp_go_khoa_khong_xoa_dau_vet` cho qua), rồi lần đúng tiêu thụ thách thức và link (`thu_hoi_don_dieu`).
+  doiSoHang(
+    await so.chung(
+      "public.passport_otp_challenges",
+      "UPDATE",
+      api(
+        "UPDATE passport_otp_challenges SET failed_attempts = failed_attempts OPERATOR(pg_catalog.+) 1 WHERE id = $1 RETURNING failed_attempts",
+        [ttPp],
+        { failed_attempts: 1 },
+      ),
+    ),
+    1,
+    "passport_otp_challenges",
+  );
+  await c.query("UPDATE passport_otp_challenges SET consumed_at = now() WHERE id = $1", [ttPp]);
+  doiSoHang(
+    await so.chung(
+      "public.supplier_passport_tokens",
+      "UPDATE",
+      api("UPDATE supplier_passport_tokens SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL RETURNING id", [tkPp], { id: tkPp }),
+    ),
+    1,
+    "supplier_passport_tokens",
+  );
+  const phPp = await chenNC(
+    "public.passport_sessions",
+    api(
+      "INSERT INTO passport_sessions (org_id, supplier_id, contact_id, challenge_id, token_hash, verified_channel, expires_at) " +
+        "VALUES ($1, $2, $3, $4, $5, 'SMS', now() + interval '4 hours') RETURNING id, org_id, supplier_id, contact_id, challenge_id",
+      [org, nccPp.ncc, nccPp.lh, ttPp, randomBytes(32)],
+      { org_id: org, supplier_id: nccPp.ncc, contact_id: nccPp.lh, challenge_id: ttPp },
+    ),
+  );
+  await chenNC(
+    "public.supplier_passport_versions",
+    api(
+      "INSERT INTO supplier_passport_versions (org_id, supplier_id, passport_session_id, legal_name, tax_code, nguoi_dai_dien, dia_chi, " +
+        "ngan_hang, so_tai_khoan, chung_nhan, nhom_hang) VALUES ($1, $2, $3, 'Cong ty Nhan Chung', '0101010101', 'Nguoi Dai Dien', " +
+        "'Ha Noi', 'Ngan hang A', '123456789', '{}', '{}') RETURNING id, org_id, supplier_id, passport_session_id",
+      [org, nccPp.ncc, phPp],
+      { org_id: org, supplier_id: nccPp.ncc, passport_session_id: phPp },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.passport_sessions",
+      "UPDATE",
+      api("UPDATE passport_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING id", [phPp], { id: phPp }),
+    ),
+    1,
+    "passport_sessions",
   );
 
   return { orgId: org };

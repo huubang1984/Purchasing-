@@ -960,6 +960,34 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // tự đổi, lần nộp ở trên gặp 401, không phải 422 hình dạng). Không đụng phiên của kịch bản.
         case "POST /guest/logout":
           return { path: r.path, body: {}, cookie: kHy };
+        // [S1.287 / S3.7a1 / ADR-081] Ba bước vô danh của Passport — token lạ ⇒ 422 có tên, không tiêu thụ link nào.
+        case "POST /guest/passport/redeem":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia }, cookie: "" };
+        case "POST /guest/passport/otp":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia, channel: "SMS" }, cookie: "" };
+        case "POST /guest/passport/otp/verify":
+          return { path: r.path, body: { orgId: orgA, token: tokenGia, code: "000000" }, cookie: "" };
+        // Hai route ghi của phiên Passport: kịch bản chưa mở phiên Passport nào (S3.7a2 sẽ đi đường ấy) ⇒ 401 trước bộ đọc thân; thân
+        // vẫn đúng hình dạng để ngày có phiên thì nó chạm nghiệp vụ.
+        case "POST /passport/versions":
+          return {
+            path: r.path,
+            body: { legalName: "Quet", taxCode: "0101010101", nguoiDaiDien: "Quet", diaChi: "Quet", nganHang: "Quet", soTaiKhoan: "123456789", chungNhan: [], nhomHang: [] },
+            cookie: "",
+          };
+        case "POST /passport/logout":
+          return { path: r.path, body: {}, cookie: "" };
+        // Yêu cầu hồ sơ cho một nhà cung cấp KHÔNG tồn tại, dưới phiên tài chính (`supplier.qualify`): qua cổng, dừng ở hàm vị từ với
+        // mã có tên (chưa bật ⇒ `PASSPORT_TO_CHUC_CHUA_BAT`; đã bật ⇒ `PASSPORT_NCC_KHONG_HOP_LE`) — không link nào được đúc.
+        case "POST /suppliers/:supplierId/passport-requests":
+          return {
+            path: `/suppliers/${UUID0}/passport-requests`,
+            body: { contactId: UUID0 },
+            cookie: trangThai.taiChinh.cookie,
+            sau: (ph) => {
+              expect([ph.status, (ph.body as { ma?: string }).ma]).toEqual([422, batS3 ? "PASSPORT_NCC_KHONG_HOP_LE" : "PASSPORT_TO_CHUC_CHUA_BAT"]);
+            },
+          };
         case "POST /policy":
           // ~~[S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.~~
@@ -1243,6 +1271,14 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         .replace(":itemId", trangThai.hangChuanId)
         .replace(":lineNo", "1")
         .replace(/:[A-Za-z]+/gu, UUID0);
+    // Cookie của route ĐỌC: khách ⇒ phiên khách; [S1.287 / S3.7a1] phiên Passport ⇒ không cookie (kịch bản chưa mở phiên Passport nào,
+    // 401 trước nghiệp vụ); hồ sơ Passport của bên mua ⇒ phiên tài chính — cổng `supplier.qualify` nằm TRONG hàm, và đọc bằng phiên
+    // `m` để lại một `PERMISSION_DENIED` ăn vào trần từ chối của phiên ấy (đo: bước 16 nhận 429 thay vì 422 ở lần tự ghi nhận).
+    const cookieDoc = (r: (typeof ROUTES)[number]): string | undefined =>
+      r.audience === "GUEST" ? k
+      : r.audience === "PASSPORT" ? undefined
+      : r.path === "/suppliers/:supplierId/passport" ? trangThai.taiChinh.cookie
+      : m;
     const phanHoiDoc = new Map<string, PhanHoi>();
     const logTruoc = logLoi.length;
     const roRi: string[] = [];
@@ -1260,7 +1296,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         r.audience === "PUBLIC" ? [{ path: thay(r.path) }]
         : hopLe !== null
           ? [{ path: hopLe.path, ...(hopLe.cookie === "" ? {} : { cookie: hopLe.cookie }), body: hopLe.body, ...(hopLe.sau === undefined ? {} : { sau: hopLe.sau }) }]
-          : [{ path: thay(r.path), cookie: r.audience === "GUEST" ? k : m }];
+          : [{ path: thay(r.path), cookie: cookieDoc(r) }];
       for (const ca of cacCa) {
         // [S1.273 / S3.3e1] Thân có thể là một lời hứa (ca xác minh đọc băm hồ sơ ngay lúc gọi) — chờ nó trước khi gửi.
         const than: unknown = r.method === "GET" ? undefined : await Promise.resolve(ca.body ?? {});
@@ -2140,7 +2176,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(aw.evaluationId, "award phải dựa trên bảng xếp hạng SAU BAFO").toBe(luot[0]?.id);
   });
 
-  it("bước 12i — PHÊ DUYỆT qua HTTP: người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {
+  it("[INV-K10c] bước 12i — PHÊ DUYỆT qua HTTP: chữ ký đầu bị chặn vì ĐÓNG SỚM chưa ghi nhận (422 K10C), giám đốc thứ hai ghi nhận qua route dùng chung; người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {
     const duong = `/rfqs/${trangThai.rfqId}/award/${trangThai.awardId}/approve`;
 
     // `pm2` vừa đề xuất, và `PROCUREMENT_MANAGER` KHÔNG giữ `po.approve` — nên họ dừng ở cổng
@@ -2149,7 +2185,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(chan.status, chan.text).toBe(403);
 
     // [S1.281 / S3.4a / K9] Luồng S3: giám đốc khai *không xung đột* trước khi ký duyệt trao thầu.
-    if (batS3) await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
+    // [S1.289 / S3.6c / K10c] Luồng S3: bước 7 đóng gói TRƯỚC hạn khi đã có năm báo giá ⇒ tín hiệu ĐÓNG SỚM chặn chữ ký đầu có tên; giám
+    // đốc THỨ HAI (ngoài gói — không tạo, không nộp, không đóng) khai không xung đột rồi ghi nhận kèm lý do qua route dùng chung
+    // (thân mang `loai`), chữ ký mới đi qua.
+    if (batS3) {
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd1.cookie);
+      const chanDongSom = await goi("POST", duong, trangThai.gd1.cookie);
+      expect(chanDongSom.status, chanDongSom.text).toBe(422);
+      expect((chanDongSom.body as { ma?: string }).ma).toBe("K10C_TIN_HIEU_CHUA_GHI_NHAN");
+      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
+      const gn = await goi("POST", `/rfqs/${trangThai.rfqId}/award/signals/acknowledge`, trangThai.gd2.cookie, {
+        lyDo: "Da doc: dong som vi du nam bao gia theo ke hoach mua sam Q4",
+        loai: "EARLY_CLOSE",
+      });
+      expect(gn.status, gn.text).toBe(201);
+    }
     const ok = await goi("POST", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(201);
     const sauMot = (ok.body as { award: { status: string; chuKyCan: number; approvals: unknown[] } }).award;
@@ -2160,8 +2210,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       // Cùng người ký lại ⇒ 422 có tên (`DA_KY_DE_XUAT_NAY`), chữ ký không nhân đôi; giám đốc THỨ HAI hoàn tất.
       const lapLai = await goi("POST", duong, trangThai.gd1.cookie);
       expect(lapLai.status, lapLai.text).toBe(422);
-      // [S1.281 / S3.4a / K9] Giám đốc thứ hai cũng khai *không xung đột* trước khi ký.
-      await khaiKhongXungDot(trangThai.rfqId, trangThai.gd2.cookie);
+      // [S1.281 / S3.4a / K9] Giám đốc thứ hai ~~cũng khai *không xung đột* trước khi ký~~ đã khai lúc ghi nhận tín hiệu đóng sớm (trên).
       const hai = await goi("POST", duong, trangThai.gd2.cookie);
       expect(hai.status, hai.text).toBe(201);
       expect((hai.body as { award: { status: string } }).award.status).toBe("APPROVED");

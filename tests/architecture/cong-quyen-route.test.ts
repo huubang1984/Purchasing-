@@ -46,6 +46,11 @@ const THU_MUC_APPS = "apps";
 /** Hàm ĐỔI TRẠNG THÁI — mọi lời gọi từ `apps/` phải đi kèm một phép kiểm quyền. */
 const HAM_DOI_TRANG_THAI = [
   "addRfqItem",
+  // [S1.287 / S3.7a1 / ADR-081] Yêu cầu hồ sơ Passport — route đòi `supplier.qualify`, hàm hỏi lại cùng mã; đúc link mới (thu
+  // hồi link và phiên cũ) và thu hồi link khi gửi hỏng — CÙNG route, cùng mã.
+  "taoYeuCauPassport",
+  "ducTokenPassport",
+  "thuHoiTokenPassport",
   // [S1.110 / S2.6] SÁU hàm ghi của `@trustprocure/danh-gia`, vào cùng lúc gói ấy vào
   // `CUA_GOI`. Cả sáu đổi `rfq_packages.status`, và ba hàm trao thầu còn ghi vào hai bảng
   // CHỈ-GHI-THÊM mà không vai nào `UPDATE` được — tức một lần ghi sai không sửa lại được.
@@ -100,6 +105,11 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.285 / S3.6d · K10b] Ảnh chụp tín hiệu khai thấp ước lượng lúc đề xuất trao thầu — người gọi duy nhất là `deXuatTraoThau`,
   // sau cổng `award.recommend` của route đề xuất; cùng khuôn `ghiTinHieuKhiNop`.
   "ghiTinHieuKhiDeXuat",
+  // [S1.289 / S3.6c · K10c] Ảnh chụp tín hiệu thu hẹp danh sách lúc thu hồi lời mời ở OPEN — người gọi duy nhất là `revokeInvitation`,
+  // sau cổng `rfq.invite` của route thu hồi; và ảnh chụp tín hiệu đóng sớm lúc đóng gói — người gọi duy nhất là `closeRfq`, sau cổng
+  // `rfq.open` của route đóng. Cùng khuôn `ghiTinHieuKhiNop`.
+  "ghiTinHieuKhiThuHoi",
+  "ghiTinHieuKhiDongSom",
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
@@ -258,6 +268,16 @@ const HAM_DUONG_KHACH = [
   // Cùng lập luận với `submitBid` dưới đây — một cổng quyền ở đây đòi một tài khoản người mua.
   "revokeGuestSession",
   "verifyOtpAndStartSession",
+  // [S1.287 / S3.7a1 / ADR-081] Đường Passport của NHÀ CUNG CẤP: đổi link, phát OTP, xác minh — tự chứng minh bằng token và mã;
+  // tra phiên từ cookie, thoát phiên của mình, đọc hồ sơ của mình (RLS theo GUC dẫn xuất), nộp phiên bản — người ghi là nhà cung
+  // cấp, đã qua token cộng OTP; một cổng quyền ở đây đòi một tài khoản người mua (cùng lập luận `submitBid`).
+  "redeemPassportLink",
+  "issuePassportOtp",
+  "verifyPassportOtpAndStartSession",
+  "resolvePassportSessionByToken",
+  "revokePassportSession",
+  "docPassportCuaToi",
+  "nopPhienBanPassport",
   // [khoản nợ 33] `submitBid` ở đây chứ không ở `HAM_DOI_TRANG_THAI`, và đó là một QUYẾT ĐỊNH:
   // nó ghi thật (một phiên bản báo giá cộng một biên nhận), nhưng người ghi là NHÀ CUNG CẤP, và
   // họ tự chứng minh thẩm quyền bằng phiên khách — thứ đã đi qua token cộng OTP. Một cổng quyền
@@ -293,6 +313,8 @@ const HAM_DUONG_KHACH = [
  */
 const HAM_DOC_CO_QUYEN = [
   "buildComparisonTable",
+  // [S1.287 / S3.7a1] Hồ sơ Passport đầy đủ — số tài khoản — dưới `supplier.qualify`, lời gọi đứng THẲNG trong thân.
+  "docHoSoPassport",
   "countReceivedBids",
   // [S1.281 / S3.4a] Khai báo xung đột của CHÍNH người gọi — vẫn chịu cổng `coi.declare` (cùng mã với lần khai): người không có
   // việc khai thì cũng không có gì để đọc, và lời gọi đứng THẲNG trong thân `docKhaiBaoXungDot`.
@@ -339,6 +361,8 @@ const HAM_DOC_CO_QUYEN = [
  */
 const HAM_THUAN_TUY = [
   "buildReceiptText",
+  // [S1.287 / S3.7a1] Đọc thân yêu cầu thành hồ sơ Passport — không I/O.
+  "docHoSoPassportNhap",
   // [S1.110] Năm hàm thuần của `@trustprocure/danh-gia`: không `client`, không `orgId`, không
   // chạm CSDL. `tinhChiPhiHieuDung` là hàm mà **J2** đòi tái lập được, nên một tham số
   // "chỉ máy chủ mới có" thêm vào nó phá đúng bất biến ấy — cùng ca `verifyReceipt`.

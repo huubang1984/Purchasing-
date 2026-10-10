@@ -24,6 +24,7 @@ import {
   chiDanChot,
   cungLanNop,
   khungTinHieuKhaiThap,
+  khungTinHieuTraoThau,
   docNhaCungCapChon,
   loaiNgoaiLeGoiY,
   loiGiaiTrinh,
@@ -124,17 +125,18 @@ describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
     );
     for (const g of RFQ_STATUSES) {
       expect(nutLoiMoi(false, g, false), `chưa bật · ${g}`).toEqual({ guiLai: true, thuHoi: !sau.has(g) });
-      expect(nutLoiMoi(true, g, false).thuHoi, `đã bật · ${g}`).toBe(g === "DRAFT");
+      // [S1.289 / S3.6c / K10c] Thu hồi ở OPEN mở lại cho tổ chức đã bật — có lý do, sinh tín hiệu thu hẹp danh sách.
+      expect(nutLoiMoi(true, g, false).thuHoi, `đã bật · ${g}`).toBe(g === "DRAFT" || g === "OPEN");
       expect(nutLoiMoi(true, g, false).guiLai, `đã bật · ${g}`).toBe(g === "OPEN" || g === "BAFO_OPEN");
     }
   });
 
-  it("tổ chức đã bật: thu hồi ĐÚNG ở DRAFT (K4a); gửi lại ĐÚNG khi gói nhận báo giá — OPEN, BAFO_OPEN", () => {
+  it("tổ chức đã bật: thu hồi ĐÚNG ở DRAFT và [S1.289 / S3.6c] OPEN (K4a, K10c); gửi lại ĐÚNG khi gói nhận báo giá — OPEN, BAFO_OPEN", () => {
     const ra = Object.fromEntries(TRANG_THAI_GOI.map((g) => [g, nutLoiMoi(true, g, false)]));
     expect(ra).toEqual({
       DRAFT: { guiLai: false, thuHoi: true },
       PENDING_APPROVAL: { guiLai: false, thuHoi: false },
-      OPEN: { guiLai: true, thuHoi: false },
+      OPEN: { guiLai: true, thuHoi: true },
       CLOSED: { guiLai: false, thuHoi: false },
       BAFO_OPEN: { guiLai: true, thuHoi: false },
       AWARDED: { guiLai: false, thuHoi: false },
@@ -676,5 +678,43 @@ describe("[S1.285 / S3.6d / K10b] khung tín hiệu khai thấp ước lượng 
     const k = khungTinHieuKhaiThap(than({ hienTai: { ...BC, vuot_nguong_kep: true }, canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: "Người đề xuất không ghi nhận được." }, soNguoiGhiNhanDuoc: 1 }, [cu]));
     expect(k.tomTat).toBe("Bậc của số tiền trao (từ 100.000.000) so với bậc của ước lượng (từ 0); số tiền trao vượt ngưỡng phê duyệt kép mà ước lượng thì không.");
     expect([k.choDoc, k.choGhiNhan, k.khongDuoc]).toEqual([true, false, "Người đề xuất không ghi nhận được."]);
+  });
+});
+
+describe("[S1.289 / S3.6c / K10c] khung tín hiệu của lượt mời thầu — phần `thuHep` và `dongSom`, cùng khuôn khai thấp", () => {
+  const TH = { loai: "INVITE_LIST_NARROWED", chinh_sach: "cs-1", goi: ["r-1"], thu_hoi: [{ loi_moi: "i-3", nguoi: "u-pm", luc: "2026-10-09T01:00:00.000000Z", ly_do: "Hết hàng" }] };
+  const DS = { loai: "EARLY_CLOSE", chinh_sach: "cs-1", goi: ["r-1"], han: "2026-10-16T00:00:00.000000Z", dong_luc: "2026-10-09T02:00:00.000000Z", nguoi_dong: "u-pm", ly_do: "Đủ báo giá", so_bao_gia: 2 };
+  const phan = (hienTai: unknown, canGhiNhan: boolean, ghiNhanDuoc = true) => ({ hienTai, canGhiNhan, nguoiXem: { ghiNhanDuoc, lyDo: null }, soNguoiGhiNhanDuoc: canGhiNhan ? 3 : null });
+  const than = (thuHep: unknown, dongSom: unknown, tinHieu: unknown[] = []) => ({
+    tinHieu: { hienTai: null, canGhiNhan: false, tinHieu, goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null, khaiThap: phan(null, false), thuHep, dongSom },
+  });
+
+  it("mỗi loại đọc ĐÚNG phần của mình: thu hẹp hiện khi `thuHep.hienTai` có, đóng sớm ẩn khi `dongSom.hienTai` null — và ngược lại; thân thiếu phần ⇒ ẩn", () => {
+    const b = than(phan(TH, true), phan(null, false));
+    expect(khungTinHieuTraoThau(b, "INVITE_LIST_NARROWED").hien).toBe(true);
+    expect(khungTinHieuTraoThau(b, "EARLY_CLOSE").hien).toBe(false);
+    expect(khungTinHieuTraoThau(b, "ESTIMATE_UNDERSTATED").hien).toBe(false);
+    expect(khungTinHieuTraoThau({ tinHieu: { khaiThap: phan(null, false) } }, "INVITE_LIST_NARROWED").hien).toBe(false);
+    expect(khungTinHieuTraoThau(null, "EARLY_CLOSE").hien).toBe(false);
+  });
+
+  it("tóm tắt là câu CSDL của hàng có bằng chứng BẰNG hiện tại — chỉ hàng CÙNG loại; không hàng nào thì dựng từ bằng chứng (số lời mời / hạn, lúc đóng, số luồng), không số tiền", () => {
+    const hangTh = { id: "s-1", loai: "INVITE_LIST_NARROWED", nguon: "THU_HOI", bangChung: TH, giaiThich: "1 lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.", ghiNhan: [] };
+    const hangDs = { id: "s-2", loai: "EARLY_CLOSE", nguon: "DONG_SOM", bangChung: DS, giaiThich: "Gói thầu đóng lúc X, trước hạn Y, khi đã có 2 luồng báo giá.", ghiNhan: [{ id: "a-1", lyDo: "Đã đọc", nguoi: "u-gd2", nguoiTen: "Nguoi duyet 2", luc: "2026-10-09T03:00:00Z" }] };
+    const b = than(phan(TH, true), phan(DS, false, false), [hangTh, hangDs]);
+    const th = khungTinHieuTraoThau(b, "INVITE_LIST_NARROWED");
+    expect(th).toEqual({ hien: true, tomTat: hangTh.giaiThich, choDoc: true, lichSu: [], choGhiNhan: true, khongDuoc: null });
+    const ds = khungTinHieuTraoThau(b, "EARLY_CLOSE");
+    expect([ds.tomTat, ds.choDoc, ds.choGhiNhan]).toEqual([hangDs.giaiThich, false, false]);
+    expect(ds.lichSu).toEqual([{ luc: "2026-10-09T03:00:00Z", noiDung: "Nguoi duyet 2 đã ghi nhận: Đã đọc" }]);
+    // Không hàng nào khớp: câu dựng từ bằng chứng.
+    const trong = than(phan({ ...TH, thu_hoi: [...TH.thu_hoi, { ...TH.thu_hoi[0], loi_moi: "i-4" }] }, true), phan(DS, true), [hangTh]);
+    expect(khungTinHieuTraoThau(trong, "INVITE_LIST_NARROWED").tomTat).toBe("2 lời mời bị thu hồi sau khi gói thầu mở — danh sách người duyệt đã ký bị thu hẹp.");
+    expect(khungTinHieuTraoThau(trong, "EARLY_CLOSE").tomTat).toBe("Gói thầu đóng lúc 2026-10-09T02:00:00.000000Z, trước hạn 2026-10-16T00:00:00.000000Z, khi đã có 2 luồng báo giá.");
+  });
+
+  it("chờ ghi nhận mà người xem không ghi nhận được ⇒ câu của máy chủ", () => {
+    const k = khungTinHieuTraoThau(than({ ...phan(TH, true), nguoiXem: { ghiNhanDuoc: false, lyDo: "Người thu hồi lời mời không ghi nhận được." } }, phan(null, false)), "INVITE_LIST_NARROWED");
+    expect([k.choDoc, k.choGhiNhan, k.khongDuoc]).toEqual([true, false, "Người thu hồi lời mời không ghi nhận được."]);
   });
 });

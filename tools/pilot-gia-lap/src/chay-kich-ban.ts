@@ -642,6 +642,17 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     }
     giaTrungThau = chon.cost;
     nhaCungCapTrungThau = tenNcc(chon.ncc);
+    // [S1.289 / S3.6c / K10c] Mọi kịch bản đóng gói SỚM khi đã có báo giá; ở tổ chức đã bật S3 chữ ký trao thầu đòi một người giữ
+    // `po.approve` NGOÀI gói (không tạo, không đóng) ghi nhận tín hiệu đóng sớm trước. Tổ chức chưa bật: 422 nghiệp vụ, bỏ qua.
+    {
+      const nd = hs.nguoi.find((n) => coQuyen(n.vai, "po.approve") && n.ma !== kb.vai.dong && n.ma !== kb.vai.tao);
+      if (nd !== undefined) {
+        const ai = nguoi(nd.ma);
+        const gn = await ai.http.goi("POST", `/rfqs/${String(rfqId)}/award/signals/acknowledge`, { lyDo: `Đã đọc: ${kb.lyDoDong ?? "đóng sớm khi đã đủ báo giá"}`, loai: "EARLY_CLOSE" });
+        ghi({ loai: "LAM", ai: moTaNguoi(nd), viec: "ghi nhận tín hiệu đóng sớm trước chữ ký trao thầu (K10c)", mongDoi: "201 (S3) hay 422 (chưa bật S3)",
+          thucTe: String(gn.status), dat: gn.status === 201 || gn.status === 422 });
+      }
+    }
     if (kb.dungO === "AWARD_PROPOSED") {
       const gd = hs.nguoi.find((n) => n.ma === "gd");
       demo = {

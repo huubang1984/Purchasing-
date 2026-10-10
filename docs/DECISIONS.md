@@ -7276,7 +7276,7 @@ S3.x.
 
 ## ADR-081 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139) · Liên quan: **ADR-013** §4, ADR-015,
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.139); **[S1.287 / S3.7a1]** ⑴ ⑶ ⑷ cài ở ADR-159 (đường Passport), ⑵ thẩm định và ⑸ ở S3.7a2 · Liên quan: **ADR-013** §4, ADR-015,
 ADR-016, ADR-017, ADR-051, ADR-080, ADR-082 ⑹ · Spec S3 §2.3 (b), §4.8
 
 **Bối cảnh.** ADR-013 §4 đòi một ADR mới cho Level 2, và ADR ấy phải trả lời câu hỏi oracle MST. Chủ dự án đưa trọn
@@ -12597,11 +12597,103 @@ hàm của màn: thước ở route khách, ba báo giá, worker, lượt chấm
 ### Điều ADR này KHÔNG nói
 
 - Lời khai thành cam kết, lưu cùng award, giải trình khi hạng giá khác hạng TCO (S4.7c). **[S1.288]** Đã quyết — ADR-160 (S4.7c1).
+---
+
+## ADR-159 — S3.7a1: Supplier Passport — link, OTP khác kênh và phiên của NHÀ CUNG CẤP (đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất), phiên bản hồ sơ chỉ-ghi-thêm, số tài khoản là ranh giới cột ở tầng mã; S3.7 chia ba PR
+
+**Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-08: *"Làm 2 đi, S3.7 trong lúc chờ"*; chọn chia ba PR
+(⑴) và chốt hai câu sau lượt soi hình dạng (⑵ đòi K8a, ⑺ ranh giới cột ở tầng mã) — cả ba theo khuyến nghị; phần còn lại theo đề xuất
+của lượt soi · **[S1.287]** · **Liên quan:** ADR-013, ADR-015, ADR-016, ADR-018, ADR-020, ADR-060, ADR-080, **ADR-081**, ADR-082 ⑹,
+ADR-084 ⑵, ADR-109, ADR-110 · **Spec:** S3 §4.8, §5 K11, §8.6, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md` §S1.287
+
+### Bối cảnh
+
+ADR-081 chốt Passport là hồ sơ THEO TỪNG TỔ CHỨC MUA, thẩm định hai cấp, và phiên Passport đặt CHÍNH `app.guest_session_id` — vì mọi
+policy `_khach` hỏi đúng literal ấy, và bảng phiên/OTP của lời mời mang `invitation_id NOT NULL` (`010`). Tới vòng này không dòng mã nào
+của Passport tồn tại. S3.7 là hạng mục lớn nhất của S3: một đường đăng nhập mới cho người ngoài tổ chức, một cột tài chính, và K8b ở
+trao thầu. Hai lượt soi đối kháng chạy trên hình dạng CHƯA CÀI (biên bản §S1.287 mục 2): đường Passport 0 CAO, 6 TRUNG, 10 THẤP;
+thẩm định + K8b 2 CAO, 6 TRUNG — phần K8b để dành S3.7a2.
+
+### Quyết định
+
+⑴ **S3.7 (trừ S3.7b — tài liệu đính kèm, chờ ADR (c)) chia ba PR:** **S3.7a1** đường Passport (vòng này); **S3.7a2** thẩm định
+(`supplier_qualifications`), K8b ở chữ ký trao thầu và hàng `APPROVED`, yêu cầu tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger
+khuôn `033`, kịch bản 41 đi qua Passport; **S3.7a3** màn thẩm định ở `/nha-cung-cap`, chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, T4.
+Giữa a2 và a3 người demo không trao được gói bậc 2 trên màn — khoảng trống cùng loại S3.6b1 → b2.
+
+⑵ **Yêu cầu hồ sơ (`supplier_passport_requests`, chỉ-ghi-thêm).** Một lý do hôm nay: `MANUAL`, dưới `supplier.qualify` (route, hàm gói,
+trigger). Hàm vị từ `passport_chot_yeu_cau` (khuôn K12: tầng gói hỏi trước, trigger hỏi lại, tên ràng buộc bằng chính mã) trả sáu mã:
+tổ chức chưa bật; nhà cung cấp không ACTIVE/không MST; **chưa có xác minh K8a còn hiệu lực** (chủ dự án chốt — một người thứ hai đã
+xác nhận MST và MỌI đích liên hệ, nên người dựng hồ sơ không cài được người liên hệ của mình làm nơi nhận link); người liên hệ không thuộc
+nhà cung cấp hay không ACTIVE; người liên hệ thiếu số điện thoại (link đi EMAIL ⇒ OTP phải đi máy điện thoại); quá trần ba yêu cầu một
+giờ một nhà cung cấp (đếm cả yêu cầu đã bị thay — một người trong tổ chức không giữ nhà cung cấp mãi ở ngoài bằng cách gửi liên tục).
+Lời từ chối của vị từ là cấu hình/dữ liệu chưa sẵn sàng, không phải đi tắt — không vào sổ (ADR-060); thiếu quyền là `PERMISSION_DENIED`.
+
+⑶ **Token (`supplier_passport_tokens`) ràng vào yêu cầu và lưu KÊNH của link.** Băm SHA-256 trần của 32 byte ngẫu nhiên, một mục đích,
+hạn ≤ 7 ngày bằng CHECK. Trigger đòi token đúc trong CÙNG giao dịch, bởi CÙNG người và phiên với yêu cầu; khoá ngoại hợp thành giữ nhà
+cung cấp và người liên hệ trùng yêu cầu; `UNIQUE (org_id, request_id)`. **Một nhà cung cấp có tối đa một link sống**: yêu cầu mới THU HỒI
+mọi link chưa dùng VÀ mọi phiên Passport còn sống của nhà cung cấp — đó là đường bên mua cắt một người nhận nhầm và gỡ một khoá OTP.
+Gửi sau commit, at-most-once; gửi hỏng ⇒ thu hồi token vừa đúc (khuôn ADR-110), yêu cầu ở lại, phản hồi nói *chưa gửi*.
+
+⑷ **OTP và phiên — bảng RIÊNG (ADR-081 ⑶), khuôn đường lời mời sau `012`/`015`/`022`/`024`.** OTP khác LỚP đích với kênh ĐÃ LƯU của link
+(không với một giả định); khoá ở cấp token; `failed_attempts` không giảm; bucket hạn mức MỚI `PASSPORT` theo nhà cung cấp (khoá theo
+token thì mỗi lần đúc lại có ngân sách mới), cùng ba bucket người gọi/đích/đích toàn tổ chức. Câu tiêu thụ token đòi chưa thu hồi và chưa
+hết hạn theo `clock_timestamp()`, kiểm `rowCount`; trigger của phiên dẫn xuất danh tính từ thách thức đã đối chiếu và đọc token
+`FOR SHARE` — một lần thu hồi commit trước câu mở phiên thì phiên không ra. Phiên ≤ 12 giờ bằng CHECK, mặc định 4 giờ; không GRANT
+INSERT cột `id`. Mã nguồn dùng lại các bản vá đã đo của `invitation.ts` (`bam`, `sinhMaOtp`, `demVaTang`, H4, MED-2) — `export` trong
+gói, không qua mặt tiền; mặt tiền giữ E2: không hàm nào trả phiên từ token.
+
+⑸ **Cô lập — phiên đặt CHÍNH `app.guest_session_id` cộng GUC dẫn xuất `app.passport_supplier_id`.** `withPassportSession` dẫn xuất nhà
+cung cấp từ hàng phiên, từ chối phiên chết, và ĐỌC LẠI năm trục — hai GUC của lời mời phải rỗng; `withGuestSession` đòi GUC Passport
+rỗng. `withTenant`, `vai-tro.ts`, `migrate.ts` học tên GUC thứ năm. Chỉ MỘT policy nới: `supplier_passport_versions_khach` mở theo GUC
+dẫn xuất (đọc); bốn bảng còn lại đóng mặc định, kể cả `passport_sessions` (lần tra phiên chạy trước khi đặt GUC). Mọi policy `_khach` cũ
+đóng với phiên Passport (liệt kê đủ ở biên bản: GUC lời mời rỗng ⇒ NULL; `guest_sessions.id` không trùng id phiên Passport). Route ghi
+chạy dưới kết nối KHÔNG GUC khách (khuôn route ghi của khách — `028`), trigger ràng phiên ↔ nhà cung cấp. Audience MỚI `PASSPORT`
+(cookie `__Host-tp_passport`, tiền tố `/passport` được lớp canh bảng route ép); ba bước vô danh ở `/guest/passport/*`, POST, trần người
+gọi (bước phát OTP miễn ở dispatcher vì trần nằm trong hàm, như `/guest/otp`).
+
+⑹ **Phiên bản hồ sơ (`supplier_passport_versions`) chỉ-ghi-thêm**, khuôn `vendor_bid_versions`: tên pháp lý, MST, người đại diện, địa
+chỉ, ngân hàng, số tài khoản, chứng nhận và nhóm hàng (danh sách ≤ 20 mục, văn bản tự do — danh mục nhóm hàng của bên mua đóng với phiên
+khách). `thu_tu` dưới khoá tư vấn THEO NHÀ CUNG CẤP hạt giống 7 — CÙNG hạt của xác minh: mọi lần ghi về độ tin của một nhà cung cấp xếp
+một hàng. Trigger đòi phiên sống, đúng nhà cung cấp, trần năm phiên bản một phiên. CHECK hình dạng: MST như `008`; số tài khoản CHỈ chữ
+số; văn bản một dòng không ký tự điều khiển hay ký tự định hướng (bidi). MST hồ sơ lệch MST bản ghi KHÔNG chặn nộp — lời đọc của bên mua
+nói `mstKhop`, thẩm định (a2) từ chối (ADR-081 ⑴). Level 2 vẫn là suy diễn (ADR-081 ⑷).
+
+⑺ **Số tài khoản — ranh giới cột ở TẦNG MÃ** (chủ dự án chốt; khuôn `don_gia`): cột chỉ được ĐỌC ở `packages/supplier/src/passport.ts`,
+đúng ba câu — bốn số cuối cho phiên Passport; số đầy đủ của phiên bản mới nhất sau `supplier.qualify`, mỗi lần đọc để một hàng
+`PASSPORT_VIEWED`; bốn số cuối và cờ *đổi tài khoản* của lịch sử. Không câu nào đọc cả hàng; không migration, view hay hàm nào đọc cột;
+bộ bằng chứng không chạm bảng Passport; payload sổ không mang khoá số tài khoản (`tests/architecture/so-tai-khoan-liet-ke.test.ts`).
+Phiên bản mới phải nhập lại đủ số — một cookie bị lấy không đọc ngược được số đã nộp. Phương án loại: mã hoá cột (vòng khoá bí mật thứ
+tư ở cấu hình triển khai — `cau-hinh.ts` đòi các vòng đôi một khác nhau), REVOKE cột khỏi `app_api` (mọi người đọc đều chạy vai ấy),
+SECURITY DEFINER (hardening (C) cấm).
+
+⑻ **Sổ:** `PASSPORT_REQUESTED`, `PASSPORT_TOKEN_ISSUED`, `PASSPORT_TOKEN_REVOKED`, `PASSPORT_VIEWED` (người mua); `PASSPORT_OTP_ISSUED`,
+`PASSPORT_SESSION_STARTED`, `PASSPORT_VERSION_SUBMITTED`, `PASSPORT_SESSION_REVOKED` (actor SUPPLIER = người liên hệ đã giữ kênh, E5).
+Payload mang thứ tự, id, lý do — không một trường hồ sơ, token, mã hay đích.
+
+⑼ **Màn `/ho-so`** (khuôn `/nop-thau`): link `#<orgId>:<mã>` → OTP → form điền từ phiên bản trước TRỪ số tài khoản → nộp; xoá mảnh
+link sau xác minh; hỏi (không tự mở) khi trình duyệt còn phiên; thoát phiên. Ba bộ gửi dựng `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`);
+bộ gửi theo kênh chỉ nhận EMAIL cho link Passport.
+
+### Cái giá, nói thẳng
+
+- **Nhà cung cấp chưa xác minh không nhận được link** — một người thứ hai bên mua xác minh trước. Người liên hệ thiếu số điện thoại
+  cũng không nhận được.
+- **Rủi ro còn lại của số tài khoản:** log tham số của Postgres (nếu bật — hardening (E4) chỉ cảnh báo) và bản sao lưu giữ số rõ. Mối
+  đe doạ chính của cột là bị TRÁO, không phải bị ĐỌC; tráo là việc của K8b (thẩm định trỏ phiên bản MỚI NHẤT, a2).
+- **Một yêu cầu mới cắt phiên đang dùng dở của nhà cung cấp** — cố ý (đường cắt người nhận nhầm), nên trần ba yêu cầu một giờ giữ nó khỏi
+  thành công cụ quấy.
+- **Vòng quét rò của kịch bản 41 chưa gọi được hai route ghi của phiên Passport tới nghiệp vụ** (kịch bản chưa mở phiên Passport — a2).
+
+### Điều ADR này KHÔNG nói
+
+Thẩm định, K8b, yêu cầu tự sinh lúc đề xuất, cổng K9 ở thẩm định, cặp trigger `033` (S3.7a2); màn thẩm định (S3.7a3); tài liệu đính kèm
+(S3.7b); vế view hiệu suất của K11 (S3.8). Chống ba pháp nhân cùng một chủ (ADR-058) — không.
 
 ## ADR-160 — S4.7c1: lời khai TCO thành cam kết lưu cùng đề xuất trao thầu — CSDL tự chụp; giải trình lệch hạng là một ô riêng do CSDL chốt
 
 **Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-10-09 (ba câu dưới) · **[S1.288]** · **Migration:**
-`119_cam_ket_trao_thau` · **Liên quan:** ADR-158 ⑸ (hạng giá tính lúc đọc), ADR-153 ⑻ (vế cam kết của L8 để S4.7c), ADR-097 ⑻,
+`121_cam_ket_trao_thau` · **Liên quan:** ADR-158 ⑸ (hạng giá tính lúc đọc), ADR-153 ⑻ (vế cam kết của L8 để S4.7c), ADR-097 ⑻,
 ADR-102 (lần đọc có giá vào sổ), ADR-108 (từ chối theo tên ràng buộc), ADR-133 (rút đề xuất) · **Spec:** S4 §2.4 ⑻, §4.8, §8.13, §9
 S4.7c1 · **Biên bản:** `evidence/security-reviews.md` §S1.288
 
@@ -12707,3 +12799,98 @@ giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham
 
 - Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2).
 - Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13).
+
+## ADR-161 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
+
+**Ngày:** 2026-10-09 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-09: *"S3.6c"*, rồi chốt bốn câu hỏi theo đề xuất (⑴ dưới ngưỡng
+thì từ chối trừ khi có ngoại lệ còn sống; ⑵ `EARLY_CLOSE` chặn chữ ký cùng cổng với hai loại kia; ⑶ một hàng K10c cho cả hai loại; ⑷ khối
+chung ở bước 7 `/mo-thau` và nút thu hồi có lý do ở `/tao-thau`) · **[S1.289]** · **Migration:** `120_tin_hieu_moi_thau` · **Liên quan:**
+ADR-058 ⒜, ADR-082 ⒁, ADR-084 ⑵, ADR-120, ADR-128, ADR-157 · **Spec:** S3 §3.3 (dòng `OPEN`), §4.6, §5.1 K4a, K10, §9 S3.6 ·
+**Biên bản:** `evidence/security-reviews.md` §S1.289
+
+### Bối cảnh
+
+Spec §4.6 kể bốn loại tín hiệu; S3.6b1 dựng `PURCHASE_SPLITTING` (ADR-120), S3.6d dựng `ESTIMATE_UNDERSTATED` và mở hai bảng của `088` theo
+loại (ADR-157). Hai loại còn lại gắn với lượt mời thầu: `INVITE_LIST_NARROWED` — *thu hồi lời mời sau khi danh sách đã được ký* — và
+`EARLY_CLOSE` — *đóng sớm một gói đã có báo giá*, vế *"phê duyệt riêng khi đã có báo giá"* mà `011` §(H-4) hoãn từ S1.2 và chưa ai làm. Trước
+vòng này `080` chặn thu hồi ở mọi trạng thái ngoài DRAFT (`k4a_thu_hoi_sai_trang_thai`, *"tới khi S3.6 dựng tín hiệu"*), nên ở tổ chức đã bật
+một nhà cung cấp hết hàng vẫn đứng trong danh sách tới lúc mở thầu; và `closeRfq` đóng sớm chỉ để lại `early_close_reason` cùng một hàng sổ
+— không ai ở chữ ký trao thầu bị bắt đọc nó. ADR-128 đã chốt ngữ nghĩa thu hồi (loại báo giá khỏi cuộc thi; sau lần mở thầu đầu tiên không thu
+hồi được), nên S3.6c hết chờ.
+
+### Quyết định
+
+⑴ **Thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật, có lý do.** Cột `rfq_invitations.ly_do_thu_hoi` (≤ 2000 byte, đã cắt, chỉ đi kèm
+`revoked_at`); trigger K4a (`rfq_invitations_kiem_danh_sach`, thân `080` nguyên văn + nhánh OPEN) đòi nó với tên `k10c_thu_hoi_thieu_ly_do`;
+`revokeInvitation` nhận `lyDo`, route thu hồi nhận `lyDo` trong thân. Lần thu hồi bù của hệ thống (`LINK_SEND_FAILED`) mang chính mã ấy làm lý
+do — ở gói đang mở nó cũng là một lần thu hẹp danh sách, tín hiệu phải kể. PENDING_APPROVAL, CLOSED và sau mở thầu giữ nguyên (K4a, ADR-128).
+
+⑵ **Dưới ngưỡng thì từ chối, trừ khi có ngoại lệ còn sống đúng loại.** Hàm vị từ `rfq_chot_thu_hoi(org, gói, lời mời)`: số NHÓM đếm được
+sau thu hồi (`rfq_dem_nhom_loi_moi` trên tập đếm được TRỪ lời mời này) dưới `so_ncc_toi_thieu` của bậc ghim ⇒ `K10C_THU_HOI_THIEU_CANH_TRANH`,
+trừ khi có ngoại lệ còn sống `SINGLE_SOURCE` (còn một lời mời sống) hay `LIMITED_COMPETITION` (nhiều hơn) — cùng luật `rfq_chot_canh_tranh`
+(K2). Tầng gói hỏi trước câu ghi (`CONTROL_DENIED`), trigger K4a hỏi lại với tên `k10c_thu_hoi_thieu_canh_tranh`. Ngoại lệ chỉ lập được ở
+DRAFT (ADR-trong `105`) — vòng này **không** mở lập ngoại lệ ở OPEN: spec §3.3 nói *cần ngoại lệ có chữ ký độc lập*, và ngoại lệ lập từ DRAFT
+nằm trong băm mà người duyệt đã ký lên; chủ dự án chọn phương án này trước phương án mở lập ở OPEN (một migration và băm danh sách đổi).
+
+⑶ **Hai hàm tín hiệu, mỗi loại một hàm.** `tin_hieu_thu_hep(org, gói)`: NULL khi tổ chức chưa bật, gói chưa mở, hay không lời mời nào bị thu
+hồi từ lúc mở (`revoked_at >= opened_at` — danh sách đã ký); bằng chứng: phiên bản chính sách ghim, `goi`, `thu_hoi[]` = {lời mời, người thu
+hồi, lúc, lý do} theo thứ tự thu hồi. `tin_hieu_dong_som(org, gói)`: NULL khi chưa bật, chưa đóng, đóng không trước hạn, hay không luồng báo
+giá nào của lời mời còn sống; bằng chứng: hạn, lúc đóng, người đóng, lý do đóng sớm, số luồng báo giá, phiên bản chính sách, `goi`. Mốc giờ
+ghi bằng `to_char` ở UTC — `to_jsonb(timestamptz)` đi theo múi giờ của phiên, hai phiên hai múi là hai bằng chứng của cùng một sự thật và K10
+sẽ fail-closed oan. KHÔNG số tiền nào (ADR-054); lý do là văn bản tự do như `reason` của `closeRfq` — không lớp máy nào chặn một con số nằm
+trong giá trị, cùng dư lượng đã khai ở `extendRfqDeadline`.
+
+⑷ **Hàng tín hiệu ghi ở cạnh gây ra nó:** `revokeInvitation` gọi `ghiTinHieuKhiThuHoi` SAU câu thu hồi, TRƯỚC hàng sổ (`nguon = 'THU_HOI'`,
+gói OPEN); `closeRfq` gọi `ghiTinHieuKhiDongSom` SAU câu đóng, TRƯỚC hàng sổ (`nguon = 'DONG_SOM'`, gói CLOSED). Hay lúc ghi nhận khi bằng
+chứng đã đổi (`GHI_NHAN`, gói AWARDED — khuôn K10a). Hai bảng của `088`/`116` rẽ thêm hai loại, thân cũ của hai loại trước nguyên văn.
+
+⑸ **`EARLY_CLOSE` chặn chữ ký như hai loại kia.** Bảng §4.6 nói tín hiệu này *đưa vế H-4 tới người ký trao thầu*; dòng K10 chỉ kể hai loại
+vì viết trước khi `EARLY_CLOSE` được thêm (ADR-082 ⒁). `award_chot_tin_hieu` đọc BA hàm: khai thấp ⇒ `K10B_TIN_HIEU_CHUA_GHI_NHAN` (như cũ),
+thu hẹp hay đóng sớm ⇒ `K10C_TIN_HIEU_CHUA_GHI_NHAN`; `duyetTraoThau` hỏi cùng chỗ (sau K7, trước câu chèn), trigger
+`rfq_award_approvals_kiem_tin_hieu_khai_thap` giữ nguyên, hàm của nó đặt tên ràng buộc theo mã (`k10b_*` / `k10c_tin_hieu_chua_ghi_nhan`).
+Tên `k10c_*` KHÔNG vào `CHOT_THEO_RANG_BUOC` (ADR-120, ADR-157).
+
+⑹ **Người ghi nhận giữ `po.approve`** (cùng cạnh bị chặn với K10b, ADR-084 ⑵) và KHÔNG là người tạo, người nộp gói, người thu hồi
+(`thu_hoi[].nguoi`) hay người đóng (`nguoi_dong`) — `K10C_TU_GHI_NHAN`; không là người khai phiên bản chính sách ghim —
+`K10C_TAC_GIA_CHINH_SACH`. Vào sổ `CONTROL_DENIED`. Mỗi loại một lần ghi nhận riêng — bằng chứng khác nhau, lời đọc khác nhau.
+
+⑺ **Một hàng K10c cho cả hai loại, mã dùng chung** (`K10C_TIN_HIEU_CHUA_GHI_NHAN`, `K10C_TU_GHI_NHAN`, `K10C_TAC_GIA_CHINH_SACH`,
+`K10C_THU_HOI_THIEU_CANH_TRANH`): cùng cạnh, cùng quyền, cùng luật người; màn đọc loại nào còn chờ từ `GET /rfqs/:rfqId/signals` (phần
+`thuHep`, `dongSom`, cùng hình dạng `khaiThap`), không từ mã. Hai hàng K10c/K10d sẽ là bảy mã và hai lời khai đếm cho một luật.
+
+⑻ **Route ghi nhận dùng chung:** `POST /rfqs/:rfqId/award/signals/acknowledge` nhận `loai` trong thân (vắng là khai thấp — hợp đồng S3.6d
+giữ nguyên); cùng quyền, cùng cổng — một route mới cho mỗi loại là ba cổng nói cùng một câu với tổng điều tra H17. Route thu hồi nhận `lyDo`.
+
+⑼ **Màn:** bước 7 `/mo-thau` gộp thành khối «Tín hiệu trước chữ ký trao thầu» với ba khối con (khai thấp giữ nguyên id, thu hẹp, đóng sớm),
+mỗi khối một nút ghi nhận; `/tao-thau` lúc gói OPEN ở tổ chức đã bật: nút *Thu hồi* hiện lại kèm ô lý do, thiếu lý do không gọi, lời từ chối
+có mã kèm chỉ dẫn. `gieo:demo --s3` KHÔNG gieo ca thu hẹp hay đóng sớm; lượt đi thử T4 không chạy — ghi ở giới hạn. `pilot-gia-lap` thêm một
+bước ghi nhận đóng sớm (201 ở S3, 422 ở MVP1 — bỏ qua) vì mọi kịch bản của nó đóng sớm khi đã có báo giá.
+
+⑽ **K10c vào sổ đăng ký** (TEST-PLAN, 91 bất biến), nhãn `[INV-K10c]` ở `trao-thau-theo-bac.int`, `danh-sach-moi.int`, `luong-moi-s3.int`,
+`kich-ban-41-http.int`. Hàng K4a sửa: thu hồi ở OPEN có lý do.
+
+### Cái giá, nói thẳng
+
+- **Mọi fixture đóng gói sớm khi đã có báo giá nay chạm K10c ở chữ ký trao thầu** — `trao-thau-theo-bac.int` (ghi nhận đóng sớm trước khi ký,
+  một wrapper), `xung-dot-loi-ich.int` (một DIRECTOR mới ghi nhận), kịch bản 41 bước 12i (giám đốc thứ hai ghi nhận qua route), `pilot-gia-lap`.
+  Không phải chi phí của một fixture: ở sản xuất, đóng sớm khi đã có báo giá đúng là thứ người ký phải đọc — vế H-4 từ `011`.
+- **Thu hồi ở OPEN làm `rfq_loi_moi_dem_duoc` nhìn người thu hồi như người chọn** (vế `chon` của `108`): nhà cung cấp do người ấy nhập hay
+  xác minh thôi đếm được ở gói này — luật có từ S3.3d, nay gặp thêm một đường tới.
+- **Bằng chứng thu hẹp mang mọi lần thu hồi từ lúc mở**: lần thu hồi thứ hai là bằng chứng mới, lần ghi nhận thứ nhất lỗi thời — fail-closed
+  đúng ca; lời đọc thứ hai rẻ.
+- **Ngoại lệ sai loại không cứu** (còn một lời mời sống thì cần `SINGLE_SOURCE`, không phải `LIMITED_COMPETITION`): người mua không lập được
+  ngoại lệ ở OPEN, nên một lần thu hồi dưới ngưỡng ở gói đã mở là không đi được — giữ lời mời hay mời thêm (nhà cung cấp mời thêm ở OPEN đếm
+  được nếu đủ luật K2). Đó là chủ ý của phương án ⑵.
+
+### Phương án đã loại
+
+- **Cho thu hồi dưới ngưỡng, chỉ ghi tín hiệu:** trái câu spec §3.3 *cần ngoại lệ*; người ký trao thầu đọc một danh sách đã thua.
+- **`EARLY_CLOSE` chỉ hiển thị, không chặn:** dòng H-4 của `011` hoãn mười tám tháng thêm một lần nữa.
+- **Hai hàng K10c/K10d:** bảy mã, hai lời khai đếm, một luật.
+- **Route ghi nhận riêng cho từng loại:** ba route cùng quyền cùng câu — cổng route nói dối với H17 bằng số lượng.
+- **Bằng chứng không mang lý do:** §4.6 đòi lý do trong bằng chứng; thiếu nó người ký đọc một id lời mời.
+
+### Điều ADR này KHÔNG nói
+
+Lập ngoại lệ ở OPEN; `gieo:demo --s3` ca thu hẹp/đóng sớm và lượt đi thử T4 cho ba tín hiệu ở chữ ký (một vòng màn); K8b
+`tham_dinh_truoc_trao` (S3.7); KPI tỷ lệ đóng sớm (S3.9).

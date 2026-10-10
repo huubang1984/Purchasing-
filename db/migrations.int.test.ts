@@ -2083,13 +2083,19 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.203 / S3.6b1] Ba hàm của tín hiệu chia nhỏ: hàm tín hiệu — một thân `RETURN NULL` tắt K10a ở cả tầng gói lẫn cạnh —,
     // luật người ghi nhận — một thân `RETURN NULL` cho người gây ra tự ghi nhận —, và vị từ của chốt ở cạnh mở gói.
     { ham: "tin_hieu_chia_nho", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
-    // [S1.285 / S3.6d] Thân `116`: luật người ghi nhận theo LOẠI bằng chứng — con trỏ dời theo.
-    { ham: "tin_hieu_chot_nguoi_ghi_nhan", chuKy: "uuid, jsonb, uuid", migration: "116_tin_hieu_khai_thap.sql" },
+    // [S1.285 / S3.6d] Thân `116`: luật người ghi nhận theo LOẠI bằng chứng — con trỏ dời theo. [S1.289 / S3.6c] Thân `120`: thêm nhánh K10c.
+    { ham: "tin_hieu_chot_nguoi_ghi_nhan", chuKy: "uuid, jsonb, uuid", migration: "120_tin_hieu_moi_thau.sql" },
     { ham: "rfq_chot_tin_hieu", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
     // [S1.285 / S3.6d / K10b] Tín hiệu khai thấp, tín hiệu hiện tại theo loại, hàm vị từ K10b ở chữ ký trao thầu.
     { ham: "tin_hieu_khai_thap", chuKy: "uuid, uuid", migration: "116_tin_hieu_khai_thap.sql" },
-    { ham: "tin_hieu_hien_tai", chuKy: "uuid, uuid, text", migration: "116_tin_hieu_khai_thap.sql" },
-    { ham: "award_chot_tin_hieu", chuKy: "uuid, uuid", migration: "116_tin_hieu_khai_thap.sql" },
+    // [S1.289 / S3.6c] Thân `120`: bốn loại ở `tin_hieu_hien_tai`, ba hàm tín hiệu ở `award_chot_tin_hieu` — con trỏ dời theo.
+    { ham: "tin_hieu_hien_tai", chuKy: "uuid, uuid, text", migration: "120_tin_hieu_moi_thau.sql" },
+    { ham: "award_chot_tin_hieu", chuKy: "uuid, uuid", migration: "120_tin_hieu_moi_thau.sql" },
+    // [S1.289 / S3.6c / K10c] Hai hàm tín hiệu của lượt mời thầu — một thân `RETURN NULL` tắt K10c ở cả tầng gói lẫn chữ ký — và vị từ
+    // của lần thu hồi ở OPEN — một thân `RETURN NULL` cho thu hẹp danh sách xuống dưới ngưỡng mà không ngoại lệ.
+    { ham: "tin_hieu_thu_hep", chuKy: "uuid, uuid", migration: "120_tin_hieu_moi_thau.sql" },
+    { ham: "tin_hieu_dong_som", chuKy: "uuid, uuid", migration: "120_tin_hieu_moi_thau.sql" },
+    { ham: "rfq_chot_thu_hoi", chuKy: "uuid, uuid, uuid", migration: "120_tin_hieu_moi_thau.sql" },
     // [S1.269 / S3.3c2] Bốn hàm của K2 và K5: bậc ghim — một thân trả bậc khác đọc sai ngưỡng —, số nhóm nhà cung cấp đếm được — một
     // thân trả hằng lớn cho nhà cung cấp vỏ qua —, và hai vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh.
     { ham: "rfq_bac_ghim", chuKy: "uuid, uuid", migration: "107_canh_tranh_toi_thieu.sql" },
@@ -2125,6 +2131,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "coi_chot_hanh_dong", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     { ham: "coi_chot_xac_minh", chuKy: "uuid, uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
     { ham: "rfq_chot_chu_ky_xung_dot", chuKy: "uuid, uuid", migration: "114_khai_bao_xung_dot.sql" },
+    // [S1.287 / S3.7a1 / ADR-081] Hàm vị từ của yêu cầu hồ sơ Passport — một thân `RETURN NULL` gửi link tới nhà cung cấp CHƯA xác minh.
+    { ham: "passport_chot_yeu_cau", chuKy: "uuid, uuid, uuid", migration: "118_passport_nha_cung_cap.sql" },
   ];
 
   it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ ~~[S1.203] mười một~~ ~~[S1.269] mười lăm~~ [S1.280] hai mươi bốn hàm trợ giúp của K1, K4b, nhóm hàng, tín hiệu chia nhỏ, K2, K5 và award theo bậc: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2180,7 +2188,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "award_chu_ky_con_hieu_luc", chuKy: "uuid, uuid", migration: "115_xung_dot_chu_ky_trao_thau.sql" },
     // [S1.288 / S4.7c1 / L8] Hạng giá của báo giá trên tập hàng CÓ hạng — trigger giải trình và cam kết cùng đọc. Một thân trả hằng
     // làm lệch hạng không bao giờ đòi giải trình, hay đòi giải trình trên đề xuất không lệch.
-    { ham: "award_hang_gia", chuKy: "uuid, uuid, uuid", migration: "119_cam_ket_trao_thau.sql" },
+    { ham: "award_hang_gia", chuKy: "uuid, uuid, uuid", migration: "121_cam_ket_trao_thau.sql" },
   ];
 
   it("[S1.204] ~~hai~~ ~~[S1.269] ba~~ ~~[S1.280] bốn~~ ~~[S1.283] bảy~~ [S1.288] tám hàm trợ giúp của ánh xạ hạng mục, chữ ký còn hiệu lực, tập loại trừ trao thầu và hạng giá: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -2305,6 +2313,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_huy",
         "rfq_packages_kiem_nguoi_mo",
         "rfq_packages_kiem_nguoi_nop",
+        // [S1.287 / S3.7a1] Người yêu cầu hồ sơ Passport và người đúc link — dẫn xuất từ phiên người mua.
+        "supplier_passport_requests_kiem_danh_tinh",
+        "supplier_passport_tokens_kiem_danh_tinh",
         // [S1.265 / S3.3b] Tác giả ngoại lệ cạnh tranh là dẫn xuất từ phiên.
         "rfq_sourcing_exceptions_kiem_danh_tinh",
         // [S1.281 / S3.4a] Người khai xung đột lợi ích là dẫn xuất từ phiên — K9 so cột ấy với người hành động.
@@ -2348,7 +2359,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "coi_declarations_chan_truncate", "coi_declarations_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "external_price_references_chan_truncate", "external_price_references_chi_ghi_them", "external_purchase_history_chan_truncate", "external_purchase_history_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_award_cam_ket_chan_truncate", "rfq_award_cam_ket_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_item_goi_y_chan_truncate", "rfq_item_goi_y_chi_ghi_them", "rfq_item_mappings_chan_truncate", "rfq_item_mappings_chi_ghi_them", "rfq_sourcing_exceptions_chan_truncate", "rfq_sourcing_exceptions_chi_ghi_them", "rfq_tra_ve_chan_truncate", "rfq_tra_ve_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "coi_declarations_chan_truncate", "coi_declarations_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "external_price_references_chan_truncate", "external_price_references_chi_ghi_them", "external_purchase_history_chan_truncate", "external_purchase_history_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_award_cam_ket_chan_truncate", "rfq_award_cam_ket_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_item_goi_y_chan_truncate", "rfq_item_goi_y_chi_ghi_them", "rfq_item_mappings_chan_truncate", "rfq_item_mappings_chi_ghi_them", "rfq_sourcing_exceptions_chan_truncate", "rfq_sourcing_exceptions_chi_ghi_them", "rfq_tra_ve_chan_truncate", "rfq_tra_ve_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_passport_requests_chan_truncate", "supplier_passport_requests_chi_ghi_them", "supplier_passport_versions_chan_truncate", "supplier_passport_versions_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -2386,7 +2397,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "kiem_tra_nguong_khong_cung_tay_nguoi_dung", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["user_roles_nguong_khong_cung_tay"] },
     { ham: "kiem_tra_nguong_khong_cung_tay_vai_tro", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["role_permissions_nguong_khong_cung_tay"] },
     { ham: "loi_moi_khong_song_lai", migration: "022_security_review_s1.sql", trigger: ["rfq_invitations_khong_song_lai"] },
-    { ham: "otp_go_khoa_khong_xoa_dau_vet", migration: "024_moi_lai_va_tran_chi_phi.sql", trigger: ["invitation_otp_go_khoa_khong_xoa_dau_vet"] },
+    { ham: "otp_go_khoa_khong_xoa_dau_vet", migration: "024_moi_lai_va_tran_chi_phi.sql", trigger: ["invitation_otp_go_khoa_khong_xoa_dau_vet", "passport_otp_challenges_go_khoa_khong_xoa_dau_vet"] },
     { ham: "otp_kiem_kenh_khac_link", migration: "022_security_review_s1.sql", trigger: ["invitation_otp_kiem_kenh"] },
     { ham: "rfq_budgets_chi_sua_khi_soan", migration: "014_procurement_policy.sql", trigger: ["rfq_budgets_chi_sua_khi_soan"] },
     { ham: "rfq_gia_han_khong_hoi_sinh", migration: "022_security_review_s1.sql", trigger: ["rfq_packages_gia_han_khong_hoi_sinh"] },
@@ -2444,7 +2455,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
     { ham: "rfq_kiem_nguong_phe_duyet_kep", migration: "014_procurement_policy.sql", trigger: ["rfq_packages_kiem_nguong_phe_duyet_kep"] },
     { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
-    { ham: "thu_hoi_don_dieu", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_thu_hoi_don_dieu", "invitation_otp_thu_hoi_don_dieu", "rfq_invitation_tokens_thu_hoi_don_dieu", "rfq_invitations_thu_hoi_don_dieu", "user_login_tokens_thu_hoi_don_dieu"] },
+    { ham: "thu_hoi_don_dieu", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_thu_hoi_don_dieu", "invitation_otp_thu_hoi_don_dieu", "passport_otp_challenges_thu_hoi_don_dieu", "passport_sessions_thu_hoi_don_dieu", "rfq_invitation_tokens_thu_hoi_don_dieu", "rfq_invitations_thu_hoi_don_dieu", "supplier_passport_tokens_thu_hoi_don_dieu", "user_login_tokens_thu_hoi_don_dieu"] },
     { ham: "unseal_canh_bao_break_glass", migration: "019_unseal.sql", trigger: ["unseal_requests_canh_bao_break_glass"] },
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
     { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
@@ -2468,7 +2479,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "107_canh_tranh_toi_thieu.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
     // [S1.194 / S3.2d / khoản 255] `080_k4a_co_ten.sql` định nghĩa lại thân K4a — hai nhánh mang tên ràng buộc —, nên con trỏ dời
     // theo quy tắc *migration CUỐI CÙNG*. Thân TRÍCH NGUYÊN VĂN từ `076` rồi đổi đúng hai vế `CONSTRAINT = …`.
-    { ham: "rfq_invitations_kiem_danh_sach", migration: "080_k4a_co_ten.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
+    // [S1.289 / S3.6c / K10c] Thân `120`: nhánh thu hồi mở thêm OPEN — có lý do, qua ngưỡng cạnh tranh — con trỏ dời theo.
+    { ham: "rfq_invitations_kiem_danh_sach", migration: "120_tin_hieu_moi_thau.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
     { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
     // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
     // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
@@ -2490,12 +2502,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_tco_khi_mo", migration: "117_tco_tham_so_ghim.sql", trigger: ["rfq_packages_tco_khi_mo"] },
     // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất và giải trình lệch hạng. Thân `RETURN NEW` ở hàm đầu cho đề xuất lệch hạng
     // đi qua không giải trình; ở hàm hai để cam kết NOT NULL hỏng hay mang ô khác lời khai; `RETURN NULL` ở hàm ba không ghi cam kết.
-    { ham: "award_kiem_giai_trinh", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_xet_giai_trinh"] },
-    { ham: "award_dien_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_award_cam_ket_dien"] },
-    { ham: "award_chup_cam_ket", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_awards_chup_cam_ket"] },
+    { ham: "award_kiem_giai_trinh", migration: "121_cam_ket_trao_thau.sql", trigger: ["rfq_awards_xet_giai_trinh"] },
+    { ham: "award_dien_cam_ket", migration: "121_cam_ket_trao_thau.sql", trigger: ["rfq_award_cam_ket_dien"] },
+    { ham: "award_chup_cam_ket", migration: "121_cam_ket_trao_thau.sql", trigger: ["rfq_awards_chup_cam_ket"] },
     // [S1.288 / S4.7c1 / J1 — rà soát TRUNG-1] Hàng chấm chỉ ghi trong giao dịch tạo lượt, cho báo giá của đúng gói. Thân `RETURN NEW` cho
     // một hàng chèn sau vào lượt đã commit đổi hạng giá mà lời đòi giải trình dựa vào.
-    { ham: "luot_cham_kiem_hang", migration: "119_cam_ket_trao_thau.sql", trigger: ["rfq_evaluation_lines_kiem_luot"] },
+    { ham: "luot_cham_kiem_hang", migration: "121_cam_ket_trao_thau.sql", trigger: ["rfq_evaluation_lines_kiem_luot"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
@@ -2562,10 +2574,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // người gọi khai bằng chứng của tín hiệu, người gây ra tự ghi nhận tín hiệu của mình, và gói mở qua một câu UPDATE viết tay
     // khi tín hiệu chưa ai ghi nhận.
     // [S1.285 / S3.6d] Thân `116`: hai trigger của tín hiệu rẽ theo LOẠI (chia nhỏ ở PENDING_APPROVAL, khai thấp ở AWARDED) — con trỏ dời theo.
-    { ham: "tin_hieu_kiem_ghi", migration: "116_tin_hieu_khai_thap.sql", trigger: ["governance_signals_tinh"] },
-    { ham: "tin_hieu_kiem_ghi_nhan", migration: "116_tin_hieu_khai_thap.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
+    // [S1.289 / S3.6c] Thân `120`: hai trigger của tín hiệu rẽ thêm hai loại (thu hẹp ở OPEN/AWARDED, đóng sớm ở CLOSED/AWARDED) — con trỏ dời theo.
+    { ham: "tin_hieu_kiem_ghi", migration: "120_tin_hieu_moi_thau.sql", trigger: ["governance_signals_tinh"] },
+    { ham: "tin_hieu_kiem_ghi_nhan", migration: "120_tin_hieu_moi_thau.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
     // [S1.285 / S3.6d / K10b] Chữ ký trao thầu: tín hiệu khai thấp chưa ai ghi nhận ⇒ từ chối `k10b_tin_hieu_chua_ghi_nhan`.
-    { ham: "award_kiem_tin_hieu_khai_thap", migration: "116_tin_hieu_khai_thap.sql", trigger: ["rfq_award_approvals_kiem_tin_hieu_khai_thap"] },
+    // [S1.289 / S3.6c / K10c] Thân `120`: thu hẹp hay đóng sớm chưa ai ghi nhận ⇒ `k10c_tin_hieu_chua_ghi_nhan` — con trỏ dời theo.
+    { ham: "award_kiem_tin_hieu_khai_thap", migration: "120_tin_hieu_moi_thau.sql", trigger: ["rfq_award_approvals_kiem_tin_hieu_khai_thap"] },
     { ham: "rfq_kiem_tin_hieu_khi_mo", migration: "088_tin_hieu_chia_nho.sql", trigger: ["rfq_packages_kiem_tin_hieu_khi_mo"] },
     // [S1.269 / S3.3c2] K2 ở cạnh nộp duyệt và K5 ở cạnh mở gói. Một thân `RETURN NEW` ở cái đầu cho gói dưới ngưỡng cạnh tranh đi
     // qua một câu UPDATE viết tay (và bỏ chốt READ COMMITTED); ở cái sau cho người chọn danh sách tự ký mở gói.
@@ -2596,6 +2610,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // xạ không lý do trên gói đã có bản rõ.
     { ham: "goi_y_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_goi_y_bat_bien"] },
     { ham: "anh_xa_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_mappings_bat_bien"] },
+    // [S1.287 / S3.7a1 / ADR-081] Năm cổng của đường Passport. Một thân `RETURN NEW` ở mỗi cái: yêu cầu của người không giữ
+    // `supplier.qualify` hay tới nhà cung cấp chưa xác minh; link đúc cho yêu cầu cũ; OTP về cùng hộp thư với link; phiên tự khai danh
+    // tính hay mở từ token đã thu hồi; phiên bản ghi cho nhà cung cấp khác.
+    { ham: "passport_kiem_yeu_cau", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_requests_kiem_yeu_cau"] },
+    { ham: "passport_kiem_token", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_tokens_kiem_token"] },
+    { ham: "passport_otp_kiem_kenh", migration: "118_passport_nha_cung_cap.sql", trigger: ["passport_otp_challenges_kiem_kenh"] },
+    { ham: "passport_phien_kiem_danh_tinh", migration: "118_passport_nha_cung_cap.sql", trigger: ["passport_sessions_kiem_danh_tinh"] },
+    { ham: "passport_kiem_phien_ban", migration: "118_passport_nha_cung_cap.sql", trigger: ["supplier_passport_versions_kiem_phien_ban"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -4289,8 +4311,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "116_tin_hieu_khai_thap.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
+        // [S1.289 / S3.6c / K10c] Hai tín hiệu của lượt mời thầu (thu hẹp danh sách mời, đóng sớm) và K10 ở chữ ký trao thầu; thu hồi ở OPEN (ADR-161).
+        "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
-        "119_cam_ket_trao_thau.sql",
+        "121_cam_ket_trao_thau.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8960,8 +8986,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "116_tin_hieu_khai_thap.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
+        // [S1.289 / S3.6c / K10c] Hai tín hiệu của lượt mời thầu (thu hẹp danh sách mời, đóng sớm) và K10 ở chữ ký trao thầu; thu hồi ở OPEN (ADR-161).
+        "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
-        "119_cam_ket_trao_thau.sql",
+        "121_cam_ket_trao_thau.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9311,8 +9341,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "116_tin_hieu_khai_thap.sql",
         // [S1.286 / S4.7b2 / L16] Tham số quy đổi TCO chụp vào gói lúc mở.
         "117_tco_tham_so_ghim.sql",
+        // [S1.287 / S3.7a1 / ADR-081] Đường Passport của nhà cung cấp: năm bảng, GUC dẫn xuất, năm cổng, hàm vị từ.
+        "118_passport_nha_cung_cap.sql",
+        // [S1.289 / S3.6c / K10c] Hai tín hiệu của lượt mời thầu (thu hẹp danh sách mời, đóng sớm) và K10 ở chữ ký trao thầu; thu hồi ở OPEN (ADR-161).
+        "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
-        "119_cam_ket_trao_thau.sql",
+        "121_cam_ket_trao_thau.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
