@@ -956,6 +956,9 @@ async function chinh(): Promise<void> {
       ra.push("  hàng — gói được mời, đã nộp, tỷ lệ phản hồi, thời gian phản hồi trung vị, lần sửa báo giá, hạng và khoảng cách tới hạng nhất");
       ra.push("  (trung vị), vào BAFO, thắng. Chỉ đếm gói ĐÃ MỞ NIÊM PHONG: ba nhà cung cấp đầu có đúng 5 gói (ba gói đã mở, gói trao thầu,");
       ra.push("  gói TCO) nên hiện đủ số; Thep Hoa Sen và Vat lieu Phu My chỉ có 2 gói nên tỷ lệ và trung vị hiện «chưa đủ lịch sử», số đếm vẫn hiện.");
+      // [S1.9101 / S3.8b — lượt đi thử T4] Công cụ nộp ngay sau lúc mở gói, nên ô «Phản hồi trung vị» hiện «0 giây» — nói trước để người
+      // demo không đọc nó thành một con số đo được.
+      ra.push("  «Phản hồi trung vị» hiện 0 giây vì công cụ nộp ngay sau lúc mở gói — số thật đến từ nhà cung cấp thật.");
       ra.push("  Gói chính còn OPEN — khi nó được mở niêm phong, bảng đổi theo. Người không giữ bid.view (người quản lý dữ liệu) bị từ chối.");
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("soan.") || n.email.startsWith("taichinh1.") || n.email.startsWith("duyet1.") || n.email.startsWith("dulieu."))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/hieu-suat#${org}:${nm.token}`);
