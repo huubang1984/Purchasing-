@@ -27483,3 +27483,78 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
   bản viết lại sau này, đo bằng phép đếm thân view và hàng ghim — không phép đo hành vi nào phân biệt được nó.
 - FINANCE/DIRECTOR suy ra được danh sách mời sau mở niêm phong — chủ dự án chấp nhận (ADR-163 ⑻⒢).
 - Màn, `gieo:demo`, T4: S3.8b.
+
+---
+
+# §S1.294 — S4.7c2: BỘ BẰNG CHỨNG PHIÊN BẢN 3 — PHÉP QUY ĐỔI TCO TÍNH LẠI ĐƯỢC Ở MỌI HÀNG, CAM KẾT CỦA ĐỀ XUẤT LÀ ĐIỀU KHOẢN CỦA BỘ
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi hành vi của hệ thống ghi — vòng này chỉ đổi thứ bộ bằng chứng
+mang và thứ bộ kiểm ngoại tuyến phán. Đổi ở bề mặt: bộ xuất qua `GET /rfqs/:rfqId/evidence-bundle` và `pnpm bang-chung xuat` nay mang
+thêm lời khai ngày, tham số TCO của gói và lời giải trình lệch hạng nguyên văn — sau đúng hai cổng cũ (`audit.read` + `bid.view`).
+Không migration. ADR-165. Không bất biến mới (J2, L8), không khoản mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất — tính lại phép quy đổi ở MỌI hàng mọi lượt; bộ kiểm phán cam kết
+cả khớp lẫn luật giải trình; lời giải trình vào bộ nguyên văn. Phần thứ hai của S4.7c (spec §9) — S4.7 khép.
+
+## 2. Đo trước (đọc mã trên `9f14db8`)
+- `chepThanhPhan` của bộ v2 chép năm khoá (`ma`, `donVi`, `heSo`, `giaTri`, `tien`): `nguon` mà lượt chấm ghi cho hai mã quy đổi từ
+  S4.7a rơi mất; `docMoiTraoThau` không đọc `rfq_award_cam_ket`; thước của gói (`tco_ma_ghim`, `tco_tham_so_ghim`, `so_ngay_giao`)
+  không vào bộ. DAC-TA §3 tính `tien = giaTri × he_so` — với `chi_phi_thanh_toan`, `chi_phi_tre`, `giaTri` là đầu vào bộ kiểm phải tin.
+- Hai công thức ở `tco.ts` (`bigint`, một phép chia `(2·tử + mẫu)/(2·mẫu)`), `nguon` ghi `coSo = tongTien`, ngày qua `String(...)`;
+  lượt chấm từ chối chấm khi ảnh chụp tham số khác phiên bản ghim (`tham_so_khop`, `117`). `award_hang_gia` (`121`): `tien` của phần
+  tử `gia` đầu tiên, lọc khuôn tiền, chỉ hàng có hạng, `1 + count(<)`.
+
+## 3. Thay đổi
+- **Xuất** (`packages/danh-gia/src/bo-bang-chung.ts`, `dac-ta.ts`): `PHIEN_BAN_BUNDLE` 3, `DAC_TA_PHIEN_BAN` 3; `nguon` nguyên văn,
+  `maThieu`, `goiTco`, `traoThau[].camKet` (LEFT JOIN `rfq_award_cam_ket` theo khoá chính, dưới `app_api` + RLS); DAC-TA §9, §10.
+  Ba hàm thuần ra cửa gói (`chiPhiThanhToan`, `chiPhiTre`, `xepHang`), phân loại thuần ở `cong-quyen-route`, ghi ở `barrel-exports`.
+- **Kiểm** (`tools/bo-xuat-danh-gia`): bộ đọc v3 (`nguon`/`thamSo` ≤ 16 khoá chuỗi, từ chối `__proto__`); lớp độc lập
+  `doc-lap/quy-doi-lai.ts` (mảng chữ số, chia ngắn cho 365 giữ thêm một chữ số lẻ, `thuVe`; bảng hạng giá); `kiem-tco.ts` hai lớp;
+  `kiem.ts` đặt §9 trước §3 cho từng hàng, thêm tập mã vào lỗi bộ, cam kết vào điều kiện ĐẠT; CLI in `LECH-CAM-KET` và dòng `cam-ket`.
+- **Test**: `kiem-tco.test` (ca tay, nửa xu, tỷ lệ nguyên, 20 000 bộ ngẫu nhiên hai lớp bằng nhau, bundle sửa đúng một chỗ ⇒ đỏ gọi tên,
+  hai lớp bất đồng, cam kết, các ca của rà soát); `bo-xuat.int` (gói TCO thật → đề xuất lệch hạng có giải trình → xuất → kiểm khi đã xoá
+  `DATABASE_URL`; sửa tỷ lệ, xoá giải trình ⇒ đỏ); kịch bản 41 (bộ v3 qua HTTP, kiểm ngoại tuyến ok, `quy-doi=4`).
+- **Tài liệu**: ADR-165; ADR-160 hai dòng gạch tại chỗ; TEST-PLAN J2, L8; spec §9 S4.7c2; STATE.
+
+## 4. Đột biến
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| D1 | chia ngắn không giữ chữ số lẻ thêm | sống ở lượt đầu (chỉ lộ khi tỷ lệ là số nguyên) ⇒ thêm ca tỷ lệ nguyên + 10 % số bộ ngẫu nhiên ⇒ ĐỎ |
+| D2 | cắt cụt thay làm tròn (thanh toán) | ĐỎ |
+| D3 | bỏ `max(0, …)` | ĐỎ |
+| D4 | hạng giá không lọc hàng có hạng | sống ở lượt đầu ⇒ thêm ca hàng không hạng giá rẻ ⇒ ĐỎ |
+| K1 | bỏ kiểm `coSo` | ĐỎ |
+| K2 | bỏ kiểm tỷ lệ thanh toán | ĐỎ |
+| K3 | bỏ luật thiếu giải trình | ĐỎ |
+| K4 | cam kết không vào điều kiện ĐẠT | ĐỎ |
+| K5 | bỏ qua lỗi quy đổi của hàng | ĐỎ |
+| K6 | bỏ kiểm tập mã | ĐỎ |
+| K7 | bỏ kiểm `khai.paymentDays` | sống ở lượt đầu ⇒ thêm ca ⇒ ĐỎ |
+| E1 | bộ xuất bỏ `nguon` | ĐỎ (`bo-xuat.int`) |
+| E2 | bộ xuất không cam kết | ĐỎ |
+| E3 | bộ xuất `goiTco.soNgayGiao` null | ĐỎ |
+
+## 5. Không đổi, đã kiểm
+- Gói không TCO: không mã quy đổi, `goiTco.tapMa = ["gia"]` ⇒ ĐẠT (`bo-xuat.int` ca cũ, kịch bản 41 bước 12j, `benchmark.int`).
+- `g17-`: `doc-lap/quy-doi-lai.ts` chỉ import `./tinh-lai.js`; `depcruise` sạch.
+
+## 6. Rà soát đối kháng (một lượt soi đọc-không-sửa trên diff `9f14db8..HEAD`)
+**Không CAO.** Hai TRUNG, bốn THẤP — xử lý ở ADR-165 ⑹:
+- **TRUNG-1 — xoá `camKet` né được §10.** Một hàng `PROPOSED` mất cam kết chỉ được đếm. **Sửa:** §10 bước 6 (`chupLuc` = `actedAt`;
+  đề xuất không cam kết sau cam kết chụp sớm nhất ⇒ đỏ); dư lượng khi bộ không còn cam kết nào nói ra.
+- **TRUNG-2 — bộ độc làm treo:** hạng giá dựng lại mỗi cam kết. **Sửa:** một bảng mỗi lượt, chỉ mục `Map`; ca 3 000 × 3 000 < 5 s.
+- **THẤP-1** — §10 lỏng hơn mã (khuôn tiền, cách loại hàng, so số với chuỗi): văn bản chép đúng luật. **THẤP-2** — giải trình rỗng được
+  tính là có: áp `CHECK` của `121`. **THẤP-3** — `__proto__` bị nuốt: bộ đọc từ chối. **THẤP-4** — ô khai của mã không có trong hàng:
+  giữ, nói rõ ở §10 bước 3.
+Đã kiểm không phải lỗi: toán hai lớp (quyết định làm tròn chính xác), khớp `luot-danh-gia.ts`/`tco.ts`/`award_hang_gia`, RLS dưới
+`app_api`, bộ v2 bị từ chối là thiết kế (khuôn ADR-144), lộ thông tin cùng mức route cam kết.
+
+## 7. Số đo
+- `pnpm t0` sạch; các bộ `tools/bo-xuat-danh-gia` 153/153 (gồm `bo-xuat.int` 13/13); kịch bản 41 + `benchmark.int` 187/187.
+- `pnpm evidence` trên cây của vòng: vitest thoát mã 0, 5286 khẳng định, **92/92** (70/70 nghiệp vụ + 22/22 hàng rào). Lượt đầu cổng
+  ĐỎ sáu cặp nhãn chưa khai (`[INV-J2]`, `[INV-L8]`, `[INV-L16]` ở `kiem-tco.test`, `bo-xuat.int`, kịch bản 41) — các tệp ấy THẬT đo
+  bất biến ấy (§9 là vế quy đổi của J2, §10 là vế kiểm lại cam kết của L8, `kiemTapMa` là tập mã ghim của L16), nên thêm cặp vào
+  `so-khai-nhan.ts` kèm lời; dựng lại ma trận, cổng XANH. Ma trận: J2 9 → 22 ca, L8 60 → 71, L16 38 → 39.
+

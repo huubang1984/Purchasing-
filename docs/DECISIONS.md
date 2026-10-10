@@ -12797,12 +12797,14 @@ giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham
   được. Không lấp ngược.
 - **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.
   Người ấy đề xuất được chính báo giá ấy, và lời từ chối nhập không vào sổ (ADR-060); chấp nhận.
-- **Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).
+- ~~**Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).~~ **[S1.294]** Đóng ở
+  ADR-165: bộ v3 mang cam kết và lời giải trình nguyên văn.
 - **`/mo-thau` không đo lại trên trình duyệt** — ô và các dòng mới theo khuôn có sẵn (`phuc-vu.test`).
 
 ### Điều ADR này KHÔNG nói
 
-- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2).
+- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2). **[S1.294]** Đã quyết —
+  ADR-165.
 - Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13).
 
 ## ADR-161 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
@@ -13048,3 +13050,69 @@ HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.
 
 Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b); KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa chọn); hiệu suất từ ERP (S5, spec §10);
 Supplier Score (S5, ADR-100).
+
+## ADR-165 — S4.7c2: bộ bằng chứng phiên bản 3 — phép quy đổi TCO tính lại được ở mọi hàng mọi lượt, cam kết của đề xuất là điều khoản của bộ, bộ kiểm ngoại tuyến hai lớp phán cả khớp lẫn luật giải trình
+
+**Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất:
+⑴ tính lại phép quy đổi ở MỌI hàng mọi lượt chấm, không chỉ báo giá được đề xuất; ⑵ bộ kiểm phán cam kết cả vế khớp lẫn luật có giải
+trình ⇔ lệch hạng; ⑶ lời giải trình vào bộ nguyên văn · **[S1.294]** · **Migration:** không · **Liên quan:** ADR-059, ADR-144,
+ADR-153, ADR-158, ADR-160, ADR-162 · **Spec:** S4 §2.4 ⑻, §4.8, §9 (S4.7c2) · **Biên bản:** `evidence/security-reviews.md` §S1.294
+
+### Bối cảnh
+
+Bộ bằng chứng phiên bản 2 (ADR-144) chép `components` của mỗi hàng qua một bộ chép bốn khoá (`ma`, `donVi`, `heSo`, `giaTri`, `tien`):
+`nguon` — phép tính của hai mã quy đổi mà lượt chấm ghi từ S4.7a — rơi mất, và thước của gói (tham số, số ngày giao) không vào bộ. Bộ
+kiểm vì thế tính lại được `tien = giaTri × he_so` và phép cộng, nhưng `giaTri` của `chi_phi_thanh_toan` và `chi_phi_tre` là ĐẦU VÀO nó
+phải tin: một hàng chấm theo thước khác thước nhà cung cấp đã thấy, hay một phép quy đổi sai trong lượt chấm, đi qua ĐẠT. Cam kết
+S4.7c1 chụp vào `rfq_award_cam_ket` (ADR-160) cũng chưa vào bộ — ADR-160 *Giới hạn nói ra* và *Điều ADR này KHÔNG nói*.
+
+### Quyết định
+
+⑴ **Bộ phiên bản 3** (`PHIEN_BAN_BUNDLE` hai bản — xuất và kiểm — cùng 3; `DAC_TA_PHIEN_BAN` 3). Mỗi thành phần mang `nguon` nguyên
+văn khi có; mỗi hàng mang `maThieu`; bộ mang `goiTco` — `tapMa`, `thamSo` (nhóm khoá `tco` chụp lúc mở, `117`), `soNgayGiao`; mỗi
+hàng trao thầu mang `camKet` (`null` ở hàng không phải đề xuất và ở đề xuất có trước S4.7c1 — không lấp ngược). Bộ kiểm chỉ đọc
+đúng phiên bản nó cài (khuôn ADR-144): bộ v2 đã xuất kiểm bằng bộ kiểm cùng phiên bản của nó.
+
+⑵ **DAC-TA §9 — phép quy đổi.** `chi_phi_thanh_toan = LÀM_TRÒN(max(0, ngayChuan − ngayKhai) × tyLe × coSo ÷ 365, 2)`,
+`chi_phi_tre = LÀM_TRÒN(max(0, ngayKhai − ngayYeuCau) × tyLe × coSo, 2)`, một lần làm tròn nửa-ra-xa-0 trên giá trị đúng. Một hàng
+tái lập được khi `nguon` đủ bốn khoá, `coSo` bằng `giaTri` của `gia` cùng hàng, tỷ lệ và ngày khớp `goiTco`, và `giaTri` tính lại
+bằng giá trị đã lưu; tập mã của mọi lượt bằng `goiTco.tapMa`; hàng có số không mang `maThieu`. §3 trỏ sang §9 cho hai mã quy đổi.
+
+⑶ **DAC-TA §10 — cam kết.** Cam kết bằng hàng chấm nó trỏ tới (hạng chi phí, chi phí, thành phần kể cả `nguon`), bằng thước của gói,
+lời khai khớp hàng (`paymentDays` ↔ `nguon.ngayKhai` của `chi_phi_thanh_toan`, `leadTimeDays` ↔ của `chi_phi_tre`, `freight` ↔
+`giaTri` của `van_chuyen`, `importCost` ↔ của `nhap_khau`), `hangGia` bằng hạng giá tính lại (tiền của phần tử `gia` đầu tiên trên
+các hàng có hạng, xếp như §5 — cùng luật `award_hang_gia`), và có giải trình KHI VÀ CHỈ KHI `hangGia ≠ hangTco`. Đề xuất không cam
+kết được ĐẾM, không đỏ. §7 giữ nguyên: bộ kiểm không phán ai được trao là đúng, cũng không phán lời giải trình có thuyết phục không.
+
+⑷ **Hai lớp như ADR-059.** Lớp độc lập `doc-lap/quy-doi-lai.ts` viết từ văn bản: số là mảng chữ số, phép chia là CHIA NGẮN cho 365
+giữ thêm một chữ số lẻ rồi đọc đuôi bị cắt (`thuVe`) — chính xác vì phần dư còn thiếu nhỏ hơn một đơn vị chữ số cuối; lớp hàm thuần gọi
+chính `chiPhiThanhToan`, `chiPhiTre`, `xepHang` của lượt chấm (ra cửa `@trustprocure/danh-gia`, phân loại thuần ở `cong-quyen-route`).
+Hai lớp bất đồng ⇒ đỏ và nói ra.
+
+⑸ **Lời giải trình nguyên văn trong bộ.** Bộ đã sau hai cổng `audit.read` + `bid.view` và đã mang giá; giải trình là lý do của quyết
+định, người kiểm toán cần đọc nó. Sổ vẫn chỉ ghi cờ (ADR-160 ⑸).
+
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.294 mục 6) — không CAO; hai TRUNG, bốn THẤP:
+- **TRUNG-1** — xoá cả `camKet` khỏi một đề xuất thì bộ kiểm chỉ đếm *"đề xuất không cam kết"* và vẫn ĐẠT. Sửa: §10 bước 6 — `chupLuc`
+  bằng `actedAt` của chính hàng (trigger `121` chụp trong giao dịch đề xuất), và một đề xuất không cam kết mà `actedAt` ≥ cam kết chụp
+  sớm nhất của bộ là bộ sai. Dư lượng nói ra: bộ không còn cam kết nào thì không phân biệt được với đề xuất cũ.
+- **TRUNG-2** — hạng giá dựng lại cho TỪNG cam kết: O(cam kết × hàng × log hàng), bộ độc làm treo. Sửa: bảng hạng giá một lần mỗi lượt
+  ở cả hai lớp, chỉ mục lượt và hàng bằng `Map`; ca đo 3 000 hàng × 3 000 cam kết dưới 5 giây.
+- **THẤP-1** — §10 bước 3, 4 lỏng hơn mã: nay chép nguyên khuôn tiền của `award_hang_gia`, nói *"hàng không khớp không vào phép xếp"*
+  và *"so cách viết thập phân"*. **THẤP-2** — giải trình rỗng hay chỉ khoảng trắng được tính là có: nay áp đúng `CHECK` của `121` (1).
+  **THẤP-3** — khoá `__proto__` của `nguon` bị nuốt im lặng: bộ đọc từ chối có tên. **THẤP-4** — `camKet.khai` mang ô khai của mã không
+  có trong hàng: GIỮ — cam kết là bản chụp nguyên văn của lần đề xuất (ADR-160 ⑷), §10 bước 3 nói rõ các ô ấy chép lại, không kiểm.
+
+### Giới hạn nói ra
+
+- **Lời khai gốc không nằm trong bộ.** `ngayKhai`, `coSo` và các ô khai thẳng đến từ phong bì đã mở; bộ chứng phép tính TỪ lời khai và
+  thước của gói, không chứng lời khai đúng là thứ nhà cung cấp đã gõ (DAC-TA §9.5).
+- **Đủ mặt các luồng vẫn không chứng được** — bộ cho thấy thứ đã vào lượt chấm, không chứng không luồng nào bị bỏ (cùng giới hạn của
+  ADR-162).
+- **Bộ v2 đã xuất không đọc được bằng bộ kiểm v3** — khuôn của ADR-144.
+- **`maThieu` ngoài vế "hàng có số không mang nó" là dữ liệu**, không tính lại được.
+
+### Điều ADR này KHÔNG nói
+
+Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13); chữ ký số trên bộ bằng chứng.
+

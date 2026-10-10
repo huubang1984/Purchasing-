@@ -22,7 +22,11 @@
 // ==============================================================================================
 
 /** [S1.262 / S4.5c2] `2`: thêm §8 — lớp dữ liệu nền (benchmark giá); §6 nói rõ lớp ấy CÓ đọc mốc thời gian. */
-export const DAC_TA_PHIEN_BAN = 2;
+/**
+ * [S1.294 / S4.7c2] `3`: thêm §9 — phép quy đổi TCO tính lại được từ `nguon` và ảnh chụp của gói — và §10 — cam kết của đề xuất
+ * trao thầu; §3 trỏ sang §9 cho hai mã quy đổi.
+ */
+export const DAC_TA_PHIEN_BAN = 3;
 
 /**
  * Đặc tả phép tính, đủ để một người ngoài dự án cài lại bằng công cụ của họ.
@@ -32,7 +36,7 @@ export const DAC_TA_PHIEN_BAN = 2;
  */
 export const DAC_TA = `# Đặc tả phép tính của bộ bằng chứng đánh giá — TrustProcure
 
-Phiên bản đặc tả: **2**
+Phiên bản đặc tả: **3**
 
 Văn bản này đủ để tính lại mọi con số trong \`bo-bang-chung.json\` **mà không cần một dòng mã nào
 của TrustProcure** và **không cần truy cập cơ sở dữ liệu của nó**. Nếu một chỗ nào dưới đây không
@@ -56,7 +60,9 @@ trao thầu.
 
 * \`chinhSachThanhPhan\` — mảng \`{ ma, don_vi, he_so }\` của phiên bản chính sách ĐÃ DÙNG cho
   lượt chấm ấy;
-* \`components[].giaTri\` của hàng — giá trị báo giá khai cho từng mã.
+* \`components[].giaTri\` của hàng — giá trị báo giá khai cho từng mã. Với hai mã QUY ĐỔI
+  (\`chi_phi_thanh_toan\`, \`chi_phi_tre\`), \`giaTri\` không do nhà cung cấp gõ mà tính từ lời khai và
+  tham số của gói; nó tự tính lại được theo §9 trước khi vào bước dưới.
 
 Thuật toán:
 
@@ -265,4 +271,90 @@ lượng của từng dòng của gói. Đây là thông tin, không phải đ�
   quan sát nào đó KHÔNG bị bỏ sót — ngoài phép so với đầu vào đã lưu ở §8.6.
 * **Bản lưu benchmark của bảng so sánh** (thứ màn mở thầu hiện) không nằm trong bundle; bundle mang
   hồ sơ benchmark của **lượt chấm**.
+
+## 9. Phép quy đổi TCO
+
+Bundle mang \`goiTco\` — ảnh chụp lúc gói mở: \`tapMa\` (tập mã thành phần của phiên bản chính sách
+ghim), \`thamSo\` (nhóm khoá \`tco\` của phiên bản ấy: \`chi_phi_von_nam\`, \`ngay_thanh_toan_chuan\`,
+\`ty_le_tre_ngay\`, đều là chuỗi), \`soNgayGiao\` (số ngày giao bên mua yêu cầu). Mỗi trường có thể là
+\`null\` ở gói không cấu hình TCO.
+
+Hai mã thành phần không đến thẳng từ lời khai mà QUY ĐỔI từ nó. Phần tử \`components\` của mỗi mã
+ấy mang \`nguon\` — bốn chuỗi — và \`giaTri\` của nó tính lại được:
+
+### 9.1 \`chi_phi_thanh_toan\`
+
+\`nguon = { coSo, ngayKhai, ngayChuan, tyLe }\`.
+
+\`giaTri = LÀM_TRÒN( max(0, ngayChuan − ngayKhai) × tyLe × coSo ÷ 365 , 2 )\`
+
+### 9.2 \`chi_phi_tre\`
+
+\`nguon = { coSo, ngayKhai, ngayYeuCau, tyLe }\`.
+
+\`giaTri = LÀM_TRÒN( max(0, ngayKhai − ngayYeuCau) × tyLe × coSo , 2 )\`
+
+Ở cả hai, \`LÀM_TRÒN\` (§4) áp **MỘT lần** lên giá trị ĐÚNG của cả biểu thức — không làm tròn sau
+phép nhân hay trước phép chia. Ngày là số nguyên không âm; \`coSo\`, \`tyLe\` là số thập phân không âm.
+
+### 9.3 Nguồn phải khớp thước của gói
+
+Một hàng có mã quy đổi tái lập được khi và chỉ khi, với mỗi mã quy đổi của nó:
+
+1. phần tử có \`nguon\` với ĐÚNG bốn khoá ở 9.1 hay 9.2;
+2. \`coSo\` bằng ĐÚNG chuỗi \`giaTri\` của thành phần \`gia\` của CÙNG hàng;
+3. \`tyLe\` bằng ĐÚNG chuỗi \`goiTco.thamSo.chi_phi_von_nam\` (9.1) hay \`goiTco.thamSo.ty_le_tre_ngay\`
+   (9.2); \`ngayChuan\` bằng ĐÚNG chuỗi \`goiTco.thamSo.ngay_thanh_toan_chuan\`; \`ngayYeuCau\` bằng cách
+   viết thập phân của \`goiTco.soNgayGiao\`;
+4. \`giaTri\` đã lưu bằng giá trị tính lại ở 9.1 hay 9.2.
+
+Một \`nguon\` không khớp thước của gói là một hàng chấm theo thước KHÁC thước nhà cung cấp đã thấy
+lúc nộp. Sau bước này, §3 áp cho mã quy đổi như mọi mã: \`tien = LÀM_TRÒN(giaTri × he_so, 2)\`.
+
+Khi \`goiTco.tapMa\` khác \`null\`, mảng \`ma\` của \`chinhSachThanhPhan\` của MỌI lượt chấm, theo đúng thứ
+tự, phải bằng \`goiTco.tapMa\` — tập mã nhà cung cấp thấy lúc nộp là tập mã lượt chấm dùng.
+
+### 9.4 Hàng không hạng
+
+\`maThieu\` liệt kê mã thiếu ô khai của một hàng không có \`effectiveCost\` (hay \`TONG_VUOT_MIEN\` khi
+tổng vượt miền tiền). Hàng có \`effectiveCost\` thì \`maThieu = null\`. Ngoài vế ấy, \`maThieu\` là dữ
+liệu: lời khai gốc không nằm trong bundle.
+
+### 9.5 Thứ phần này KHÔNG tính lại
+
+Lời khai gốc — \`ngayKhai\`, \`coSo\`, và các ô \`giaTri\` khai thẳng — đến từ phong bì đã mở, không nằm
+trong bundle. Bundle chứng phép tính TỪ lời khai và thước của gói; nó không chứng lời khai là đúng
+thứ nhà cung cấp đã gõ.
+
+## 10. Cam kết của đề xuất trao thầu
+
+\`traoThau[].camKet\` là cam kết hệ thống chụp LÚC đề xuất — điều khoản của lần đề xuất: thứ người đề
+xuất đã thấy và nhận khi chọn báo giá. Chỉ hàng \`status = "PROPOSED"\` mang cam kết; đề xuất có trước
+khi hệ thống chụp cam kết mang \`null\` (không lấp ngược). Gọi \`h\` là hàng của lượt chấm \`evaluationId\`
+cho báo giá \`bidVersionId\` của chính hàng trao thầu ấy. Cam kết ĐẠT khi:
+
+1. \`hangTco\` bằng \`h.rank\`; \`effectiveCost\` bằng \`h.effectiveCost\`; \`components\` bằng
+   \`h.components\` — từng phần tử, từng khoá, kể cả \`nguon\`;
+2. \`tapMa\`, \`thamSo\`, \`soNgayGiao\` bằng \`goiTco\`;
+3. \`khai\` khớp hàng: khi hàng có mã \`chi_phi_thanh_toan\`, cách viết thập phân của \`khai.paymentDays\`
+   bằng \`nguon.ngayKhai\` của mã ấy; \`chi_phi_tre\` ↔ \`khai.leadTimeDays\` cùng cách; \`van_chuyen\` ↔
+   \`khai.freight\` (bằng ĐÚNG chuỗi \`giaTri\`); \`nhap_khau\` ↔ \`khai.importCost\`. Ô khai của mã KHÔNG có
+   trong hàng là bốn ô hệ thống chụp nguyên văn lúc đề xuất — chép lại, không kiểm;
+4. \`hangGia\` bằng hạng giá tính lại: trên các hàng CÓ hạng của cùng lượt chấm, lấy \`tien\` của phần
+   tử ĐẦU TIÊN có \`ma = "gia"\`; hàng mà \`tien\` ấy vắng hay không khớp đúng khuôn
+   \`^[0-9]{1,16}\\.[0-9]{2}$\` (không dấu, tối đa 16 chữ số nguyên, đúng hai chữ số lẻ) **không vào**
+   phép xếp; các hàng còn lại xếp như §5. Hạng giá của báo giá được đề xuất là hạng của nó trong phép
+   xếp ấy, \`null\` khi nó không vào phép xếp;
+5. \`giaiTrinhLechHang\` khác \`null\` **khi và chỉ khi** \`hangGia ≠ hangTco\` (một bên \`null\` mà bên kia
+   không cũng là khác). Khi khác \`null\`, nó có ít nhất một ký tự không phải khoảng trắng — khoảng trắng
+   gồm cả khoảng trắng Unicode (U+00A0, U+1680, U+2000–U+200B, U+2028, U+2029, U+202F, U+205F, U+3000,
+   U+FEFF) — và tối đa 2000 ký tự (điểm mã);
+6. \`chupLuc\` bằng ĐÚNG chuỗi \`actedAt\` của chính hàng trao thầu — cam kết chỉ chụp trong giao dịch đề
+   xuất. Gọi \`t₀\` là \`chupLuc\` sớm nhất trong bundle: một hàng \`PROPOSED\` không mang cam kết mà
+   \`actedAt ≥ t₀\` (so chuỗi ISO cùng dạng) là bundle sai — từ \`t₀\` hệ thống chụp cam kết cho MỌI đề
+   xuất. Khi bundle không còn cam kết nào, đề xuất không cam kết không phân biệt được với đề xuất có
+   trước khi hệ thống chụp — bước này không nói gì về nó.
+
+Một hàng trao thầu không phải \`PROPOSED\` mà mang cam kết là bundle sai. Phần này không nói lời giải
+trình có thuyết phục không — đó là việc của người đọc, cùng tinh thần §7.
 `;
