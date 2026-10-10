@@ -53,8 +53,12 @@ import { DAC_TA, DAC_TA_PHIEN_BAN } from "./dac-ta.js";
 import { docLopDuLieuNen, type DuLieuNenBundle } from "./lop-du-lieu-nen.js";
 
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
-/** [S1.262 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài. */
-export const PHIEN_BAN_BUNDLE = 2;
+/**
+ * [S1.262 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài.
+ * [S1.9101 / S4.7c2] `3`: phép quy đổi TCO tính lại được (`nguon` của mã quy đổi, `maThieu`, `goiTco`) và cam kết của mỗi đề xuất
+ * trao thầu (`traoThau[].camKet`) — `DAC-TA.md` §9, §10.
+ */
+export const PHIEN_BAN_BUNDLE = 3;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
 export const TEP_DAC_TA = "DAC-TA.md";
 
@@ -78,6 +82,11 @@ export interface ThanhPhanLuu {
   readonly heSo?: string;
   readonly giaTri?: string;
   readonly tien: string | null;
+  /**
+   * [S1.9101 / S4.7c2] Phép tính của mã quy đổi (`chi_phi_thanh_toan`, `chi_phi_tre`) — cơ sở, ngày khai, ngày chuẩn hay yêu cầu, tỷ
+   * lệ — chép nguyên văn như lượt chấm ghi (`luot-danh-gia.ts`); vắng ở mã không quy đổi. `DAC-TA.md` §9.
+   */
+  readonly nguon?: Readonly<Record<string, string>>;
 }
 
 export interface HangBundle {
@@ -86,6 +95,8 @@ export interface HangBundle {
   readonly effectiveCost: string | null;
   readonly rank: number | null;
   readonly components: readonly ThanhPhanLuu[];
+  /** [S1.9101 / S4.7c2] Mã thiếu ô khai của hàng không hạng (`ma_thieu`, `112`) — `null` khi hàng đủ ô. */
+  readonly maThieu: readonly string[] | null;
 }
 
 export interface LuotChamBundle {
@@ -103,6 +114,40 @@ export interface LuotChamBundle {
   readonly hang: readonly HangBundle[];
 }
 
+/**
+ * [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở (`112` (5), `117`): tập mã và nhóm khoá `tco` của phiên bản ghim, số ngày giao yêu
+ * cầu. Thước mà mọi `nguon` của mọi lượt chấm phải khớp — `DAC-TA.md` §9.
+ */
+export interface GoiTcoBundle {
+  readonly tapMa: readonly string[] | null;
+  /** Nhóm khoá `tco` nguyên văn (`chi_phi_von_nam`, `ngay_thanh_toan_chuan`, `ty_le_tre_ngay`) — `null` khi phiên bản không cấu hình. */
+  readonly thamSo: Readonly<Record<string, string>> | null;
+  readonly soNgayGiao: number | null;
+}
+
+/** [S1.9101 / S4.7c2] Bốn ô khai của báo giá được đề xuất, qua đúng bộ đọc của lượt chấm (`121`). */
+export interface KhaiCamKetBundle {
+  readonly freight: string | null;
+  readonly importCost: string | null;
+  readonly paymentDays: number | null;
+  readonly leadTimeDays: number | null;
+}
+
+/** [S1.9101 / S4.7c2] Cam kết TCO CSDL chụp lúc đề xuất (`rfq_award_cam_ket`, `121`) — điều khoản cam kết của bộ, `DAC-TA.md` §10. */
+export interface CamKetBundle {
+  readonly hangTco: number;
+  readonly hangGia: number | null;
+  readonly effectiveCost: string;
+  readonly components: readonly ThanhPhanLuu[];
+  readonly khai: KhaiCamKetBundle;
+  readonly tapMa: readonly string[] | null;
+  readonly thamSo: Readonly<Record<string, string>> | null;
+  readonly soNgayGiao: number | null;
+  /** Lời giải trình lệch hạng NGUYÊN VĂN (chủ dự án chốt 2026-10-10) — sổ chỉ ghi cờ, bộ mang văn bản sau hai cổng của lần xuất. */
+  readonly giaiTrinhLechHang: string | null;
+  readonly chupLuc: MocThoiGian;
+}
+
 export interface TraoThauBundle {
   readonly awardId: string;
   readonly evaluationId: string;
@@ -110,6 +155,8 @@ export interface TraoThauBundle {
   readonly status: string;
   readonly reason: string;
   readonly actedAt: MocThoiGian;
+  /** [S1.9101 / S4.7c2] `null` ở mọi hàng không phải đề xuất, và ở đề xuất có trước S4.7c1 (không lấp ngược). */
+  readonly camKet: CamKetBundle | null;
 }
 
 export interface BoBangChung {
@@ -121,6 +168,8 @@ export interface BoBangChung {
   readonly orgId: string;
   readonly rfqId: string;
   readonly xuatLuc: MocThoiGian;
+  /** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. */
+  readonly goiTco: GoiTcoBundle;
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
   readonly traoThau: readonly TraoThauBundle[];
@@ -156,6 +205,7 @@ interface HangDong {
   readonly effective_cost: string | null;
   readonly rank: number | null;
   readonly components: readonly Record<string, unknown>[];
+  readonly ma_thieu: readonly string[] | null;
 }
 
 interface HangAward {
@@ -165,27 +215,47 @@ interface HangAward {
   readonly status: string;
   readonly reason: string;
   readonly acted_at: Date;
+  // [S1.9101 / S4.7c2] Cam kết của hàng (LEFT JOIN) — `ck_co` false khi không có.
+  readonly ck_co: boolean;
+  readonly ck_hang_tco: number | null;
+  readonly ck_hang_gia: number | null;
+  readonly ck_effective_cost: string | null;
+  readonly ck_components: readonly Record<string, unknown>[] | null;
+  readonly ck_khai: Record<string, unknown> | null;
+  readonly ck_tap_ma: readonly string[] | null;
+  readonly ck_tham_so: unknown;
+  readonly ck_so_ngay_giao: number | null;
+  readonly ck_giai_trinh: string | null;
+  readonly ck_chup_luc: Date | null;
+}
+
+/** Một object mọi giá trị là chuỗi, chép nguyên văn — `null` khi không phải hình dạng ấy (bộ kiểm khi ấy báo thiếu, không đoán). */
+function chepChuoiTheoKhoa(tho: unknown): Readonly<Record<string, string>> | null {
+  if (tho === null || typeof tho !== "object" || Array.isArray(tho)) return null;
+  const ra: Record<string, string> = {};
+  for (const [k, v] of Object.entries(tho as Record<string, unknown>)) {
+    if (typeof v !== "string") return null;
+    ra[k] = v;
+  }
+  return ra;
 }
 
 /** Chép một phần tử `components` NGUYÊN VĂN, chỉ phán xử kiểu chứ không đổi cách viết khoá. */
-function chepThanhPhan(tho: Record<string, unknown>): {
-  ma: string;
-  donVi?: string;
-  heSo?: string;
-  giaTri?: string;
-  tien: string | null;
-} {
+function chepThanhPhan(tho: Record<string, unknown>): ThanhPhanLuu {
   const lay = (ten: string): string | undefined => {
     const gt = tho[ten];
     return typeof gt === "string" ? gt : undefined;
   };
   const tien = tho["tien"];
+  // [S1.9101 / S4.7c2] `nguon` của mã quy đổi đi kèm — vắng thì KHÔNG có khoá (bundle v2 không có khoá này ở mọi hàng).
+  const nguon = tho["nguon"] === undefined ? null : chepChuoiTheoKhoa(tho["nguon"]);
   return {
     ma: lay("ma") ?? "",
     donVi: lay("donVi"),
     heSo: lay("heSo"),
     giaTri: lay("giaTri"),
     tien: typeof tien === "string" ? tien : null,
+    ...(nguon === null ? {} : { nguon }),
   };
 }
 
@@ -226,7 +296,8 @@ export async function docMoiLuotCham(
               s.legal_name AS supplier_name,
               l.effective_cost::pg_catalog.text AS effective_cost,
               l.rank,
-              l.components
+              l.components,
+              l.ma_thieu
          FROM public.rfq_evaluation_lines l
          JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) l.bid_version_id
                                           AND v.org_id OPERATOR(pg_catalog.=) l.org_id
@@ -259,6 +330,7 @@ export async function docMoiLuotCham(
         effectiveCost: d.effective_cost,
         rank: d.rank,
         components: d.components.map(chepThanhPhan),
+        maThieu: d.ma_thieu,
       })),
     });
   }
@@ -276,14 +348,28 @@ export async function docMoiTraoThau(
   orgId: string,
   rfqId: string,
 ): Promise<readonly TraoThauBundle[]> {
+  // [S1.9101 / S4.7c2] Cam kết của hàng — chỉ hàng `PROPOSED` có (`121`), và đề xuất có trước S4.7c1 thì không (không lấp ngược).
   const { rows } = await client.query<HangAward>(
     `SELECT a.id,
             a.evaluation_id,
             a.bid_version_id,
             a.status,
             a.reason,
-            a.acted_at
+            a.acted_at,
+            (k.award_id IS NOT NULL) AS ck_co,
+            k.hang_tco AS ck_hang_tco,
+            k.hang_gia AS ck_hang_gia,
+            k.effective_cost::pg_catalog.text AS ck_effective_cost,
+            k.components AS ck_components,
+            k.khai AS ck_khai,
+            k.tap_ma AS ck_tap_ma,
+            k.tham_so AS ck_tham_so,
+            k.so_ngay_giao AS ck_so_ngay_giao,
+            k.giai_trinh_lech_hang AS ck_giai_trinh,
+            k.chup_luc AS ck_chup_luc
        FROM public.rfq_awards a
+       LEFT JOIN public.rfq_award_cam_ket k ON k.award_id OPERATOR(pg_catalog.=) a.id
+                                           AND k.org_id OPERATOR(pg_catalog.=) a.org_id
       WHERE a.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND a.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
       ORDER BY a.acted_at ASC, a.id ASC`,
@@ -296,7 +382,59 @@ export async function docMoiTraoThau(
     status: r.status,
     reason: r.reason,
     actedAt: moc(r.acted_at),
+    camKet: r.ck_co ? camKetCuaHang(r) : null,
   }));
+}
+
+function soHayNull(gt: unknown): number | null {
+  return typeof gt === "number" && Number.isInteger(gt) ? gt : null;
+}
+
+function chuoiHayNull(gt: unknown): string | null {
+  return typeof gt === "string" ? gt : null;
+}
+
+/** Hàng cam kết → `CamKetBundle`. Cột `NOT NULL` của `121` nên `hang_tco`, `effective_cost`, `chup_luc` luôn có khi hàng có. */
+function camKetCuaHang(r: HangAward): CamKetBundle {
+  const khai = r.ck_khai ?? {};
+  return {
+    hangTco: r.ck_hang_tco ?? 0,
+    hangGia: r.ck_hang_gia,
+    effectiveCost: r.ck_effective_cost ?? "",
+    components: (r.ck_components ?? []).map(chepThanhPhan),
+    khai: {
+      freight: chuoiHayNull(khai["freight"]),
+      importCost: chuoiHayNull(khai["importCost"]),
+      paymentDays: soHayNull(khai["paymentDays"]),
+      leadTimeDays: soHayNull(khai["leadTimeDays"]),
+    },
+    tapMa: r.ck_tap_ma,
+    thamSo: chepChuoiTheoKhoa(r.ck_tham_so),
+    soNgayGiao: r.ck_so_ngay_giao,
+    giaiTrinhLechHang: r.ck_giai_trinh,
+    chupLuc: moc(r.ck_chup_luc ?? new Date(0)),
+  };
+}
+
+/** [S1.9101 / S4.7c2] Ảnh chụp TCO của gói lúc mở — `DAC-TA.md` §9. Gói không mở (bất khả khi đã có lượt chấm) cho ba `null`. */
+export async function docGoiTco(client: pg.PoolClient, orgId: string, rfqId: string): Promise<GoiTcoBundle> {
+  const { rows } = await client.query<{
+    readonly tco_ma_ghim: readonly string[] | null;
+    readonly tco_tham_so_ghim: unknown;
+    readonly so_ngay_giao: number | null;
+  }>(
+    `SELECT r.tco_ma_ghim, r.tco_tham_so_ghim, r.so_ngay_giao
+       FROM public.rfq_packages r
+      WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, rfqId],
+  );
+  const r = rows[0];
+  return {
+    tapMa: r?.tco_ma_ghim ?? null,
+    thamSo: chepChuoiTheoKhoa(r?.tco_tham_so_ghim ?? null),
+    soNgayGiao: r?.so_ngay_giao ?? null,
+  };
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -339,6 +477,7 @@ export async function dungBoBangChung(
   const luotCham = await docMoiLuotCham(client, orgId, rfqId);
   if (luotCham.length === 0) return null;
   const traoThau = await docMoiTraoThau(client, orgId, rfqId);
+  const goiTco = await docGoiTco(client, orgId, rfqId);
   const duLieuNen = await docLopDuLieuNen(
     client,
     orgId,
@@ -357,6 +496,7 @@ export async function dungBoBangChung(
     orgId,
     rfqId,
     xuatLuc: { giaTri: xuatLuc.toISOString(), nguon: NGUON_DONG_HO_XUAT },
+    goiTco,
     luotCham,
     traoThau,
     duLieuNen,

@@ -55,6 +55,15 @@ import {
   type KetQuaKiemDuLieuNen,
   type TinhBenchmarkHamThuan,
 } from "./kiem-du-lieu-nen.js";
+import {
+  QUY_DOI_THAT,
+  kiemCamKet,
+  kiemQuyDoiHang,
+  kiemTapMa,
+  soQuyDoi,
+  type KetQuaKiemCamKet,
+  type QuyDoiHamThuan,
+} from "./kiem-tco.js";
 
 /** Chữ ký của lớp ⑴. Mặc định bọc `tinhChiPhiHieuDung`; test tiêm một bản CÓ LỖI vào đây. */
 export type TinhHamThuan = (
@@ -106,6 +115,10 @@ export interface KetQuaKiem {
   readonly hangTraoThau: readonly { readonly awardId: string; readonly rank: number | null }[];
   /** [S1.262 / S4.5c2] Lớp dữ liệu nền (`DAC-TA.md` §8); `null` khi bundle không mang lớp ấy. */
   readonly duLieuNen: KetQuaKiemDuLieuNen | null;
+  /** [S1.9101 / S4.7c2] Số thành phần quy đổi đã tính lại (`DAC-TA.md` §9) — 0 ở gói không TCO. */
+  readonly soQuyDoi: number;
+  /** [S1.9101 / S4.7c2] Cam kết của các đề xuất trao thầu (`DAC-TA.md` §10). */
+  readonly camKet: KetQuaKiemCamKet;
 }
 
 /** Đầu vào của phép tính lại cho một hàng: `ma` + `giaTri` đã lưu, KHÔNG lấy `tien` hay `heSo`. */
@@ -151,8 +164,18 @@ function soSanhKetQua(
   return noi;
 }
 
-function kiemMotHang(luot: LuotChamBundle, hang: HangBundle, hamThuan: TinhHamThuan): KiemHang {
+function kiemMotHang(
+  bo: BoBangChung,
+  luot: LuotChamBundle,
+  hang: HangBundle,
+  hamThuan: TinhHamThuan,
+  hamThuanQuyDoi: QuyDoiHamThuan,
+): KiemHang {
   const chung = { evaluationId: luot.evaluationId, bidVersionId: hang.bidVersionId };
+  // [S1.9101 / S4.7c2] §9 trước §3: `giaTri` của mã quy đổi là ĐẦU VÀO của §3, nên một `giaTri` quy đổi sai làm hàng LỆCH dù phép
+  // cộng ở §3 khớp — đúng chỗ bundle v2 phải tin mà không kiểm được.
+  const quyDoi = kiemQuyDoiHang(bo.goiTco, hang, hamThuanQuyDoi);
+  if (quyDoi.length > 0) return { ...chung, ketLuan: "LECH", noi: quyDoi };
   const dauVao = dauVaoCuaHang(hang);
   if (dauVao === null || hang.effectiveCost === null) {
     return {
@@ -210,6 +233,7 @@ export function kiemBo(
   dacTaDiKem: string,
   hamThuan: TinhHamThuan = HAM_THUAN_THAT,
   hamThuanBenchmark: TinhBenchmarkHamThuan = HAM_THUAN_BENCHMARK_THAT,
+  hamThuanQuyDoi: QuyDoiHamThuan = QUY_DOI_THAT,
 ): KetQuaKiem {
   const loiBo: string[] = [];
 
@@ -222,9 +246,14 @@ export function kiemBo(
   }
 
   const hang: KiemHang[] = [];
+  let soQuyDoiDaKiem = 0;
   for (const luot of bo.luotCham) {
-    for (const h of luot.hang) hang.push(kiemMotHang(luot, h, hamThuan));
+    for (const h of luot.hang) {
+      hang.push(kiemMotHang(bo, luot, h, hamThuan, hamThuanQuyDoi));
+      soQuyDoiDaKiem += soQuyDoi(h);
+    }
     loiBo.push(...kiemThuHang(luot));
+    loiBo.push(...kiemTapMa(bo.goiTco, luot));
   }
 
   // ⑵ Trao thầu phải nối được với một hàng của một lượt chấm CÓ TRONG bundle.
@@ -256,8 +285,10 @@ export function kiemBo(
   // [S1.262 / S4.5c2] ⑶ Lớp dữ liệu nền: có thì phải ĐẠT trọn — một nhãn benchmark không tái lập được là một lần bundle nói sai.
   const duLieuNen = kiemDuLieuNen(bo, hamThuanBenchmark);
   const duLieuNenDat = duLieuNen === null || (duLieuNen.loi.length === 0 && duLieuNen.soLech === 0 && duLieuNen.soDong > 0);
+  // [S1.9101 / S4.7c2] ⑷ Cam kết: mọi cam kết phải ĐẠT — một cam kết lệch hàng chấm là một điều khoản bundle nói sai.
+  const camKet = kiemCamKet(bo, hamThuanQuyDoi);
   return {
-    dat: loiBo.length === 0 && soLech === 0 && soDat > 0 && duLieuNenDat,
+    dat: loiBo.length === 0 && soLech === 0 && soDat > 0 && duLieuNenDat && camKet.loi.length === 0,
     soHang: hang.length,
     soDat,
     soLech,
@@ -266,5 +297,7 @@ export function kiemBo(
     loiBo,
     hangTraoThau,
     duLieuNen,
+    soQuyDoi: soQuyDoiDaKiem,
+    camKet,
   };
 }
