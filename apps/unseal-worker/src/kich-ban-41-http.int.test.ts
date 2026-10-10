@@ -60,6 +60,8 @@ import {
   type CamKetHien,
   type ThanhPhanXepHang,
 } from "../../web/src/tco.js";
+// [S1.9101 / S3.8b] Hàm đọc và hàm trình bày của màn `/hieu-suat` — khối K11 cuối đưa thân THẬT của route qua chính chúng.
+import { docHieuSuat, oCuaHang } from "../../web/src/hieu-suat.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
@@ -2300,6 +2302,29 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const thang = rows[0]!.ncc;
     const hs = await hieuSuatTheoLoiMoi();
     expect(hs.map((h) => h?.[5])).toEqual(trangThai.loiMoi.map((l) => (l.supplierId === thang ? 1 : 0)));
+  });
+
+  // [S1.9101 / S3.8b] Kịch bản 41 ĐỌC MÀN: thân thật của `GET /supplier-performance` đi qua đúng hàm đọc và hàm trình bày của `/hieu-suat`.
+  // Một trường đổi tên hay đổi kiểu ở route làm `docHieuSuat` bỏ hàng (hay trả `null`), và ca này đỏ — phép đo T1 của màn chạy trên thân
+  // viết tay, nên chỉ ở đây hình dạng của màn và hình dạng của route gặp nhau.
+  it("[INV-K11] MÀN /hieu-suat đọc thân thật của route — năm nhà cung cấp của gói chính, mỗi người một gói: mọi tỷ lệ và trung vị «chưa đủ lịch sử (1/5 gói)», số đếm hiện", async () => {
+    const r = await goi("GET", "/supplier-performance", trangThai.gd1.cookie);
+    expect(r.status, r.text).toBe(200);
+    const bang = docHieuSuat(r.body);
+    expect(bang, "thân route không qua được hàm đọc của màn").not.toBeNull();
+    if (bang === null) return;
+    // Không hàng nào bị bỏ: mọi hàng route trả đều qua hàm đọc.
+    expect(bang.nhaCungCap).toHaveLength((r.body as { hieuSuat: { nhaCungCap: unknown[] } }).hieuSuat.nhaCungCap.length);
+    const theoId = new Map(bang.nhaCungCap.map((h) => [h.supplierId, h]));
+    const chuaDu = `chưa đủ lịch sử (1/${String(bang.sanLichSu)} gói)`;
+    for (const [i, l] of trangThai.loiMoi.entries()) {
+      const h = theoId.get(l.supplierId);
+      expect(h, l.ten).toBeDefined();
+      if (h === undefined) continue;
+      const o = oCuaHang(h, bang.sanLichSu).map((x) => x.noiDung);
+      expect([o[1], o[2], o[5], o[6]], l.ten).toEqual(["1 gói", "1 gói", i === 3 ? "1" : "0", "1 gói"]);
+      expect([o[3], o[4], o[7], o[8], o[11]], l.ten).toEqual([chuaDu, chuaDu, chuaDu, chuaDu, chuaDu]);
+    }
   });
 
   // [mảnh 1 / màn xuất bằng chứng] Bước cuối của kịch bản `docs/PRODUCT.md` §11 — *"xuất được

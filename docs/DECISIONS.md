@@ -13046,5 +13046,30 @@ HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.
 
 ### Điều ADR này KHÔNG nói
 
-Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b); KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa chọn); hiệu suất từ ERP (S5, spec §10);
-Supplier Score (S5, ADR-100).
+~~Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b);~~ **[S1.9101]** (nay ở ⑼ dưới) KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa
+chọn); hiệu suất từ ERP (S5, spec §10); Supplier Score (S5, ADR-100).
+
+### ⑼ [S1.9101 / S3.8b] Màn `/hieu-suat`, bộ gieo, kịch bản 41 đọc màn
+
+Chủ dự án, 2026-10-10: *"ok, làm theo hình dạng đó"* — hình dạng trình ở cuộc trò chuyện sau khi S3.8a mở PR.
+
+⒜ **Màn chỉ đọc, một bước sau đăng nhập**, cho người giữ `bid.view`; link từ header của `/mo-thau` và `/chinh-sach` (hai trang người giữ
+`bid.view` được in link tới). Thứ tự hàng là thứ tự route trả (tên, rồi id) — không xếp, không tô màu theo con số, không điểm tổng hợp.
+⒝ **Màn không tự xét sàn.** Ô *"chưa đủ lịch sử (m/s gói)"* đọc `chuaDuLichSu` máy chủ trả; `m` là mẫu số của CHÍNH chỉ số ấy, khớp
+lời gọi `giu(…)` của `packages/kiem-soat/src/hieu-suat.ts` — gói được mời cho tỷ lệ phản hồi, gói đã nộp cho thời gian phản hồi, gói xếp
+hạng cho hạng, khoảng cách và tỷ lệ thắng. Trường không bị giữ mà vẫn rỗng (mọi lượt có chi phí hạng nhất bằng 0) hiện "—".
+⒞ **Khoảng cách trên `Number.MAX_SAFE_INTEGER` phần vạn hiện cận dưới** (*"hơn 90.071.992.547.409,91%"*): `numeric` của CSDL đi qua JSON
+thành `double`, và chữ số cuối của một số lớn hơn thế không còn là chữ số của CSDL (lượt soi THẤP-6 của §S1.291 cho một giá trị như vậy).
+⒟ **Ngôn ngữ mô tả, đo ở phạm vi màn.** Kho chưa có luật chung cấm chữ đánh giá (bảng §5 của `docs/PRODUCT.md` không có hàng ấy, và
+`cau-cam-tren-giao-dien` khớp 1:1 với bảng), nên `apps/web/src/hieu-suat.test.ts` quét ba tệp của màn và chữ module sinh ra, biên chữ theo
+Unicode, có đối chứng dương và âm. Một hàng §5 cho mọi màn là việc của chủ dự án, không của vòng này.
+⒠ **`gieo:demo --s3` chấm ba gói đã mở thay vì thêm gói.** Không lượt chấm ấy, ba nhà cung cấp đầu có 5 gói mời, 5 nộp mà chỉ 2 gói xếp
+hạng (trao thầu, TCO) — màn chỉ nói *"chưa đủ lịch sử"* ở hạng, khoảng cách, tỷ lệ thắng. Thêm gói thì đụng K10a (nhóm `DA-MO` đã 90
+triệu, cận 100 triệu) hay K3 (bậc từ 100 triệu, N = 5, cửa sổ theo người chọn). Cái giá: ba gói rời `UNSEALED` sang `EVALUATING` (lịch sử
+giá và benchmark không đổi — `gia_da_lo` không đọc trạng thái, `EVALUATING` vẫn trong tập của benchmark); số đứng ĐÚNG ở sàn — bớt một
+gói đã chấm là về dưới sàn.
+⒡ **Kịch bản 41 đọc màn.** Phép đo T1 của màn chạy trên thân viết tay; khối `[INV-K11]` cuối của kịch bản 41 HTTP đưa thân THẬT của route
+qua `docHieuSuat` và `oCuaHang` (import tương đối xuyên app như `tco.ts`), nên một trường đổi tên hay đổi kiểu ở route làm nó đỏ.
+
+Đo bằng: `apps/web/src/hieu-suat.test.ts`, các ca `/hieu-suat` của `apps/web/src/phuc-vu.test.ts`, khối kịch bản 41 ở ⒡, lượt đi thử T4
+(biên bản §S1.9101).
