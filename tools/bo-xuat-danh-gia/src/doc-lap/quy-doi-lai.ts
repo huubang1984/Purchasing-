@@ -22,7 +22,7 @@ const KHUON_KHONG_AM = /^(?=.{1,64}$)\d+(?:\.\d+)?$/u;
 /** Tiền đúng dạng §2 — cùng khuôn `award_hang_gia` (`121`) lọc `tien` của `gia`. */
 const KHUON_TIEN = /^[0-9]{1,16}\.[0-9]{2}$/u;
 
-function ngay(chuoi: string): number | null {
+function docNgay(chuoi: string): number | null {
   return KHUON_NGAY.test(chuoi) ? Number(chuoi) : null;
 }
 
@@ -60,8 +60,8 @@ export function chiaNgan(x: SoThapPhan, mau: number, themLe: number): SoThapPhan
 export function chiPhiThanhToanLai(coSo: string, ngayKhai: string, ngayChuan: string, tyLe: string): string | null {
   const t = khongAm(coSo);
   const r = khongAm(tyLe);
-  const k = ngay(ngayKhai);
-  const c = ngay(ngayChuan);
+  const k = docNgay(ngayKhai);
+  const c = docNgay(ngayChuan);
   if (t === null || r === null || k === null || c === null) return null;
   const d = docThapPhan(String(Math.max(0, c - k)));
   if (d === null) return null;
@@ -73,8 +73,8 @@ export function chiPhiThanhToanLai(coSo: string, ngayKhai: string, ngayChuan: st
 export function chiPhiTreLai(coSo: string, ngayKhai: string, ngayYeuCau: string, tyLe: string): string | null {
   const t = khongAm(coSo);
   const r = khongAm(tyLe);
-  const k = ngay(ngayKhai);
-  const y = ngay(ngayYeuCau);
+  const k = docNgay(ngayKhai);
+  const y = docNgay(ngayYeuCau);
   if (t === null || r === null || k === null || y === null) return null;
   const d = docThapPhan(String(Math.max(0, k - y)));
   if (d === null) return null;

@@ -199,7 +199,7 @@ describe("[S1.9101 / S4.7c2] bộ kiểm trên bundle TCO — §9", () => {
   });
 
   it("[INV-J2] mã quy đổi mất `nguon`, hay `nguon` sai khoá ⇒ LỆCH (§9.3 bước 1); hàng có số mang `maThieu` ⇒ LỆCH (§9.4)", () => {
-    const mat = kiemBo(bo(suaThanhPhan(hangMau(), "bA", "chi_phi_tre", ({ nguon: _bo, ...c }) => c)), DAC_TA);
+    const mat = kiemBo(bo(suaThanhPhan(hangMau(), "bA", "chi_phi_tre", (c) => ({ ma: c.ma, donVi: c.donVi, heSo: c.heSo, giaTri: c.giaTri, tien: c.tien }))), DAC_TA);
     expect(mat.hang.find((x) => x.bidVersionId === "bA")?.noi.join("\n")).toMatch(/không mang `nguon`/u);
     const khoa = kiemBo(
       bo(suaThanhPhan(hangMau(), "bA", "chi_phi_tre", (c) => ({ ...c, nguon: { coSo: "100.00", ngayKhai: "14", tyLe: "0.001" } }))),
