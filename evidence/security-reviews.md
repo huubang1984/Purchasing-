@@ -27237,3 +27237,71 @@ hàm = bốn dòng `chot: K10c`; ba tên `k10c_*` không ở `CHOT_THEO_RANG_BUO
   sách migration gỡ tay; lời khai 116 migration, 159 ADR, 91 bất biến): `pnpm t0` 54 s; `pnpm test` 157 tệp / 2820 ca; kịch bản 41 HTTP
   93/93 48 s; `tin-hieu-chia-nho.int` 14/14 16 s; evidence vitest thoát mã **0**, **91/91**, **5186** khẳng định, 2 056 s (bắt đầu
   00:31 ngày 2026-10-10 sau 6 lượt chờ) — `INV-matrix.md` sinh lại trên bản gộp.
+
+---
+
+# §S1.9101 — J1 VẾ PHIÊN BẢN: HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG BÁO GIÁ, LỜI MỜI CÒN SỐNG
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — mã sản xuất không đổi, lượt chấm sản xuất ghi đúng tập cũ.
+Đổi ở CSDL: một đường ghi thứ hai dưới `app_api` thôi chọn được phiên bản đã bị thay hay báo giá của lời mời đã thu hồi cho một lượt chấm.
+Migration `9501_hang_cham_phien_ban_moi_nhat`, ADR-9201. Không bất biến mới (J1), không khoản mới.
+
+## 1. Vòng này là gì
+Việc tách ra từ rà soát §S1.288 TRUNG-1. Vế (a) — hàng chấm chỉ ghi trong giao dịch tạo lượt — và (b) — báo giá của đúng gói — đã vào
+master ở #265 (`rfq_evaluation_lines_kiem_luot`, `121` mục (5)). Vế (c) — *"phiên bản là phiên bản đã mở của vòng mà lượt chấm đọc"* —
+để lại với lời *"chạm ngữ nghĩa lượt chấm sau BAFO"*. Chủ dự án, 2026-10-10: *"Làm vế (c)"*, sau khi được báo kết quả đo ở mục 2.
+
+## 2. Đo trước (đọc mã và chạy trên `cc807f9`, master sau #265)
+- `docBaoGia` (`luot-danh-gia.ts`): `DISTINCT ON (v.bid_id) … ORDER BY v.bid_id, v.version DESC` trên `rfq_unsealed_bids`, vế
+  `i.revoked_at IS NULL` — một hàng cho một luồng, phiên bản lớn nhất ĐÃ MỞ, lời mời còn sống. Sau BAFO, nhà cung cấp ngoài top-N không nộp
+  lại (`059`), nên phiên bản mới nhất đã mở của họ là bản vòng một: luật ấy không đổi gì khi chép vào CSDL. Câu *"chạm ngữ nghĩa"* của
+  §S1.288 sai — nó nghĩ tới *"phiên bản của vòng"*, không tới luật mà lượt chấm đã dùng.
+- `057`: khoá ngoại `(org_id, bid_version_id) → rfq_unsealed_bids` buộc *"đã mở"*; `UNIQUE (org_id, evaluation_id, bid_version_id)`;
+  `app_api` có `INSERT` theo cột và `SELECT`, không `UPDATE`/`DELETE` — trigger ở INSERT là đủ.
+- Hai ca đo mới (`luot-danh-gia.int`, khối `[S1.9101]`), chạy TRƯỚC khi có trigger: một lượt chấm dựng trọn dưới `app_api` nhận (1) phiên
+  bản vòng một của nhà cung cấp đã nộp lại ở BAFO, (2) báo giá của lời mời đã thu hồi — cả hai câu `INSERT` thành công. Đỏ đúng chỗ.
+
+## 3. Hình dạng (ADR-9201)
+Hàm + trigger RIÊNG (`luot_cham_kiem_phien_ban`, `rfq_evaluation_lines_kiem_phien_ban`), không sửa `luot_cham_kiem_hang` — ghim của `121`
+giữ nguyên. Lời mời đã thu hồi ⇒ `hang_cham_loi_moi_thu_hoi`; luồng có phiên bản lớn hơn có hàng ở `rfq_unsealed_bids` ⇒
+`hang_cham_phien_ban_cu`. Tên xếp giữa `…_kiem_luot` và `…_kiem_thanh_phan`.
+
+## 4. Thay đổi
+- `db/migrations/9501_hang_cham_phien_ban_moi_nhat.sql`; `hardening.always.sql`: `TRIGGER_DUOC_PHEP` của `rfq_evaluation_lines` thêm
+  trigger mới (thiếu dòng này hardening GỠ trigger lạ — đo được: lần chạy đầu ca đo vẫn xanh-sai), một khối ghim hàm + trigger (`$fn349$`).
+- Sổ đăng ký: `HAM_56` và ba danh sách migration (`migrations.int`), `danh-sach-ham-canh.ts`, `HAM_SQL` của `ban-ro-liet-ke` (dòng
+  `TỒN TẠI` — chỉ hỏi tồn tại, không đọc `payload`), lớp CSDL của `lich-su-gia.int` (L5).
+- `hardening-suy-tu`: kịch bản `dungKichBan()` thu hồi CHÍNH lời mời mang báo giá duy nhất rồi vẫn mở, chấm và trao báo giá ấy — thế giới
+  mà `docBaoGia` không tạo ra; trigger mới đỏ ở đó (hai ca H19). Nay nhân chứng UPDATE của `rfq_invitations` thu hồi một lời mời THỨ HAI
+  của gói (câu dựng dưới chủ sở hữu), không ai dùng sau.
+- Tài liệu: ADR-9201; ADR-160 giới hạn đầu gạch tại chỗ; TEST-PLAN J1; STATE. Sửa kèm tham chiếu `119` cũ thành `121` ở ADR-160 ⑽,
+  TEST-PLAN J1 và §S1.288 — `cap-so` cấp lại số migration khi gộp #267, và số trần trong văn xuôi không lệnh nào đổi.
+
+## 5. Đột biến (thân hàm, thay CÙNG LÚC ở migration, khối `DO` và thân chuẩn hoá của ghim)
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | bỏ vế lời mời đã thu hồi (`IF false`) | ĐỎ |
+| M2 | so sánh ngược (`v.version < luong.version`) | ĐỎ |
+| M3 | bỏ vế *"đã mở"* (nối `rfq_unsealed_bids` không theo phiên bản) | ĐỎ — lượt đầu mẫu thay chạm cả một hàm khác (`rfq_unsealed_bids` dòng 14690); chạy lại với mẫu chỉ khớp hàm mới, vẫn ĐỎ |
+| M4 | bỏ vế cùng luồng (`v.bid_id = luong.bid_id`) | ĐỎ |
+| M5 | `RETURN NEW` ngay đầu thân | ĐỎ |
+| M6 | `>=` thay `>` | ĐỎ |
+
+M3 cần ca *"bản nộp lại CHƯA MỞ không thay bản đã mở"* — thêm vào ca BAFO trước khi chạy đột biến; thiếu nó M3 sống, vì trong luồng sản
+xuất mọi bản nộp lại đều được mở.
+
+## 6. Rà soát đối kháng (tự soi, đọc-không-sửa trên diff)
+- Đường vòng UPDATE: không — `app_api` không có `UPDATE` trên bảng.
+- Hàm chạy dưới vai người gọi, đọc `vendor_bid_versions`, `vendor_bids`, `rfq_invitations`, `rfq_unsealed_bids` dưới RLS của tổ chức hiện
+  hành; `org_id` của hàng mới bằng tổ chức ấy (`WITH CHECK`), nên không hàng nào của chính tổ chức bị che. `NOT FOUND` ⇒ `RETURN NEW` —
+  phiên bản không tồn tại thì khoá ngoại của `057` từ chối, và `…_kiem_luot` (chạy trước) đã ném `hang_cham_bao_gia_goi_khac`.
+- Đua: lượt chấm chỉ tạo ở `UNSEALED`/`BAFO_UNSEALED`, không lần mở phong bì nào chạy ở hai trạng thái ấy; một lần thu hồi commit giữa
+  `docBaoGia` và câu ghi làm câu ghi hỏng — đóng.
+- Không CAO, không TRUNG. Giới hạn nói ra ở ADR-9201: giá trị `effective_cost`/`rank` và đủ mặt các luồng vẫn là J2.
+
+## 7. Số đo
+- `pnpm t0` sạch; `pnpm test` 159 tệp / 2840 ca (sau `cap-so --dem`).
+- Int liên quan: `luot-danh-gia.int` 145/145, `migrations.int` 128/128, `rls-coverage.int` 61/61, `lich-su-gia.int` 51/51,
+  `check-an-ninh.int` 4/4, `ban-ro-liet-ke` 9/9; `hardening-suy-tu` 38 ca — lượt đầu đỏ hai ca H19 (mục 4), sau sửa kịch bản 36 đạt + 2 bỏ
+  qua theo bộ lọc.
