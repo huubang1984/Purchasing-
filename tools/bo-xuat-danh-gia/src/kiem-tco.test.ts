@@ -131,6 +131,21 @@ describe("[S1.9101 / S4.7c2] lớp độc lập của phép quy đổi — §9.1
     expect(chiPhiTreLai("0.50", "1", "0", "0.01")).toBe("0.01");
   });
 
+  it("[INV-J2] tỷ lệ là số NGUYÊN: tích chỉ có hai chữ số lẻ, nên quyết định làm tròn phải đọc chữ số giữ thêm — 1 × 1 × 1.83 ÷ 365 = 0.00501… ⇒ 0.01", () => {
+    expect(chiPhiThanhToanLai("1.83", "0", "1", "1")).toBe("0.01");
+    expect(chiPhiThanhToanLai("1.83", "0", "1", "1")).toBe(chiPhiThanhToan("1.83", 1, 0, "1"));
+    expect(chiPhiThanhToanLai("1.82", "0", "1", "1"), "0.004986… ⇒ 0.00").toBe("0.00");
+  });
+
+  it("[INV-L8] hạng giá chỉ xếp các hàng CÓ hạng: một hàng không hạng giá rẻ hơn không chiếm hạng nào (§10 bước 4)", () => {
+    const hang = [
+      { bidVersionId: "khong-hang", rank: null, tienGia: "1.00" },
+      { bidVersionId: "b2", rank: 1, tienGia: "5.00" },
+      { bidVersionId: "b3", rank: 2, tienGia: "3.00" },
+    ];
+    expect([hangGiaLai(hang, "b3"), hangGiaLai(hang, "b2"), hangGiaLai(hang, "khong-hang")]).toEqual([1, 2, null]);
+  });
+
   it("chia ngắn giữ thêm chữ số lẻ, cắt cụt — không làm tròn", () => {
     const x = docThapPhan("1.00");
     if (x === null) throw new Error("fixture");
@@ -151,7 +166,8 @@ describe("[S1.9101 / S4.7c2] lớp độc lập của phép quy đổi — §9.1
     };
     for (let i = 0; i < 20_000; i += 1) {
       const coSo = `${String(ngau(10_000_000))}.${String(ngau(100)).padStart(2, "0")}`;
-      const tyLeNam = `0.${String(ngau(10_000)).padStart(4, "0")}`;
+      // Một phần mười số bộ dùng tỷ lệ NGUYÊN — tích khi ấy chỉ có hai chữ số lẻ (ca của chữ số giữ thêm khi chia).
+      const tyLeNam = i % 10 === 0 ? String(ngau(3)) : `0.${String(ngau(10_000)).padStart(4, "0")}`;
       const tyLeNgay = `0.${String(ngau(1_000_000)).padStart(6, "0")}`;
       const a = ngau(400);
       const b = ngau(400);
@@ -275,6 +291,7 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
       [{ thamSo: { ...THAM_SO, ty_le_tre_ngay: "0.002" } }, /thamSo khác goiTco\.thamSo/u],
       [{ soNgayGiao: 20 }, /soNgayGiao 20 khác goiTco\.soNgayGiao 14/u],
       [{ khai: { ...goc.khai, leadTimeDays: 1 } }, /khai\.leadTimeDays 1 khác nguon\.ngayKhai của "chi_phi_tre"/u],
+      [{ khai: { ...goc.khai, paymentDays: 7 } }, /khai\.paymentDays 7 khác nguon\.ngayKhai của "chi_phi_thanh_toan"/u],
       [{ khai: { ...goc.khai, freight: "7.00" } }, /khai\.freight 7\.00 khác giaTri của "van_chuyen"/u],
       [{ hangGia: (goc.hangGia ?? 0) + 1 }, /lớp độc lập: hangGia của cam kết/u],
     ];
