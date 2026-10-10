@@ -27,10 +27,16 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **Hai người** sẽ giữ KeyAdmin (nhóm `tp-key-admins`). Một người là điều kiện chặn dữ liệu thật (ADR-062).
       **[2026-10-09] Đã có hai tài khoản** trong nhóm, tài khoản thứ hai nghiệm thu đạt (3.3; STATE khoản 15). Ai giữ
       tài khoản thứ hai không được kiểm — chủ dự án chốt ngày 2026-10-02.
-- [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin. **[2026-10-09] Chưa:** thư ⑴
-      tới đúng một địa chỉ. **[2026-10-10]** `email_canh_bao` nay là danh sách (mỗi địa chỉ một đăng ký); bản trước là
-      một chuỗi, nên thêm người thứ ba nghĩa là bỏ người cũ. Apply lại stack 60 thì MỌI địa chỉ, kể cả địa chỉ cũ,
-      nhận lại thư xác nhận và phải bấm lại: đăng ký cũ bị xoá vì địa chỉ resource đổi.
+- [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin. ~~**[2026-10-09] Chưa:** thư ⑴
+      tới đúng một địa chỉ.~~ **[2026-10-10]** `email_canh_bao` nay là danh sách (mỗi địa chỉ một đăng ký); bản trước là
+      một chuỗi, nên thêm người thứ ba nghĩa là bỏ người cũ. ~~Apply lại stack 60 thì MỌI địa chỉ, kể cả địa chỉ cũ,
+      nhận lại thư xác nhận và phải bấm lại: đăng ký cũ bị xoá vì địa chỉ resource đổi.~~ **[2026-10-10 — đã apply; câu
+      trước SAI]** Địa chỉ MỚI nhận thư xác nhận; địa chỉ CŨ thì MẤT đăng ký: `Subscribe` của resource mới trả lại ARN
+      đăng ký cũ đã xác nhận (SNS gộp theo topic, giao thức và địa chỉ), rồi `Unsubscribe` của resource cũ xoá chính ARN
+      ấy — hai địa chỉ resource khác nhau nên Terraform không xếp thứ tự giữa chúng. `plan` lần hai thấy đăng ký mất và
+      tạo lại (`1 to add`); bấm thư xác nhận MỚI NHẤT. Lần sau đổi địa chỉ resource của một subscription: thêm khối
+      `removed` (`lifecycle { destroy = false }`) cho địa chỉ cũ. Kết quả: hai đăng ký đã xác nhận, `tp-canh-dang-ky`
+      ra `2 topic, 3 dia chi, 0 hong`, đối chứng 3.3 ra thư ở cả hai hộp. Ai giữ địa chỉ thứ hai không được kiểm.
 - [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
       khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
@@ -154,7 +160,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại"). **[2026-10-09]** Chạy lại bằng tài khoản KeyAdmin
       thứ hai trên `alias/tp-receipt-sign`: `PutKeyPolicy` lúc 15:00:05Z, `errorCode` rỗng, policy trước và sau trùng
-      băm, thư tới trong vài phút (STATE khoản 15).
+      băm, thư tới trong vài phút (STATE khoản 15). **[2026-10-10]** Chạy lại sau khi `email_canh_bao` thành danh
+      sách: `PutKeyPolicy` lúc 07:05:20Z, `errorCode` rỗng, policy trùng bản 2026-09-30; topic `tp-canh-bao-khoa`
+      1 thông điệp → 2 thư, 0 hỏng (CloudWatch); cả hai hộp đã nhận.
 - [ ] **3.3b [2026-10-02 / khoản 336] Đối chứng dương ⑴ cho thao tác ghi ngoài `PutKeyPolicy`.** Apply lại stack 60 bằng lệnh
       3.1 trước: ngoài thay đổi 3.1 đã nói (concurrency Lambda khi gỡ `tam_override.tf`), plan chỉ được đổi TẠI CHỖ ba
       resource của ⑴ — `aws_cloudwatch_event_rule.put_key_policy_audit`,
@@ -422,7 +430,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 9. Trước dữ liệu thật — kiểm lại
 
 - [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ. **[2026-10-09]** Vế đầu: hai tài khoản, nghiệm thu
-      đạt (0.2, 3.3). Vế sau: CHƯA — thư ⑴ tới đúng một địa chỉ.
+      đạt (0.2, 3.3). Vế sau: ~~CHƯA — thư ⑴ tới đúng một địa chỉ.~~ **[2026-10-10]** thư ⑴ tới hai địa chỉ (3.3:
+      2 thư, 0 hỏng); ai giữ địa chỉ thứ hai không được kiểm, nên vế này mới đo được trên ĐỊA CHỈ, chưa đo về NGƯỜI.
 - [ ] **[2026-10-02 / khoản 336]** Cảnh báo cho mọi thao tác ghi của KeyAdmin, không chỉ `PutKeyPolicy`: tắt khoá, hẹn xoá khoá, đổi hay xoá alias, tắt xoay khoá. ~~Hôm nay ⑴ chỉ bắt `PutKeyPolicy` — khoản ấy ở rổ A.~~ **[sửa 2026-10-02]** Mã đã bắt cả 17 thao tác; khoản ấy vẫn ở rổ A tới khi stack 60 được apply lại và 3.3b có đủ sáu thư. **[2026-10-05]** Đã apply lại và đã đủ sáu thư — khoản 336 đóng.
 - [ ] **[rà 2026-10-01]** Ít nhất một kênh OTP ngoài thư (SMS hay Zalo) đã bật — `pnpm kiem-truoc-apply` hết `[VANG] kenh_otp` (0.3).
 - [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2, **[rà 2026-10-01]** 8.1 (⑼).
