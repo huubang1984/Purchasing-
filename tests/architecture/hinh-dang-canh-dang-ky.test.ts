@@ -38,11 +38,16 @@ describe("[ADR-089] canh đăng ký SNS", () => {
 
   it("⑵ MONG_DOI đọc đúng hai biến người nhận; mọi subscription email của stack đọc từ một trong hai biến ấy", () => {
     const ham = khoi("aws_lambda_function", "canh_dang_ky");
-    expect(ham).toContain('{ topic = aws_sns_topic.canh_bao_khoa.arn, bien = "email_canh_bao", nhan = [var.email_canh_bao] }');
+    // [2026-10-10] `email_canh_bao` là danh sách: Lambda đối chiếu NGUYÊN danh sách, không bọc lại một phần tử.
+    expect(ham).toContain('{ topic = aws_sns_topic.canh_bao_khoa.arn, bien = "email_canh_bao", nhan = var.email_canh_bao }');
     expect(ham).toContain('{ topic = aws_sns_topic.van_hanh.arn, bien = "email_van_hanh", nhan = var.email_van_hanh }');
     const dangKy = [...TF.matchAll(/resource "aws_sns_topic_subscription" "([a-z_]+)" \{/gu)].map((m) => m[1]);
     expect(dangKy.sort()).toEqual(["email", "van_hanh"]);
-    expect(khoi("aws_sns_topic_subscription", "email")).toMatch(/endpoint += var\.email_canh_bao\n/u);
+    // Mỗi địa chỉ một đăng ký: `for_each` trên đúng biến ấy, `endpoint` là phần tử — không `[0]`, không chuỗi viết cứng.
+    expect(khoi("aws_sns_topic_subscription", "email")).toMatch(/for_each += toset\(var\.email_canh_bao\)\n/u);
+    expect(khoi("aws_sns_topic_subscription", "email")).toMatch(/endpoint += each\.value\n/u);
+    expect(khoi("aws_sns_topic_subscription", "van_hanh")).toMatch(/endpoint += each\.value\n/u);
+    expect(TF).toMatch(/variable "email_canh_bao" \{\n[^}]*type += list\(string\)\n/u);
     expect(khoi("aws_sns_topic_subscription", "van_hanh")).toMatch(/for_each += toset\(var\.email_van_hanh\)/u);
   });
 

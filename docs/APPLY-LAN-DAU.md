@@ -28,7 +28,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       **[2026-10-09] Đã có hai tài khoản** trong nhóm, tài khoản thứ hai nghiệm thu đạt (3.3; STATE khoản 15). Ai giữ
       tài khoản thứ hai không được kiểm — chủ dự án chốt ngày 2026-10-02.
 - [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin. **[2026-10-09] Chưa:** thư ⑴
-      tới đúng một địa chỉ.
+      tới đúng một địa chỉ. **[2026-10-10]** `email_canh_bao` nay là danh sách (mỗi địa chỉ một đăng ký); bản trước là
+      một chuỗi, nên thêm người thứ ba nghĩa là bỏ người cũ. Apply lại stack 60 thì MỌI địa chỉ, kể cả địa chỉ cũ,
+      nhận lại thư xác nhận và phải bấm lại: đăng ký cũ bị xoá vì địa chỉ resource đổi.
 - [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
       khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
@@ -117,7 +119,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **3.1 `60-canh-bao`** (`tp-audit` + `tp-prod`):
   `infra\terraform\60-canh-bao\canh-bao.tfvars` (không commit — `*.tfvars` đã bị bỏ qua):
   ```hcl
-  email_canh_bao = "<email an ninh>"
+  email_canh_bao = ["<email an ninh>", "<người nhận thứ ba>"]   # [2026-10-10] danh sách — mục 9
   email_van_hanh = ["<email van hanh>"]
   ```
   ```powershell
