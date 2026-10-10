@@ -12,7 +12,7 @@
 
 import { chiPhiThanhToan, chiPhiTre, xepHang } from "@trustprocure/danh-gia";
 import type { CamKetDoc, GoiTcoDoc, HangBundle, LuotChamBundle, ThanhPhanLuu, BoBangChung } from "./bo.js";
-import { chiPhiThanhToanLai, chiPhiTreLai, hangGiaLai } from "./doc-lap/quy-doi-lai.js";
+import { bangHangGiaLai, chiPhiThanhToanLai, chiPhiTreLai } from "./doc-lap/quy-doi-lai.js";
 
 export const MA_THANH_TOAN = "chi_phi_thanh_toan";
 export const MA_TRE = "chi_phi_tre";
@@ -189,25 +189,38 @@ function tienGiaDau(h: HangBundle): string | null {
   return g === undefined ? null : g.tien;
 }
 
-/** Hạng giá theo lớp ⑴ — cùng bộ lọc §10 bước 4, phép xếp của lượt chấm. */
-function hangGiaThuan(luot: LuotChamBundle, bidVersionId: string, hamThuan: QuyDoiHamThuan): number | null {
+/** Hạng giá theo lớp ⑴ cho MỌI báo giá có hạng của lượt — cùng bộ lọc §10 bước 4, phép xếp của lượt chấm; một lần mỗi lượt. */
+function bangHangGiaThuan(luot: LuotChamBundle, hamThuan: QuyDoiHamThuan): ReadonlyMap<string, number | null> {
   const coHang = luot.hang.filter((h) => h.rank !== null);
   const gia = coHang.map((h) => {
     const t = tienGiaDau(h);
     return t !== null && KHUON_TIEN.test(t) ? t : null;
   });
   const xep = hamThuan.xepHang(gia);
-  const i = coHang.findIndex((h) => h.bidVersionId === bidVersionId);
-  return i < 0 ? null : (xep[i] ?? null);
+  return new Map(coHang.map((h, i) => [h.bidVersionId, xep[i] ?? null]));
+}
+
+/** Hai bảng hạng giá (lớp ⑵, lớp ⑴) của một lượt — dựng lười, một lần mỗi lượt. */
+interface HangGiaLuot {
+  readonly docLap: ReadonlyMap<string, number | null>;
+  readonly thuan: ReadonlyMap<string, number | null>;
+}
+
+/**
+ * [rà soát §S1.9101 — THẤP-2] Giải trình có mặt phải là thứ `121` (1) nhận: có ít nhất một ký tự không phải khoảng trắng (kể cả khoảng
+ * trắng Unicode và ký tự rộng 0) và tối đa 2000 ký tự — chuỗi rỗng không phải một lời giải trình.
+ */
+const KY_TU_KHONG_TRANG = /[^\s\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]/u;
+function giaiTrinhHopLe(s: string): boolean {
+  return KY_TU_KHONG_TRANG.test(s) && [...s].length <= 2000;
 }
 
 function kiemMotCamKet(
   bo: BoBangChung,
   awardId: string,
-  luot: LuotChamBundle,
   h: HangBundle,
   k: CamKetDoc,
-  hamThuan: QuyDoiHamThuan,
+  hangGia: HangGiaLuot,
 ): readonly string[] {
   const noi: string[] = [];
   const ten = `cam kết của trao thầu ${awardId}`;
@@ -238,12 +251,9 @@ function kiemMotCamKet(
       noi.push(`${ten}: khai.importCost ${String(k.khai.importCost)} khác giaTri của "nhap_khau" (§10 bước 3)`);
     }
   }
-  // §10 bước 4 — hạng giá, hai lớp.
-  const docLap = hangGiaLai(
-    luot.hang.map((x) => ({ bidVersionId: x.bidVersionId, rank: x.rank, tienGia: tienGiaDau(x) })),
-    h.bidVersionId,
-  );
-  const thuan = hangGiaThuan(luot, h.bidVersionId, hamThuan);
+  // §10 bước 4 — hạng giá, hai lớp, đọc từ bảng đã dựng một lần cho lượt.
+  const docLap = hangGia.docLap.get(h.bidVersionId) ?? null;
+  const thuan = hangGia.thuan.get(h.bidVersionId) ?? null;
   const viet = (x: number | null): string => (x === null ? "null" : String(x));
   noi.push(
     ...haiLop(`hangGia của ${ten}`, viet(k.hangGia), viet(docLap), viet(thuan)).map((d) => `${d} (§10 bước 4)`),
@@ -256,6 +266,9 @@ function kiemMotCamKet(
   if (!lech && k.giaiTrinhLechHang !== null) {
     noi.push(`${ten}: hạng giá bằng hạng chi phí (${String(k.hangTco)}) mà có giải trình (§10 bước 5)`);
   }
+  if (k.giaiTrinhLechHang !== null && !giaiTrinhHopLe(k.giaiTrinhLechHang)) {
+    noi.push(`${ten}: giải trình rỗng (chỉ khoảng trắng) hay dài quá 2000 ký tự — không phải thứ hệ thống nhận (§10 bước 5)`);
+  }
   return noi;
 }
 
@@ -265,9 +278,37 @@ export function kiemCamKet(bo: BoBangChung, hamThuan: QuyDoiHamThuan = QUY_DOI_T
   let soCamKet = 0;
   let soDat = 0;
   let soDeXuatKhongCamKet = 0;
+  // [rà soát §S1.9101 — TRUNG-2] Chỉ mục một lần: lượt theo id, hàng theo (lượt, báo giá), bảng hạng giá dựng lười mỗi lượt.
+  const luotTheoId = new Map(bo.luotCham.map((l) => [l.evaluationId, l]));
+  const hangTheoLuot = new Map(bo.luotCham.map((l) => [l.evaluationId, new Map(l.hang.map((h) => [h.bidVersionId, h]))]));
+  const hangGiaTheoLuot = new Map<string, HangGiaLuot>();
+  const hangGiaCua = (luot: LuotChamBundle): HangGiaLuot => {
+    const co = hangGiaTheoLuot.get(luot.evaluationId);
+    if (co !== undefined) return co;
+    const moi: HangGiaLuot = {
+      docLap: bangHangGiaLai(luot.hang.map((x) => ({ bidVersionId: x.bidVersionId, rank: x.rank, tienGia: tienGiaDau(x) }))),
+      thuan: bangHangGiaThuan(luot, hamThuan),
+    };
+    hangGiaTheoLuot.set(luot.evaluationId, moi);
+    return moi;
+  };
+  // [rà soát §S1.9101 — TRUNG-1] Cam kết chụp SỚM NHẤT của bundle — từ mốc ấy hệ thống đã chụp cam kết cho MỌI đề xuất (§10 bước 6).
+  let chupSomNhat: string | null = null;
+  for (const t of bo.traoThau) {
+    const c = t.camKet?.chupLuc.giaTri;
+    if (c !== undefined && (chupSomNhat === null || c < chupSomNhat)) chupSomNhat = c;
+  }
   for (const t of bo.traoThau) {
     if (t.camKet === null) {
-      if (t.status === "PROPOSED") soDeXuatKhongCamKet += 1;
+      if (t.status === "PROPOSED") {
+        soDeXuatKhongCamKet += 1;
+        if (chupSomNhat !== null && t.actedAt.giaTri >= chupSomNhat) {
+          loi.push(
+            `đề xuất ${t.awardId} lúc ${t.actedAt.giaTri} KHÔNG mang cam kết, mà bundle có cam kết chụp từ ${chupSomNhat} — ` +
+              "từ mốc ấy mọi đề xuất đều được chụp (§10 bước 6)",
+          );
+        }
+      }
       continue;
     }
     soCamKet += 1;
@@ -275,13 +316,19 @@ export function kiemCamKet(bo: BoBangChung, hamThuan: QuyDoiHamThuan = QUY_DOI_T
       loi.push(`trao thầu ${t.awardId} ở trạng thái ${t.status} mà mang cam kết — chỉ đề xuất mang cam kết (§10)`);
       continue;
     }
-    const luot = bo.luotCham.find((l) => l.evaluationId === t.evaluationId);
-    const h = luot?.hang.find((x) => x.bidVersionId === t.bidVersionId);
+    if (t.camKet.chupLuc.giaTri !== t.actedAt.giaTri) {
+      loi.push(
+        `cam kết của trao thầu ${t.awardId} chụp lúc ${t.camKet.chupLuc.giaTri}, khác lúc đề xuất ${t.actedAt.giaTri} — ` +
+          "cam kết chỉ chụp trong chính giao dịch đề xuất (§10 bước 6)",
+      );
+    }
+    const luot = luotTheoId.get(t.evaluationId);
+    const h = hangTheoLuot.get(t.evaluationId)?.get(t.bidVersionId);
     if (luot === undefined || h === undefined) {
       loi.push(`cam kết của trao thầu ${t.awardId} trỏ một hàng KHÔNG có trong bundle (§10)`);
       continue;
     }
-    const noi = kiemMotCamKet(bo, t.awardId, luot, h, t.camKet, hamThuan);
+    const noi = kiemMotCamKet(bo, t.awardId, h, t.camKet, hangGiaCua(luot));
     if (noi.length === 0) soDat += 1;
     loi.push(...noi);
   }

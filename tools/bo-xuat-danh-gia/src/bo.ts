@@ -323,7 +323,12 @@ function chuoiTheoKhoa(gt: unknown, duong: string): Readonly<Record<string, stri
   const khoa = Object.keys(o);
   if (khoa.length > 16) throw new BoHongError(duong, "tối đa 16 khoá");
   const ra: Record<string, string> = {};
-  for (const k of khoa) ra[k] = chuoi(o, k, duong);
+  for (const k of khoa) {
+    // [rà soát §S1.9101 — THẤP-3] Gán chuỗi vào `__proto__` của một object thường là no-op: khoá ấy sẽ biến mất khỏi phép đếm khoá
+    // của §9.3 bước 1 thay vì làm nó đỏ. Từ chối có tên.
+    if (k === "__proto__") throw new BoHongError(`${duong}.${k}`, "khoá không được phép");
+    ra[k] = chuoi(o, k, duong);
+  }
   return ra;
 }
 

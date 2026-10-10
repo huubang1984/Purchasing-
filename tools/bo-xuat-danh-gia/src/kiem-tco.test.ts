@@ -1,7 +1,7 @@
 // [S1.9101 / S4.7c2] Phép quy đổi TCO (`DAC-TA.md` §9) và cam kết của đề xuất (§10) trong bộ kiểm — hai lớp, mỗi chỗ lệch gọi tên.
 import { describe, expect, it } from "vitest";
 import { DAC_TA, chiPhiThanhToan, chiPhiTre } from "@trustprocure/danh-gia";
-import type { BoBangChung, CamKetDoc, HangBundle, ThanhPhanLuu, TraoThauBundle } from "./bo.js";
+import { BoHongError, docBo, type BoBangChung, type CamKetDoc, type HangBundle, type ThanhPhanLuu, type TraoThauBundle } from "./bo.js";
 import { chiPhiThanhToanLai, chiPhiTreLai, chiaNgan, hangGiaLai } from "./doc-lap/quy-doi-lai.js";
 import { docThapPhan, tinhLai, vietThapPhan, xepHangLai, khongTinhDuoc, type ThanhPhanChinhSachDoc } from "./doc-lap/tinh-lai.js";
 import { kiemBo } from "./kiem.js";
@@ -72,14 +72,14 @@ function camKetDung(h: HangBundle, hang: readonly HangBundle[], giaiTrinh: strin
   };
 }
 
-function deXuat(bid: string, camKet: CamKetDoc | null, status = "PROPOSED"): TraoThauBundle {
+function deXuat(bid: string, camKet: CamKetDoc | null, status = "PROPOSED", actedAt = "2026-10-10T01:00:00.000Z"): TraoThauBundle {
   return {
-    awardId: `aw-${bid}`,
+    awardId: `aw-${bid}-${actedAt}`,
     evaluationId: "ev-1",
     bidVersionId: bid,
     status,
     reason: "de xuat",
-    actedAt: { giaTri: "2026-10-10T01:00:00.000Z", nguon: NGUON },
+    actedAt: { giaTri: actedAt, nguon: NGUON },
     camKet,
   };
 }
@@ -263,7 +263,11 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
   it("[INV-L8] cam kết khớp hàng, lệch hạng có giải trình ⇒ ĐẠT; đề xuất cũ không cam kết được ĐẾM, không đỏ", () => {
     const { hang, bid } = lech();
     const h = hang.find((x) => x.bidVersionId === bid) as HangBundle;
-    const kq = kiemBo(bo(hang, [deXuat(bid, camKetDung(h, hang, "chon theo chi phi")), deXuat("bA", null)]), DAC_TA);
+    // Đề xuất cũ (trước khi hệ thống chụp cam kết) — `actedAt` SỚM hơn cam kết sớm nhất của bundle (§10 bước 6).
+    const kq = kiemBo(
+      bo(hang, [deXuat("bA", null, "PROPOSED", "2026-10-01T00:00:00.000Z"), deXuat(bid, camKetDung(h, hang, "chon theo chi phi"))]),
+      DAC_TA,
+    );
     expect(kq.camKet.loi).toEqual([]);
     expect(kq.camKet).toMatchObject({ soCamKet: 1, soDat: 1, soDeXuatKhongCamKet: 1 });
     expect(kq.dat).toBe(true);
@@ -307,5 +311,47 @@ describe("[S1.9101 / S4.7c2] cam kết của đề xuất — §10", () => {
     const h = hang[0] as HangBundle;
     const kq = kiemBo(bo(hang, [deXuat(h.bidVersionId, camKetDung(h, hang, null), "APPROVED")]), DAC_TA);
     expect(kq.camKet.loi.join("\n")).toMatch(/ở trạng thái APPROVED mà mang cam kết/u);
+  });
+
+  it("[INV-L8] [rà soát §S1.9101 — TRUNG-1] cam kết bị XOÁ khỏi một đề xuất SAU mốc chụp sớm nhất ⇒ ĐỎ; cam kết chụp lúc khác lúc đề xuất ⇒ ĐỎ (§10 bước 6)", () => {
+    const { hang, bid } = lech();
+    const h = hang.find((x) => x.bidVersionId === bid) as HangBundle;
+    const xoa = kiemBo(
+      bo(hang, [deXuat(bid, camKetDung(h, hang, "chon theo chi phi")), deXuat("bA", null, "PROPOSED", "2026-10-10T02:00:00.000Z")]),
+      DAC_TA,
+    );
+    expect(xoa.dat).toBe(false);
+    expect(xoa.camKet.loi.join("\n")).toMatch(/KHÔNG mang cam kết, mà bundle có cam kết chụp từ 2026-10-10T01:00:00\.000Z/u);
+    const lechLuc = kiemBo(
+      bo(hang, [deXuat(bid, { ...camKetDung(h, hang, "chon theo chi phi"), chupLuc: { giaTri: "2026-10-10T03:00:00.000Z", nguon: NGUON } })]),
+      DAC_TA,
+    );
+    expect(lechLuc.camKet.loi.join("\n")).toMatch(/chụp lúc 2026-10-10T03:00:00\.000Z, khác lúc đề xuất/u);
+  });
+
+  it("[INV-L8] [rà soát §S1.9101 — THẤP-2] giải trình chỉ khoảng trắng (kể cả ký tự rộng 0) hay dài quá 2000 ký tự ⇒ ĐỎ (§10 bước 5)", () => {
+    const { hang, bid } = lech();
+    const h = hang.find((x) => x.bidVersionId === bid) as HangBundle;
+    for (const g of [" \u200b\u00a0", "x".repeat(2001)]) {
+      const kq = kiemBo(bo(hang, [deXuat(bid, camKetDung(h, hang, g))]), DAC_TA);
+      expect(kq.camKet.loi.join("\n")).toMatch(/giải trình rỗng \(chỉ khoảng trắng\) hay dài quá 2000 ký tự/u);
+    }
+  });
+
+  it("[rà soát §S1.9101 — TRUNG-2] bundle 3 000 hàng, 3 000 đề xuất mang cam kết: hạng giá dựng MỘT lần mỗi lượt — kiểm xong dưới 5 giây", () => {
+    const mot = hangMau()[0] as HangBundle;
+    const nhieu: HangBundle[] = Array.from({ length: 3000 }, (_, i) => ({ ...mot, bidVersionId: `b${String(i)}`, rank: 1 }));
+    const dx = nhieu.map((x) => deXuat(x.bidVersionId, { ...camKetDung(x, [x], null), hangTco: 1, hangGia: 1 }));
+    const bat = Date.now();
+    const kq = kiemBo(bo(nhieu, dx), DAC_TA);
+    expect(Date.now() - bat).toBeLessThan(5000);
+    expect(kq.camKet.soCamKet).toBe(3000);
+  });
+
+  it("[rà soát §S1.9101 — THẤP-3] bộ đọc từ chối khoá `__proto__` trong `nguon` — gán chuỗi vào nó là no-op và sẽ lách phép đếm khoá", () => {
+    const json = JSON.stringify(bo(hangMau())).replace('"nguon":{', '"nguon":{"__proto__":"x",');
+    expect(() => docBo(JSON.parse(json))).toThrow(BoHongError);
+    expect(() => docBo(JSON.parse(json))).toThrow(/nguon\.__proto__`: khoá không được phép/u);
+    expect(docBo(JSON.parse(JSON.stringify(bo(hangMau())))).goiTco.soNgayGiao, "đối chứng: bundle lành đọc được").toBe(14);
   });
 });

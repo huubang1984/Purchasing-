@@ -93,9 +93,16 @@ export interface HangChoHangGia {
  * đầu tiên, xếp như §5. `null` khi báo giá ấy không có hạng hay không có `tien` ấy.
  */
 export function hangGiaLai(hang: readonly HangChoHangGia[], bidVersionId: string): number | null {
+  return bangHangGiaLai(hang).get(bidVersionId) ?? null;
+}
+
+/**
+ * Hạng giá của MỌI báo giá có hạng của một lượt chấm, một lần — [rà soát §S1.9101 — TRUNG-2] tính lại cả phép xếp cho TỪNG cam kết
+ * là O(cam kết × hàng × log hàng), và một bundle độc nhiều đề xuất làm bộ kiểm treo.
+ */
+export function bangHangGiaLai(hang: readonly HangChoHangGia[]): ReadonlyMap<string, number | null> {
   const coHang = hang.filter((h) => h.rank !== null);
   const gia = coHang.map((h) => (h.tienGia !== null && KHUON_TIEN.test(h.tienGia) ? h.tienGia : null));
   const xep = xepHangLai(gia);
-  const i = coHang.findIndex((h) => h.bidVersionId === bidVersionId);
-  return i < 0 ? null : (xep[i] ?? null);
+  return new Map(coHang.map((h, i) => [h.bidVersionId, xep[i] ?? null]));
 }

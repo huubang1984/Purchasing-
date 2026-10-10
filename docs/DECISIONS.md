@@ -13092,6 +13092,17 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 ⑸ **Lời giải trình nguyên văn trong bộ.** Bộ đã sau hai cổng `audit.read` + `bid.view` và đã mang giá; giải trình là lý do của quyết
 định, người kiểm toán cần đọc nó. Sổ vẫn chỉ ghi cờ (ADR-160 ⑸).
 
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 6) — không CAO; hai TRUNG, bốn THẤP:
+- **TRUNG-1** — xoá cả `camKet` khỏi một đề xuất thì bộ kiểm chỉ đếm *"đề xuất không cam kết"* và vẫn ĐẠT. Sửa: §10 bước 6 — `chupLuc`
+  bằng `actedAt` của chính hàng (trigger `121` chụp trong giao dịch đề xuất), và một đề xuất không cam kết mà `actedAt` ≥ cam kết chụp
+  sớm nhất của bộ là bộ sai. Dư lượng nói ra: bộ không còn cam kết nào thì không phân biệt được với đề xuất cũ.
+- **TRUNG-2** — hạng giá dựng lại cho TỪNG cam kết: O(cam kết × hàng × log hàng), bộ độc làm treo. Sửa: bảng hạng giá một lần mỗi lượt
+  ở cả hai lớp, chỉ mục lượt và hàng bằng `Map`; ca đo 3 000 hàng × 3 000 cam kết dưới 5 giây.
+- **THẤP-1** — §10 bước 3, 4 lỏng hơn mã: nay chép nguyên khuôn tiền của `award_hang_gia`, nói *"hàng không khớp không vào phép xếp"*
+  và *"so cách viết thập phân"*. **THẤP-2** — giải trình rỗng hay chỉ khoảng trắng được tính là có: nay áp đúng `CHECK` của `121` (1).
+  **THẤP-3** — khoá `__proto__` của `nguon` bị nuốt im lặng: bộ đọc từ chối có tên. **THẤP-4** — `camKet.khai` mang ô khai của mã không
+  có trong hàng: GIỮ — cam kết là bản chụp nguyên văn của lần đề xuất (ADR-160 ⑷), §10 bước 3 nói rõ các ô ấy chép lại, không kiểm.
+
 ### Giới hạn nói ra
 
 - **Lời khai gốc không nằm trong bộ.** `ngayKhai`, `coSo` và các ô khai thẳng đến từ phong bì đã mở; bộ chứng phép tính TỪ lời khai và

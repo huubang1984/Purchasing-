@@ -336,14 +336,24 @@ cho báo giá \`bidVersionId\` của chính hàng trao thầu ấy. Cam kết Đ
 1. \`hangTco\` bằng \`h.rank\`; \`effectiveCost\` bằng \`h.effectiveCost\`; \`components\` bằng
    \`h.components\` — từng phần tử, từng khoá, kể cả \`nguon\`;
 2. \`tapMa\`, \`thamSo\`, \`soNgayGiao\` bằng \`goiTco\`;
-3. \`khai\` khớp hàng: khi hàng có mã \`chi_phi_thanh_toan\`, \`khai.paymentDays\` bằng \`nguon.ngayKhai\`
-   của mã ấy; \`chi_phi_tre\` ↔ \`khai.leadTimeDays\`; \`van_chuyen\` ↔ \`khai.freight\` (bằng \`giaTri\`);
-   \`nhap_khau\` ↔ \`khai.importCost\`;
+3. \`khai\` khớp hàng: khi hàng có mã \`chi_phi_thanh_toan\`, cách viết thập phân của \`khai.paymentDays\`
+   bằng \`nguon.ngayKhai\` của mã ấy; \`chi_phi_tre\` ↔ \`khai.leadTimeDays\` cùng cách; \`van_chuyen\` ↔
+   \`khai.freight\` (bằng ĐÚNG chuỗi \`giaTri\`); \`nhap_khau\` ↔ \`khai.importCost\`. Ô khai của mã KHÔNG có
+   trong hàng là bốn ô hệ thống chụp nguyên văn lúc đề xuất — chép lại, không kiểm;
 4. \`hangGia\` bằng hạng giá tính lại: trên các hàng CÓ hạng của cùng lượt chấm, lấy \`tien\` của phần
-   tử ĐẦU TIÊN có \`ma = "gia"\` (bỏ phần tử không đúng dạng tiền ở §2), xếp như §5; hạng giá của báo
-   giá được đề xuất là hạng của nó trong phép xếp ấy, \`null\` khi nó không có \`tien\` ấy;
+   tử ĐẦU TIÊN có \`ma = "gia"\`; hàng mà \`tien\` ấy vắng hay không khớp đúng khuôn
+   \`^[0-9]{1,16}\\.[0-9]{2}$\` (không dấu, tối đa 16 chữ số nguyên, đúng hai chữ số lẻ) **không vào**
+   phép xếp; các hàng còn lại xếp như §5. Hạng giá của báo giá được đề xuất là hạng của nó trong phép
+   xếp ấy, \`null\` khi nó không vào phép xếp;
 5. \`giaiTrinhLechHang\` khác \`null\` **khi và chỉ khi** \`hangGia ≠ hangTco\` (một bên \`null\` mà bên kia
-   không cũng là khác).
+   không cũng là khác). Khi khác \`null\`, nó có ít nhất một ký tự không phải khoảng trắng — khoảng trắng
+   gồm cả khoảng trắng Unicode (U+00A0, U+1680, U+2000–U+200B, U+2028, U+2029, U+202F, U+205F, U+3000,
+   U+FEFF) — và tối đa 2000 ký tự (điểm mã);
+6. \`chupLuc\` bằng ĐÚNG chuỗi \`actedAt\` của chính hàng trao thầu — cam kết chỉ chụp trong giao dịch đề
+   xuất. Gọi \`t₀\` là \`chupLuc\` sớm nhất trong bundle: một hàng \`PROPOSED\` không mang cam kết mà
+   \`actedAt ≥ t₀\` (so chuỗi ISO cùng dạng) là bundle sai — từ \`t₀\` hệ thống chụp cam kết cho MỌI đề
+   xuất. Khi bundle không còn cam kết nào, đề xuất không cam kết không phân biệt được với đề xuất có
+   trước khi hệ thống chụp — bước này không nói gì về nó.
 
 Một hàng trao thầu không phải \`PROPOSED\` mà mang cam kết là bundle sai. Phần này không nói lời giải
 trình có thuyết phục không — đó là việc của người đọc, cùng tinh thần §7.
