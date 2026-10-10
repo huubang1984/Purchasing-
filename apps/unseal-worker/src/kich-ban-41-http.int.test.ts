@@ -411,6 +411,32 @@ async function soHangBenchmark(): Promise<number> {
   return Number(rows[0]?.n ?? "0");
 }
 
+/**
+ * [S1.291 / S3.8a / K11] Hiệu suất của NĂM nhà cung cấp của gói chính, đọc qua HTTP bằng một người giữ `bid.view` (giám đốc) — khoá theo
+ * `supplierId`; nhà cung cấp phụ và gói hy sinh không vào. Mỗi lần đọc: 200, không một chữ số giá nào ở thân.
+ */
+async function hieuSuatNamNcc(): Promise<
+  Map<string, { soGoiMoi: number; soGoiNop: number; soLanSua: number; soGoiXepHang: number; soLanVaoBafo: number; soLanThang: number }>
+> {
+  const r = await goi("GET", "/supplier-performance", trangThai.gd1.cookie);
+  expect(r.status, r.text).toBe(200);
+  expect(quetRoRi(r.text), "route hiệu suất mang giá dạng rõ").toEqual([]);
+  const cua = new Set(trangThai.loiMoi.map((l) => l.supplierId));
+  const ds = (r.body as {
+    hieuSuat: { nhaCungCap: { supplierId: string; soGoiMoi: number; soGoiNop: number; soLanSua: number; soGoiXepHang: number; soLanVaoBafo: number; soLanThang: number }[] };
+  }).hieuSuat.nhaCungCap;
+  return new Map(ds.filter((n) => cua.has(n.supplierId)).map((n) => [n.supplierId, n]));
+}
+
+/** [S1.291 / S3.8a / K11] Năm hàng hiệu suất theo thứ tự lời mời: `[mời, nộp, sửa, xếp hạng, vào BAFO, thắng]`; thiếu hàng ⇒ `null`. */
+async function hieuSuatTheoLoiMoi(): Promise<(number[] | null)[]> {
+  const hs = await hieuSuatNamNcc();
+  return trangThai.loiMoi.map((l) => {
+    const h = hs.get(l.supplierId);
+    return h === undefined ? null : [h.soGoiMoi, h.soGoiNop, h.soLanSua, h.soGoiXepHang, h.soLanVaoBafo, h.soLanThang];
+  });
+}
+
 const trangThai: {
   rfqId: string;
   /** [S1.201 / S3.6a] Luồng S3: nhóm hàng người tài chính dựng ở bước 1 — gói chính và hai gói hy sinh mang nó. */
@@ -806,6 +832,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const ds = await goi("GET", "/guest/bids", lm.cookie);
     expect((ds.body as { bids: { versions: { version: number }[] }[] }).bids[0]?.versions.map((v) => v.version)).toEqual([1, 2]);
     lm.gia = GIA_SUA_LAI;
+  });
+
+  it("[INV-K11] HIỆU SUẤT ở OPEN — năm nhà cung cấp đã nộp, một người sửa giá, mà route hiệu suất chưa có hàng nào của họ", async () => {
+    // [S1.291 / S3.8a] Spec S3 §6 T2: bộ quét phải KHÔNG thấy trước, và THẤY ngay sau lúc gói được phép đọc (khối đối chứng dương dưới).
+    expect(await hieuSuatTheoLoiMoi()).toEqual([null, null, null, null, null]);
   });
 
   it("[INV-A1] [INV-A2] BỘ QUÉT RÒ RỈ: mọi route, bốn đối tượng, TRƯỚC mở thầu — không một chữ số giá nào ở thân, header, hay log", async () => {
@@ -1351,6 +1382,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(rows[0]?.n).toBe("0");
   });
 
+  it("[INV-K11] HIỆU SUẤT ở CLOSED chưa mở niêm phong — vẫn không hàng nào: so trước và sau lúc đóng không được lộ ai đã nộp (góc C⑦)", async () => {
+    // [S1.291 / S3.8a] Chủ dự án chốt 2026-10-10: ~~`≥ CLOSED`~~ của spec §4.9 — chỉ số phản hồi cũng chỉ đọc gói ĐÃ LỘ GIÁ.
+    expect(await hieuSuatTheoLoiMoi()).toEqual([null, null, null, null, null]);
+  });
+
   it("bước 9 — [INV-D2] mở thầu cần HAI phê duyệt của HAI người qua HTTP, và người yêu cầu không tự duyệt", async () => {
     const yc = await goi("POST", `/rfqs/${trangThai.rfqId}/unseal`, trangThai.mua.cookie, { reason: "da het han nop, mo thau de cham" });
     expect(yc.status, yc.text).toBe(201);
@@ -1411,6 +1447,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(bang.aggregates.belowBudget).toBe(2);
     // Sau UNSEALED, giá đi ra là ĐÚNG — bộ quét phải thấy nó, nếu không bộ quét mù.
     expect(quetRoRi(r.text).length).toBeGreaterThan(0);
+  });
+
+  it("[INV-K11] ĐỐI CHỨNG DƯƠNG — HIỆU SUẤT NGAY khi gói UNSEALED: năm hàng, mỗi người một lần mời, một lần nộp; người sửa giá ở bước 6 có một lần sửa; chưa chấm nên chưa xếp hạng", async () => {
+    expect(await hieuSuatTheoLoiMoi()).toEqual(trangThai.loiMoi.map((_, i) => [1, 1, (i === 3 ? 1 : 0), 0, 0, 0]));
   });
 
   it("[INV-L6] LỊCH SỬ GIÁ qua HTTP NGAY khi gói UNSEALED — người giữ bid.view THẤY năm quan sát (vị thế cuối, đơn giá = tổng / 100), mỗi lần đọc một hàng sổ; người không giữ bid.view và phiên khách thì không", async () => {
@@ -1574,6 +1614,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const lai = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, m, {});
     expect(lai.status, lai.text).toBe(422);
     expect(lai.text).toContain("UNSEALED");
+  });
+
+  it("[INV-K11] HIỆU SUẤT sau lượt chấm — mỗi người một gói xếp hạng", async () => {
+    expect(await hieuSuatTheoLoiMoi()).toEqual(trangThai.loiMoi.map((_, i) => [1, 1, (i === 3 ? 1 : 0), 1, 0, 0]));
   });
 
   it("[INV-A2] [INV-A5] [INV-A4] BỘ QUÉT RÒ RỈ LẦN HAI — SAU mở thầu, khi bản rõ ĐÃ nằm trong CSDL: năm phiên khách và một người mua KHÔNG có bid.view đọc mọi route đọc — không giá nào lọt", async () => {
@@ -1749,6 +1793,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       [trangThai.rfqId],
     );
     expect(soBafo).toEqual([{ payload: { ma: "BAFO_NGOAI_TOP_N" } }]);
+  });
+
+  it("[INV-K11] HIỆU SUẤT ở BAFO_OPEN — vòng một vẫn đếm (đối chứng dương lúc BAFO mở, spec §5.1 K11); hạng rời gói, chưa ai vào BAFO", async () => {
+    // Vế *phiên bản BAFO chưa vào* KHÔNG đo được ở đây: mỗi người top-2 nộp đúng MỘT phiên bản vòng hai, nên số lần sửa của vòng ấy là 0
+    // dù có cổng hay không — vế ấy đo ở `apps/api/src/hieu-suat.int.test.ts` khối B (bốn phiên bản BAFO) và đột biến V15 (§S1.291).
+    expect(await hieuSuatTheoLoiMoi()).toEqual(trangThai.loiMoi.map((_, i) => [1, 1, (i === 3 ? 1 : 0), 0, 0, 0]));
   });
 
   it("[INV-A2] [INV-J4] BỘ QUÉT RÒ RỈ LẦN BA — giá BAFO đã NẰM TRONG CSDL mà chưa qua cổng bốn vế: không route nào trả nó, KỂ CẢ cho người mua đủ quyền", async () => {
@@ -1968,6 +2018,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(so).toHaveLength(2);
     expect(so[0]?.payload.bafoRoundId).toBeNull();
     expect(so[1]?.payload.bafoRoundId).toBe(trangThai.bafoRoundId);
+  });
+
+  it("[INV-K11] ĐỐI CHỨNG DƯƠNG — HIỆU SUẤT NGAY khi vòng BAFO mở niêm phong: hạng về gói, top-2 vào BAFO một lần, ba người còn lại không", async () => {
+    const vao = (ten: string): number => (trangThai.topN.includes(ten) ? 1 : 0);
+    expect(trangThai.topN, "tiền đề: top-2 của bước 12c").toHaveLength(2);
+    expect(await hieuSuatTheoLoiMoi()).toEqual(trangThai.loiMoi.map((l, i) => [1, 1, (i === 3 ? 1 : 0), 1, vao(l.ten), 0]));
   });
 
   it("[INV-J4] ĐỐI CHỨNG DƯƠNG — SAU cổng bốn vế, cùng bộ quét ấy THẤY giá BAFO", async () => {
@@ -2231,6 +2287,19 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // Lần duyệt NỮA trên cùng đề xuất bị từ chối: hàng mới nhất nay là `APPROVED`.
     const lai = await goi("POST", duong, batS3 ? trangThai.gd1.cookie : trangThai.gd2.cookie);
     expect(lai.status, lai.text).toBe(422);
+  });
+
+  it("[INV-K11] HIỆU SUẤT sau phê duyệt trao thầu — đúng người được trao có một lần thắng (hàng trao thầu MỚI NHẤT là APPROVED)", async () => {
+    const { rows } = await db.pool.query<{ ncc: string }>(
+      "SELECT i.supplier_id AS ncc FROM rfq_awards a JOIN vendor_bid_versions v ON v.org_id = a.org_id AND v.id = a.bid_version_id " +
+        "JOIN vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id JOIN rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id " +
+        "WHERE a.org_id = $1 AND a.rfq_id = $2 AND a.status = 'APPROVED'",
+      [orgA, trangThai.rfqId],
+    );
+    expect(rows, "tiền đề: một hàng APPROVED").toHaveLength(1);
+    const thang = rows[0]!.ncc;
+    const hs = await hieuSuatTheoLoiMoi();
+    expect(hs.map((h) => h?.[5])).toEqual(trangThai.loiMoi.map((l) => (l.supplierId === thang ? 1 : 0)));
   });
 
   // [mảnh 1 / màn xuất bằng chứng] Bước cuối của kịch bản `docs/PRODUCT.md` §11 — *"xuất được
@@ -3411,5 +3480,49 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
       ["Lời khai cam kết", "phí vận chuyển 500000.00 · số ngày thanh toán 60 · số ngày giao 30 (yêu cầu 30)"],
       ["Giải trình lệch hạng", giaiTrinh],
     ]);
+  });
+
+  // [S1.294 / S4.7c2] Bộ bằng chứng v3 của gói TCO qua HTTP: cam kết đi vào bộ (kể cả lời giải trình nguyên văn), và bộ kiểm độc
+  // lập — chạy với `DATABASE_URL` đã xoá — tính lại phép quy đổi của MỌI hàng cùng cam kết. Đi trọn chuỗi màn → route → CSDL → bộ.
+  it("[INV-L8] [INV-J2] bộ bằng chứng v3 qua HTTP: cam kết + giải trình trong bộ; bộ kiểm độc lập tính lại phép quy đổi và cam kết", async () => {
+    const ok = await goi("GET", `/rfqs/${st.rfqId}/evidence-bundle`, st.gd1.cookie);
+    expect(ok.status, ok.text).toBe(200);
+    const tep = (ok.body as { evidenceBundle: { tep: Record<string, string> } }).evidenceBundle.tep;
+    const bo = JSON.parse(tep["bo-bang-chung.json"] ?? "") as {
+      phienBan: number;
+      goiTco: { soNgayGiao: number | null };
+      traoThau: { status: string; camKet: { hangTco: number; hangGia: number | null; giaiTrinhLechHang: string | null } | null }[];
+    };
+    expect(bo.phienBan).toBe(3);
+    expect(bo.goiTco.soNgayGiao).toBe(SO_NGAY_GIAO);
+    expect(bo.traoThau.map((t) => [t.status, t.camKet?.hangTco, t.camKet?.hangGia, t.camKet?.giaiTrinhLechHang])).toEqual([
+      ["PROPOSED", 1, 2, "dat hon B 2 trieu theo gia nhung giao dung han va thanh toan dung ky"],
+    ]);
+    const goc = fileURLToPath(new URL("../../../", import.meta.url));
+    const thuMuc = await mkdtemp(join(tmpdir(), "tp-bang-chung-tco-"));
+    try {
+      for (const [ten, noiDung] of Object.entries(tep)) await writeFile(join(thuMuc, ten), Buffer.from(noiDung, "utf8"));
+      const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "test" };
+      delete env["DATABASE_URL"];
+      const kq = spawnSync(
+        execPath,
+        [
+          "--experimental-transform-types",
+          "--import",
+          pathToFileURL(join(goc, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href,
+          join(goc, "tools", "bo-xuat-danh-gia", "src", "index.ts"),
+          "kiem",
+          "--bo",
+          thuMuc,
+        ],
+        { env, encoding: "utf8", cwd: goc },
+      );
+      expect(kq.status, `${kq.stdout}\n${kq.stderr}`).toBe(0);
+      expect(kq.stdout).toContain("ok=true");
+      // Hai báo giá có số (A, B) × hai mã quy đổi = bốn thành phần tính lại; C thiếu số ngày giao nên không hạng, không thành phần.
+      expect(kq.stdout).toContain("cam-ket\tso=1\tdat=1\tde-xuat-khong-cam-ket=0\tquy-doi=4");
+    } finally {
+      await rm(thuMuc, { recursive: true, force: true });
+    }
   });
 });

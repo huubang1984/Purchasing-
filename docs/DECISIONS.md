@@ -12797,12 +12797,14 @@ giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham
   được. Không lấp ngược.
 - **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.
   Người ấy đề xuất được chính báo giá ấy, và lời từ chối nhập không vào sổ (ADR-060); chấp nhận.
-- **Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).
+- ~~**Bộ bằng chứng chưa mang cam kết** — `PHIEN_BAN_BUNDLE` vẫn 2, `docMoiTraoThau` bỏ giải trình (S4.7c2).~~ **[S1.294]** Đóng ở
+  ADR-165: bộ v3 mang cam kết và lời giải trình nguyên văn.
 - **`/mo-thau` không đo lại trên trình duyệt** — ô và các dòng mới theo khuôn có sẵn (`phuc-vu.test`).
 
 ### Điều ADR này KHÔNG nói
 
-- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2).
+- Bộ bằng chứng phiên bản 3, DAC-TA, bộ kiểm ngoại tuyến tính lại phép quy đổi từ lời khai và tham số (S4.7c2). **[S1.294]** Đã quyết —
+  ADR-165.
 - Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13).
 
 ## ADR-161 — S3.6c: K10c — hai tín hiệu của lượt mời thầu (`INVITE_LIST_NARROWED`, `EARLY_CLOSE`) chặn CHỮ KÝ duyệt trao thầu như K10b; thu hồi lời mời mở ở `OPEN` cho tổ chức đã bật — có lý do, qua ngưỡng cạnh tranh của bậc; một hàng K10c cho cả hai loại
@@ -12945,3 +12947,172 @@ thu hồi commit giữa `docBaoGia` và câu ghi hàng làm câu ghi bị từ c
 ### Điều ADR này KHÔNG nói
 
 Tính lại `effective_cost` từ bản rõ ở CSDL; buộc lượt chấm có đủ mọi luồng còn sống.
+
+## ADR-163 — S3.8a: hiệu suất nhà cung cấp — một view `security_invoker` chỉ đọc gói ĐÃ LỘ GIÁ, kể cả ở các cột phản hồi (K11); vị từ khách trong THÂN view; một đường đọc, cổng `bid.view`, một hàng sổ mỗi lần
+
+**Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"chuẩn bị tiếp S3.8 và S3.9"*, chốt bốn câu của kế hoạch
+chuẩn bị (câu 1: ⒝ chỉ gói đã lộ giá; câu 2: hai PR, trang `/hieu-suat`; câu 3: S3.8a → S3.8b → S3.9b → chờ S3.7a2 và S4.7c2 → S3.9a; câu 4 của
+S3.9), rồi *"Làm S3.8a đi"* · **[S1.291]** · **Migration:** `123_hieu_suat_nha_cung_cap` · **Liên quan:** ADR-054, ADR-081 ⑶, ADR-128,
+ADR-140 (L5, L6), spec S4 §2.5 ⒀ và góc C⑦ của S1.159 · **Spec:** S3 §4.9, §5.1 K11, §6 T2, §8.3 · **Kế hoạch:**
+`docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` · **Biên bản:** `evidence/security-reviews.md` §S1.291
+
+### Bối cảnh
+
+Spec S3 §4.9 (2026-09-26) đặt một view theo nhà cung cấp: cột phản hồi (mời, nộp, thời gian phản hồi, số lần sửa) đọc gói `≥ CLOSED`, cột giá
+(hạng, khoảng cách tới hạng nhất, vào BAFO, thắng) đọc gói `≥ UNSEALED`. Ba ngày sau, S1.159 chốt NGƯỢC ở spec S4 (`:755`, `:969`) và spec S4b
+(㊾): đọc từ `CLOSED` làm lộ *ai đã nộp và nhịp sửa* TRƯỚC mở niêm phong — so một chỉ số trước và sau lúc gói X đóng là biết nhà cung cấp N đã nộp
+X chưa, trong khi bảng so sánh (nơi duy nhất danh tính người nộp đi ra) chỉ mở từ UNSEALED (`comparison.ts:52`) và gói CLOSED còn huỷ được
+(`071`). Spec S3 không được sửa theo; lượt soi đối kháng trên hình dạng chưa cài của S3.8 bắt được (CAO-1, kế hoạch chuẩn bị §0).
+
+Đo trước (kế hoạch §1): trạng thái gói KHÔNG đơn điệu — ba cạnh lùi, `CANCELLED` tới được từ CLOSED/UNSEALED/BAFO_* và giữ `closed_at`
+(`071:62-89`); `AWARDED` là *đã đề xuất* (`trao-thau.ts:487-494`); không có `unsealed_at` trên gói; `gia_da_lo` (`096`, L5, ghim ở hardening) là
+vị từ *giá đã lộ* duy nhất; phiên KHÁCH đọc hàng của CHÍNH nó ở năm bảng (`027`, `060`) nên một view bắt đầu từ một trong các bảng ấy KHÔNG tự ra 0 hàng
+cho nó; lược đồ chưa có view nào và hardening (C) `CAU_DOC_VONG` chỉ đọc `reloptions`, không ghim thân view.
+
+### Quyết định
+
+⑴ **Một view, hai cổng, cả hai là CHÍNH `gia_da_lo`.** `supplier_performance` `WITH (security_invoker = true)`, mỗi hàng một (tổ chức, nhà cung
+cấp) có ít nhất một số đếm khác 0. Cột vòng một (mời, nộp, thời gian phản hồi, sửa ở vòng một) gác bằng `gia_da_lo(gói, LEAST(now(),
+cancelled_at, lần mở BAFO đầu))`: mốc lùi về lần mở BAFO đầu nên vòng một — đã lộ trước khi vòng mở — vẫn đếm khi gói đang BAFO (đối chứng
+dương *"cả lúc BAFO_OPEN"* của K11 §5.1); mốc lùi về lúc huỷ nên gói huỷ SAU mở niêm phong vẫn đếm, gói huỷ TRƯỚC thì không bao giờ. Phiên bản
+của vòng BAFO và mọi cột từ giá gác bằng `gia_da_lo(gói, now())`. Không một vị từ thứ hai nào để lệch với L5.
+
+⑵ **Định nghĩa.** Lời mời ĐƯỢC ĐẾM là `revoked_at IS NULL AND status <> 'UNSENT'` (từ vựng ADR-128; chỉ mục bộ phận `024` giữ tối đa một lời
+mời sống mỗi (gói, nhà cung cấp), nên các cột VÒNG MỘT ghép báo giá theo đúng lời mời ấy — luồng của lời mời đã thu hồi không vào;
+**[lượt soi trên mã §S1.291 THẤP-4]** phiên bản BAFO, hạng, vào BAFO, thắng ghép báo giá → lời mời KHÔNG lọc: chúng đọc báo giá đã mở
+niêm phong, mà worker chỉ mở luồng còn sống và tầng gói chặn thu hồi sau lần mở thầu đầu — hai lớp NGOÀI view; **[gộp #268 / ADR-162]**
+cho hạng, khoảng cách và vào BAFO nay thêm một lớp ở CSDL: trigger `luot_cham_kiem_phien_ban` (`122`) từ chối hàng chấm của lời mời đã
+thu hồi LÚC CHẤM và của phiên bản không phải bản mới nhất đã mở của luồng). Thời gian
+phản hồi: phiên bản vòng một đầu trừ `greatest(opened_at, lời mời.created_at)`, giây, sàn — mời sau khi mở thì tính từ lúc mời: **lệch §4.9 có
+chủ đích** (*"mở gói → phiên bản nộp đầu"* phạt người được mời muộn). Trung vị là `percentile_disc(0.5)` — phần tử thật, số chẵn thì phần tử
+dưới — để tính lại được chính xác. Khoảng cách tới hạng nhất là PHẦN VẠN số nguyên `div((chi phí − thấp nhất) × 20000 + thấp nhất, 2 × thấp
+nhất)` (làm tròn nửa lên không qua phép chia có làm tròn trung gian), kiểu `numeric` — **[THẤP-6]** bản đầu ép `bigint` và một giá 0,01
+cạnh chi phí 10 nghìn tỷ làm tràn, hỏng view của CẢ tổ chức (đầu vào trong tay nhà cung cấp); thấp nhất bằng 0 ⇒ NULL cho lượt ấy, không chia
+cho 0. Thắng: hàng
+`rfq_awards` MỚI NHẤT của gói (`acted_at DESC, id DESC`, khuôn `094`) là `APPROVED`. Vào BAFO: hạng ở lượt chấm của vòng ≤ `top_n` (vị từ của
+trigger nộp BAFO, `059`). Hạng và khoảng cách đọc ở lượt chấm MỚI NHẤT của gói.
+
+⑶ **Vị từ khách trong THÂN view**, nguyên văn mẫu `_khach` của `027`. **[THẤP-1]** View hôm nay bắt đầu từ `suppliers` — bảng ĐÓNG với khách —
+nên nó ra 0 hàng cho phiên khách cả khi bỏ vị từ; vị từ là lớp không phụ thuộc bảng nào đứng đầu (một bản viết lại bắt đầu từ
+`rfq_invitations` thì lộ). Phiên Passport đặt chính `app.guest_session_id` (ADR-081 ⑶) nên vị từ áp cho nó — suy từ cấu tạo, không
+phép đo hành vi riêng. Và một phép đếm MỚI ở `rls-coverage`: mọi view `public` mà `app_api` SELECT được phải chứa vế ấy trong thân (khuôn khoản 29 cho view) —
+phép đo hành vi một mình không giết được đột biến *bỏ vị từ khách*, vì dưới phiên khách `gia_da_lo` đã ra false (`unseal_requests` đóng với
+khách).
+
+⑷ **Không số tiền nào đi ra**: không `effective_cost`, không tổng, không nhắc bảng bản rõ (`lich-su-gia.int` cấm view nhắc nó).
+
+⑸ **Ghim ở hardening** — một hàng TỰ CHỮA trong `bang`: câu sửa tạo lại view (`CREATE OR REPLACE … WITH (security_invoker = true)`) rồi
+`REVOKE ALL … FROM PUBLIC; GRANT SELECT … TO app_api`; hậu điều kiện so `pg_get_viewdef` đã chuẩn hoá khoảng trắng với chuỗi ĐO trên cụm dùng
+một lần, cộng `reloptions` đúng một phần tử và ACL đúng {chủ, `app_api` SELECT}; thông điệp chỉ in vân tay. Đo 2026-10-10: `CREATE OR REPLACE
+VIEW` thiếu `WITH (…)` XOÁ `security_invoker` (một migration sau quên nó thì `CAU_DOC_VONG` chặn lúc deploy); đột biến bỏ vị từ khách lúc chạy
+⇒ `migrate()` phát *"SAI TRƯỚC khi sửa"* kèm vân tay rồi tự khôi phục. Câu sửa chạy mỗi lần deploy: một migration sau đổi thân view phải sửa
+cả chuỗi ghim — cùng luật của mọi thân hàm ghim.
+
+⑹ **Tầng gói, một hàm** — `docHieuSuatNhaCungCap` (`packages/kiem-soat/src/hieu-suat.ts`): `requirePermission(bid.view)` trong thân (rổ
+`HAM_DOC_CO_QUYEN`; loại tài nguyên mới `SUPPLIER_PERFORMANCE`, `resourceId` là tổ chức), một hàng `SUPPLIER_PERFORMANCE_READ` mỗi lần đọc
+thành công trên chính giao dịch đọc (ghi hỏng ⇒ ném, không chỉ số nào ra — khuôn `PRICE_HISTORY_READ`). Tỷ lệ tính ở đây, phần vạn. Sàn lịch
+sử GIẢ ĐỊNH 5 gói theo TỪNG nhà cung cấp, trên mẫu số của mọi tỷ lệ và mọi trung vị (**[THẤP-5]** trung vị khoảng cách xét số gói XẾP HẠNG,
+không số gói có khoảng cách xác định — lượt có giá thấp nhất 0 vẫn đếm vào mẫu số mà không góp giá trị): dưới sàn ⇒ `null` kèm tên trường trong `chuaDuLichSu`;
+số đếm luôn trả. Theo tổ chức thì một nhà cung cấp một lần mời hiện 1/1 = 100% — đúng điều §8.3 cấm.
+
+⑺ **Route** `GET /supplier-performance` — BUYER, `agent: false` (khuôn `/ranking`, lịch sử giá, benchmark; dòng khai ở `apps/mcp`). Cổng
+`tests/architecture/hieu-suat-liet-ke.test.ts`: đúng một tệp TypeScript sản xuất nhắc tên view, ký hiệu hàm chỉ ở nơi định nghĩa, mặt tiền gói,
+route và câu khai của MCP, không migration nào ngoài tệp dựng view và tệp ghim nhắc tên view.
+
+⑻ **Cái giá, nói ra.** ⒜ Chỉ số phản hồi đến muộn hơn: sau mở niêm phong, không sau lúc đóng. ⒝ Gói huỷ TRƯỚC mở niêm phong không bao giờ
+được tính — hành vi phản hồi ở gói ấy mất khỏi chỉ số. ⒞ Gói có vòng BAFO đang mở hay đã đóng chưa lộ rời MỌI cột giá cho tới khi vòng ấy lộ.
+⒟ `gia_da_lo` là hàm STABLE gọi hai lần mỗi gói của tổ chức — chưa đo ở quy mô vài trăm gói. ⒠ Lớp *một đường đọc* là lớp chữ: một câu SQL
+dựng động vượt qua nó; CSDL không biết người gọi giữ `bid.view` hay không (kho không có GUC người dùng). ⒡ Thời gian phản hồi của lời mời đi
+UNSENT→SENT tính từ lúc tạo lời mời, không từ lúc gửi thật — không cột nào lưu lúc gửi. ⒢ **[lượt soi trên mã §S1.291 TRUNG-1 —
+chủ dự án chấp nhận 2026-10-10]** FINANCE và DIRECTOR — giữ `bid.view`, KHÔNG giữ `rfq.invite` — suy ra được ai đã được MỜI vào một gói,
+kể cả người được mời mà không nộp, sau khi gói mở niêm phong (một gói đã lộ thì đọc thẳng; nhiều gói thì so trước và sau). Hôm nay danh
+sách mời chỉ người giữ `rfq.invite` đọc được (`listInvitations`); bảng so sánh và bảng xếp hạng chỉ có người đã nộp. Chủ dự án chọn ghi
+thành cái giá thay vì gác vế lời mời bằng `rfq.invite` — nhất quán với câu 4 của kế hoạch (lớp governance của S3.9 mang trọn danh sách mời
+bản rõ cho FINANCE/DIRECTOR).
+
+### Phương án loại
+
+- **Giữ `≥ CLOSED` của §4.9** — trái C⑦ (bối cảnh).
+- **Mọi cột gác bằng `gia_da_lo(now())`** (phương án ⒜ của câu 1) — vòng một của gói biến mất khi gói có BAFO đang mở, nên đối chứng dương lúc
+  BAFO_OPEN phải đặt trên gói khác.
+- **Gác theo TẬP TRẠNG THÁI** — trạng thái đi lùi được và `CANCELLED` giữ `closed_at`; một tập trạng thái và một mốc thời gian cho hai câu trả
+  lời khác nhau.
+- **Vế quyền trong thân view** — kho không có GUC người dùng nào; một GUC mới thì mã chạy dưới `app_api` tự đặt được.
+- **Vị từ nội tuyến thay `gia_da_lo`** — mất phép đo L5, thêm một vị từ để trôi; spec S4 ⒀ đòi *"MỘT hàm SQL"*.
+
+### Đo bằng
+
+`apps/api/src/hieu-suat.int.test.ts` (A tính đúng — view bằng bản tính lại TypeScript độc lập trên mười gói; B K11 theo thời gian; C cô lập; D
+HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.ts`, `tests/architecture/hieu-suat-liet-ke.test.ts`, kịch bản 41 HTTP
+(bảy khối T2, hai luồng), và đột biến ở biên bản §S1.291.
+
+### Điều ADR này KHÔNG nói
+
+Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b); KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa chọn); hiệu suất từ ERP (S5, spec §10);
+Supplier Score (S5, ADR-100).
+
+## ADR-165 — S4.7c2: bộ bằng chứng phiên bản 3 — phép quy đổi TCO tính lại được ở mọi hàng mọi lượt, cam kết của đề xuất là điều khoản của bộ, bộ kiểm ngoại tuyến hai lớp phán cả khớp lẫn luật giải trình
+
+**Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất:
+⑴ tính lại phép quy đổi ở MỌI hàng mọi lượt chấm, không chỉ báo giá được đề xuất; ⑵ bộ kiểm phán cam kết cả vế khớp lẫn luật có giải
+trình ⇔ lệch hạng; ⑶ lời giải trình vào bộ nguyên văn · **[S1.294]** · **Migration:** không · **Liên quan:** ADR-059, ADR-144,
+ADR-153, ADR-158, ADR-160, ADR-162 · **Spec:** S4 §2.4 ⑻, §4.8, §9 (S4.7c2) · **Biên bản:** `evidence/security-reviews.md` §S1.294
+
+### Bối cảnh
+
+Bộ bằng chứng phiên bản 2 (ADR-144) chép `components` của mỗi hàng qua một bộ chép bốn khoá (`ma`, `donVi`, `heSo`, `giaTri`, `tien`):
+`nguon` — phép tính của hai mã quy đổi mà lượt chấm ghi từ S4.7a — rơi mất, và thước của gói (tham số, số ngày giao) không vào bộ. Bộ
+kiểm vì thế tính lại được `tien = giaTri × he_so` và phép cộng, nhưng `giaTri` của `chi_phi_thanh_toan` và `chi_phi_tre` là ĐẦU VÀO nó
+phải tin: một hàng chấm theo thước khác thước nhà cung cấp đã thấy, hay một phép quy đổi sai trong lượt chấm, đi qua ĐẠT. Cam kết
+S4.7c1 chụp vào `rfq_award_cam_ket` (ADR-160) cũng chưa vào bộ — ADR-160 *Giới hạn nói ra* và *Điều ADR này KHÔNG nói*.
+
+### Quyết định
+
+⑴ **Bộ phiên bản 3** (`PHIEN_BAN_BUNDLE` hai bản — xuất và kiểm — cùng 3; `DAC_TA_PHIEN_BAN` 3). Mỗi thành phần mang `nguon` nguyên
+văn khi có; mỗi hàng mang `maThieu`; bộ mang `goiTco` — `tapMa`, `thamSo` (nhóm khoá `tco` chụp lúc mở, `117`), `soNgayGiao`; mỗi
+hàng trao thầu mang `camKet` (`null` ở hàng không phải đề xuất và ở đề xuất có trước S4.7c1 — không lấp ngược). Bộ kiểm chỉ đọc
+đúng phiên bản nó cài (khuôn ADR-144): bộ v2 đã xuất kiểm bằng bộ kiểm cùng phiên bản của nó.
+
+⑵ **DAC-TA §9 — phép quy đổi.** `chi_phi_thanh_toan = LÀM_TRÒN(max(0, ngayChuan − ngayKhai) × tyLe × coSo ÷ 365, 2)`,
+`chi_phi_tre = LÀM_TRÒN(max(0, ngayKhai − ngayYeuCau) × tyLe × coSo, 2)`, một lần làm tròn nửa-ra-xa-0 trên giá trị đúng. Một hàng
+tái lập được khi `nguon` đủ bốn khoá, `coSo` bằng `giaTri` của `gia` cùng hàng, tỷ lệ và ngày khớp `goiTco`, và `giaTri` tính lại
+bằng giá trị đã lưu; tập mã của mọi lượt bằng `goiTco.tapMa`; hàng có số không mang `maThieu`. §3 trỏ sang §9 cho hai mã quy đổi.
+
+⑶ **DAC-TA §10 — cam kết.** Cam kết bằng hàng chấm nó trỏ tới (hạng chi phí, chi phí, thành phần kể cả `nguon`), bằng thước của gói,
+lời khai khớp hàng (`paymentDays` ↔ `nguon.ngayKhai` của `chi_phi_thanh_toan`, `leadTimeDays` ↔ của `chi_phi_tre`, `freight` ↔
+`giaTri` của `van_chuyen`, `importCost` ↔ của `nhap_khau`), `hangGia` bằng hạng giá tính lại (tiền của phần tử `gia` đầu tiên trên
+các hàng có hạng, xếp như §5 — cùng luật `award_hang_gia`), và có giải trình KHI VÀ CHỈ KHI `hangGia ≠ hangTco`. Đề xuất không cam
+kết được ĐẾM, không đỏ. §7 giữ nguyên: bộ kiểm không phán ai được trao là đúng, cũng không phán lời giải trình có thuyết phục không.
+
+⑷ **Hai lớp như ADR-059.** Lớp độc lập `doc-lap/quy-doi-lai.ts` viết từ văn bản: số là mảng chữ số, phép chia là CHIA NGẮN cho 365
+giữ thêm một chữ số lẻ rồi đọc đuôi bị cắt (`thuVe`) — chính xác vì phần dư còn thiếu nhỏ hơn một đơn vị chữ số cuối; lớp hàm thuần gọi
+chính `chiPhiThanhToan`, `chiPhiTre`, `xepHang` của lượt chấm (ra cửa `@trustprocure/danh-gia`, phân loại thuần ở `cong-quyen-route`).
+Hai lớp bất đồng ⇒ đỏ và nói ra.
+
+⑸ **Lời giải trình nguyên văn trong bộ.** Bộ đã sau hai cổng `audit.read` + `bid.view` và đã mang giá; giải trình là lý do của quyết
+định, người kiểm toán cần đọc nó. Sổ vẫn chỉ ghi cờ (ADR-160 ⑸).
+
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.294 mục 6) — không CAO; hai TRUNG, bốn THẤP:
+- **TRUNG-1** — xoá cả `camKet` khỏi một đề xuất thì bộ kiểm chỉ đếm *"đề xuất không cam kết"* và vẫn ĐẠT. Sửa: §10 bước 6 — `chupLuc`
+  bằng `actedAt` của chính hàng (trigger `121` chụp trong giao dịch đề xuất), và một đề xuất không cam kết mà `actedAt` ≥ cam kết chụp
+  sớm nhất của bộ là bộ sai. Dư lượng nói ra: bộ không còn cam kết nào thì không phân biệt được với đề xuất cũ.
+- **TRUNG-2** — hạng giá dựng lại cho TỪNG cam kết: O(cam kết × hàng × log hàng), bộ độc làm treo. Sửa: bảng hạng giá một lần mỗi lượt
+  ở cả hai lớp, chỉ mục lượt và hàng bằng `Map`; ca đo 3 000 hàng × 3 000 cam kết dưới 5 giây.
+- **THẤP-1** — §10 bước 3, 4 lỏng hơn mã: nay chép nguyên khuôn tiền của `award_hang_gia`, nói *"hàng không khớp không vào phép xếp"*
+  và *"so cách viết thập phân"*. **THẤP-2** — giải trình rỗng hay chỉ khoảng trắng được tính là có: nay áp đúng `CHECK` của `121` (1).
+  **THẤP-3** — khoá `__proto__` của `nguon` bị nuốt im lặng: bộ đọc từ chối có tên. **THẤP-4** — `camKet.khai` mang ô khai của mã không
+  có trong hàng: GIỮ — cam kết là bản chụp nguyên văn của lần đề xuất (ADR-160 ⑷), §10 bước 3 nói rõ các ô ấy chép lại, không kiểm.
+
+### Giới hạn nói ra
+
+- **Lời khai gốc không nằm trong bộ.** `ngayKhai`, `coSo` và các ô khai thẳng đến từ phong bì đã mở; bộ chứng phép tính TỪ lời khai và
+  thước của gói, không chứng lời khai đúng là thứ nhà cung cấp đã gõ (DAC-TA §9.5).
+- **Đủ mặt các luồng vẫn không chứng được** — bộ cho thấy thứ đã vào lượt chấm, không chứng không luồng nào bị bỏ (cùng giới hạn của
+  ADR-162).
+- **Bộ v2 đã xuất không đọc được bằng bộ kiểm v3** — khuôn của ADR-144.
+- **`maThieu` ngoài vế "hàng có số không mang nó" là dữ liệu**, không tính lại được.
+
+### Điều ADR này KHÔNG nói
+
+Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13); chữ ký số trên bộ bằng chứng.
+

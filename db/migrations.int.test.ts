@@ -4322,6 +4322,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "121_cam_ket_trao_thau.sql",
         // [S1.290 / J1] Hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng báo giá, lời mời còn sống.
         "122_hang_cham_phien_ban_moi_nhat.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8999,6 +9001,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "121_cam_ket_trao_thau.sql",
         // [S1.290 / J1] Hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng báo giá, lời mời còn sống.
         "122_hang_cham_phien_ban_moi_nhat.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9356,6 +9360,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "121_cam_ket_trao_thau.sql",
         // [S1.290 / J1] Hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng báo giá, lời mời còn sống.
         "122_hang_cham_phien_ban_moi_nhat.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

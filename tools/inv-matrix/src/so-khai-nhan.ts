@@ -154,6 +154,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/api.int.test.ts",
     // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
+    // [S1.291 / S3.8a] Route hiệu suất: BUYER (không `bid.view`) bị 403 kèm đúng một `PERMISSION_DENIED`.
+    "apps/api/src/hieu-suat.int.test.ts",
     // [S1.86 / khoản 128] Ai GIỮ được khoá ghi sổ của tổ chức, và giữ được bao lâu: một phiên vai ứng dụng nay KHÔNG lấy
     // được khoá mức PHIÊN (42501), nên không còn đường CỐ Ý làm mọi lần ghi sổ của một tổ chức gãy 55P03 vô thời hạn.
     "db/khoa-ghi-so-nguoi-giu.int.test.ts",
@@ -364,11 +366,15 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // J2 — TÁI LẬP ĐƯỢC. Năm tệp vì bất biến này sống ở năm chỗ khác nhau: hàm thuần, luật làm
   // tròn đối chiếu với Postgres, dữ liệu ĐÃ GHI, và hai nửa của bộ bằng chứng S2.7 — trong đó
   // `kiem.test.ts` mang ba mũi đột biến của ADR-059.
+  // [S1.294 / S4.7c2] Vế QUY ĐỔI (`DAC-TA.md` §9): `kiem-tco` đo hai lớp tính lại phép quy đổi TCO (ca tay, nửa xu, 20 000 bộ đối
+  // chiếu, từng trường bị sửa, hai lớp bất đồng); `kich-ban-41-http` đo bộ v3 xuất qua HTTP rồi kiểm ngoại tuyến tính lại quy đổi.
   J2: [
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/danh-gia/src/chi-phi-hieu-dung.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/danh-gia/src/nua-xu.int.test.ts",
     "tools/bo-xuat-danh-gia/src/bo-xuat.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
     "tools/bo-xuat-danh-gia/src/kiem.test.ts",
   ],
   // J3 — ba vế phân tách nhiệm vụ; tệp HTTP đo vế ấy trên đường sản xuất thật.
@@ -502,6 +508,18 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
   ],
+  // K11 — [S1.291 / S3.8a] hiệu suất nhà cung cấp chỉ đọc gói đã lộ giá. `hieu-suat` đo trên Postgres thật, dưới `app_api` và qua
+  // HTTP: view bằng bản tính lại độc lập trên mười gói phủ mọi nhánh (khuôn J2), ảnh chụp sau từng cạnh của gói (không gì trước
+  // UNSEALED, vòng một vẫn đếm lúc BAFO mở, BAFO chưa lộ không vào), phiên khách của gói đã lộ ra 0 hàng, cổng `bid.view` kèm hàng sổ,
+  // sàn lịch sử, ghi sổ hỏng thì không chỉ số nào ra. `rls-coverage` đếm vị từ khách trong THÂN mọi view `app_api` đọc được;
+  // `hieu-suat-liet-ke` giữ đường đọc là một và có tên. `kich-ban-41-http` (T2, spec §6): route hiệu suất qua HTTP sau từng cạnh của gói
+  // chính — không hàng ở OPEN và CLOSED, đối chứng dương ngay sau UNSEALED, vòng một vẫn đếm ở BAFO_OPEN, BAFO lộ thì vào, thắng sau duyệt.
+  K11: [
+    "apps/api/src/hieu-suat.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    "db/rls-coverage.int.test.ts",
+    "tests/architecture/hieu-suat-liet-ke.test.ts",
+  ],
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
@@ -587,14 +605,20 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // chép luật L8 của màn với `kiemChinhSachTco` trên mười tám ca.
   // [S1.288 / S4.7c1] Vế CAM KẾT: `luot-danh-gia` đo hạng giá SQL bằng hạng giá TS, lời đòi giải trình ở CSDL, cam kết chụp đúng lời khai
   // và chỉ trong giao dịch đề xuất, quyền cột, chỉ-ghi-thêm; `phuc-vu` đo ô giải trình của `/mo-thau` (theo hàng đã chọn và theo mã).
+  // [S1.294 / S4.7c2] Vế KIỂM LẠI cam kết (`DAC-TA.md` §10): `kiem-tco` đo cam kết khớp hàng và gói, luật giải trình hai chiều, mỗi
+  // trường bị sửa, cam kết bị xoá sau mốc chụp; `bo-xuat.int` và `kich-ban-41-http` đo cam kết + giải trình nguyên văn trong bộ v3 và bộ
+  // kiểm ngoại tuyến bắt lời giải trình bị xoá.
   L8: [
     "apps/api/src/buyer.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "apps/web/src/chinh-sach.test.ts",
     "apps/web/src/phuc-vu.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/danh-gia/src/tco.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
     "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
+    "tools/bo-xuat-danh-gia/src/bo-xuat.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
   ],
   // L16 — [S1.279 / S4.7a] thước TCO cố định trước khi giá lộ — vế TCO và form nhà cung cấp của L14 (số mới theo ADR-097 ⒇).
   // `luot-danh-gia` đo tập mã chụp lúc mở và lượt chấm dùng chính tập ấy (phiên bản khai sau, quyền cột, ảnh chụp lệch, đột biến);
@@ -606,6 +630,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // `guest.int` đo thước ở route khách (gói không ảnh chụp ⇒ `null`, tham số chỉ của mã bật, mã lạ lọc, không hệ số hay ngưỡng);
   // `phuc-vu` đo ô của mã bật, ô bắt buộc chặn nút nộp, ô ẩn không vào phong bì, ô xoá khi đổi phiên; `bac-mac-dinh-dong-bo` khoá bốn khoá
   // phong bì của màn với bốn khoá bộ đọc SQL của lượt chấm.
+  // [S1.294 / S4.7c2] Vế BỘ BẰNG CHỨNG: `kiem-tco` đo bộ kiểm báo đỏ khi tập mã của một lượt chấm khác tập mã ghim của gói (`goiTco`).
   L16: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/guest.int.test.ts",
@@ -614,6 +639,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
     "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
   ],
   // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở

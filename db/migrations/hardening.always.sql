@@ -964,7 +964,9 @@ DECLARE
           -- nay THIU và không sửa được, xem khoản 162) — thì
           -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một
           -- view trên bảng tra cứu KHÔNG có dữ liệu tenant cũng phải đặt cờ; cửa ra là một dòng `ALTER VIEW` hoặc
-          -- `NGOAI_LE_DOC_VONG`. Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.
+          -- `NGOAI_LE_DOC_VONG`. ~~Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.~~
+          -- [S1.291 / S3.8a] Từ `123_hieu_suat_nha_cung_cap` lược đồ có MỘT view — `supplier_performance`, `security_invoker` —
+          -- thân, cờ và ACL ghim ở hàng của nó trong `bang` (tự chữa); vế này vẫn không kêu oan chỗ nào.
           -- [S1.50 / lượt soi 42 NHẸ-3] `reloptions` giữ NGUYÊN VĂN chuỗi người dùng gõ, và `parse_bool` của PostgreSQL nhận
           -- cả `yes`, `y`, `t`, `tr`, `tru`. Bản cũ chỉ nhận `true|on|1` nên `SET (security_invoker = yes)` — một view THẬT SỰ
           -- invoker — bị mục này kêu và CHẶN DEPLOY trên lược đồ hợp lệ, đúng chiều hỏng ADR-028 §3 cấm.
@@ -17321,6 +17323,149 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.luot_cham_kiem_phien_ban()')),
                   'hàm public.luot_cham_kiem_phien_ban() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_phien_ban() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.291 / S3.8a / K11] View hieu suat nha cung cap — than, security_invoker va ACL. Mot than bo vi tu khach, bo mot cong gia_da_lo hay doi dinh nghia thang cho phien khach/Passport hay gia chua lo vao chi so; CREATE OR REPLACE thieu WITH xoa security_invoker (do 2026-10-10).
+    ARRAY[
+      $q$định nghĩa view supplier_performance (123_hieu_suat_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '123_hieu_suat_nha_cung_cap.sql')$q$,
+      $q$CREATE OR REPLACE VIEW public.supplier_performance WITH (security_invoker = true) AS
+WITH goi AS MATERIALIZED (
+  SELECT r.org_id,
+         r.id AS rfq_id,
+         r.opened_at,
+         public.gia_da_lo(r.org_id, r.id,
+                          LEAST(pg_catalog.now(), r.cancelled_at,
+                                (SELECT min(v.opened_at)
+                                   FROM public.rfq_bafo_rounds v
+                                  WHERE v.org_id = r.org_id AND v.rfq_id = r.id))) AS lo_vong_mot,
+         public.gia_da_lo(r.org_id, r.id, pg_catalog.now()) AS lo_gia
+    FROM public.rfq_packages r
+),
+loi_moi AS (
+  SELECT i.org_id, i.supplier_id, i.rfq_id, i.id AS invitation_id, greatest(g.opened_at, i.created_at) AS moc_bat_dau
+    FROM public.rfq_invitations i
+    JOIN goi g ON g.org_id = i.org_id AND g.rfq_id = i.rfq_id
+   WHERE g.lo_vong_mot AND i.revoked_at IS NULL AND i.status <> 'UNSENT'
+),
+nop AS (
+  SELECT l.org_id, l.supplier_id, l.rfq_id, min(v.submitted_at) - l.moc_bat_dau AS phan_hoi, count(*) AS so_phien_ban
+    FROM loi_moi l
+    JOIN public.vendor_bids b ON b.org_id = l.org_id AND b.invitation_id = l.invitation_id
+    JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id
+   WHERE v.bafo_round_id IS NULL
+   GROUP BY l.org_id, l.supplier_id, l.rfq_id, l.moc_bat_dau
+),
+sua_bafo AS (
+  SELECT i.org_id, i.supplier_id, count(*) - count(DISTINCT (v.bid_id, v.bafo_round_id)) AS so_sua
+    FROM public.vendor_bid_versions v
+    JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+    JOIN goi g ON g.org_id = i.org_id AND g.rfq_id = i.rfq_id
+   WHERE v.bafo_round_id IS NOT NULL AND g.lo_gia
+   GROUP BY i.org_id, i.supplier_id
+),
+luot AS (
+  SELECT DISTINCT ON (e.org_id, e.rfq_id) e.org_id, e.rfq_id, e.id AS evaluation_id
+    FROM public.rfq_evaluations e
+    JOIN goi g ON g.org_id = e.org_id AND g.rfq_id = e.rfq_id
+   WHERE g.lo_gia
+   ORDER BY e.org_id, e.rfq_id, e.created_at DESC, e.id DESC
+),
+hang AS (
+  SELECT l.org_id, i.supplier_id, l.rfq_id, d.rank,
+         pg_catalog.div((d.effective_cost - m.thap) * 20000 + m.thap, nullif(m.thap, 0) * 2) AS phan_van
+    FROM luot l
+    JOIN (SELECT d2.org_id, d2.evaluation_id, min(d2.effective_cost) AS thap
+            FROM public.rfq_evaluation_lines d2
+           GROUP BY d2.org_id, d2.evaluation_id) m ON m.org_id = l.org_id AND m.evaluation_id = l.evaluation_id
+    JOIN public.rfq_evaluation_lines d ON d.org_id = l.org_id AND d.evaluation_id = l.evaluation_id
+    JOIN public.vendor_bid_versions v ON v.org_id = d.org_id AND v.id = d.bid_version_id
+    JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+   WHERE d.effective_cost IS NOT NULL
+),
+bafo AS (
+  SELECT r.org_id, i.supplier_id, count(DISTINCT r.id) AS so_lan
+    FROM public.rfq_bafo_rounds r
+    JOIN goi g ON g.org_id = r.org_id AND g.rfq_id = r.rfq_id
+    JOIN public.rfq_evaluation_lines d ON d.org_id = r.org_id AND d.evaluation_id = r.evaluation_id
+    JOIN public.vendor_bid_versions v ON v.org_id = d.org_id AND v.id = d.bid_version_id
+    JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+   WHERE g.lo_gia AND d.rank <= r.top_n
+   GROUP BY r.org_id, i.supplier_id
+),
+thang AS (
+  SELECT a.org_id, i.supplier_id, count(*) AS so_lan
+    FROM (SELECT DISTINCT ON (x.org_id, x.rfq_id) x.org_id, x.rfq_id, x.status, x.bid_version_id
+            FROM public.rfq_awards x
+           ORDER BY x.org_id, x.rfq_id, x.acted_at DESC, x.id DESC) a
+    JOIN goi g ON g.org_id = a.org_id AND g.rfq_id = a.rfq_id
+    JOIN public.vendor_bid_versions v ON v.org_id = a.org_id AND v.id = a.bid_version_id
+    JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+   WHERE g.lo_gia AND a.status = 'APPROVED'
+   GROUP BY a.org_id, i.supplier_id
+),
+moi_gom AS (
+  SELECT l.org_id, l.supplier_id, count(DISTINCT l.rfq_id) AS so_goi_moi
+    FROM loi_moi l
+   GROUP BY l.org_id, l.supplier_id
+),
+nop_gom AS (
+  SELECT n.org_id, n.supplier_id,
+         count(*) AS so_goi_nop,
+         percentile_disc(0.5) WITHIN GROUP (ORDER BY floor(EXTRACT(epoch FROM n.phan_hoi))) AS trung_vi_giay,
+         sum(n.so_phien_ban - 1) AS sua_vong_mot
+    FROM nop n
+   GROUP BY n.org_id, n.supplier_id
+),
+hang_gom AS (
+  SELECT h.org_id, h.supplier_id,
+         count(DISTINCT h.rfq_id) AS so_goi_xep_hang,
+         percentile_disc(0.5) WITHIN GROUP (ORDER BY h.rank) AS hang_trung_vi,
+         percentile_disc(0.5) WITHIN GROUP (ORDER BY h.phan_van) AS khoang_cach_trung_vi
+    FROM hang h
+   GROUP BY h.org_id, h.supplier_id
+)
+SELECT s.org_id,
+       s.id AS supplier_id,
+       coalesce(mg.so_goi_moi, 0)::bigint AS so_goi_moi,
+       coalesce(ng.so_goi_nop, 0)::bigint AS so_goi_nop,
+       ng.trung_vi_giay::bigint AS trung_vi_phan_hoi_giay,
+       (coalesce(ng.sua_vong_mot, 0) + coalesce(sb.so_sua, 0))::bigint AS so_lan_sua,
+       coalesce(hg.so_goi_xep_hang, 0)::bigint AS so_goi_xep_hang,
+       hg.hang_trung_vi,
+       hg.khoang_cach_trung_vi AS khoang_cach_trung_vi_phan_van,
+       coalesce(bf.so_lan, 0)::bigint AS so_lan_vao_bafo,
+       coalesce(th.so_lan, 0)::bigint AS so_lan_thang
+  FROM public.suppliers s
+  LEFT JOIN moi_gom mg ON mg.org_id = s.org_id AND mg.supplier_id = s.id
+  LEFT JOIN nop_gom ng ON ng.org_id = s.org_id AND ng.supplier_id = s.id
+  LEFT JOIN sua_bafo sb ON sb.org_id = s.org_id AND sb.supplier_id = s.id
+  LEFT JOIN hang_gom hg ON hg.org_id = s.org_id AND hg.supplier_id = s.id
+  LEFT JOIN bafo bf ON bf.org_id = s.org_id AND bf.supplier_id = s.id
+  LEFT JOIN thang th ON th.org_id = s.org_id AND th.supplier_id = s.id
+ WHERE NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL
+   AND (mg.so_goi_moi IS NOT NULL OR hg.so_goi_xep_hang IS NOT NULL OR sb.so_sua IS NOT NULL
+        OR bf.so_lan IS NOT NULL OR th.so_lan IS NOT NULL);
+REVOKE ALL ON public.supplier_performance FROM PUBLIC;
+GRANT SELECT ON public.supplier_performance TO app_api$q$,
+      $q$(SELECT btrim(regexp_replace(pg_get_viewdef(c.oid), '\s+', ' ', 'g'))
+                = $than$WITH goi AS MATERIALIZED ( SELECT r.org_id, r.id AS rfq_id, r.opened_at, gia_da_lo(r.org_id, r.id, LEAST(now(), r.cancelled_at, ( SELECT min(v.opened_at) AS min FROM rfq_bafo_rounds v WHERE ((v.org_id = r.org_id) AND (v.rfq_id = r.id))))) AS lo_vong_mot, gia_da_lo(r.org_id, r.id, now()) AS lo_gia FROM rfq_packages r ), loi_moi AS ( SELECT i.org_id, i.supplier_id, i.rfq_id, i.id AS invitation_id, GREATEST(g.opened_at, i.created_at) AS moc_bat_dau FROM (rfq_invitations i JOIN goi g ON (((g.org_id = i.org_id) AND (g.rfq_id = i.rfq_id)))) WHERE (g.lo_vong_mot AND (i.revoked_at IS NULL) AND (i.status <> 'UNSENT'::text)) ), nop AS ( SELECT l.org_id, l.supplier_id, l.rfq_id, (min(v.submitted_at) - l.moc_bat_dau) AS phan_hoi, count(*) AS so_phien_ban FROM ((loi_moi l JOIN vendor_bids b ON (((b.org_id = l.org_id) AND (b.invitation_id = l.invitation_id)))) JOIN vendor_bid_versions v ON (((v.org_id = b.org_id) AND (v.bid_id = b.id)))) WHERE (v.bafo_round_id IS NULL) GROUP BY l.org_id, l.supplier_id, l.rfq_id, l.moc_bat_dau ), sua_bafo AS ( SELECT i.org_id, i.supplier_id, (count(*) - count(DISTINCT ROW(v.bid_id, v.bafo_round_id))) AS so_sua FROM (((vendor_bid_versions v JOIN vendor_bids b ON (((b.org_id = v.org_id) AND (b.id = v.bid_id)))) JOIN rfq_invitations i ON (((i.org_id = b.org_id) AND (i.id = b.invitation_id)))) JOIN goi g ON (((g.org_id = i.org_id) AND (g.rfq_id = i.rfq_id)))) WHERE ((v.bafo_round_id IS NOT NULL) AND g.lo_gia) GROUP BY i.org_id, i.supplier_id ), luot AS ( SELECT DISTINCT ON (e.org_id, e.rfq_id) e.org_id, e.rfq_id, e.id AS evaluation_id FROM (rfq_evaluations e JOIN goi g ON (((g.org_id = e.org_id) AND (g.rfq_id = e.rfq_id)))) WHERE g.lo_gia ORDER BY e.org_id, e.rfq_id, e.created_at DESC, e.id DESC ), hang AS ( SELECT l.org_id, i.supplier_id, l.rfq_id, d.rank, div((((d.effective_cost - m.thap) * (20000)::numeric) + m.thap), (NULLIF(m.thap, (0)::numeric) * (2)::numeric)) AS phan_van FROM (((((luot l JOIN ( SELECT d2.org_id, d2.evaluation_id, min(d2.effective_cost) AS thap FROM rfq_evaluation_lines d2 GROUP BY d2.org_id, d2.evaluation_id) m ON (((m.org_id = l.org_id) AND (m.evaluation_id = l.evaluation_id)))) JOIN rfq_evaluation_lines d ON (((d.org_id = l.org_id) AND (d.evaluation_id = l.evaluation_id)))) JOIN vendor_bid_versions v ON (((v.org_id = d.org_id) AND (v.id = d.bid_version_id)))) JOIN vendor_bids b ON (((b.org_id = v.org_id) AND (b.id = v.bid_id)))) JOIN rfq_invitations i ON (((i.org_id = b.org_id) AND (i.id = b.invitation_id)))) WHERE (d.effective_cost IS NOT NULL) ), bafo AS ( SELECT r.org_id, i.supplier_id, count(DISTINCT r.id) AS so_lan FROM (((((rfq_bafo_rounds r JOIN goi g ON (((g.org_id = r.org_id) AND (g.rfq_id = r.rfq_id)))) JOIN rfq_evaluation_lines d ON (((d.org_id = r.org_id) AND (d.evaluation_id = r.evaluation_id)))) JOIN vendor_bid_versions v ON (((v.org_id = d.org_id) AND (v.id = d.bid_version_id)))) JOIN vendor_bids b ON (((b.org_id = v.org_id) AND (b.id = v.bid_id)))) JOIN rfq_invitations i ON (((i.org_id = b.org_id) AND (i.id = b.invitation_id)))) WHERE (g.lo_gia AND (d.rank <= r.top_n)) GROUP BY r.org_id, i.supplier_id ), thang AS ( SELECT a.org_id, i.supplier_id, count(*) AS so_lan FROM ((((( SELECT DISTINCT ON (x.org_id, x.rfq_id) x.org_id, x.rfq_id, x.status, x.bid_version_id FROM rfq_awards x ORDER BY x.org_id, x.rfq_id, x.acted_at DESC, x.id DESC) a JOIN goi g ON (((g.org_id = a.org_id) AND (g.rfq_id = a.rfq_id)))) JOIN vendor_bid_versions v ON (((v.org_id = a.org_id) AND (v.id = a.bid_version_id)))) JOIN vendor_bids b ON (((b.org_id = v.org_id) AND (b.id = v.bid_id)))) JOIN rfq_invitations i ON (((i.org_id = b.org_id) AND (i.id = b.invitation_id)))) WHERE (g.lo_gia AND (a.status = 'APPROVED'::text)) GROUP BY a.org_id, i.supplier_id ), moi_gom AS ( SELECT l.org_id, l.supplier_id, count(DISTINCT l.rfq_id) AS so_goi_moi FROM loi_moi l GROUP BY l.org_id, l.supplier_id ), nop_gom AS ( SELECT n.org_id, n.supplier_id, count(*) AS so_goi_nop, percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY (floor(EXTRACT(epoch FROM n.phan_hoi)))) AS trung_vi_giay, sum((n.so_phien_ban - 1)) AS sua_vong_mot FROM nop n GROUP BY n.org_id, n.supplier_id ), hang_gom AS ( SELECT h.org_id, h.supplier_id, count(DISTINCT h.rfq_id) AS so_goi_xep_hang, percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY h.rank) AS hang_trung_vi, percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY h.phan_van) AS khoang_cach_trung_vi FROM hang h GROUP BY h.org_id, h.supplier_id ) SELECT s.org_id, s.id AS supplier_id, COALESCE(mg.so_goi_moi, (0)::bigint) AS so_goi_moi, COALESCE(ng.so_goi_nop, (0)::bigint) AS so_goi_nop, (ng.trung_vi_giay)::bigint AS trung_vi_phan_hoi_giay, ((COALESCE(ng.sua_vong_mot, (0)::numeric) + (COALESCE(sb.so_sua, (0)::bigint))::numeric))::bigint AS so_lan_sua, COALESCE(hg.so_goi_xep_hang, (0)::bigint) AS so_goi_xep_hang, hg.hang_trung_vi, hg.khoang_cach_trung_vi AS khoang_cach_trung_vi_phan_van, COALESCE(bf.so_lan, (0)::bigint) AS so_lan_vao_bafo, COALESCE(th.so_lan, (0)::bigint) AS so_lan_thang FROM ((((((suppliers s LEFT JOIN moi_gom mg ON (((mg.org_id = s.org_id) AND (mg.supplier_id = s.id)))) LEFT JOIN nop_gom ng ON (((ng.org_id = s.org_id) AND (ng.supplier_id = s.id)))) LEFT JOIN sua_bafo sb ON (((sb.org_id = s.org_id) AND (sb.supplier_id = s.id)))) LEFT JOIN hang_gom hg ON (((hg.org_id = s.org_id) AND (hg.supplier_id = s.id)))) LEFT JOIN bafo bf ON (((bf.org_id = s.org_id) AND (bf.supplier_id = s.id)))) LEFT JOIN thang th ON (((th.org_id = s.org_id) AND (th.supplier_id = s.id)))) WHERE (((NULLIF(current_setting('app.guest_session_id'::text, true), ''::text))::uuid IS NULL) AND ((mg.so_goi_moi IS NOT NULL) OR (hg.so_goi_xep_hang IS NOT NULL) OR (sb.so_sua IS NOT NULL) OR (bf.so_lan IS NOT NULL) OR (th.so_lan IS NOT NULL)));$than$
+            AND c.reloptions = ARRAY['security_invoker=true']
+            AND EXISTS (SELECT 1 FROM aclexplode(c.relacl) a WHERE a.grantee = 'app_api'::regrole AND a.privilege_type = 'SELECT')
+            AND NOT EXISTS (SELECT 1 FROM aclexplode(c.relacl) a
+                             WHERE a.grantee <> c.relowner
+                               AND NOT (a.grantee = 'app_api'::regrole AND a.privilege_type = 'SELECT'))
+           FROM pg_class c WHERE c.oid = to_regclass('public.supplier_performance') AND c.relkind = 'v')$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính view khác bản chuẩn — vân tay viewdef: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(pg_get_viewdef(c.oid), '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | reloptions(chỉ tên)=' || coalesce((SELECT string_agg(split_part(o.tuy_chon, '=', 1), ',') FROM unnest(c.reloptions) AS o(tuy_chon)), '(null)')
+                          || ' | người được cấp=' || coalesce((SELECT string_agg(DISTINCT a.grantee::regrole::text, ',') FROM aclexplode(c.relacl) a), '(null)')
+                     FROM pg_class c WHERE c.oid = to_regclass('public.supplier_performance')),
+                  'view public.supplier_performance không tồn tại')$q$,
+      $q$quyền sở hữu view public.supplier_performance (hoặc CREATE trên schema public khi view chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.204 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
     ARRAY[

@@ -168,6 +168,12 @@ async function kiem(thamSo: readonly string[]): Promise<number> {
       `benchmark\tdong=${String(kq.duLieuNen.soDong)}\tdat=${String(kq.duLieuNen.soDat)}\tlech=${String(kq.duLieuNen.soLech)}\n`,
     );
   }
+  // [S1.294 / S4.7c2] Cam kết: mọi lời lệch, rồi một dòng tổng — kể cả số đề xuất không mang cam kết (BÁO, không đỏ).
+  for (const d of kq.camKet.loi) stdout.write(`LECH-CAM-KET\t${d}\n`);
+  stdout.write(
+    `cam-ket\tso=${String(kq.camKet.soCamKet)}\tdat=${String(kq.camKet.soDat)}` +
+      `\tde-xuat-khong-cam-ket=${String(kq.camKet.soDeXuatKhongCamKet)}\tquy-doi=${String(kq.soQuyDoi)}\n`,
+  );
   stdout.write(
     `${kq.dat ? "ok=true" : "ok=false"}` +
       `\thang=${String(kq.soHang)}\tdat=${String(kq.soDat)}\tlech=${String(kq.soLech)}` +

@@ -1208,6 +1208,9 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 const DANH_SACH_TRANG_KIEM_SOAT = [
   "KiemSoatError",
   "LOAI_TIN_HIEU_TRAO_THAU",
+  // [S1.291 / S3.8a] Hiệu suất nhà cung cấp: sàn lịch sử (giả định chờ pilot) và đường đọc có cổng `bid.view`.
+  "SAN_LICH_SU",
+  "docHieuSuatNhaCungCap",
   "docKhaiBaoXungDot",
   "ghiNhanTinHieu",
   "ghiTinHieuKhiDeXuat",
@@ -1260,6 +1263,11 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "rutDeXuatTraoThau",
   // [S1.288 / S4.7c1 / L8] Đọc cam kết TCO chụp lúc đề xuất — cổng `bid.view` thẳng trong thân; route `…/award/commitment`.
   "docCamKetTraoThau",
+  // [S1.294 / S4.7c2] Ba hàm THUẦN cho lớp hàm thuần của bộ kiểm bộ bằng chứng (`tools/bo-xuat-danh-gia`): hai phép quy đổi TCO
+  // (`DAC-TA.md` §9) và phép xếp hạng thi đấu dùng cho hạng giá (§10). Không kết nối, không cổng — chúng chỉ tính.
+  "chiPhiThanhToan",
+  "chiPhiTre",
+  "xepHang",
   // [mảnh 1 / màn xuất bằng chứng] Nửa XUẤT của bộ bằng chứng S2.7 xuống gói để CLI và `apps/api`
   // ghi ra cùng byte. `xuatBoBangChung` là đường có cổng; `dungBoBangChung` không cổng, chỉ công
   // cụ vận hành gọi. Năm hằng số là hình dạng của bundle mà nửa KIỂM ở `tools/` đối chiếu.
