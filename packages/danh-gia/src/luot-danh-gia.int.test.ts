@@ -4783,3 +4783,98 @@ describe("[S1.288 / S4.7c1] L8 vế cam kết — cam kết TCO chụp ở CSDL 
   });
 });
 
+
+// ================================================================================================
+// [S1.9101 / J1 vế phiên bản — tiếp TRUNG-1 của §S1.288] HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG, LỜI MỜI CÒN SỐNG
+//
+// `121` buộc hàng chấm ghi trong CHÍNH giao dịch tạo lượt, cho báo giá của ĐÚNG gói. Còn một vế: một đường ghi thứ hai dựng TRỌN
+// một lượt chấm trong giao dịch của nó chọn được, trong các bản rõ của gói, phiên bản VÒNG MỘT của nhà cung cấp đã nộp lại ở BAFO
+// (giá cũ), hay báo giá của lời mời đã thu hồi — hai thứ `docBaoGia` không bao giờ đọc. Hai ca dưới ghi thẳng dưới `app_api`, như
+// đường ghi thứ hai.
+// ================================================================================================
+describe("[S1.9101] J1 vế phiên bản — hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng, lời mời còn sống", { timeout: 300000 }, () => {
+  const hangGia = (tien: string, hang: number): readonly unknown[] => [
+    tien,
+    JSON.stringify([{ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien }]),
+    hang,
+  ];
+
+  /** Một lượt chấm và MỘT hàng của nó, cùng giao dịch, dưới `app_api` — đường ghi thứ hai. */
+  async function luotTay(rfqId: string, policyId: string, bidVersionId: string, tien: string): Promise<unknown> {
+    return withTenant(apiPool, orgA, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+        [orgA, rfqId, policyId, uYc, sYc],
+      );
+      return c.query(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, $4, $5::jsonb, $6)",
+        [orgA, rows[0]?.id ?? "", bidVersionId, ...hangGia(tien, 1)],
+      );
+    }).catch((e: unknown) => e);
+  }
+
+  it("[INV-J1] sau BAFO: hàng cho phiên bản VÒNG MỘT của nhà cung cấp đã nộp lại ⇒ `hang_cham_phien_ban_cu`; phiên bản mới nhất qua; bản nộp lại CHƯA MỞ không thay bản đã mở; lượt chấm sản xuất vẫn giữ bản vòng một của nhà cung cấp ngoài top-N", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["548800000.00", "VND"],
+        ["537600000.00", "VND"],
+        ["544000000.00", "VND"],
+      ],
+      2,
+    );
+    const { rows: cs } = await db.pool.query<{ policy_id: string }>("SELECT policy_id FROM rfq_evaluations WHERE id = $1", [luotId]);
+    const policyId = cs[0]?.policy_id ?? "";
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    const lai1 = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    // Luồng thứ hai trong top-2 cũng nộp lại, nhưng phong bì ấy KHÔNG mở (bản rõ ghi thẳng, như mọi ca của tệp): "đã mở" là có hàng ở
+    // `rfq_unsealed_bids` — đúng tập `docBaoGia` đọc —, nên bản vòng một của luồng ấy vẫn là phiên bản mới nhất ĐÃ MỞ.
+    await nopLaiBafo(rfqId, banRo[2] ?? "");
+    await moThauBafo(rfqId, vongId, [[lai1, { totalAmount: "500000000.00", currency: "VND" }]]);
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_UNSEALED");
+
+    // Giá VÒNG MỘT (537,6 triệu) của luồng đã nộp lại 500 triệu: bản rõ vẫn còn, FK sang `rfq_unsealed_bids` cho qua.
+    expect(await luotTay(rfqId, policyId, banRo[1] ?? "", "537600000.00")).toMatchObject({
+      code: "23514",
+      constraint: "hang_cham_phien_ban_cu",
+    });
+    // Đối chứng dương: phiên bản mới nhất của chính luồng ấy, và bản vòng một của luồng KHÔNG nộp lại (ngoài top-N).
+    expect(await luotTay(rfqId, policyId, lai1, "500000000.00")).toMatchObject({ rowCount: 1 });
+    expect(await luotTay(rfqId, policyId, banRo[0] ?? "", "548800000.00")).toMatchObject({ rowCount: 1 });
+    expect(await luotTay(rfqId, policyId, banRo[2] ?? "", "544000000.00"), "phiên bản lớn hơn CHƯA MỞ không thay bản đã mở").toMatchObject({
+      rowCount: 1,
+    });
+
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(new Map(kq.lines.map((l) => [l.bidVersionId, l.rank]))).toEqual(
+      new Map([
+        [lai1, 1],
+        [banRo[2], 2],
+        [banRo[0], 3],
+      ]),
+    );
+  });
+
+  it("[INV-J1] lời mời đã thu hồi ⇒ `hang_cham_loi_moi_thu_hoi`; lời mời còn sống qua; lượt chấm sản xuất không đổi", async () => {
+    const { rfqId, banRo, csId } = await goiDaMo([
+      ["900000000.00", "VND"],
+      ["950000000.00", "VND"],
+    ]);
+    const { rows: lm } = await db.pool.query<{ invitation_id: string }>(
+      "SELECT b.invitation_id FROM vendor_bid_versions v JOIN vendor_bids b ON b.id = v.bid_id WHERE v.id = $1",
+      [banRo[0] ?? ""],
+    );
+    await db.pool.query(
+      "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1",
+      [lm[0]?.invitation_id ?? "", uYc, sYc],
+    );
+    expect(await luotTay(rfqId, csId, banRo[0] ?? "", "900000000.00")).toMatchObject({
+      code: "23514",
+      constraint: "hang_cham_loi_moi_thu_hoi",
+    });
+    expect(await luotTay(rfqId, csId, banRo[1] ?? "", "950000000.00")).toMatchObject({ rowCount: 1 });
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.lines.map((l) => [l.bidVersionId, l.rank])).toEqual([[banRo[1], 1]]);
+  });
+});

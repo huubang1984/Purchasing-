@@ -27009,7 +27009,7 @@ bắt buộc, CSDL tính hạng giá lúc đề xuất và từ chối có tên.
 - **Sổ đăng ký** — `migrations.int` (HAM_56, HAM_ANH_XA, ba danh sách), `danh-sach-ham-canh`, `check-an-ninh`, `rls-coverage` (quyền bảng,
   quyền cột, policy khách), `hardening-suy-tu` (bảng chỉ-ghi-thêm, nhân chứng `rfq_award_cam_ket`/INSERT), `migration-shape`,
   `ban-ro-liet-ke`, `barrel-exports`, `cong-quyen-route`, `so-khai-nhan`.
-- **CSDL — vá TRUNG-1 (chủ dự án: *"Vá đi"*)** — `119` mục (5): `luot_cham_kiem_hang`, trigger `rfq_evaluation_lines_kiem_luot` — hàng chấm
+- **CSDL — vá TRUNG-1 (chủ dự án: *"Vá đi"*)** — ~~`119`~~ `121` mục (5): `luot_cham_kiem_hang`, trigger `rfq_evaluation_lines_kiem_luot` — hàng chấm
   chỉ ghi trong chính giao dịch tạo lượt (`rfq_evaluations.created_at = now()`), cho báo giá của đúng gói (qua lời mời). Ghim hardening,
   TRIGGER_DUOC_PHEP, `migrations.int`, `danh-sach-ham-canh`. Ba chỗ test ghi hàng chấm ở giao dịch khác viết lại cho cùng giao dịch
   (`luot-danh-gia.int` — hàm `chenHang` của J1 và ca `ma_thieu`; `lich-su-gia.int`); nhân chứng của `dungKichBan()` dựng lượt thứ hai
@@ -27072,7 +27072,7 @@ Một lượt soi đọc-không-sửa trên diff chưa commit. **Không CAO.** H
   duy nhất của bảng chỉ kiểm hình dạng thành phần. Một câu ghi thẳng chèn được vào lượt mới nhất một hàng có hạng với `gia` rẻ hơn (phiên
   bản vòng 1 trước BAFO, báo giá gói khác): hạng giá của báo giá được đề xuất đổi và trigger giải trình cho qua. Báo cáo chủ dự án kèm
   khuyến nghị tách việc; chủ dự án: *"Vá đi"*. **Sửa:** trigger `rfq_evaluation_lines_kiem_luot` (mục 4). Vế *"phiên bản của đúng vòng"*
-  KHÔNG làm — chạm ngữ nghĩa lượt chấm sau BAFO; nói ra ở mục 9.
+  KHÔNG làm — ~~chạm ngữ nghĩa lượt chấm sau BAFO~~; nói ra ở mục 9. **[S1.9101]** Làm ở §S1.9101: luật của `docBaoGia` không đổi ngữ nghĩa sau BAFO.
 - **TRUNG-2 — ô giải trình chỉ theo bảng đã đọc.** BUYER giữ `award.recommend`, không giữ `bid.view` (`005`): không bao giờ đọc được bảng,
   ô không bao giờ hiện, đề xuất lệch hạng không đi được; mỗi lần thử đọc lại bảng ⇒ 403 vào sổ. Bảng cũ (sau BAFO) cho vòng lặp ô hiện /
   máy chủ nói không cần. **Sửa:** lời từ chối trao thầu mang `ma` (`dispatch`), màn hiện hay ẩn ô theo mã, không đọc lại bảng; `veXepHang`
