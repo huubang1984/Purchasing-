@@ -28,3 +28,6 @@ export {
 // [S1.281 / S3.4a] Khai báo xung đột lợi ích (K9, spec S3 §4.5): khai và đọc khai báo của CHÍNH người gọi. Chốt ở bảy cổng là
 // trigger của `114_khai_bao_xung_dot`; gói này không giữ bản sao nào của phép so.
 export { docKhaiBaoXungDot, khaiBaoXungDot, type KhaiBaoXungDot, type KhaiBaoXungDotCuaToi, type TrangThaiXungDot } from "./xung-dot.js";
+// [S1.9101 / S3.8a] Hiệu suất nhà cung cấp (K11, spec S3 §4.9): đường đọc DUY NHẤT của view hiệu suất, sau cổng
+// `bid.view` và kèm hàng sổ. Vị từ bí mật — chỉ gói đã lộ giá, vị từ khách — là thân view, ghim ở hardening.
+export { SAN_LICH_SU, docHieuSuatNhaCungCap, type HieuSuat, type HieuSuatNhaCungCap, type TruongDuoiSan } from "./hieu-suat.js";

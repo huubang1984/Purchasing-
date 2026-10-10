@@ -882,6 +882,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_passport_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_versions", quyen: "SELECT" },
+      // [S1.9101 / S3.8a] View hiệu suất (security_invoker): chỉ SELECT — đọc ở tầng gói sau cổng `bid.view`.
+      { grantee: "app_api", bang: "supplier_performance", quyen: "SELECT" },
       // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
@@ -4599,4 +4601,46 @@ describe("[S1.226 / khoản 110 — ADR-131] phạm vi FORCE của khoản 91 l�
       await donDep();
     }
   }, 180000);
+});
+
+// ================================================================================================
+// [S1.9101 / S3.8a / K11] VIEW MANG VỊ TỪ KHÁCH TRONG THÂN — khuôn khoản 29 cho view
+//
+// Policy `_khach` canh BẢNG; view không mang policy được. Phiên khách của lời mời đọc được hàng của CHÍNH nó ở năm bảng (`027`,
+// `060`), nên một view `security_invoker` BẮT ĐẦU từ một trong các bảng ấy không tự ra 0 hàng cho nó. Spec S3 §5.1 K11 đòi vị từ
+// khách trong THÂN view. Phép đo hành vi không giết được đột biến *bỏ vị từ khách* của `supplier_performance`: view ấy bắt đầu từ
+// `suppliers` — bảng đóng với khách — và mọi cột của nó đã qua `gia_da_lo`, mà dưới phiên khách hàm ấy ra false (`unseal_requests`
+// đóng với khách) — lượt soi trên mã §S1.9101 THẤP-1 sửa lời khai đầu, vốn nói khối C của `hieu-suat.int` đo được điều ấy;
+// nên lớp này đọc THÂN: mọi view `public` mà `app_api` SELECT được phải chứa nguyên văn vế *không phải phiên khách* (`KHACH_NULL`, dạng
+// `pg_get_expr`/`pg_get_viewdef` in ra). Hardening ghim thân của từng view là lớp deploy; đây là lớp đếm — một view MỚI chưa ai ghim
+// cũng bị đòi.
+// ================================================================================================
+describe("[S1.9101 / S3.8a / K11] view `app_api` đọc được mang vị từ khách trong thân", () => {
+  const CAU_VIEW_DOC_DUOC =
+    "SELECT c.relname AS ten, pg_get_viewdef(c.oid) AS than FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+    "WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm') AND has_table_privilege('app_api', c.oid, 'SELECT') ORDER BY 1";
+  const thieuViTu = (hang: readonly { ten: string; than: string }[]): string[] =>
+    hang.filter((h) => !h.than.replace(/\s+/gu, " ").includes(KHACH_NULL)).map((h) => h.ten);
+
+  it("[INV-K11] mọi view `public` mà `app_api` SELECT được chứa nguyên văn vế *không phải phiên khách*; đối chứng: view thiếu vế bị nêu", async () => {
+    const { rows } = await db.pool.query<{ ten: string; than: string }>(CAU_VIEW_DOC_DUOC);
+    expect(rows.map((r) => r.ten), "tiền đề: bộ quét phải thấy view của S3.8").toContain("supplier_performance");
+    expect(thieuViTu(rows), "view đọc được bởi app_api mà không chặn phiên khách trong thân").toEqual([]);
+    // Đối chứng chống rỗng ruột, trong giao dịch huỷ: một view invoker cấp cho app_api mà thiếu vế PHẢI bị nêu; thêm vế thì không.
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("CREATE VIEW public.zz_v_k11 WITH (security_invoker = true) AS SELECT s.id FROM public.suppliers s");
+      await c.query("GRANT SELECT ON public.zz_v_k11 TO app_api");
+      expect(thieuViTu((await c.query<{ ten: string; than: string }>(CAU_VIEW_DOC_DUOC)).rows)).toEqual(["zz_v_k11"]);
+      await c.query(
+        "CREATE OR REPLACE VIEW public.zz_v_k11 WITH (security_invoker = true) AS SELECT s.id FROM public.suppliers s " +
+          "WHERE NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL",
+      );
+      expect(thieuViTu((await c.query<{ ten: string; than: string }>(CAU_VIEW_DOC_DUOC)).rows)).toEqual([]);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  });
 });
