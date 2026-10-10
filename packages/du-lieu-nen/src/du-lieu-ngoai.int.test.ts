@@ -27,7 +27,7 @@ import {
 } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
-// [khoản 9403] Khẳng định "không mang đơn giá" tìm DÃY CHỮ SỐ của đơn giá trong cả chuỗi JSON — mà chuỗi ấy mang UUID ngẫu nhiên
+// [khoản 347] Khẳng định "không mang đơn giá" tìm DÃY CHỮ SỐ của đơn giá trong cả chuỗi JSON — mà chuỗi ấy mang UUID ngẫu nhiên
 // (`randomUUID`), và một nhóm hex của UUID có thể là đúng dãy ấy: CI master #260 (run 37730919838) đỏ ở ca ⑷ dưới đây mà không
 // đơn giá nào lọt. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm; mọi chỗ khác của chuỗi vẫn bị tìm.
 const MAU_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;

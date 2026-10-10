@@ -223,7 +223,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-// [khoản 9402] Các ca của tệp này đếm tới trần của bộ đếm cửa sổ CỐ ĐỊNH (`caller_rate_limits`/`otp_rate_limits`, cửa sổ
+// [khoản 346] Các ca của tệp này đếm tới trần của bộ đếm cửa sổ CỐ ĐỊNH (`caller_rate_limits`/`otp_rate_limits`, cửa sổ
 // `OTP_RATE_WINDOW_SECONDS` neo vào giờ CSDL) rồi đòi lần N+1 bị chặn, hay đếm hàng của một cửa sổ — đúng chỉ khi cả ca nằm
 // trong MỘT cửa sổ. Sát mốc lật thì chờ qua mốc trước khi ca chạy; biên 60 s gấp gần sáu lần ca dài nhất đo ở evidence (10,6 s).
 beforeEach(async () => {

@@ -213,7 +213,7 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
   // đầy đủ; 30 s+ khi `pnpm evidence` chạy CẢ HAI tầng trên cùng máy (16 worker) — đỏ hai lượt
   // liên tiếp đúng ở trần 30 s mặc định, không một khẳng định nào sai. Không phải họ 57P01 của
   // nợ 24 (đó là vòng đời kết nối); đây là ngân sách wall-clock cho một ca cố ý nặng.~~
-  // **[khoản 9401]** Một ca cho cả ma trận là một trần wall-clock DUY NHẤT cho 62 × 23 = 1 426 lời gọi HTTP tuần tự (đếm ở
+  // **[khoản 345]** Một ca cho cả ma trận là một trần wall-clock DUY NHẤT cho 62 × 23 = 1 426 lời gọi HTTP tuần tự (đếm ở
   // master `cc807f97`), mỗi lời gọi một câu đếm và một hàng sổ ở giao dịch riêng — và ma trận lớn lên với MỖI route, MỖI mã
   // quyền. Đo: chạy riêng 23–29 s; evidence CI master 11,8–42,1 s (56 lượt, 30/09 → 09/10); dưới tải bảy tệp int nặng chạy
   // cùng 44–49 s; và hai lượt evidence ở máy quá trần 120 s khi một PHIÊN KHÁC chạy test tích hợp cùng lúc (§S1.280 lượt 2,

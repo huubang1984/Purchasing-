@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [khoản 9402] CHỜ QUA MỐC LẬT CỦA MỘT BỘ ĐẾM CỬA SỔ CỐ ĐỊNH
+// [khoản 346] CHỜ QUA MỐC LẬT CỦA MỘT BỘ ĐẾM CỬA SỔ CỐ ĐỊNH
 //
 // Hai bộ đếm hạn mức của dự án — `tangBucketNguoiGoi` (`caller_rate_limits`) và `demVaTang` (`otp_rate_limits`) — đếm theo
 // cửa sổ CỐ ĐỊNH neo vào đồng hồ CSDL: `window_start = floor(epoch(now()) / 900) * 900`. Cửa sổ lật đúng vào :00, :15, :30,

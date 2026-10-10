@@ -1,4 +1,4 @@
-// [khoản 9402] `choQuaMocCuaSo` — chờ khi giờ CSDL sát mốc lật, không chờ khi xa; giờ là giờ CSDL, không phải giờ tiến trình.
+// [khoản 346] `choQuaMocCuaSo` — chờ khi giờ CSDL sát mốc lật, không chờ khi xa; giờ là giờ CSDL, không phải giờ tiến trình.
 import { describe, expect, it } from "vitest";
 import type { NguonTruyVan } from "@trustprocure/db";
 import { choQuaMocCuaSo, msToiMocKeTiep } from "./moc-cua-so.js";
@@ -12,7 +12,7 @@ function csdlTai(csdlMs: number): NguonTruyVan {
   return { query: () => Promise.resolve({ rows: [{ ms: csdlMs }] }) } as unknown as NguonTruyVan;
 }
 
-describe("[khoản 9402] msToiMocKeTiep", () => {
+describe("[khoản 346] msToiMocKeTiep", () => {
   it("đúng mốc là trọn một cửa sổ, sát trước mốc là phần còn lại, trước epoch vẫn dương", () => {
     expect(MOC % (CUA_SO * 1000)).toBe(0);
     expect(msToiMocKeTiep(MOC, CUA_SO)).toBe(900_000);
@@ -22,7 +22,7 @@ describe("[khoản 9402] msToiMocKeTiep", () => {
   });
 });
 
-describe("[khoản 9402] choQuaMocCuaSo", () => {
+describe("[khoản 346] choQuaMocCuaSo", () => {
   it("giờ CSDL còn 5 s tới mốc, biên 60 s ⇒ ngủ qua mốc thêm một giây (6 000 ms)", async () => {
     const ngu: number[] = [];
     const da = await choQuaMocCuaSo(csdlTai(MOC - 5_000), {

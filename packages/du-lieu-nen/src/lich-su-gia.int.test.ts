@@ -22,7 +22,7 @@ import { PermissionDeniedError } from "@trustprocure/identity";
 import { docLichSuGia, khaiBiDanhDonVi, khaiQuyDoiRieng, taoHangChuan, taoPhienBanHangChuan, type LichSuGia } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
-// [khoản 9403] Cùng lớp với ca ⑷ của `du-lieu-ngoai.int.test.ts`: khẳng định "sổ không mang đơn giá" tìm dãy chữ số trong một
+// [khoản 347] Cùng lớp với ca ⑷ của `du-lieu-ngoai.int.test.ts`: khẳng định "sổ không mang đơn giá" tìm dãy chữ số trong một
 // chuỗi có UUID ngẫu nhiên. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm.
 const MAU_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
 const boUuid = (s: string): string => s.replace(MAU_UUID, "<uuid>");
