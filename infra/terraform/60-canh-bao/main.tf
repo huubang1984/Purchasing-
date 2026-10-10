@@ -375,6 +375,10 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
   })
 }
 
+# [2026-10-10] Đổi địa chỉ resource này (thêm for_each, đổi tên) thì thêm cho địa chỉ cũ một khối
+# `removed { from = ...  lifecycle { destroy = false } }`. Không có nó, `Subscribe` của resource mới trả lại ARN đăng
+# ký cũ đã xác nhận rồi `Unsubscribe` của resource cũ xoá chính ARN ấy: lượt apply đầu của bản danh sách làm địa chỉ
+# cũ mất đăng ký (APPLY-LAN-DAU 0.2).
 resource "aws_sns_topic_subscription" "email" {
   provider  = aws.audit
   for_each  = toset(var.email_canh_bao)
