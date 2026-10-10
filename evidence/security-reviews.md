@@ -27626,7 +27626,23 @@ một lần, không phải cổng; đăng nhập bằng link MỚI qua `POST /au
   mã mới, dựng lại trên CSDL mới (bí mật ghi danh chỉ hiện một lần), lượt hai 21/21. Dừng cụm (0 cổng), xoá hai CSDL tạm.
 
 ## 6. Số đo
-SO_DO
+Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng chờ máy rảnh — vòng ấy chỉ kiểm lúc khởi động.
+- Trước gộp: `pnpm t0` 60 s (depcruise 586 module, 0 vi phạm); `pnpm test` 160 tệp / 2875 ca, 333 s; kịch bản 41 HTTP 110/110, 113 s. Lần
+  `pnpm test` đầu đỏ ở `ma-chep-api-worker` (§4).
+- Trên `73dadbd8` (sau gộp #271, #270 và `cap-so`): `pnpm t0` 172 s; `pnpm test` 160 / 2875, 596 s. Evidence lượt một **vitest thoát mã 1**,
+  5 423 s — 30 ca ở 8 tệp CSDL/API: 21 QUÁ HẠN, 9 sai khẳng định là dư chất của ca quá hạn trong CSDL dùng chung (fixture `zz98b…` của
+  `rls-coverage`, *"NÉM: Hardening"* của `hardening-suy-tu`, một hàng thừa ở `auth`, thứ tự xoay vòng ở `outbox`). Hai lượt evidence của phiên
+  khác chạy chồng (`rule600` và `s3-5-award-theo-bac`, báo cáo xong 21:59 và 22:00; lượt này 20:31–22:02). Không tệp nào thuộc vòng. Chạy lại
+  không đổi gì: **vitest thoát mã 0**, **92/92**, **5300** khẳng định, 2 199 s; K11 33 → **35** (khối đọc màn ở hai luồng).
+- Gộp #276 (S1.294 / S4.7c2) vào `e7d29b46` — ba xung đột tài liệu gỡ tay; #276 thêm một khối riêng ở phần TCO của kịch bản 41, không chạm
+  khối đọc màn: `pnpm t0` 87 s; `pnpm test` 161 / 2896, 388 s; evidence **vitest thoát mã 1**, 2 609 s — 0 ca đỏ, một tệp
+  (`loi-giao-thuc.int`) hỏng ở mức tệp, 0 s: testcontainers *"No host port found for host IP"* lúc dựng container (đồng hồ Docker khớp
+  máy); 92/92, 5326 khẳng định.
+- Gộp #273 (khoản 348) vào `3e7d65b1`, không xung đột: `pnpm t0` 73 s; `pnpm test` 161 / 2896, 172 s; evidence **vitest thoát mã 1**,
+  3 397 s — đúng một ca QUÁ HẠN: `[sổ nợ 73] RULE` của `hardening-suy-tu-tinh-chat` hết trần 600 s (`migrations.int` 3 391 s — máy tải; ca ấy
+  346,6 s ở evidence CI master `74a18d3f`, 451 và 302 s ở hai lượt xanh của §S1.291), ca khoản 349 / #272 đang tách một ca mỗi bảng; 92/92,
+  5326 khẳng định. Ma trận commit: chỉ hàng K11 đổi (33 → 35) so với bản đã commit — hàng H19 của lượt đỏ không vào.
+- Lượt chạy lại trên `3e7d65b1`: ghi ở thân PR và thân merge (lệ S1.70).
 
 ## 7. Giới hạn
 - T4 là lượt đi thử một lần, không phải cổng (TEST-PLAN T4).
