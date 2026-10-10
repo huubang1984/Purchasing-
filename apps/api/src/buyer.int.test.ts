@@ -216,12 +216,14 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
   // **[khoản 345]** Một ca cho cả ma trận là một trần wall-clock DUY NHẤT cho 62 × 23 = 1 426 lời gọi HTTP tuần tự (đếm ở
   // master `cc807f97`), mỗi lời gọi một câu đếm và một hàng sổ ở giao dịch riêng — và ma trận lớn lên với MỖI route, MỖI mã
   // quyền. Đo: chạy riêng 23–29 s; evidence CI master 11,8–42,1 s (56 lượt, 30/09 → 09/10); dưới tải bảy tệp int nặng chạy
-  // cùng 44–49 s; và hai lượt evidence ở máy quá trần 120 s khi một PHIÊN KHÁC chạy test tích hợp cùng lúc (§S1.280 lượt 2,
+  // cùng 42–49 s; và hai lượt evidence ở máy quá trần 120 s khi một PHIÊN KHÁC chạy test tích hợp cùng lúc (§S1.280 lượt 2,
   // và lượt đo cây gộp của PR #248 ngày 2026-10-08) — không khẳng định nào sai, không treo: ca chậm theo đúng tải. fsync tắt
-  // chỉ bớt 10–20 % (đo A/B xen kẽ), nên không phải đĩa. Tách thành MỘT CA MỖI MÃ QUYỀN (`it.each`): mỗi ca ~62 lời gọi,
-  // vài giây, dưới trần mặc định 30 s — lần chậm gấp ba vẫn còn xa trần, và một lần đỏ nói ĐÚNG mã nào. Phủ không đổi: cùng
-  // tập cặp, cùng hai khẳng định (đúng mã qua, mã khác 403) và cùng phép đếm chéo bằng sổ, nay theo từng người giữ mã.
-  describe("[INV-H17] [sổ nợ 47] MÃ QUYỀN ĐÚNG: với mỗi route ghi, một phiên giữ ĐÚNG MỘT mã quyền", () => {
+  // chỉ bớt 16 % khi chạy riêng, 8 % dưới tải (A/B xen kẽ), nên không phải đĩa. Tách thành MỘT CA MỖI MÃ QUYỀN (`it.each`):
+  // mỗi ca ~62 lời gọi, vài giây, dưới trần mặc định 30 s — và một lần đỏ nói ĐÚNG mã nào. Phủ không đổi: cùng tập cặp, cùng
+  // hai khẳng định (đúng mã qua, mã khác 403) và cùng phép đếm chéo bằng sổ, nay theo từng người giữ mã. Đo sau vá: chạy riêng
+  // 24 ca tổng 29,0 s, ca dài nhất 2,0 s; trong một lượt evidence bị hai phiên khác chen tải, tổng 47,2 s, ca dài nhất 3,1 s.
+  // Nhãn `[INV-H17]` chỉ ở describe ngoài và tên từng ca — như các ca anh em — vì ma trận đếm MỖI lần nhãn có trong tên đầy đủ.
+  describe("MÃ QUYỀN ĐÚNG: với mỗi route ghi, một phiên giữ ĐÚNG MỘT mã quyền", () => {
     const maQuyen = Object.values(PERMISSIONS);
     const routeGhi = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self !== true);
     const nguoiTheoQuyen = new Map<string, Nguoi>();
