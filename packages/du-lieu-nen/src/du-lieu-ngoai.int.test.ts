@@ -27,6 +27,11 @@ import {
 } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+// [khoản 9403] Khẳng định "không mang đơn giá" tìm DÃY CHỮ SỐ của đơn giá trong cả chuỗi JSON — mà chuỗi ấy mang UUID ngẫu nhiên
+// (`randomUUID`), và một nhóm hex của UUID có thể là đúng dãy ấy: CI master #260 (run 37730919838) đỏ ở ca ⑷ dưới đây mà không
+// đơn giá nào lọt. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm; mọi chỗ khác của chuỗi vẫn bị tìm.
+const MAU_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+const boUuid = (s: string): string => s.replace(MAU_UUID, "<uuid>");
 
 let db: TestDatabase;
 let api: pg.Pool;
@@ -375,7 +380,8 @@ describe("[INV-L15] [S1.272 / S4.6a] ⑷ đọc — lô và hàng KHÔNG đơn g
       ["THEP-D10", "kg", "2025-11-20", "Cong ty Thep A, chi nhanh 2", true],
       ["THEP-D10", "kg", "2025-12-05", "Cong ty Thep B", false],
     ]);
-    const json = JSON.stringify({ lo, hang });
+    const json = boUuid(JSON.stringify({ lo, hang }));
+    expect(json, "chuỗi đã có UUID để bỏ — phép tìm dưới đây không rỗng ruột").toContain("<uuid>");
     expect(json).not.toMatch(/15200|15400|15500|111000|350000|16000|donGia|don_gia/u);
     expect(await trong(orgA, (c) => docLoDuLieuNgoai(c, orgA, { loai: "MOC_NGOAI", loNhapId: lichSu.loNhapId, actorSessionId: quanLyA.phien }, api))).toBeNull();
   });

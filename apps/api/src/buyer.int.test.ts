@@ -201,53 +201,67 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     expect(Number(rows[0]?.n)).toBe(coToaDo);
   });
 
-  it("[INV-H17] [sổ nợ 47] MÃ QUYỀN ĐÚNG: với mỗi route ghi, một phiên giữ ĐÚNG MỘT mã quyền — chỉ đúng `route.permission` mới qua cổng, MỌI mã khác ⇒ 403", async () => {
-    // [review H2-11 ⑶] Quét "không quyền ⇒ 403" chứng minh cổng ĐÓNG, không chứng minh nó đóng ĐÚNG
-    // KHOÁ: `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh. Reviewer đề nghị "mọi quyền TRỪ
-    // route.permission ⇒ 403" — bất khả thi theo đúng thiết kế: một vai/một người gom gần hết quyền
-    // bị chính trigger D3 (005) và 033 chặn. Phép đo tương đương và trigger-an-toàn: MỖI mã quyền
-    // một vai đơn lẻ, một người; với mỗi route ghi, đúng một người qua cổng (không thêm bản ghi
-    // từ chối), mọi người khác 403 và +1 PERMISSION_DENIED. Tất cả tự sinh từ ROUTES và PERMISSIONS.
+  // [review H2-11 ⑶] Quét "không quyền ⇒ 403" chứng minh cổng ĐÓNG, không chứng minh nó đóng ĐÚNG
+  // KHOÁ: `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh. Reviewer đề nghị "mọi quyền TRỪ
+  // route.permission ⇒ 403" — bất khả thi theo đúng thiết kế: một vai/một người gom gần hết quyền
+  // bị chính trigger D3 (005) và 033 chặn. Phép đo tương đương và trigger-an-toàn: MỖI mã quyền
+  // một vai đơn lẻ, một người; với mỗi route ghi, đúng một người qua cổng (không thêm bản ghi
+  // từ chối), mọi người khác 403 và +1 PERMISSION_DENIED. Tất cả tự sinh từ ROUTES và PERMISSIONS.
+  //
+  // ~~[S1.11] Ngân sách riêng, vì ca này là một VÒNG QUÉT (route ghi × mã quyền, mỗi cặp một phiên
+  // và một lời gọi HTTP) và nó lớn theo cả hai chiều. Đo được: ~13,5 s trong một lượt `test:int`
+  // đầy đủ; 30 s+ khi `pnpm evidence` chạy CẢ HAI tầng trên cùng máy (16 worker) — đỏ hai lượt
+  // liên tiếp đúng ở trần 30 s mặc định, không một khẳng định nào sai. Không phải họ 57P01 của
+  // nợ 24 (đó là vòng đời kết nối); đây là ngân sách wall-clock cho một ca cố ý nặng.~~
+  // **[khoản 9401]** Một ca cho cả ma trận là một trần wall-clock DUY NHẤT cho 62 × 23 = 1 426 lời gọi HTTP tuần tự (đếm ở
+  // master `cc807f97`), mỗi lời gọi một câu đếm và một hàng sổ ở giao dịch riêng — và ma trận lớn lên với MỖI route, MỖI mã
+  // quyền. Đo: chạy riêng 23–29 s; evidence CI master 11,8–42,1 s (56 lượt, 30/09 → 09/10); dưới tải bảy tệp int nặng chạy
+  // cùng 44–49 s; và hai lượt evidence ở máy quá trần 120 s khi một PHIÊN KHÁC chạy test tích hợp cùng lúc (§S1.280 lượt 2,
+  // và lượt đo cây gộp của PR #248 ngày 2026-10-08) — không khẳng định nào sai, không treo: ca chậm theo đúng tải. fsync tắt
+  // chỉ bớt 10–20 % (đo A/B xen kẽ), nên không phải đĩa. Tách thành MỘT CA MỖI MÃ QUYỀN (`it.each`): mỗi ca ~62 lời gọi,
+  // vài giây, dưới trần mặc định 30 s — lần chậm gấp ba vẫn còn xa trần, và một lần đỏ nói ĐÚNG mã nào. Phủ không đổi: cùng
+  // tập cặp, cùng hai khẳng định (đúng mã qua, mã khác 403) và cùng phép đếm chéo bằng sổ, nay theo từng người giữ mã.
+  describe("[INV-H17] [sổ nợ 47] MÃ QUYỀN ĐÚNG: với mỗi route ghi, một phiên giữ ĐÚNG MỘT mã quyền", () => {
     const maQuyen = Object.values(PERMISSIONS);
-    const nguoiTheoQuyen = new Map<string, Nguoi>();
-    for (const ma of maQuyen) {
-      const vai = `KIEM_${ma.toUpperCase().replace(/\./gu, "_")}`;
-      await db.pool.query("INSERT INTO roles (code, name) VALUES ($1, $2)", [vai, `Kiem ${ma}`]);
-      await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ($1, $2)", [vai, ma]);
-      nguoiTheoQuyen.set(ma, await nguoi(`kiem-${ma}@vidu.vn`, [vai]));
-    }
     const routeGhi = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self !== true);
-    expect(routeGhi.length).toBeGreaterThan(15);
-    const truoc = new Map<string, number>();
-    for (const [ma, ng] of nguoiTheoQuyen) truoc.set(ma, await demTuChoi(ng.id));
+    const nguoiTheoQuyen = new Map<string, Nguoi>();
 
-    const sai: string[] = [];
-    for (const r of routeGhi) {
-      // TS suy ra vị từ từ `filter` ở trên: `r` là BuyerWriteRoute, `permission` chắc chắn có.
-      const path = r.path.replace(/:[A-Za-z]+/gu, UUID0);
-      for (const [ma, ng] of nguoiTheoQuyen) {
+    beforeAll(async () => {
+      for (const ma of maQuyen) {
+        const vai = `KIEM_${ma.toUpperCase().replace(/\./gu, "_")}`;
+        await db.pool.query("INSERT INTO roles (code, name) VALUES ($1, $2)", [vai, `Kiem ${ma}`]);
+        await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ($1, $2)", [vai, ma]);
+        nguoiTheoQuyen.set(ma, await nguoi(`kiem-${ma}@vidu.vn`, [vai]));
+      }
+    });
+
+    it.each(maQuyen)("[INV-H17] [sổ nợ 47] MÃ QUYỀN ĐÚNG — người giữ `%s`: chỉ route đòi đúng mã ấy mới qua cổng, MỌI route khác ⇒ 403", async (ma) => {
+      expect(routeGhi.length).toBeGreaterThan(15);
+      const ng = nguoiTheoQuyen.get(ma);
+      if (ng === undefined) throw new Error(`thiếu người giữ ${ma} — beforeAll không dựng`);
+      const truoc = await demTuChoi(ng.id);
+      const sai: string[] = [];
+      for (const r of routeGhi) {
+        // TS suy ra vị từ từ `filter` ở trên: `r` là BuyerWriteRoute, `permission` chắc chắn có.
+        const path = r.path.replace(/:[A-Za-z]+/gu, UUID0);
         const kq = await goi(r.method, path, ng, {}, gocQuet);
         const quaCong = kq.status !== 403;
         if (ma === (r.permission as string) && !quaCong) sai.push(`${r.method} ${r.path}: ĐÚNG mã ${ma} mà vẫn 403`);
         if (ma !== (r.permission as string) && quaCong) sai.push(`${r.method} ${r.path}: mã ${ma} (không phải ${r.permission}) đi qua với ${kq.status}`);
       }
-    }
-    expect(sai, "cổng quyền của một route đóng SAI KHOÁ").toEqual([]);
-    // Đếm chéo bằng sổ kiểm toán: người giữ mã P bị từ chối đúng bằng số route ghi KHÔNG đòi P.
-    for (const [ma, ng] of nguoiTheoQuyen) {
+      expect(sai, "cổng quyền của một route đóng SAI KHOÁ").toEqual([]);
+      // Đếm chéo bằng sổ kiểm toán: người giữ mã P bị từ chối đúng bằng số route ghi KHÔNG đòi P.
       const mongDoi = routeGhi.filter((r) => (r.permission as string) !== ma).length;
-      expect(await demTuChoi(ng.id) - (truoc.get(ma) ?? 0), `PERMISSION_DENIED của người giữ ${ma}`).toBe(mongDoi);
-    }
-    // Chống rỗng ruột: có mã quyền không route nào đòi (bị từ chối ở MỌI route) và có mã được ≥ 1 route đòi.
-    const doiBoi = new Set(routeGhi.map((r) => r.permission as string));
-    expect(maQuyen.filter((m) => !doiBoi.has(m)).length).toBeGreaterThan(0);
-    expect(doiBoi.size).toBeGreaterThan(5);
-    // [S1.11] Ngân sách riêng, vì ca này là một VÒNG QUÉT (route ghi × mã quyền, mỗi cặp một phiên
-    // và một lời gọi HTTP) và nó lớn theo cả hai chiều. Đo được: ~13,5 s trong một lượt `test:int`
-    // đầy đủ; 30 s+ khi `pnpm evidence` chạy CẢ HAI tầng trên cùng máy (16 worker) — đỏ hai lượt
-    // liên tiếp đúng ở trần 30 s mặc định, không một khẳng định nào sai. Không phải họ 57P01 của
-    // nợ 24 (đó là vòng đời kết nối); đây là ngân sách wall-clock cho một ca cố ý nặng.
-  }, 120_000);
+      expect(await demTuChoi(ng.id) - truoc, `PERMISSION_DENIED của người giữ ${ma}`).toBe(mongDoi);
+    });
+
+    it("[INV-H17] [sổ nợ 47] chống rỗng ruột: có mã quyền không route nào đòi, và có hơn năm mã được route đòi", () => {
+      const doiBoi = new Set(routeGhi.map((r) => r.permission as string));
+      expect(maQuyen.filter((m) => !doiBoi.has(m)).length).toBeGreaterThan(0);
+      expect(doiBoi.size).toBeGreaterThan(5);
+      expect(nguoiTheoQuyen.size, "mỗi mã quyền một người giữ").toBe(maQuyen.length);
+    });
+  });
 
   it("route ĐỌC không có cổng ở dispatcher (theo ADR-016): phiên không quyền vẫn đọc được /me, /suppliers", async () => {
     const khongQuyen = await nguoi("docduoc@vidu.vn", []);
