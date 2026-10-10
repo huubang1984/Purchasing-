@@ -24912,8 +24912,10 @@ Một lượt độc lập đọc mã và hình dạng đề xuất. Không CAO.
 - **THẤP — đường đọc dựa vào READ COMMITTED** (`withTenant` mở `BEGIN` trần): dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao
   dịch. Không sửa: lượt đọc khi ấy đúng tại ảnh chụp ấy, vẫn nhất quán; bên gọi duy nhất là route (READ COMMITTED) — mục 6.
 - **THẤP — khoá còn lại ở đường ghi có trần.** Một cửa sổ mỗi lần mở thầu (bản lưu `UNIQUE (org_id, unseal_request_id)`), lấy SAU phép
-  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. Xấu nhất ở quy mô lớn
-  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu. Mở thêm lần mở thầu cần
+  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. ~~Xấu nhất ở quy mô lớn
+  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu.~~ **[2026-10-11 — ĐO,
+  mục 8]** Sai: mỗi lần đọc đầu giữ hàng gói từ câu khoá tới commit, không suốt phép tính; ở 5.000 gói, tám lần đọc đầu dồn hay trải
+  2,4 s ⇒ cạnh chờ hàng lâu nhất 22,0 ms, 0/317 lần hỏng. Mở thêm lần mở thầu cần
   người xin và người duyệt. Ghi ở ADR-143.
 - **Xác nhận, không phải lỗi** (tự kiểm lại): bảng so sánh — chuẩn *"bảng so sánh mở"* của L6 — đọc trạng thái một lần, không khoá
   (`packages/unseal/src/comparison.ts`), rồi ghi `COMPARISON_VIEWED`; không ai dựa vào thứ tự sổ của hàng `BENCHMARK_*` (chỉ đếm hay
@@ -24978,8 +24980,9 @@ mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá 
   ADR-143).
 - Đường đọc giả định READ COMMITTED; dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao dịch (lượt đọc khi ấy đúng tại ảnh chụp
   ấy). Không có phép kiểm mức cô lập.
-- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); không đo một loạt lần đọc đầu ở quy mô 5.000 gói.
-- Bộ đo ở tầng hàm, không qua HTTP; luồng đọc liên tục là tải tổng hợp.
+- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); ~~không đo một loạt lần đọc đầu ở quy mô 5.000 gói.~~ **[2026-10-11]**
+  đo ở mục 8.
+- Bộ đo ở tầng hàm, ~~không qua HTTP~~ **[2026-10-11]** qua HTTP đo ở mục 8; luồng đọc liên tục là tải tổng hợp.
 
 ## 7. Số đo
 - `cap-so` cấp S1.274 (trailer `Cap-So` ở `53097e00`); `cap-so --kiem` sạch; Handoff 342 khoản, 54 còn mở.
@@ -24989,6 +24992,63 @@ mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá 
   L7 116 → 123 — bảy ca thêm của ⑻ (tám ca mới, một ca bỏ); bản mới vào commit này. 23 ca bỏ qua như §S1.271 mục 6 (13 ca
   `skipIf(win32)`).
 - Trước đó, trên mã chưa commit: trọn `benchmark.int` 69/69 (máy rảnh); đột biến và hai lượt đo ở mục 4–5.
+
+## 8. [2026-10-11] Hai phép đo còn treo của mục 6: lần đọc đầu ở 5.000 gói, và qua HTTP thật
+Chủ dự án, 2026-10-11: *"Quay lại hai phép đo còn treo của khoản 342"*. Không đổi mã; số đo ghi ở đây, ADR-143 và hàng 342 gạch tại
+chỗ.
+
+**Bộ đo.** Một tệp tạm `apps/api/src/zz-do-342.ts` (không commit, xoá sau lượt đo) chạy bằng `node --experimental-transform-types` trên
+mã của `457cfe07` (`doc-benchmark.ts` không đổi từ S1.274). Cụm Postgres 16 dùng một lần, `migrate()` của kho. Dữ liệu là
+`tools/do-lich-su-gia/gieo.sql` (5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, 1.681 s), chạy từ một bản sao tạm có thêm
+nhóm khoá `benchmark` vào phiên bản chính sách (bản của kho không có nhóm ấy). Mọi kết nối đo đi qua `createPool` sản xuất dưới
+`app_api`: `lock_timeout` và `statement_timeout` đọc lại lúc chạy đều 15 s. Cạnh là cạnh trọn của mục 4 (câu khoá của
+`duyetTraoThau`, một hàng sổ, COMMIT), chạy trên pool riêng hai kết nối. Máy rảnh trước và sau mỗi pha.
+
+**Pha A — lần đọc đầu ở quy mô.** Mỗi cách đo trên một gói `UNSEALED` chưa có bản lưu, với tám lần `docBenchmark` (pool 10 kết nối,
+một phiên người mua). Cạnh thử lại cách nhau 100 ms suốt loạt.
+
+| Cách | Lần đọc đầu | Lần thử cạnh | Chờ hàng | Chờ sổ | Cả cạnh | Hỏng |
+|---|---|---|---|---|---|---|
+| Dồn (cả tám cùng lúc) | một `TINH_MOI` 14,8 s; bảy tính trọn rồi gặp bản lưu (`BAN_LUU`) 14,9–15,3 s | 128 | p50 1,0 · p95 1,7 · lâu nhất 22,0 ms | lâu nhất 8,6 ms | p95 23,9 · lâu nhất 73,4 ms | 0 |
+| Trải (một lần mỗi 2,4 s, cả tám bắt đầu trong 16,8 s) | `TINH_MOI` 11,3 s; bốn lần bắt đầu ở +2,4 … +9,6 s tính trọn rồi gặp bản lưu, 11,4–11,8 s; ba lần từ +12,0 s đọc bản lưu, dưới 0,1 s | 189 | p50 0,8 · p95 1,1 · lâu nhất 6,0 ms | lâu nhất 2,5 ms | p95 12,6 · lâu nhất 30,0 ms | 0 |
+
+Lời khai *"một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s"* (mục 2, ADR-143) là **SAI**: nó lấy thời gian tính làm thời gian giữ
+khoá. `kiemLaiDuoiKhoa` chạy SAU phép tính và sau cờ mốc ngoài. Mỗi lần đọc đầu chỉ giữ `FOR SHARE` qua đoạn từ câu khoá tới commit:
+ghi bản lưu (hay gặp `ON CONFLICT` với bản của lần trước), đọc lại, một hàng sổ. Cửa sổ của các lần đọc chỉ phủ nhau khi phép tính
+của chúng xong cách nhau vài mili giây. Muốn giữ hàng gói liền 15 s thì phải có hàng trăm lần đọc đầu trên một lần mở thầu, xong nối
+nhau; một tiến trình chỉ có 10 kết nối (suy ra, không đo). Lần gặp bản lưu gọi cờ mốc ngoài lần hai, dưới khoá. Đọc mã: lần gọi ấy
+không chờ lô nhập giá ngoài nào, vì khoá tư vấn dùng chung của hai bảng ngoài (`choGhiXong` của `gia-ngoai.ts`, mức giao dịch) đã lấy
+ở phép tính trước khoá. Ngoại lệ là khi tập hàng chuẩn đo được rỗng: lần gọi trước khoá trả `[]` mà không lấy khoá tư vấn. Dữ liệu
+gieo không có giá ngoài.
+
+**Pha B — qua HTTP thật.** `createApiServer(createDispatcher({ pool, auditPool, services: dichVuTest().services }))` nghe ở
+`127.0.0.1`: pool API 10 kết nối, pool sổ 4. Phiên người mua là một hàng `sessions` thật đã qua MFA, gửi bằng cookie. Gói đo là gói
+`UNSEALED` đã có bản lưu từ pha A; tiền đề `GET /rfqs/:id/benchmark` ⇒ 200 `CO/BAN_LUU`. N vòng gọi `GET` liên tục (mỗi vòng chờ trả
+lời rồi gọi lại), rồi 30 lần cạnh cách nhau 20 ms ở mỗi mức. Ba lượt: *Sau* (mã hiện tại), *Trước* (đột biến D1 + D2 của mục 5 lúc
+chạy: hai đường đọc khoá lại `FOR SHARE` như trước bản sửa; khôi phục kiểm sha256), *Sau* lần hai.
+
+| Vòng HTTP | Trước: chờ hàng | Trước: hỏng | Sau: chờ hàng (hai lượt) | Sau: chờ sổ | Sau: cả cạnh | Sau: hỏng | Sau: lượt đọc HTTP, p50 |
+|---|---|---|---|---|---|---|---|
+| 0 | lâu nhất 4,2 ms | 0/30 | lâu nhất 3,0 / 3,3 ms | 5,1 / 5,9 ms | 22,0 / 23,9 ms | 0/30, 0/30 | — |
+| 6 | p95 4,0 · lâu nhất 15,6 ms | 0/30 | 1,4 / 1,7 ms | 6,3 / 3,5 ms | 12,7 / 12,3 ms | 0/30, 0/30 | 261 / 247 lượt, 25,4 / 26,8 ms |
+| 12 | lần duy nhất qua chờ 5,8 s | **29/30** (`57014`) | 3,1 / 4,1 ms | 13,2 / 13,0 ms | 27,2 / 24,2 ms | 0/30, 0/30 | 348 / 371 lượt, 51,4 / 44,8 ms |
+
+- Qua HTTP, bản sửa đứng như ở tầng hàm: mười hai vòng đọc liên tục, 0/60 lần cạnh hỏng, cạnh lâu nhất 27,2 ms. Mã trước: 29/30 hỏng.
+- Ở mã trước, sáu vòng HTTP KHÔNG bỏ đói được cạnh (0/30), trong khi sáu luồng ở tầng hàm làm hỏng 6/30 (mục 4). Suy ra, không
+  đo riêng: mỗi lượt HTTP dài ~25 ms mà khoá chỉ giữ ở đuôi giao dịch đọc, nên giữa các lượt còn khe. Ngưỡng qua HTTP ở máy này nằm
+  giữa 6 và 12 vòng.
+- Lượt *Trước* mất 445 s, phần lớn là 29 lần cạnh chờ tới trần 15 s ở mức mười hai vòng. Trong lúc ấy route phục vụ 139.442 lượt
+  đọc, mã 200 cả, p50 36,6 ms. Mỗi lượt là một hàng sổ `BENCHMARK_READ`, tức ~313 hàng mỗi giây từ một phiên. Route đọc không có
+  hạn mức (ADR-143, *"tải của chính tổ chức, có hàng sổ"*); số này cho thấy cỡ của tải ấy.
+
+**Giới hạn còn lại.**
+- Một tiến trình API trên một máy; nhiều tiến trình không đo. Đường đọc không khoá nên số tiến trình không đổi nó; cửa sổ của lần đọc
+  đầu vẫn là một mỗi lần mở thầu.
+- Cạnh chạy trên pool riêng, nên không đo tranh kết nối trong pool 10 của một tiến trình. Tám lần đọc đầu dồn chiếm tám kết nối trong
+  11–15 s, mà các route khác của tiến trình ấy dùng chung pool.
+- Lần đọc đầu một mình ở máy này mất 11,3 s; §S1.256 đo 18,1–19,1 s trên cùng `gieo.sql`. Không so hai số: khác lúc đo, và mã
+  đã khác (S1.276 thêm nhãn ngoài vào phép tính). Kết luận về khoá không phụ thuộc thời gian tính, vì khoá lấy sau phép tính.
+- Một gói, tải tổng hợp, mỗi mức 30 lần cạnh.
 
 # §S1.273 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-150
 
