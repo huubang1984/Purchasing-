@@ -12787,9 +12787,9 @@ giá thuộc gói của lượt qua lời mời; hai nhánh có tên (`hang_cham
 
 - **Một đường ghi thứ hai dựng TRỌN một lượt chấm mới** trong giao dịch của nó vẫn chọn được hàng của lượt ấy trong các báo giá đã mở của
   gói (kể cả phiên bản vòng 1 sau BAFO) — vế ấy là J2, lượt chấm tái lập được từ bản rõ, đo ở bộ kiểm ngoại tuyến của bộ bằng chứng.
-  ~~Buộc *"đúng phiên bản của vòng"* ở CSDL chạm ngữ nghĩa lượt chấm sau BAFO; không làm ở vòng này.~~ **[S1.9101]** Đo lại: luật
+  ~~Buộc *"đúng phiên bản của vòng"* ở CSDL chạm ngữ nghĩa lượt chấm sau BAFO; không làm ở vòng này.~~ **[S1.290]** Đo lại: luật
   một-hàng-một-luồng của `docBaoGia` (phiên bản lớn nhất đã mở, lời mời còn sống) không đổi ngữ nghĩa sau BAFO; CSDL nay chép nó —
-  ADR-9201. Giá trị `effective_cost` và đủ mặt các luồng vẫn là J2.
+  ADR-162. Giá trị `effective_cost` và đủ mặt các luồng vẫn là J2.
 - **Đề xuất trước S4.7c không có cam kết**, kể cả đề xuất còn sống trên gói TCO của S4.7a/b lệch hạng mà không giải trình — vẫn duyệt
   được. Không lấp ngược.
 - **Người giữ `award.recommend` dò được hạng** — gửi kèm giải trình, lời đáp *không cần* nói hạng giá bằng hạng chi phí, không hàng sổ.
@@ -12897,11 +12897,11 @@ bước ghi nhận đóng sớm (201 ở S3, 422 ở MVP1 — bỏ qua) vì mọ
 Lập ngoại lệ ở OPEN; `gieo:demo --s3` ca thu hẹp/đóng sớm và lượt đi thử T4 cho ba tín hiệu ở chữ ký (một vòng màn); K8b
 `tham_dinh_truoc_trao` (S3.7); KPI tỷ lệ đóng sớm (S3.9).
 
-## ADR-9201 — J1 vế phiên bản: hàng chấm chỉ nhận phiên bản MỚI NHẤT ĐÃ MỞ của luồng báo giá, lời mời còn sống — CSDL chép luật một-hàng-một-luồng của `docBaoGia`
+## ADR-162 — J1 vế phiên bản: hàng chấm chỉ nhận phiên bản MỚI NHẤT ĐÃ MỞ của luồng báo giá, lời mời còn sống — CSDL chép luật một-hàng-một-luồng của `docBaoGia`
 
 **Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10 chọn *"Làm vế (c)"* sau khi đo rằng luật không đổi
-ngữ nghĩa lượt chấm sau BAFO · **[S1.9101]** · **Migration:** `9501_hang_cham_phien_ban_moi_nhat` · **Liên quan:** ADR-128, ADR-160 ⑽ ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+ngữ nghĩa lượt chấm sau BAFO · **[S1.290]** · **Migration:** `122_hang_cham_phien_ban_moi_nhat` · **Liên quan:** ADR-128, ADR-160 ⑽ ·
+**Biên bản:** `evidence/security-reviews.md` §S1.290
 
 ### Bối cảnh
 
@@ -12922,7 +12922,7 @@ lại, phiên bản mới nhất đã mở của họ vẫn là bản vòng mộ
 ⑵ **Hàm và trigger riêng, không sửa `luot_cham_kiem_hang`.** Ghim của `121` (5) giữ nguyên; tên mới xếp giữa `…_kiem_luot` và
 `…_kiem_thanh_phan` (BEFORE cùng sự kiện chạy theo thứ tự tên) — hàng ngoài giao dịch hay của gói khác nghe lý do ấy trước.
 
-⑶ **Mã sản xuất không đổi.** `taoLuotDanhGia` đã ghi đúng tập này; hai ca đo ở `luot-danh-gia.int` (khối `[S1.9101]`) kèm đối chứng dương
+⑶ **Mã sản xuất không đổi.** `taoLuotDanhGia` đã ghi đúng tập này; hai ca đo ở `luot-danh-gia.int` (khối `[S1.290]`) kèm đối chứng dương
 — phiên bản mới nhất của luồng đã nộp lại, bản vòng một của luồng ngoài top-N — và lượt chấm sản xuất sau đó.
 
 ⑷ **Đua đóng, không mở.** Lượt chấm chỉ tạo được ở `UNSEALED`/`BAFO_UNSEALED`, không lần mở phong bì nào chạy ở hai trạng thái ấy; một lần

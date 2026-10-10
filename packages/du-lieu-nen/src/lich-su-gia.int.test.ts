@@ -857,7 +857,7 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
     );
     // [S1.280 / S3.5a / K7] `award_so_tien_trao` đọc số tiền và tiền tệ của báo giá được chọn để phân bậc trao thầu — cùng dòng ở lớp tĩnh.
     // [S1.288 / S4.7c1 / L8] `award_dien_cam_ket` đọc bốn ô khai của báo giá được đề xuất vào cam kết — cùng dòng ở lớp tĩnh.
-    // [S1.9101 / J1] `luot_cham_kiem_phien_ban` hỏi luồng có phiên bản lớn hơn đã mở chưa, không đọc `payload` — cùng dòng ở lớp tĩnh.
+    // [S1.290 / J1] `luot_cham_kiem_phien_ban` hỏi luồng có phiên bản lớn hơn đã mở chưa, không đọc `payload` — cùng dòng ở lớp tĩnh.
     expect(rows.map((r) => r.ten)).toEqual([
       "public.anh_xa_kiem_luat",
       "public.award_dien_cam_ket",

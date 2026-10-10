@@ -47,8 +47,8 @@ const HAM_SQL: Readonly<Record<string, string>> = {
   // chụp vào `rfq_award_cam_ket` dưới `app_api` lúc đề xuất; đọc ra chỉ qua `docCamKetTraoThau` dưới cổng `bid.view`.
   award_dien_cam_ket: "ĐỌC — bốn ô khai TCO của báo giá được đề xuất, chụp vào cam kết (L8, `121_cam_ket_trao_thau`)",
   goi_y_kiem_luat: "TỒN TẠI — gợi ý trên gói đã có bản rõ chỉ do người giữ `item.manage` ghi (`089`)",
-  // [S1.9101 / J1] Luồng có phiên bản lớn hơn ĐÃ MỞ chưa — chỉ hỏi tồn tại, không đọc `payload`; chép luật một-hàng-một-luồng của `docBaoGia`.
-  luot_cham_kiem_phien_ban: "TỒN TẠI — hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng (J1, `9501_hang_cham_phien_ban_moi_nhat`)",
+  // [S1.290 / J1] Luồng có phiên bản lớn hơn ĐÃ MỞ chưa — chỉ hỏi tồn tại, không đọc `payload`; chép luật một-hàng-một-luồng của `docBaoGia`.
+  luot_cham_kiem_phien_ban: "TỒN TẠI — hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng (J1, `122_hang_cham_phien_ban_moi_nhat`)",
   quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`096`)",
 };
 

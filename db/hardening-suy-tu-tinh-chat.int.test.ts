@@ -1276,8 +1276,8 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     },
   });
   // Rồi phiên khách bị thu hồi, token bị thu hồi, lời mời bị thu hồi.
-  // [S1.9101 / J1] Lời mời bị thu hồi là lời mời THỨ HAI của gói, không phải `lm`: báo giá `pb` của `lm` là báo giá được mở, chấm và trao
-  // ở dưới, và `luot_cham_kiem_phien_ban` (`9501`) từ chối hàng chấm của lời mời đã thu hồi — đúng luật `docBaoGia` (ADR-128).
+  // [S1.290 / J1] Lời mời bị thu hồi là lời mời THỨ HAI của gói, không phải `lm`: báo giá `pb` của `lm` là báo giá được mở, chấm và trao
+  // ở dưới, và `luot_cham_kiem_phien_ban` (`122`) từ chối hàng chấm của lời mời đã thu hồi — đúng luật `docBaoGia` (ADR-128).
   const nccThuHoi = await dungId(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
     [org, `NCC thu hoi ${hex}`, pm.u, pm.s],

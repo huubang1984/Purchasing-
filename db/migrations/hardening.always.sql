@@ -17241,10 +17241,10 @@ $ham$;
                   'hàm public.luot_cham_kiem_hang() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_hang() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / J1 — tiep TRUNG-1 cua §S1.288] Hang cham chi nhan phien ban moi nhat da mo cua luong, loi moi con song. Than `RETURN NEW` cho mot luot cham dung tron o duong ghi thu hai chon gia vong mot da bi BAFO thay, hay bao gia cua loi moi da thu hoi.
+    -- [S1.290 / J1 — tiep TRUNG-1 cua §S1.288] Hang cham chi nhan phien ban moi nhat da mo cua luong, loi moi con song. Than `RETURN NEW` cho mot luot cham dung tron o duong ghi thu hai chon gia vong mot da bi BAFO thay, hay bao gia cua loi moi da thu hoi.
     ARRAY[
-      $q$hàm + trigger luot_cham_kiem_phien_ban (9501_hang_cham_phien_ban_moi_nhat)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_hang_cham_phien_ban_moi_nhat.sql')$q$,
+      $q$hàm + trigger luot_cham_kiem_phien_ban (122_hang_cham_phien_ban_moi_nhat)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '122_hang_cham_phien_ban_moi_nhat.sql')$q$,
       $q$DO $fn349$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

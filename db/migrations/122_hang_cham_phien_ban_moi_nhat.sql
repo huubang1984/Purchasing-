@@ -1,10 +1,10 @@
 -- ==============================================================================================
--- 9501_hang_cham_phien_ban_moi_nhat — [S1.9101] HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG BÁO GIÁ, LỜI MỜI CÒN SỐNG
+-- 122_hang_cham_phien_ban_moi_nhat — [S1.290] HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG BÁO GIÁ, LỜI MỜI CÒN SỐNG
 -- (J1, vế phiên bản — tiếp TRUNG-1 của rà soát §S1.288)
 --
 -- `121` (5) buộc hàng chấm ghi trong CHÍNH giao dịch tạo lượt, cho báo giá của ĐÚNG gói, và nói ra vế còn mở: một đường ghi thứ hai
 -- dựng TRỌN một lượt chấm trong giao dịch của nó vẫn chọn được hàng trong các bản rõ của gói. Đo lúc viết (`luot-danh-gia.int`, khối
--- `[S1.9101]`): dưới `app_api`, lượt ấy nhận được phiên bản VÒNG MỘT của nhà cung cấp đã nộp lại ở BAFO (giá cũ — khoá ngoại sang
+-- `[S1.290]`): dưới `app_api`, lượt ấy nhận được phiên bản VÒNG MỘT của nhà cung cấp đã nộp lại ở BAFO (giá cũ — khoá ngoại sang
 -- `rfq_unsealed_bids` cho qua vì bản rõ ấy vẫn còn, bảng chỉ-ghi-thêm), và báo giá của lời mời ĐÃ THU HỒI. `docBaoGia` không bao giờ
 -- đọc hai thứ ấy: luật của nó (§S1.108 mục 7d, khoản 250 / ADR-128) là MỘT hàng cho MỘT luồng — phiên bản `version` lớn nhất trong
 -- số đã mở — và chỉ luồng của lời mời còn sống.

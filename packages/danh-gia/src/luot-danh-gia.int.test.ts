@@ -4785,14 +4785,14 @@ describe("[S1.288 / S4.7c1] L8 vế cam kết — cam kết TCO chụp ở CSDL 
 
 
 // ================================================================================================
-// [S1.9101 / J1 vế phiên bản — tiếp TRUNG-1 của §S1.288] HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG, LỜI MỜI CÒN SỐNG
+// [S1.290 / J1 vế phiên bản — tiếp TRUNG-1 của §S1.288] HÀNG CHẤM CHỈ NHẬN PHIÊN BẢN MỚI NHẤT ĐÃ MỞ CỦA LUỒNG, LỜI MỜI CÒN SỐNG
 //
 // `121` buộc hàng chấm ghi trong CHÍNH giao dịch tạo lượt, cho báo giá của ĐÚNG gói. Còn một vế: một đường ghi thứ hai dựng TRỌN
 // một lượt chấm trong giao dịch của nó chọn được, trong các bản rõ của gói, phiên bản VÒNG MỘT của nhà cung cấp đã nộp lại ở BAFO
 // (giá cũ), hay báo giá của lời mời đã thu hồi — hai thứ `docBaoGia` không bao giờ đọc. Hai ca dưới ghi thẳng dưới `app_api`, như
 // đường ghi thứ hai.
 // ================================================================================================
-describe("[S1.9101] J1 vế phiên bản — hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng, lời mời còn sống", { timeout: 300000 }, () => {
+describe("[S1.290] J1 vế phiên bản — hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng, lời mời còn sống", { timeout: 300000 }, () => {
   const hangGia = (tien: string, hang: number): readonly unknown[] => [
     tien,
     JSON.stringify([{ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: tien, tien }]),
