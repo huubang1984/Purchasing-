@@ -1215,6 +1215,9 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 const DANH_SACH_TRANG_KIEM_SOAT = [
   "KiemSoatError",
   "LOAI_TIN_HIEU_TRAO_THAU",
+  // [S1.291 / S3.8a] Hiệu suất nhà cung cấp: sàn lịch sử (giả định chờ pilot) và đường đọc có cổng `bid.view`.
+  "SAN_LICH_SU",
+  "docHieuSuatNhaCungCap",
   "docKhaiBaoXungDot",
   "ghiNhanTinHieu",
   "ghiTinHieuKhiDeXuat",
@@ -1320,6 +1323,8 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   // người giữ `supplier.qualify` do bên gọi truyền vào xác minh — câu thô trên pool chủ cụm.
   "nguoiNhapNhaCungCap",
   "nhaCungCapDemDuoc",
+  // [khoản 346] Chờ qua mốc lật của bộ đếm cửa sổ cố định, đọc giờ CSDL qua `doLechDongHo` — không câu SQL mới.
+  "choQuaMocCuaSo",
   // [S1.9101 / S3.7a2 / K8b] Phiên bản Passport thô cho fixture thẩm định: năm câu ghi của đường Passport trong MỘT giao dịch trên pool
   // chủ cụm, mọi trigger vẫn chạy — test của tầng gói và của award theo bậc cần một nhà cung cấp ĐÃ NỘP hồ sơ mà không đo đường ấy.
   "phienBanPassportTho",

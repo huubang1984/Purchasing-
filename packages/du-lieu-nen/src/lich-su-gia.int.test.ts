@@ -22,6 +22,10 @@ import { PermissionDeniedError } from "@trustprocure/identity";
 import { docLichSuGia, khaiBiDanhDonVi, khaiQuyDoiRieng, taoHangChuan, taoPhienBanHangChuan, type LichSuGia } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+// [khoản 347] Cùng lớp với ca ⑷ của `du-lieu-ngoai.int.test.ts`: khẳng định "sổ không mang đơn giá" tìm dãy chữ số trong một
+// chuỗi có UUID ngẫu nhiên. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm.
+const MAU_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+const boUuid = (s: string): string => s.replace(MAU_UUID, "<uuid>");
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
 
@@ -857,11 +861,13 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
     );
     // [S1.280 / S3.5a / K7] `award_so_tien_trao` đọc số tiền và tiền tệ của báo giá được chọn để phân bậc trao thầu — cùng dòng ở lớp tĩnh.
     // [S1.288 / S4.7c1 / L8] `award_dien_cam_ket` đọc bốn ô khai của báo giá được đề xuất vào cam kết — cùng dòng ở lớp tĩnh.
+    // [S1.290 / J1] `luot_cham_kiem_phien_ban` hỏi luồng có phiên bản lớn hơn đã mở chưa, không đọc `payload` — cùng dòng ở lớp tĩnh.
     expect(rows.map((r) => r.ten)).toEqual([
       "public.anh_xa_kiem_luat",
       "public.award_dien_cam_ket",
       "public.award_so_tien_trao",
       "public.goi_y_kiem_luat",
+      "public.luot_cham_kiem_phien_ban",
       "public.quan_sat_gia",
     ]);
   });
@@ -927,7 +933,8 @@ describe("[INV-L6] docLichSuGia — cổng bid.view, một hàng sổ mỗi lầ
 
     const so = await soHang("PRICE_HISTORY_READ", item);
     expect(so).toEqual([{ payload: { itemId: item, soQuanSat: 2, viewedBySessionId: pm.phien }, resource_type: "CANONICAL_ITEM", actor_id: pm.nguoi }]);
-    expect(JSON.stringify(so)).not.toMatch(/123456|12345\.67|99\.00/u);
+    expect(boUuid(JSON.stringify(so)), "chuỗi đã có UUID để bỏ").toContain("<uuid>");
+    expect(boUuid(JSON.stringify(so))).not.toMatch(/123456|12345\.67|99\.00/u);
     // Lần đọc thứ hai: thêm đúng một hàng.
     await doc(pm.phien, item);
     expect(await soHang("PRICE_HISTORY_READ", item)).toHaveLength(2);

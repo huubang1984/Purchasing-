@@ -1279,6 +1279,22 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     },
   });
   // Rồi phiên khách bị thu hồi, token bị thu hồi, lời mời bị thu hồi.
+  // [S1.290 / J1] Lời mời bị thu hồi là lời mời THỨ HAI của gói, không phải `lm`: báo giá `pb` của `lm` là báo giá được mở, chấm và trao
+  // ở dưới, và `luot_cham_kiem_phien_ban` (`122`) từ chối hàng chấm của lời mời đã thu hồi — đúng luật `docBaoGia` (ADR-128).
+  const nccThuHoi = await dungId(
+    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+    [org, `NCC thu hoi ${hex}`, pm.u, pm.s],
+  );
+  const lhThuHoi = await dungId(
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+      "VALUES ($1, $2, 'Nguoi ban 2', $3, '0900000002', $4, $5) RETURNING id",
+    [org, nccThuHoi, `thuhoi${hex}@vidu.vn`, pm.u, pm.s],
+  );
+  const lmThuHoi = await dungId(
+    "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+      "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+    [org, rfq1, nccThuHoi, lhThuHoi, pm.u, pm.s],
+  );
   await so.chung("public.guest_sessions", "UPDATE", api("UPDATE guest_sessions SET revoked_at = now() WHERE id = $1 RETURNING revoked_at", [pk], { revoked_at: KHAC_NULL }));
   await so.chung(
     "public.rfq_invitation_tokens",
@@ -1291,7 +1307,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     api(
       "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1 " +
         "RETURNING status, revoked_at, revoked_by, revoked_by_session_id",
-      [lm, pm.u, pm.s],
+      [lmThuHoi, pm.u, pm.s],
       { status: "REVOKED", revoked_at: KHAC_NULL, revoked_by: pm.u, revoked_by_session_id: pm.s },
     ),
   );
@@ -2889,7 +2905,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // Đích của INSERT/UPDATE/DELETE là r (bảng), p (bảng phân mảnh), v (view), m (matview), f (bảng
     // ngoài). Chỉ 'r' đi qua đủ các lớp của H19 hôm nay: view nhận trigger INSTEAD OF (trả NULL là
     // nuốt hàng), bảng ngoài ghi ra một cụm khác, phân mảnh cần chốt trên từng lá (đã đo ở test lá).
-    const LOAI_DA_KHAI: readonly string[] = [];
+    // [S1.291 / S3.8a] View CHỈ ĐỌC: không trigger INSTEAD OF (`CAU_QUAN_HE_KHAC_SAI` cấm), `app_api` chỉ SELECT (ghim ở hardening và ở
+    // `rls-coverage`), nên nó không phải đường ghi nào H19 phải nhìn.
+    const LOAI_DA_KHAI: readonly string[] = ["public.supplier_performance (v)"];
     // [S1.34 / khoản nợ 78] Vì sao loại `pg_temp%`: bảng tạm là của PHIÊN, không phải của lược đồ, và
     // một bảng tạm trùng tên đứng TRƯỚC public trong search_path — đúng cơ chế che tên của ADR-036 ⑯.
     // Tổng điều tra này không nhìn thấy nó theo thiết kế; thứ đóng đường ấy là hardening thu hồi TEMP

@@ -10,12 +10,20 @@
 #     TỆP NÀY MỘT MÌNH CHƯA CƯỠNG CHẾ GÌ. Nó chỉ có răng khi trên GitHub, ở nhánh mặc định, bật:
 #       · Settings → Branches → "Require a pull request before merging",
 #       · "Require review from Code Owners",
-#       · "Required approvals" >= 2 — và vì chủ kho là một người, người thứ HAI phải là một
-#         cộng tác viên thật được thêm vào kho (hoặc một dòng nữa ở đây khi có người ấy).
+#       · ~~"Required approvals" >= 2~~ [2026-10-09] "Required approvals" = 1 — người mở PR không tự
+#         duyệt được, nên khi kho có hai người thì >= 2 làm MỌI PR không đủ người duyệt; và vì chủ kho là
+#         một người, người thứ HAI phải là một cộng tác viên thật được thêm vào kho (hoặc một dòng nữa ở
+#         đây khi có người ấy).
 #     Chừng nào chưa bật, PR của chính chủ kho tự merge được, và người mở PR không phải chủ kho
 #     cũng không bị chặn. Đây là bước cấu hình THỦ CÔNG của chủ dự án, không tự động hoá được từ
 #     repo: một job CI đọc được số approval qua API nhưng chạy dưới quyền của chính PR, và người
 #     mở PR sửa được workflow trong cùng PR đó. Chỉ branch protection phía GitHub mới cưỡng chế được.
+#
+#     [2026-10-09] ĐÃ BẬT, bằng ruleset `bao-ve-master` trên nhánh mặc định (từ 2026-10-02): bắt PR,
+#     1 approval, review của Code Owners, bỏ duyệt cũ khi có commit mới, người đẩy cuối không tự
+#     duyệt, chặn force push và xoá nhánh; bypass cho vai Repository admin. Kho có cộng tác viên
+#     thứ hai. Hệ quả: PR của người khác không merge được khi chủ kho chưa duyệt; PR của chính chủ
+#     kho merge bằng bypass (`gh pr merge --admin`) — tệp này vẫn không giữ chủ kho khỏi chính mình.
 #
 # VÌ SAO CÓ FILE NÀY, nói bằng kết luận đo được chứ không bằng khẩu hiệu:
 #   Hai reviewer độc lập, ở hai hàng rào khác nhau (hàng rào G1 của Task 7 và hàng rào RLS của
