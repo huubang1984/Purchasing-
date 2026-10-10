@@ -27,9 +27,9 @@ const THU_MUC_MIGRATION = fileURLToPath(new URL("../../db/migrations/", import.m
 const TEP_TS: Readonly<Record<string, string>> = {
   "packages/supplier/src/passport.ts":
     "GHI phiên bản (phiên Passport); ĐỌC của nhà cung cấp (bốn số cuối) và của bên mua sau `supplier.qualify` (số đầy đủ, hàng sổ)",
-  // [S1.9101 / S3.7a2 / K8b] Thẩm định đọc thứ tự phiên bản (mới nhất hay không) — không đọc cột hồ sơ nào.
+  // [S1.293 / S3.7a2 / K8b] Thẩm định đọc thứ tự phiên bản (mới nhất hay không) — không đọc cột hồ sơ nào.
   "packages/supplier/src/tham-dinh.ts": "ĐỌC `thu_tu` của phiên bản được thẩm định và của phiên bản mới nhất",
-  // [S1.9101 / S3.7a2] Fixture test: GHI một phiên bản thô trên pool chủ cụm — số tài khoản trong danh sách cột, không sau RETURNING.
+  // [S1.293 / S3.7a2] Fixture test: GHI một phiên bản thô trên pool chủ cụm — số tài khoản trong danh sách cột, không sau RETURNING.
   "packages/test-support/src/passport-tho.ts": "GHI phiên bản thô cho fixture thẩm định (pool chủ cụm, một giao dịch)",
 };
 /** Tệp có câu INSERT mang `so_tai_khoan` trong danh sách cột — đường nộp thật và fixture thô. */

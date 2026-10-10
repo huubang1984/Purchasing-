@@ -10,7 +10,7 @@ import { docThamDinhNhaCungCap, thamDinhNhaCungCap, thuHoiThamDinhNhaCungCap } f
 import { docHoSoXacMinh, thuHoiXacMinhNhaCungCap, xacMinhNhaCungCap } from "./xac-minh.js";
 
 // =============================================================================================
-// [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸ · ADR-9201] THẨM ĐỊNH ĐẦY ĐỦ NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16, DƯỚI `app_api`
+// [S1.293 / S3.7a2 / K8b · ADR-081 ⑵ ⑸ · ADR-164] THẨM ĐỊNH ĐẦY ĐỦ NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16, DƯỚI `app_api`
 //
 // Mỗi luật một ca, và mỗi ca đọc CSDL chứ không đọc lời của hàm: hàng trong `supplier_qualifications`, hàng sổ, và câu trả lời của
 // `ncc_tham_dinh_hien_hanh` — hàm mà K8b ở trao thầu hỏi. Phiên bản Passport dựng bằng `phienBanPassportTho` (năm câu ghi của `118`,

@@ -118,9 +118,9 @@ export type KetQuaYeuCauTuDeXuat =
   | { readonly ok: false; readonly ma: MaTuChoiPassport | "PASSPORT_KHONG_CO_LOI_MOI" };
 
 /**
- * [S1.9101 / S3.7a2 / K8b] Yêu cầu hồ sơ TỰ SINH lúc đề xuất trao thầu ở bậc `tham_dinh_truoc_trao` cho nhà cung cấp chưa có thẩm định
+ * [S1.293 / S3.7a2 / K8b] Yêu cầu hồ sơ TỰ SINH lúc đề xuất trao thầu ở bậc `tham_dinh_truoc_trao` cho nhà cung cấp chưa có thẩm định
  * còn hiệu lực (spec §4.8: *kích hoạt tự động khi đề xuất award*; chủ dự án chốt 2026-10-10). Dưới quyền ĐỀ XUẤT (`award.recommend`),
- * KHÔNG đòi `supplier.qualify`: trigger `passport_kiem_yeu_cau` (thân `9501`) đòi một đề xuất `PROPOSED` còn sống của chính người gọi
+ * KHÔNG đòi `supplier.qualify`: trigger `passport_kiem_yeu_cau` (thân `124`) đòi một đề xuất `PROPOSED` còn sống của chính người gọi
  * cho nhà cung cấp ấy. Người liên hệ nhận link là người ĐƯỢC MỜI của gói — không ai chọn đích. Hàm vị từ `passport_chot_yeu_cau` từ chối
  * (chưa K8a, thiếu điện thoại, quá trần…) ⇒ `ok: false` có mã, giao dịch còn lành, đề xuất vẫn ghi; chữ ký bị K8b chặn tới khi thẩm định.
  * Người gọi đúc link (`ducTokenPassport`) trong CÙNG giao dịch và gửi sau commit — khuôn route yêu cầu tay.

@@ -211,7 +211,7 @@ const COMMIT_TRAN_DA_KHAI: Record<string, { readonly so: number; readonly lyDo: 
   "packages/test-support/src/passport-tho.ts": {
     so: 1,
     lyDo:
-      "[S1.9101 / S3.7a2] hạ tầng test — fixture Passport thô: năm câu ghi của đường Passport trên pool CHỦ CỤM trong MỘT giao dịch " +
+      "[S1.293 / S3.7a2] hạ tầng test — fixture Passport thô: năm câu ghi của đường Passport trên pool CHỦ CỤM trong MỘT giao dịch " +
       "(trigger token đòi `now()` bằng nhau với yêu cầu), không phải pool ứng dụng; cụm thử không có replica",
   },
   "packages/db/src/migrate.ts": {
@@ -363,7 +363,7 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 1,
     cau: 0,
     lyDo:
-      "[S1.9101 / S3.7a2] hạ tầng test — fixture Passport thô lấy MỘT client của pool chủ cụm cho giao dịch năm câu ghi (cùng `now()`)",
+      "[S1.293 / S3.7a2] hạ tầng test — fixture Passport thô lấy MỘT client của pool chủ cụm cho giao dịch năm câu ghi (cùng `now()`)",
   },
   "packages/test-support/src/nha-cung-cap-dem-duoc.ts": {
     lay: 0,
@@ -431,7 +431,7 @@ const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyD
   "packages/test-support/src/passport-tho.ts": {
     so: 1,
     lyDo:
-      "[S1.9101 / S3.7a2] hạ tầng test — client một giao dịch của fixture Passport thô; kết nối đứt ở đó làm bộ test đỏ, " +
+      "[S1.293 / S3.7a2] hạ tầng test — client một giao dịch của fixture Passport thô; kết nối đứt ở đó làm bộ test đỏ, " +
       "không có tiến trình sản xuất nào để chết",
   },
   "packages/test-support/src/postgres.ts": {

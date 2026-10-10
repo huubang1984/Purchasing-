@@ -3111,10 +3111,10 @@ $ham$;
          ('public', 'supplier_passport_tokens', 'supplier_passport_tokens_muc_dich', '118_passport_nha_cung_cap', 'CHECK ((purpose = ''PASSPORT_SUBMISSION''::text))'),
          ('public', 'supplier_passport_versions', 'supplier_passport_versions_so_tai_khoan', '118_passport_nha_cung_cap', 'CHECK ((so_tai_khoan ~ ''^[0-9]{6,20}$''::text))'),
          ('public', 'supplier_passport_versions', 'supplier_passport_versions_van_ban', '118_passport_nha_cung_cap', 'CHECK ((((octet_length(btrim(legal_name)) >= 1) AND (octet_length(btrim(legal_name)) <= 500)) AND ((octet_length(btrim(nguoi_dai_dien)) >= 1) AND (octet_length(btrim(nguoi_dai_dien)) <= 200)) AND ((octet_length(btrim(dia_chi)) >= 1) AND (octet_length(btrim(dia_chi)) <= 1000)) AND ((octet_length(btrim(ngan_hang)) >= 1) AND (octet_length(btrim(ngan_hang)) <= 200)) AND ((((legal_name || nguoi_dai_dien) || dia_chi) || ngan_hang) !~ ''[\x01-\x1f\x7f\x200e\x200f\x202a-\x202e\x2066-\x2069]''::text)))'),
-         ('public', 'supplier_qualifications', 'supplier_qualifications_loai_check', '9501_tham_dinh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''QUALIFIED''::text, ''REVOKED''::text])))'),
-         ('public', 'supplier_qualifications', 'supplier_qualifications_ly_do_theo_loai', '9501_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
-         ('public', 'supplier_qualifications', 'supplier_qualifications_phien_ban_theo_loai', '9501_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''QUALIFIED''::text) = (passport_version_id IS NOT NULL)))'),
-         ('public', 'supplier_qualifications', 'supplier_qualifications_tham_dinh_du_cot', '9501_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR (het_han_at IS NOT NULL)))'),
+         ('public', 'supplier_qualifications', 'supplier_qualifications_loai_check', '124_tham_dinh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''QUALIFIED''::text, ''REVOKED''::text])))'),
+         ('public', 'supplier_qualifications', 'supplier_qualifications_ly_do_theo_loai', '124_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
+         ('public', 'supplier_qualifications', 'supplier_qualifications_phien_ban_theo_loai', '124_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''QUALIFIED''::text) = (passport_version_id IS NOT NULL)))'),
+         ('public', 'supplier_qualifications', 'supplier_qualifications_tham_dinh_du_cot', '124_tham_dinh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR (het_han_at IS NOT NULL)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
          ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
@@ -3871,7 +3871,7 @@ $ham$;
          ('public', 'supplier_passport_requests', '118_passport_nha_cung_cap'),
          ('public', 'supplier_passport_tokens', '118_passport_nha_cung_cap'),
          ('public', 'supplier_passport_versions', '118_passport_nha_cung_cap'),
-         ('public', 'supplier_qualifications', '9501_tham_dinh_nha_cung_cap'),
+         ('public', 'supplier_qualifications', '124_tham_dinh_nha_cung_cap'),
          ('public', 'supplier_verifications', '082_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
@@ -11337,10 +11337,10 @@ $ham$$q$,
                   'hàm public.award_vai_cua_nguoi(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_vai_cua_nguoi(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Than tu 9501_tham_dinh_nha_cung_cap.sql: o bac doi tham dinh, chu ky chi dem khi tham_dinh_id BANG tham dinh hien hanh cua nha cung cap duoc trao — phien ban Passport moi lam tham dinh cu thoi hieu luc va chu ky cu thoi dem (chu du an chot 2026-10-10). Mot than bo ve ay mang chu ky cu qua ho so moi.
+    -- [S1.293 / S3.7a2 / K8b] Than tu 124_tham_dinh_nha_cung_cap.sql: o bac doi tham dinh, chu ky chi dem khi tham_dinh_id BANG tham dinh hien hanh cua nha cung cap duoc trao — phien ban Passport moi lam tham dinh cu thoi hieu luc va chu ky cu thoi dem (chu du an chot 2026-10-10). Mot than bo ve ay mang chu ky cu qua ho so moi.
     ARRAY[
-      $q$định nghĩa hàm award_chu_ky_con_hieu_luc(uuid, uuid) (115_xung_dot_chu_ky_trao_thau, thân từ 9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_chu_ky_con_hieu_luc(uuid, uuid) (115_xung_dot_chu_ky_trao_thau, thân từ 124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chu_ky_con_hieu_luc(p_org uuid, p_award uuid) RETURNS TABLE (nguoi uuid, vai text[])
   LANGUAGE sql
   STABLE
@@ -11378,10 +11378,10 @@ $ham$$q$,
                   'hàm public.award_chu_ky_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chu_ky_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Nha cung cap cua mot phien ban bao gia (bao gia -> loi moi -> nha cung cap) — trigger tham dinh, vi tu K8b va trigger yeu cau cung doc. Mot than tra NULL tat K8b o moi noi.
+    -- [S1.293 / S3.7a2 / K8b] Nha cung cap cua mot phien ban bao gia (bao gia -> loi moi -> nha cung cap) — trigger tham dinh, vi tu K8b va trigger yeu cau cung doc. Mot than tra NULL tat K8b o moi noi.
     ARRAY[
-      $q$định nghĩa hàm award_ncc_cua_bao_gia(uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_ncc_cua_bao_gia(uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_ncc_cua_bao_gia(p_org uuid, p_bid_version uuid) RETURNS uuid
   LANGUAGE sql
   STABLE
@@ -11411,10 +11411,10 @@ $ham$$q$,
                   'hàm public.award_ncc_cua_bao_gia(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_ncc_cua_bao_gia(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] CAU HOI DUY NHAT: id tham dinh con hieu luc hay NULL — hang moi nhat QUALIFIED, chua het han, tro phien ban Passport MOI NHAT, xac minh K8a con hieu luc, nguoi tham dinh khong CO_XUNG_DOT voi nha cung cap. Mot than bo ve phien ban moi nhat mang tham dinh cu qua ho so moi (ADR-081 (2)).
+    -- [S1.293 / S3.7a2 / K8b] CAU HOI DUY NHAT: id tham dinh con hieu luc hay NULL — hang moi nhat QUALIFIED, chua het han, tro phien ban Passport MOI NHAT, xac minh K8a con hieu luc, nguoi tham dinh khong CO_XUNG_DOT voi nha cung cap. Mot than bo ve phien ban moi nhat mang tham dinh cu qua ho so moi (ADR-081 (2)).
     ARRAY[
-      $q$định nghĩa hàm ncc_tham_dinh_hien_hanh(uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_tham_dinh_hien_hanh(uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_tham_dinh_hien_hanh(p_org uuid, p_ncc uuid) RETURNS uuid
   LANGUAGE sql
   STABLE
@@ -11455,10 +11455,10 @@ $ham$$q$,
                   'hàm public.ncc_tham_dinh_hien_hanh(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm ncc_tham_dinh_hien_hanh(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Vo boolean cua ncc_tham_dinh_hien_hanh — tang goi va man doc.
+    -- [S1.293 / S3.7a2 / K8b] Vo boolean cua ncc_tham_dinh_hien_hanh — tang goi va man doc.
     ARRAY[
-      $q$định nghĩa hàm ncc_tham_dinh_con_hieu_luc(uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_tham_dinh_con_hieu_luc(uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_tham_dinh_con_hieu_luc(p_org uuid, p_ncc uuid) RETURNS boolean
   LANGUAGE sql
   STABLE
@@ -11484,10 +11484,10 @@ $ham$$q$,
                   'hàm public.ncc_tham_dinh_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm ncc_tham_dinh_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Bac cao hon cua trao thau co bat tham_dinh_truoc_trao khong — false khi to chuc chua bat hay K7 chua qua (award_chot_bac noi truoc), khong nem. Mot than tra false tat K8b o chu ky, hang APPROVED va phep dem chu ky.
+    -- [S1.293 / S3.7a2 / K8b] Bac cao hon cua trao thau co bat tham_dinh_truoc_trao khong — false khi to chuc chua bat hay K7 chua qua (award_chot_bac noi truoc), khong nem. Mot than tra false tat K8b o chu ky, hang APPROVED va phep dem chu ky.
     ARRAY[
-      $q$định nghĩa hàm award_doi_tham_dinh(uuid, uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_doi_tham_dinh(uuid, uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_doi_tham_dinh(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS boolean
   LANGUAGE plpgsql
   STABLE
@@ -11521,10 +11521,10 @@ $ham$$q$,
                   'hàm public.award_doi_tham_dinh(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_doi_tham_dinh(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Vi tu K8b o chu ky va de xuat: K8B_CHUA_THAM_DINH khi khong co tham dinh hien hanh; K8B_NGUOI_THAM_DINH_TRONG_GOI khi nguoi tham dinh nam trong rfq_tap_loai_tru cua goi (loai theo HANH VI); K8B_NGUOI_THAM_DINH_TRAO_THAU khi nguoi hanh dong la chinh nguoi tham dinh (ADR-081 (5)). Mot than `RETURN NULL` tat K8b o tang goi lan hai trigger.
+    -- [S1.293 / S3.7a2 / K8b] Vi tu K8b o chu ky va de xuat: K8B_CHUA_THAM_DINH khi khong co tham dinh hien hanh; K8B_NGUOI_THAM_DINH_TRONG_GOI khi nguoi tham dinh nam trong rfq_tap_loai_tru cua goi (loai theo HANH VI); K8B_NGUOI_THAM_DINH_TRAO_THAU khi nguoi hanh dong la chinh nguoi tham dinh (ADR-081 (5)). Mot than `RETURN NULL` tat K8b o tang goi lan hai trigger.
     ARRAY[
-      $q$định nghĩa hàm award_chot_tham_dinh(uuid, uuid, uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_chot_tham_dinh(uuid, uuid, uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_tham_dinh(p_org uuid, p_rfq uuid, p_bid_version uuid, p_nguoi uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11574,10 +11574,10 @@ $ham$$q$,
                   'hàm public.award_chot_tham_dinh(uuid, uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_chot_tham_dinh(uuid, uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Vi tu K8b o hang APPROVED: hoi award_chot_tham_dinh voi nguoi de xuat, roi kiem theo TAP — chu ky con hieu luc khong chua nguoi tham dinh. Mot than `RETURN NULL` cho nguoi tham dinh ky roi hang APPROVED di qua.
+    -- [S1.293 / S3.7a2 / K8b] Vi tu K8b o hang APPROVED: hoi award_chot_tham_dinh voi nguoi de xuat, roi kiem theo TAP — chu ky con hieu luc khong chua nguoi tham dinh. Mot than `RETURN NULL` cho nguoi tham dinh ky roi hang APPROVED di qua.
     ARRAY[
-      $q$định nghĩa hàm award_chot_tham_dinh_duyet(uuid, uuid) (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_chot_tham_dinh_duyet(uuid, uuid) (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_chot_tham_dinh_duyet(p_org uuid, p_award uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -11684,10 +11684,10 @@ $ham$$q$,
                   'hàm public.award_du_chu_ky(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm award_du_chu_ky(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Than tu 9501_tham_dinh_nha_cung_cap.sql: tap loai tru cua chu ky trao thau them nguoi cua hang tham dinh MOI NHAT cua nha cung cap duoc trao — nguoi tham dinh khong la chu ky doc lap K5b (nhu nguoi xac minh). Mot than bo nguon ay la nguoi vua noi ho so dang tin vua ky doc lap.
+    -- [S1.293 / S3.7a2 / K8b] Than tu 124_tham_dinh_nha_cung_cap.sql: tap loai tru cua chu ky trao thau them nguoi cua hang tham dinh MOI NHAT cua nha cung cap duoc trao — nguoi tham dinh khong la chu ky doc lap K5b (nhu nguoi xac minh). Mot than bo nguon ay la nguoi vua noi ho so dang tin vua ky doc lap.
     ARRAY[
-      $q$định nghĩa hàm award_tap_loai_tru(uuid, uuid, uuid) (113_trao_thau_theo_bac, thân từ 9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm award_tap_loai_tru(uuid, uuid, uuid) (113_trao_thau_theo_bac, thân từ 124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.award_tap_loai_tru(p_org uuid, p_rfq uuid, p_bid_version uuid) RETURNS SETOF uuid
   LANGUAGE sql
   STABLE
@@ -12880,10 +12880,10 @@ $ham$;
                   'hàm public.coi_kiem_xac_minh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Luat nguoi, thu tu, phien ban va han cua tham dinh (khuon 082): nguoi giu supplier.qualify, khong giu rfq.invite (k8b_nguoi_moi_tham_dinh), khong tao ho so/nguoi lien he (k8b_nguoi_tao_tu_tham_dinh), khong da de xuat/da ky de xuat song cho nha cung cap (k8b_nguoi_trao_thau_tham_dinh); QUALIFIED tro phien ban MOI NHAT dung MST, co xac minh K8a; het_han_at theo chinh sach hieu luc. Mot than `RETURN NEW` cho nguoi dung ho so tu tham dinh va de thu_tu NULL.
+    -- [S1.293 / S3.7a2 / K8b] Luat nguoi, thu tu, phien ban va han cua tham dinh (khuon 082): nguoi giu supplier.qualify, khong giu rfq.invite (k8b_nguoi_moi_tham_dinh), khong tao ho so/nguoi lien he (k8b_nguoi_tao_tu_tham_dinh), khong da de xuat/da ky de xuat song cho nha cung cap (k8b_nguoi_trao_thau_tham_dinh); QUALIFIED tro phien ban MOI NHAT dung MST, co xac minh K8a; het_han_at theo chinh sach hieu luc. Mot than `RETURN NEW` cho nguoi dung ho so tu tham dinh va de thu_tu NULL.
     ARRAY[
-      $q$hàm + trigger ncc_kiem_tham_dinh (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger ncc_kiem_tham_dinh (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$DO $fn350$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13055,10 +13055,10 @@ $ham$;
                   'hàm public.ncc_kiem_tham_dinh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.ncc_kiem_tham_dinh() và bảng public.supplier_qualifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Cong K9 thu tam: nguoi da khai CO xung dot voi nha cung cap ay khong tham dinh hay thu hoi tham dinh no — cung ham vi tu coi_chot_xac_minh (chu du an chot 2026-10-10).
+    -- [S1.293 / S3.7a2 / K8b] Cong K9 thu tam: nguoi da khai CO xung dot voi nha cung cap ay khong tham dinh hay thu hoi tham dinh no — cung ham vi tu coi_chot_xac_minh (chu du an chot 2026-10-10).
     ARRAY[
-      $q$hàm + trigger coi_kiem_tham_dinh (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger coi_kiem_tham_dinh (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$DO $fn351$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13123,10 +13123,10 @@ $ham$;
                   'hàm public.coi_kiem_tham_dinh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.coi_kiem_tham_dinh() và bảng public.supplier_qualifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Lop chan cuoi cua K8b o chu ky duyet trao thau (ten xep sau _kiem_nguoi_duyet, truoc _kiem_tin_hieu_khai_thap/_kiem_vai_theo_bac/_kiem_xung_dot): bac doi ma khong co tham dinh hien hanh hay nguoi ky la nguoi tham dinh => tu choi co ten; chup tham_dinh_id vao chu ky. Mot than `RETURN NEW` bo chup la chu ky khong bao gio thoi dem.
+    -- [S1.293 / S3.7a2 / K8b] Lop chan cuoi cua K8b o chu ky duyet trao thau (ten xep sau _kiem_nguoi_duyet, truoc _kiem_tin_hieu_khai_thap/_kiem_vai_theo_bac/_kiem_xung_dot): bac doi ma khong co tham dinh hien hanh hay nguoi ky la nguoi tham dinh => tu choi co ten; chup tham_dinh_id vao chu ky. Mot than `RETURN NEW` bo chup la chu ky khong bao gio thoi dem.
     ARRAY[
-      $q$hàm + trigger award_kiem_tham_dinh_chu_ky (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger award_kiem_tham_dinh_chu_ky (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$DO $fn352$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13205,10 +13205,10 @@ $ham$;
                   'hàm public.award_kiem_tham_dinh_chu_ky() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.award_kiem_tham_dinh_chu_ky() và bảng public.rfq_award_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Trigger K8b tren rfq_awards: PROPOSED chan nguoi tham dinh hien hanh tu de xuat (thieu tham dinh KHONG chan de xuat — yeu cau ho so tu sinh o day); APPROVED hoi award_chot_tham_dinh_duyet theo tap. Mot than `RETURN NEW` cho hang APPROVED tho di qua khi nguoi tham dinh da ky.
+    -- [S1.293 / S3.7a2 / K8b] Trigger K8b tren rfq_awards: PROPOSED chan nguoi tham dinh hien hanh tu de xuat (thieu tham dinh KHONG chan de xuat — yeu cau ho so tu sinh o day); APPROVED hoi award_chot_tham_dinh_duyet theo tap. Mot than `RETURN NEW` cho hang APPROVED tho di qua khi nguoi tham dinh da ky.
     ARRAY[
-      $q$hàm + trigger award_kiem_tham_dinh (9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger award_kiem_tham_dinh (124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$DO $fn353$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -13358,10 +13358,10 @@ $ham$$q$,
                   'hàm public.passport_chot_yeu_cau(uuid, uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm passport_chot_yeu_cau(uuid, uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.7a2 / K8b] Than tu 9501_tham_dinh_nha_cung_cap.sql: MANUAL doi supplier.qualify; AWARD_PROPOSED doi award.recommend, mot de xuat PROPOSED con song cua chinh nguoi yeu cau cho nha cung cap ay, nguoi lien he la nguoi duoc moi cua goi; ham vi tu passport_chot_yeu_cau hoi lai cho ca hai. Than `RETURN NEW` mo yeu cau tu sinh cho nguoi khong de xuat.
+    -- [S1.293 / S3.7a2 / K8b] Than tu 124_tham_dinh_nha_cung_cap.sql: MANUAL doi supplier.qualify; AWARD_PROPOSED doi award.recommend, mot de xuat PROPOSED con song cua chinh nguoi yeu cau cho nha cung cap ay, nguoi lien he la nguoi duoc moi cua goi; ham vi tu passport_chot_yeu_cau hoi lai cho ca hai. Than `RETURN NEW` mo yeu cau tu sinh cho nguoi khong de xuat.
     ARRAY[
-      $q$hàm + trigger passport_kiem_yeu_cau (118_passport_nha_cung_cap, thân từ 9501_tham_dinh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tham_dinh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger passport_kiem_yeu_cau (118_passport_nha_cung_cap, thân từ 124_tham_dinh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '124_tham_dinh_nha_cung_cap.sql')$q$,
       $q$DO $fn95$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

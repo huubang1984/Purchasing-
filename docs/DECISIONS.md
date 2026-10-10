@@ -13051,14 +13051,14 @@ Supplier Score (S5, ADR-100).
 
 ---
 
-## ADR-9201 — S3.7a2: K8b — thẩm định đầy đủ trên phiên bản Passport MỚI NHẤT chặn chữ ký duyệt trao thầu và hàng `APPROVED` ở bậc `tham_dinh_truoc_trao`; chữ ký chụp id thẩm định và thôi đếm khi thẩm định đổi; yêu cầu hồ sơ tự sinh lúc đề xuất; cổng K9 thứ tám; ADR (c) chốt cho S3.7b
+## ADR-164 — S3.7a2: K8b — thẩm định đầy đủ trên phiên bản Passport MỚI NHẤT chặn chữ ký duyệt trao thầu và hàng `APPROVED` ở bậc `tham_dinh_truoc_trao`; chữ ký chụp id thẩm định và thôi đếm khi thẩm định đổi; yêu cầu hồ sơ tự sinh lúc đề xuất; cổng K9 thứ tám; ADR (c) chốt cho S3.7b
 
 **Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"tiếp S3.7a2 và S3.7b"*, rồi chốt bốn câu hỏi theo
 đề xuất (⑴ chữ ký chụp id thẩm định, thôi đếm khi thẩm định đổi; ⑵ yêu cầu `AWARD_PROPOSED` dưới quyền đề xuất, link tới người liên hệ được
 mời; ⑶ cổng K9 thứ tám tái dùng `K9_XAC_MINH_NCC_XUNG_DOT`; ⑷ S3.7b: bytes thô qua `PUT`, kho tệp adapter, trần 10 MB, PDF/JPG/PNG, cờ đã
-quét) · **[S1.9101]** · **Migration:** `9501_tham_dinh_nha_cung_cap` · **Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, **ADR-081** ⑵ ⑸, ADR-084,
+quét) · **[S1.293]** · **Migration:** `124_tham_dinh_nha_cung_cap` · **Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, **ADR-081** ⑵ ⑸, ADR-084,
 ADR-108, ADR-120, ADR-155, **ADR-159** ⑴, ADR-161 · **Spec:** S3 §2.3 (c), §4.8, §5.1 K8b, K9, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md`
-§S1.9101
+§S1.293
 
 ### Bối cảnh
 

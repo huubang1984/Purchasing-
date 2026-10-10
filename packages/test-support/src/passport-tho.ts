@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a2 / K8b] PHIÊN BẢN PASSPORT *THÔ* CHO FIXTURE — dàn cảnh dùng chung của mọi test cần một nhà cung cấp ĐÃ NỘP hồ sơ
+// [S1.293 / S3.7a2 / K8b] PHIÊN BẢN PASSPORT *THÔ* CHO FIXTURE — dàn cảnh dùng chung của mọi test cần một nhà cung cấp ĐÃ NỘP hồ sơ
 //
 // Thẩm định (K8b) trỏ một phiên bản Passport, mà một phiên bản chỉ sinh ra sau trọn đường của `118`: yêu cầu → link → thách thức OTP →
 // phiên → phiên bản (năm bảng, năm trigger ENABLE ALWAYS). Test của tầng gói và của award theo bậc không đo đường ấy (`passport.int`

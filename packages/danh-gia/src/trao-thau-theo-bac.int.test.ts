@@ -1336,9 +1336,9 @@ describe("[S1.283 / S3.4b / K9] chữ ký trao thầu của người đã khai C
 
 
 // =============================================================================================
-// ⑹ K8b — THẨM ĐỊNH ĐẦY ĐỦ Ở CHỮ KÝ TRAO THẦU VÀ HÀNG APPROVED (S3.7a2, `9501`)
+// ⑹ K8b — THẨM ĐỊNH ĐẦY ĐỦ Ở CHỮ KÝ TRAO THẦU VÀ HÀNG APPROVED (S3.7a2, `124`)
 // =============================================================================================
-describe("[S1.9101 / S3.7a2 / K8b] thẩm định đầy đủ ở bậc `tham_dinh_truoc_trao`: chữ ký bị chặn tới khi thẩm định, chữ ký chụp id thẩm định và thôi đếm khi phiên bản Passport mới, người thẩm định không đề xuất/ký, người đã ký không thẩm định", { timeout: 300000 }, () => {
+describe("[S1.293 / S3.7a2 / K8b] thẩm định đầy đủ ở bậc `tham_dinh_truoc_trao`: chữ ký bị chặn tới khi thẩm định, chữ ký chụp id thẩm định và thôi đếm khi phiên bản Passport mới, người thẩm định không đề xuất/ký, người đã ký không thẩm định", { timeout: 300000 }, () => {
   /** Bậc 2 đòi thẩm định — mọi thứ khác như `BAC`. */
   const BAC_TD = BAC.map((b, i) => (i === 2 ? { ...b, tham_dinh_truoc_trao: true } : b));
   const toChucTD = () => taoToChuc(true, undefined, BAC_TD);

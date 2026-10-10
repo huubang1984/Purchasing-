@@ -27486,10 +27486,10 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
 
 ---
 
-# §S1.9101 — S3.7a2: K8b — THẨM ĐỊNH ĐẦY ĐỦ TRÊN PHIÊN BẢN PASSPORT MỚI NHẤT CHẶN CHỮ KÝ DUYỆT TRAO THẦU; CHỮ KÝ CHỤP ID THẨM ĐỊNH; YÊU CẦU HỒ SƠ TỰ SINH LÚC ĐỀ XUẤT; CỔNG K9 THỨ TÁM — ADR-9201
+# §S1.293 — S3.7a2: K8b — THẨM ĐỊNH ĐẦY ĐỦ TRÊN PHIÊN BẢN PASSPORT MỚI NHẤT CHẶN CHỮ KÝ DUYỆT TRAO THẦU; CHỮ KÝ CHỤP ID THẨM ĐỊNH; YÊU CẦU HỒ SƠ TỰ SINH LÚC ĐỀ XUẤT; CỔNG K9 THỨ TÁM — ADR-164
 
-**Ngày:** 2026-10-10 · **Nhánh:** `s3-7a2-tham-dinh-k8b` (từ `cc807f97`, master sau #265) · **Migration:** `9501_tham_dinh_nha_cung_cap` ·
-**ADR:** 9201 · **Hàng sổ bất biến:** K8b (~~92 = 70 + 22~~ 93 = 71 + 22 sau gộp #271) · **Chủ dự án:** *"tiếp S3.7a2 và S3.7b"*; bốn câu chốt theo đề xuất.
+**Ngày:** 2026-10-10 · **Nhánh:** `s3-7a2-tham-dinh-k8b` (từ `cc807f97`, master sau #265) · **Migration:** `124_tham_dinh_nha_cung_cap` ·
+**ADR:** 164 · **Hàng sổ bất biến:** K8b (~~92 = 70 + 22~~ 93 = 71 + 22 sau gộp #271) · **Chủ dự án:** *"tiếp S3.7a2 và S3.7b"*; bốn câu chốt theo đề xuất.
 
 ## 1. Vòng này là gì
 
@@ -27500,14 +27500,14 @@ tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger khuôn `033`, k
 
 - `tham_dinh_truoc_trao` là cờ CHƯA ai đọc: `113` ghi *"CHƯA cưỡng chế (K8b là S3.7)"*; bậc một tỷ của `BAC_MAC_DINH` (web, kịch bản 41) và
   `BAC_DEMO` bật cờ ấy — kịch bản 41 luồng S3 trao gói một tỷ mà không hồ sơ nào.
-- Lượt soi B của S3.7a1 để lại 2 CAO (C1 ký trước rồi thẩm định sau; C2 K8b không đòi K8a) và 6 TRUNG — đều xử ở đây (ADR-9201 ⑴ ⑶ ⑷).
+- Lượt soi B của S3.7a1 để lại 2 CAO (C1 ký trước rồi thẩm định sau; C2 K8b không đòi K8a) và 6 TRUNG — đều xử ở đây (ADR-164 ⑴ ⑶ ⑷).
 - `award_tap_loai_tru` đã loại người XÁC MINH mới nhất khỏi chữ ký độc lập; không có vế người thẩm định.
 - `passport_kiem_yeu_cau` đòi `supplier.qualify` cho mọi yêu cầu — người đề xuất (PM) không giữ, nên yêu cầu tự sinh phải có lý do riêng.
 - `rfq_award_approvals` một người một chữ ký (UNIQUE) và chỉ-ghi-thêm ⇒ *ký lại* của cùng người là bất khả — ghi thành cái giá.
 - `tests/architecture` và `rfq.int` so tên ràng buộc trong thân 13 hàm trigger với `CHOT_THEO_RANG_BUOC` hai chiều: tên dữ liệu `tham_dinh_*`
   phải được ghim và loại khỏi phép so (bài S3.6c).
 
-## 3. Hình dạng (ADR-9201) — bốn câu chốt
+## 3. Hình dạng (ADR-164) — bốn câu chốt
 
 | # | Câu | Chốt |
 |---|---|---|
@@ -27518,7 +27518,7 @@ tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger khuôn `033`, k
 
 ## 4. Thay đổi
 
-- **db** `9501`: (0) `award_ncc_cua_bao_gia`; (1) `supplier_passport_requests` mở `AWARD_PROPOSED` + `rfq_id`, `passport_kiem_yeu_cau` viết
+- **db** `124`: (0) `award_ncc_cua_bao_gia`; (1) `supplier_passport_requests` mở `AWARD_PROPOSED` + `rfq_id`, `passport_kiem_yeu_cau` viết
   lại; (2) `supplier_qualifications` (RLS, policy khách đóng, GRANT, ba trigger khuôn bảng) + `UNIQUE (org_id, id)` ở phiên bản Passport; (3)
   `ncc_kiem_tham_dinh`; (8) `coi_kiem_tham_dinh`; (4) `ncc_tham_dinh_hien_hanh`/`_con_hieu_luc`; (5) `award_doi_tham_dinh`,
   `award_chot_tham_dinh`, `award_chot_tham_dinh_duyet`; (6) `rfq_award_approvals.tham_dinh_id`, `award_chu_ky_con_hieu_luc` viết lại, hai trigger
@@ -27533,7 +27533,7 @@ tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger khuôn `033`, k
   QUA_HAM), barrel-exports (+4), so-khai-nhan (K8b 4 tệp; K9 +1), MOC_GHIM 92.
 - **Test**: `tham-dinh.int` 12 ca; `trao-thau-theo-bac.int` ⑹ 5 ca; `tham-dinh-http.int` 2 ca; kịch bản 41 bước 12h (yêu cầu tự sinh) + 12h2
   (Passport trọn đường + thẩm định) + thân quét hai route mới.
-- **Docs**: ADR-9201, TEST-PLAN hàng K8b (K7/K9 sửa, tổng 92), spec §4.8/§5.1/§9, STATE cột mốc + lời khai, Handoff lời khai đếm.
+- **Docs**: ADR-164, TEST-PLAN hàng K8b (K7/K9 sửa, tổng 92), spec §4.8/§5.1/§9, STATE cột mốc + lời khai, Handoff lời khai đếm.
 
 ## 5. Điểm phát hiện lúc đo
 
@@ -27589,5 +27589,5 @@ Ma trận: hàng K8b MỚI (19 ca); D5 187 → 188 (route thẩm định); K9 14
 cây trước bản sửa §5): vitest thoát mã 1, 5228 khẳng định, 2 573 s — tám tệp kiến trúc và `hardening-suy-tu-tinh-chat.int` đỏ, sổ khai nhãn chặn
 `[INV-D5]` ở `tham-dinh-http.int`; chữ ký là sổ đăng ký thiếu khai, không phải tranh chấp (máy không có vitest nào khác).
 Trước evidence: mười hai tệp int chạy lẻ tuần tự (kịch bản 41 96/96, trao-thau 37/37, passport 20/20, xác minh 10/10, xung đột 13/13,
-rfq 60/60, check-an-ninh 4/4, rls 61/61, bac-chinh-sach 42/42, cạnh tranh 36/36; `migrations.int` 3 ca đỏ vì ba danh sách xếp `9501` trước
+rfq 60/60, check-an-ninh 4/4, rls 61/61, bac-chinh-sach 42/42, cạnh tranh 36/36; `migrations.int` 3 ca đỏ vì ba danh sách xếp `124` trước
 `121` — sửa thứ tự, lượt evidence xanh).

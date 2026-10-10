@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] THẨM ĐỊNH ĐẦY ĐỦ QUA HTTP — ba route của bên mua trên một hồ sơ Passport nộp THẬT qua đường
+// [S1.293 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] THẨM ĐỊNH ĐẦY ĐỦ QUA HTTP — ba route của bên mua trên một hồ sơ Passport nộp THẬT qua đường
 // của `118` (yêu cầu → link → OTP → phiên → nộp). Yêu cầu hồ sơ TỰ SINH lúc đề xuất đo ở kịch bản 41 HTTP (bước 12h/12h2) — nơi có
 // trọn luồng gói thầu tới đề xuất; ở đây chỉ ba route và cổng quyền của chúng. Khuôn `passport.int.test.ts`.
 // ==============================================================================================
@@ -199,7 +199,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9101 / S3.7a2 / K8b] thẩm định qua HTTP", { timeout: 120000 }, () => {
+describe("[S1.293 / S3.7a2 / K8b] thẩm định qua HTTP", { timeout: 120000 }, () => {
   it("[INV-K8b] hồ sơ nộp thật ⇒ GET qualification nói chưa thẩm định; POST qualify phiên bản mới nhất ⇒ 201 hiệu lực; phiên bản 2 ⇒ thôi hiệu lực, thẩm định phiên bản 1 bị 422 có tên; thẩm định 2 ⇒ hiệu lực; thu hồi ⇒ REVOKED", async () => {
     const t = await taoToChuc();
     const n = await ncc(t);

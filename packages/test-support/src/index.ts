@@ -5,5 +5,5 @@ export { RELKIND_QUET_GIA, quetGiaMoiQuanHe, type KetQuaQuetGia } from "./quet-g
 export { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, type NguoiPhien, type NhaCungCapDemDuoc } from "./nha-cung-cap-dem-duoc.js";
 // [khoản 346] Chờ qua mốc lật của bộ đếm cửa sổ cố định (`caller_rate_limits`, `otp_rate_limits`) theo giờ CSDL.
 export { choQuaMocCuaSo, type TuyChonMocCuaSo } from "./moc-cua-so.js";
-// [S1.9101 / S3.7a2 / K8b] Phiên bản Passport THÔ cho fixture — đi trọn năm câu ghi của `118` bằng quyền chủ cụm, mọi trigger vẫn chạy.
+// [S1.293 / S3.7a2 / K8b] Phiên bản Passport THÔ cho fixture — đi trọn năm câu ghi của `118` bằng quyền chủ cụm, mọi trigger vẫn chạy.
 export { phienBanPassportTho, type HoSoTho, type PhienBanPassportTho } from "./passport-tho.js";

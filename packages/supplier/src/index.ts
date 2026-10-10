@@ -61,7 +61,7 @@ export {
   type MaTuChoiPassport,
   type PhienBanPassportCuaToi,
 } from "./passport.js";
-// [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] Thẩm định đầy đủ trên phiên bản Passport mới nhất — ghi dưới `supplier.qualify`, trigger
+// [S1.293 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] Thẩm định đầy đủ trên phiên bản Passport mới nhất — ghi dưới `supplier.qualify`, trigger
 // `ncc_kiem_tham_dinh` có thẩm quyền; một hàm đọc trạng thái.
 export {
   docThamDinhNhaCungCap,

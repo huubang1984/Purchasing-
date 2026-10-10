@@ -94,7 +94,7 @@ const HAM_DOI_TRANG_THAI = [
   "thuHoiXacMinhNhaCungCap",
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
   "xacMinhNhaCungCap",
-  // [S1.9101 / S3.7a2 / K8b] Thẩm định và thu hồi thẩm định — route đòi `supplier.qualify`, hàm hỏi lại cùng mã. Yêu cầu Passport tự
+  // [S1.293 / S3.7a2 / K8b] Thẩm định và thu hồi thẩm định — route đòi `supplier.qualify`, hàm hỏi lại cùng mã. Yêu cầu Passport tự
   // sinh lúc đề xuất (`AWARD_PROPOSED`) — route đề xuất trao thầu đòi `award.recommend`, hàm hỏi lại cùng mã.
   "thamDinhNhaCungCap",
   "thuHoiThamDinhNhaCungCap",
@@ -207,7 +207,7 @@ const HAM_CHI_DOC = [
   // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docXacMinhNhaCungCap",
-  // [S1.9101 / S3.7a2 / K8b] Trạng thái thẩm định của một nhà cung cấp — cùng hạng `docXacMinhNhaCungCap`. Vế *ai gọi được* đóng ở route
+  // [S1.293 / S3.7a2 / K8b] Trạng thái thẩm định của một nhà cung cấp — cùng hạng `docXacMinhNhaCungCap`. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "docThamDinhNhaCungCap",
   // [S1.273 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp — gộp `docXacMinhNhaCungCap` và `listSupplierContacts`, cùng hạng hai

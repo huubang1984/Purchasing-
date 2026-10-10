@@ -490,7 +490,7 @@ const DANH_SACH_TRANG_SUPPLIER = [
   "docPassportCuaToi",
   "nopPhienBanPassport",
   "taoYeuCauPassport",
-  // [S1.9101 / S3.7a2 / K8b] Yêu cầu hồ sơ TỰ SINH lúc đề xuất — dưới `award.recommend` (cổng ở hàm), người liên hệ là người được mời
+  // [S1.293 / S3.7a2 / K8b] Yêu cầu hồ sơ TỰ SINH lúc đề xuất — dưới `award.recommend` (cổng ở hàm), người liên hệ là người được mời
   // của gói (dẫn xuất, không ai chọn đích); thẩm định đầy đủ: hai hàm ghi dưới `supplier.qualify` (cổng ở hàm), một hàm đọc trạng
   // thái — không token, không phiên, không số tài khoản trong thân trả về. Mọi hàm gọi `assertTenantBound` trước mọi thứ.
   "taoYeuCauPassportTuDeXuat",
@@ -1325,7 +1325,7 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   "nhaCungCapDemDuoc",
   // [khoản 346] Chờ qua mốc lật của bộ đếm cửa sổ cố định, đọc giờ CSDL qua `doLechDongHo` — không câu SQL mới.
   "choQuaMocCuaSo",
-  // [S1.9101 / S3.7a2 / K8b] Phiên bản Passport thô cho fixture thẩm định: năm câu ghi của đường Passport trong MỘT giao dịch trên pool
+  // [S1.293 / S3.7a2 / K8b] Phiên bản Passport thô cho fixture thẩm định: năm câu ghi của đường Passport trong MỘT giao dịch trên pool
   // chủ cụm, mọi trigger vẫn chạy — test của tầng gói và của award theo bậc cần một nhà cung cấp ĐÃ NỘP hồ sơ mà không đo đường ấy.
   "phienBanPassportTho",
 ];

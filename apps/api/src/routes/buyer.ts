@@ -343,7 +343,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId/qualification",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.7a2 / K8b] Trạng thái thẩm định đầy đủ — hàng mới nhất cộng `ncc_tham_dinh_con_hieu_luc`, thứ tự phiên bản được
+    // [S1.293 / S3.7a2 / K8b] Trạng thái thẩm định đầy đủ — hàng mới nhất cộng `ncc_tham_dinh_con_hieu_luc`, thứ tự phiên bản được
     // thẩm định và phiên bản mới nhất. KHÔNG cho agent, cùng lý do `…/verification`; màn thẩm định (S3.7a3) và `/mo-thau` đọc.
     agent: false,
     handler: async (ctx) => ({
@@ -957,7 +957,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         },
         ctx.auditPool,
       );
-      // [S1.9101 / S3.7a2 / K8b · spec §4.8] Bậc đòi thẩm định mà nhà cung cấp được trao chưa có thẩm định còn hiệu lực ⇒ YÊU CẦU HỒ SƠ
+      // [S1.293 / S3.7a2 / K8b · spec §4.8] Bậc đòi thẩm định mà nhà cung cấp được trao chưa có thẩm định còn hiệu lực ⇒ YÊU CẦU HỒ SƠ
       // PASSPORT TỰ SINH (`AWARD_PROPOSED`, dưới quyền đề xuất): link đúc cùng giao dịch tới người liên hệ ĐƯỢC MỜI của gói, gửi sau commit
       // (khuôn `…/passport-requests`). Vị từ từ chối (chưa K8a, thiếu điện thoại, quá trần, link đang sống…) ⇒ đề xuất VẪN ghi, phản hồi nói
       // lý do bỏ qua — chữ ký bị K8b chặn tới khi người giữ `supplier.qualify` gửi yêu cầu tay và thẩm định.
@@ -1259,7 +1259,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/qualify",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] Thẩm định đầy đủ trên phiên bản Passport số `phienBanThuTu` — người thẩm định gửi lại đúng
+    // [S1.293 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] Thẩm định đầy đủ trên phiên bản Passport số `phienBanThuTu` — người thẩm định gửi lại đúng
     // thứ tự đã xem ở `GET …/passport`; CSDL đòi nó là phiên bản MỚI NHẤT và MST khớp bản ghi. Cổng của bộ điều phối là `supplier.qualify`;
     // trigger `ncc_kiem_tham_dinh` đòi thêm luật người, ba nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
@@ -1282,7 +1282,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/qualification/revoke",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.7a2 / K8b] Thu hồi thẩm định — lý do bắt buộc và vào sổ.
+    // [S1.293 / S3.7a2 / K8b] Thu hồi thẩm định — lý do bắt buộc và vào sổ.
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
     resourceType: "SUPPLIER",
     resourceId: supplierIdParam,

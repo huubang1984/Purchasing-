@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 9501_tham_dinh_nha_cung_cap — [S1.9101 / S3.7a2 của spec S3 · K8b · K9 cổng tám] THẨM ĐỊNH ĐẦY ĐỦ TRÊN PHIÊN BẢN PASSPORT
+-- 124_tham_dinh_nha_cung_cap — [S1.293 / S3.7a2 của spec S3 · K8b · K9 cổng tám] THẨM ĐỊNH ĐẦY ĐỦ TRÊN PHIÊN BẢN PASSPORT
 -- MỚI NHẤT, CHẶN CHỮ KÝ DUYỆT TRAO THẦU VÀ HÀNG `APPROVED` Ở BẬC `tham_dinh_truoc_trao`; YÊU CẦU HỒ SƠ TỰ SINH LÚC ĐỀ XUẤT
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.8, §5.1 (K8b, K9), §9 (S3.7). ADR-081 ⑵ ⑸,
--- ADR-159 ⑴, ADR-9201. Chủ dự án chốt 2026-10-10 (bốn câu, theo đề xuất): chữ ký chụp id thẩm định và THÔI ĐẾM khi thẩm định đổi;
+-- ADR-159 ⑴, ADR-164. Chủ dự án chốt 2026-10-10 (bốn câu, theo đề xuất): chữ ký chụp id thẩm định và THÔI ĐẾM khi thẩm định đổi;
 -- yêu cầu `AWARD_PROPOSED` dưới quyền đề xuất (`award.recommend`), link tới người liên hệ ĐƯỢC MỜI của gói; cổng K9 thứ tám tái dùng
 -- `coi_chot_xac_minh` (một hàm vị từ cho xác minh và thẩm định); S3.7b (tài liệu đính kèm) là PR riêng sau a2.
 --

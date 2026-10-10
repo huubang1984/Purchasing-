@@ -156,7 +156,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/passport.int.test.ts",
     // [S1.291 / S3.8a] Route hiệu suất: BUYER (không `bid.view`) bị 403 kèm đúng một `PERMISSION_DENIED`.
     "apps/api/src/hieu-suat.int.test.ts",
-    // [S1.9101 / S3.7a2 / K8b] Route thẩm định: PM không giữ `supplier.qualify` ⇒ 403 ở cổng route và một hàng PERMISSION_DENIED.
+    // [S1.293 / S3.7a2 / K8b] Route thẩm định: PM không giữ `supplier.qualify` ⇒ 403 ở cổng route và một hàng PERMISSION_DENIED.
     "apps/api/src/tham-dinh-http.int.test.ts",
     // [S1.86 / khoản 128] Ai GIỮ được khoá ghi sổ của tổ chức, và giữ được bao lâu: một phiên vai ứng dụng nay KHÔNG lấy
     // được khoá mức PHIÊN (42501), nên không còn đường CỐ Ý làm mọi lần ghi sổ của một tổ chức gãy 55P03 vô thời hạn.
@@ -650,7 +650,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.273 / S3.3e1] `man-kiem-soat` đo lần xác minh ràng băm hồ sơ đã thấy qua HTTP (băm cũ ⇒ 422, không hàng nào ở lại) và màn hồ
   // sơ thấy người liên hệ lạ cùng người thêm nó (lượt soi CAO-2).
   K8a: ["packages/supplier/src/xac-minh.int.test.ts", "apps/api/src/man-kiem-soat.int.test.ts"],
-  // K8b — [S1.9101 / S3.7a2] thẩm định đầy đủ trên phiên bản Passport mới nhất. `tham-dinh.int` đo ở tầng gói và tầng CSDL dưới `app_api`:
+  // K8b — [S1.293 / S3.7a2] thẩm định đầy đủ trên phiên bản Passport mới nhất. `tham-dinh.int` đo ở tầng gói và tầng CSDL dưới `app_api`:
   // mỗi luật người một ca kèm hàng `CONTROL_DENIED`, phiên bản không mới nhất / MST lệch / chưa K8a từ chối có tên không vào sổ, hạn, thu
   // hồi, phiên bản mới làm thẩm định thôi hiệu lực, chỉ ghi thêm, đột biến từng vế. `trao-thau-theo-bac` ⑹ đo K8b ở trao thầu: chữ ký bị
   // chặn tới khi thẩm định, chữ ký chụp id thẩm định và thôi đếm khi phiên bản mới, người thẩm định không đề xuất/ký, hàng APPROVED theo
@@ -668,6 +668,6 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // người có xung đột không đếm ở cạnh mở gói và ở hàng duyệt trao thầu, tổ chức chưa bật chạy như MVP1, và đột biến từng vế.
   // [S1.283 / S3.4b] `trao-thau-theo-bac` ⑸ đo K9 ở phép đếm chữ ký trao thầu: chữ ký của người khai `CO_XUNG_DOT` sau khi ký không
   // đếm ở K7 (đủ số, hai vai) lẫn K5b (độc lập), lời trả về đánh dấu nó, và đột biến từng vế.
-  // [S1.9101 / S3.7a2] `tham-dinh.int` đo cổng K9 thứ tám: người khai CÓ xung đột với nhà cung cấp không thẩm định được nó.
+  // [S1.293 / S3.7a2] `tham-dinh.int` đo cổng K9 thứ tám: người khai CÓ xung đột với nhà cung cấp không thẩm định được nó.
   K9: ["apps/api/src/xung-dot-loi-ich.int.test.ts", "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts", "packages/supplier/src/tham-dinh.int.test.ts"],
 };

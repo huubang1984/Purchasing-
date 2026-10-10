@@ -43,7 +43,7 @@ import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocur
 // là dependency của worker (đường chạy của worker không chạm api). Test là nơi duy nhất nối hai app.
 import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.js";
 import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
-// [S1.9101 / S3.7a2 / K8b] Cookie phiên Passport — bước 12h2 đi trọn đường nhà cung cấp.
+// [S1.293 / S3.7a2 / K8b] Cookie phiên Passport — bước 12h2 đi trọn đường nhà cung cấp.
 import { COOKIE_PHIEN_PASSPORT } from "../../api/src/routes/passport.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
@@ -1072,7 +1072,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           };
         case "POST /suppliers/:supplierId/verification/revoke":
           return { path: r.path.replace(":supplierId", nccHyId), body: { reason: "thu hoi xac minh de quet" }, cookie: trangThai.taiChinh.cookie };
-        // [S1.9101 / S3.7a2 / K8b] Thẩm định nhà cung cấp HY SINH: nó chưa có phiên bản Passport nào ⇒ 422 có tên ở tầng gói (không hàng
+        // [S1.293 / S3.7a2 / K8b] Thẩm định nhà cung cấp HY SINH: nó chưa có phiên bản Passport nào ⇒ 422 có tên ở tầng gói (không hàng
         // thẩm định); thu hồi khi chưa thẩm định ⇒ trigger từ chối 422. Cả hai tới nghiệp vụ, không đụng nhà cung cấp của kịch bản.
         case "POST /suppliers/:supplierId/qualify":
           return { path: r.path.replace(":supplierId", nccHyId), body: { phienBanThuTu: 1 }, cookie: trangThai.taiChinh.cookie };
@@ -2212,7 +2212,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(aw.bidVersionId).toBe(nhat.bidVersionId);
     trangThai.awardId = aw.awardId;
 
-    // [S1.9101 / S3.7a2 / K8b] Luồng S3: bậc 1 tỷ của `BAC_MAC_DINH` đòi thẩm định và nhà cung cấp thắng chưa có thẩm định ⇒ YÊU CẦU HỒ SƠ
+    // [S1.293 / S3.7a2 / K8b] Luồng S3: bậc 1 tỷ của `BAC_MAC_DINH` đòi thẩm định và nhà cung cấp thắng chưa có thẩm định ⇒ YÊU CẦU HỒ SƠ
     // PASSPORT TỰ SINH dưới quyền đề xuất của `pm2`, link đi tới người liên hệ ĐƯỢC MỜI (bộ gửi của test ghi lại). Luồng MVP1: không đòi.
     const td = (ok.body as { thamDinh: { can: boolean; conHieuLuc?: boolean; yeuCau?: { daGui: boolean; contactId: string } | null; boQua?: string } }).thamDinh;
     if (batS3) {

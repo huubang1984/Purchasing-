@@ -4,10 +4,10 @@ import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuCho
 import { SupplierError } from "./suppliers.js";
 
 // =============================================================================================
-// [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸ · ADR-9201] THẨM ĐỊNH ĐẦY ĐỦ NHÀ CUNG CẤP — trên phiên bản Passport MỚI NHẤT
+// [S1.293 / S3.7a2 / K8b · ADR-081 ⑵ ⑸ · ADR-164] THẨM ĐỊNH ĐẦY ĐỦ NHÀ CUNG CẤP — trên phiên bản Passport MỚI NHẤT
 //
 // Cấp hai của ADR-081 ⑵: bên mua xác nhận một phiên bản hồ sơ do nhà cung cấp nộp; chỉ đòi khi trao thầu ở bậc `tham_dinh_truoc_trao`.
-// Câu hỏi *nhà cung cấp này có thẩm định còn hiệu lực không* là hàm SQL `ncc_tham_dinh_hien_hanh` (`9501`), một phép tính, một chỗ ở;
+// Câu hỏi *nhà cung cấp này có thẩm định còn hiệu lực không* là hàm SQL `ncc_tham_dinh_hien_hanh` (`124`), một phép tính, một chỗ ở;
 // gói này chỉ ghi và đọc. Khuôn `xac-minh.ts` (K8a), ba lớp:
 //   ⑴ `requirePermission(supplier.qualify)` — thiếu quyền là `PERMISSION_DENIED` (D5), trước mọi câu ghi;
 //   ⑵ trigger `ncc_kiem_tham_dinh` — lớp có THẨM QUYỀN: người thẩm định khác người tạo hồ sơ và người liên hệ, không giữ `rfq.invite`,
@@ -144,7 +144,7 @@ export async function thamDinhNhaCungCap(
   return await docThamDinhNhaCungCap(client, orgId, input.supplierId);
 }
 
-/** Thu hồi thẩm định — lý do bắt buộc, trần 2000 byte (CHECK ở `9501`). Chỉ thu hồi được khi hàng mới nhất là `QUALIFIED`. */
+/** Thu hồi thẩm định — lý do bắt buộc, trần 2000 byte (CHECK ở `124`). Chỉ thu hồi được khi hàng mới nhất là `QUALIFIED`. */
 export async function thuHoiThamDinhNhaCungCap(
   client: pg.PoolClient,
   orgId: string,

@@ -76,7 +76,7 @@ const HAM_BU_THEO_MA_QUYEN: Readonly<Record<string, readonly string[]>> = {
   RFQ_INVITE: ["danhDauDaGui", "revokeInvitation", "revokeMagicLinkToken"],
   // [S1.287 / S3.7a1] `POST /suppliers/:supplierId/passport-requests`: gửi link Passport hỏng ⇒ thu hồi token vừa đúc (ADR-110).
   SUPPLIER_QUALIFY: ["thuHoiTokenPassport"],
-  // [S1.9101 / S3.7a2 / K8b] `POST /rfqs/:rfqId/award`: đề xuất ở bậc đòi thẩm định tự sinh yêu cầu Passport và đúc link trong CÙNG
+  // [S1.293 / S3.7a2 / K8b] `POST /rfqs/:rfqId/award`: đề xuất ở bậc đòi thẩm định tự sinh yêu cầu Passport và đúc link trong CÙNG
   // giao dịch; gửi link hỏng ⇒ thu hồi token vừa đúc (ADR-110). `thuHoiTokenPassport` không tự đòi quyền — nó chỉ chạm token của chính
   // yêu cầu này, mà yêu cầu ấy đã qua `award.recommend` (hàm gói và trigger `passport_kiem_yeu_cau`).
   AWARD_RECOMMEND: ["thuHoiTokenPassport"],
@@ -565,7 +565,7 @@ describe("[S1.209 / khoản 135] việc sau commit: closure không chạm `ctx.c
     expect(kq.choDangKy.some((c) => c.hamBu.includes("khiXong")), `không chỗ nào có \`khiXong\` — ADR-113 đăng ký ít nhất một\n${ke}`).toBe(true);
     // Đối chứng cho phép đọc mã quyền: chỗ đăng ký của lần mở gói nằm dưới `RFQ_OPEN`, chỗ của lần mời dưới `RFQ_INVITE`.
     expect(kq.choDangKy.filter((c) => c.ham === "afterCommitLoGui").map((c) => c.maQuyen)).toEqual(["RFQ_OPEN"]);
-    // [S1.287 / S3.7a1] …và chỗ của lần gửi link Passport dưới `SUPPLIER_QUALIFY`; [S1.9101 / S3.7a2] link Passport tự sinh lúc đề xuất
+    // [S1.287 / S3.7a1] …và chỗ của lần gửi link Passport dưới `SUPPLIER_QUALIFY`; [S1.293 / S3.7a2] link Passport tự sinh lúc đề xuất
     // trao thầu dưới `AWARD_RECOMMEND`.
     expect(new Set(kq.choDangKy.filter((c) => c.ham === "afterCommitCoBu").map((c) => c.maQuyen))).toEqual(
       new Set(["AWARD_RECOMMEND", "RFQ_INVITE", "SUPPLIER_QUALIFY"]),

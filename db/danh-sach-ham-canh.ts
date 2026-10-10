@@ -108,7 +108,7 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // OTP khác lớp đích với kênh đã lưu, danh tính phiên dẫn xuất từ thách thức, phiên bản dưới khoá theo phiên sống. Chỉ gắn INSERT ⇒
   // không thể là hàm canh; từ chối CÓ ĐIỀU KIỆN; một hàng HỢP LỆ đi qua mỗi hàm — `dungKichBan()` đi trọn đường Passport.
   "public.passport_kiem_yeu_cau",
-  // [S1.9101 / S3.7a2 / K8b] Bốn hàm INSERT của thẩm định: luật người, thứ tự dưới khoá, phiên bản mới nhất và hạn của thẩm định
+  // [S1.293 / S3.7a2 / K8b] Bốn hàm INSERT của thẩm định: luật người, thứ tự dưới khoá, phiên bản mới nhất và hạn của thẩm định
   // (`ncc_kiem_tham_dinh`); cổng K9 thứ tám (`coi_kiem_tham_dinh`); chữ ký duyệt trao thầu chụp thẩm định (`award_kiem_tham_dinh_chu_ky`)
   // và hàng đề xuất/duyệt ở bậc đòi thẩm định (`award_kiem_tham_dinh`). Chỉ gắn INSERT ⇒ không thể là hàm canh; từ chối CÓ ĐIỀU KIỆN.
   // Nhân chứng: `dungKichBan()` thẩm định phiên bản Passport của nhà cung cấp thứ ba, và mọi câu đề xuất/ký trao thầu của kịch bản

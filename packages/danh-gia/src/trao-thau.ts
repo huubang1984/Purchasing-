@@ -96,7 +96,7 @@ const CAU_CHOT_DOC_LAP =
 /** [S1.285 / S3.6d] Chốt K10b ở chữ ký — `$1` tổ chức, `$2` gói: tín hiệu khai thấp hiện tại chưa ai ghi nhận. */
 const CAU_CHOT_TIN_HIEU_KHAI_THAP =
   "SELECT public.award_chot_tin_hieu($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS ly_do";
-// [S1.9101 / S3.7a2 / K8b] Hai vị từ của thẩm định (`9501`): ở chữ ký và đề xuất (gói, báo giá, người), và ở hàng `APPROVED` theo TẬP.
+// [S1.293 / S3.7a2 / K8b] Hai vị từ của thẩm định (`124`): ở chữ ký và đề xuất (gói, báo giá, người), và ở hàng `APPROVED` theo TẬP.
 const CAU_CHOT_THAM_DINH =
   "SELECT public.award_chot_tham_dinh($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid) AS ly_do";
 const CAU_CHOT_THAM_DINH_DUYET =
@@ -216,7 +216,7 @@ export interface ChuKyDuyet {
 }
 
 /**
- * [S1.9101 / S3.7a2 / K8b] Lời của đề xuất về thẩm định: bậc cao hơn có đòi (`tham_dinh_truoc_trao`) không, và nhà cung cấp được
+ * [S1.293 / S3.7a2 / K8b] Lời của đề xuất về thẩm định: bậc cao hơn có đòi (`tham_dinh_truoc_trao`) không, và nhà cung cấp được
  * trao đã có thẩm định CÒN HIỆU LỰC chưa — `doi && !conHieuLuc` là lúc route tự sinh yêu cầu hồ sơ Passport (spec §4.8). Đọc từ CSDL
  * (`award_doi_tham_dinh`, `ncc_tham_dinh_con_hieu_luc`), không tính lại ở lớp này.
  */
@@ -464,7 +464,7 @@ export async function deXuatTraoThau(
   // ký lên một gói đã có nó. Phiên bản báo giá không phải một báo giá đã mở của gói ⇒ hàm vị từ cho qua để J5 nói ở trigger.
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_BAC, [orgId, input.rfqId, input.bidVersionId]);
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_HAU_KIEM, [orgId, input.rfqId, lv.id, input.bidVersionId]);
-  // [S1.9101 / S3.7a2 / K8b] Người đã thẩm định hồ sơ của nhà cung cấp không đề xuất trao cho họ (ADR-081 ⑸) — một mã, trước câu ghi.
+  // [S1.293 / S3.7a2 / K8b] Người đã thẩm định hồ sơ của nhà cung cấp không đề xuất trao cho họ (ADR-081 ⑸) — một mã, trước câu ghi.
   // Hai mã khác của vị từ KHÔNG chặn đề xuất: thiếu thẩm định là lúc yêu cầu hồ sơ tự sinh (route), người thẩm định trong gói là
   // việc của chữ ký. Trigger `rfq_awards_kiem_tham_dinh` hỏi lại cho câu đi tắt.
   const { rows: tdDeXuat } = await client.query<{ ly_do: string | null }>(CAU_CHOT_THAM_DINH, [orgId, input.rfqId, input.bidVersionId, actor.id]);
@@ -558,7 +558,7 @@ export async function deXuatTraoThau(
     },
   });
 
-  // [S1.9101 / S3.7a2 / K8b] Lời về thẩm định cho route: bậc đòi mà chưa có thẩm định hiện hành ⇒ route tự sinh yêu cầu hồ sơ Passport
+  // [S1.293 / S3.7a2 / K8b] Lời về thẩm định cho route: bậc đòi mà chưa có thẩm định hiện hành ⇒ route tự sinh yêu cầu hồ sơ Passport
   // (cùng giao dịch, link gửi sau commit). Đọc sau mọi câu ghi — đề xuất đã ghi, cạnh đã đổi.
   const { rows: td } = await client.query<{ doi: boolean; co: boolean; ncc: string | null }>(CAU_TRANG_THAI_THAM_DINH, [
     orgId,
@@ -703,7 +703,7 @@ export async function duyetTraoThau(
   // [S1.285 / S3.6d / K10b] Tín hiệu khai thấp tính NGAY LÚC NÀY chưa ai ghi nhận ⇒ `K10B_TIN_HIEU_CHUA_GHI_NHAN`, `CONTROL_DENIED`
   // trước câu chèn chữ ký; trigger `rfq_award_approvals_kiem_tin_hieu_khai_thap` hỏi lại cho câu đi tắt (ADR-120: không qua bảng tên → mã).
   await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_TIN_HIEU_KHAI_THAP, [orgId, dx.rfq_id]);
-  // [S1.9101 / S3.7a2 / K8b] Bậc đòi thẩm định: nhà cung cấp được trao phải có thẩm định CÒN HIỆU LỰC trên phiên bản Passport mới nhất
+  // [S1.293 / S3.7a2 / K8b] Bậc đòi thẩm định: nhà cung cấp được trao phải có thẩm định CÒN HIỆU LỰC trên phiên bản Passport mới nhất
   // (`K8B_CHUA_THAM_DINH`), do người ngoài gói (`K8B_NGUOI_THAM_DINH_TRONG_GOI`), và người ký không là người thẩm định
   // (`K8B_NGUOI_THAM_DINH_TRAO_THAU`) — `CONTROL_DENIED` trước câu chèn chữ ký; trigger `rfq_award_approvals_kiem_tham_dinh` hỏi lại
   // và chụp `tham_dinh_id` vào chữ ký: thẩm định đổi (phiên bản mới) thì chữ ký thôi đếm (`conHieuLuc`), không huỷ đề xuất.
@@ -741,7 +741,7 @@ export async function duyetTraoThau(
   if (du) {
     await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_HAU_KIEM, [orgId, dx.rfq_id, dx.evaluation_id, dx.bid_version_id]);
     await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_DOC_LAP, [orgId, dx.id]);
-    // [S1.9101 / S3.7a2 / K8b] Hàng `APPROVED` kiểm theo TẬP: người đề xuất ∪ chữ ký còn hiệu lực không chứa người thẩm định — hỏi ở
+    // [S1.293 / S3.7a2 / K8b] Hàng `APPROVED` kiểm theo TẬP: người đề xuất ∪ chữ ký còn hiệu lực không chứa người thẩm định — hỏi ở
     // đây, trước mọi hàng sổ (lượt soi S3.7a1: trigger từ chối SAU hàng sổ SIGNED là 500, không CONTROL_DENIED).
     await hoiChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_THAM_DINH_DUYET, [orgId, dx.id]);
   }

@@ -507,7 +507,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "ADR-084 ⑵). Tới được khi một người mang cả vai mời lẫn vai xác minh",
     thongDiep: "Người có quyền mời nhà cung cấp không được xác minh nhà cung cấp (K8a).",
   },
-  // [S1.9101 / S3.7a2 / ADR-9201 / K8b] Sáu dòng K8b — thẩm định đầy đủ trên phiên bản Passport mới nhất (`9501_tham_dinh_nha_cung_cap`).
+  // [S1.293 / S3.7a2 / ADR-164 / K8b] Sáu dòng K8b — thẩm định đầy đủ trên phiên bản Passport mới nhất (`124_tham_dinh_nha_cung_cap`).
   // Ba luật người ở trigger `ncc_kiem_tham_dinh` (khuôn K8a) và ba vế ở trao thầu (`award_chot_tham_dinh`, `award_chot_tham_dinh_duyet`
   // — tầng gói hỏi trước, hai trigger hỏi lại, tên ràng buộc bằng chính mã viết thường). Cả sáu vào sổ: thẩm định là thứ mở chữ ký
   // trao thầu ở bậc `tham_dinh_truoc_trao`, nên mỗi lần đi tắt quanh nó là đúng ca kiểm toán viên cần thấy.
@@ -624,7 +624,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     vaoSo: true,
     lyDo:
       "người đã khai CÓ xung đột với một nhà cung cấp — ở bất kỳ gói nào — xác minh hay thu hồi xác minh hồ sơ của chính nhà cung cấp " +
-      "ấy (ADR-082 ⒄: cổng ở xác minh), [S1.9101 / S3.7a2] hay thẩm định / thu hồi thẩm định hồ sơ ấy (cổng K9 thứ tám, cùng hàm vị " +
+      "ấy (ADR-082 ⒄: cổng ở xác minh), [S1.293 / S3.7a2] hay thẩm định / thu hồi thẩm định hồ sơ ấy (cổng K9 thứ tám, cùng hàm vị " +
       "từ). Xác minh là thứ cho nhà cung cấp được đếm vào K2, thẩm định là thứ mở chữ ký trao thầu ở bậc đòi — đó là lần người có " +
       "quan hệ tự quyết cho người mình có quan hệ",
     thongDiep:
@@ -681,8 +681,8 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   k8a_lien_he_ho_so_nguoi_khac: "K8A_LIEN_HE_HO_SO_NGUOI_KHAC",
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
-  // [S1.9101 / S3.7a2 / K8b] Ba nhánh của `ncc_kiem_tham_dinh` và ba mã của hai hàm vị từ K8b mà hai trigger trao thầu đặt bằng
-  // `lower(ly_do)` (`9501_tham_dinh_nha_cung_cap`).
+  // [S1.293 / S3.7a2 / K8b] Ba nhánh của `ncc_kiem_tham_dinh` và ba mã của hai hàm vị từ K8b mà hai trigger trao thầu đặt bằng
+  // `lower(ly_do)` (`124_tham_dinh_nha_cung_cap`).
   k8b_chua_tham_dinh: "K8B_CHUA_THAM_DINH",
   k8b_nguoi_moi_tham_dinh: "K8B_NGUOI_MOI_THAM_DINH",
   k8b_nguoi_tao_tu_tham_dinh: "K8B_NGUOI_TAO_TU_THAM_DINH",

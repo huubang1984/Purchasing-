@@ -167,7 +167,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Phiên bản là thứ thẩm định (S3.7a2) trỏ tới: sửa được một hàng là tráo tài khoản ngân hàng.
   "supplier_passport_requests",
   "supplier_passport_versions",
-  // [S1.9101 / S3.7a2 / K8b] Thẩm định nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
+  // [S1.293 / S3.7a2 / K8b] Thẩm định nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
   // `ENABLE ALWAYS`. Chữ ký trao thầu chụp id thẩm định: sửa được một hàng là đổi điều người ký đã dựa vào.
   "supplier_qualifications",
   "supplier_verifications",
@@ -2260,7 +2260,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       { org_id: org, supplier_id: nccPp.ncc, contact_id: nccPp.lh, challenge_id: ttPp },
     ),
   );
-  // [S1.9101 / S3.7a2] MST của phiên bản BẰNG MST bản ghi — thẩm định bên dưới từ chối MST lệch (`tham_dinh_mst_lech`).
+  // [S1.293 / S3.7a2] MST của phiên bản BẰNG MST bản ghi — thẩm định bên dưới từ chối MST lệch (`tham_dinh_mst_lech`).
   const pbPp = await chenNC(
     "public.supplier_passport_versions",
     api(
@@ -2271,7 +2271,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       { org_id: org, supplier_id: nccPp.ncc, passport_session_id: phPp },
     ),
   );
-  // ---- [S1.9101 / S3.7a2 / K8b] Thẩm định trên phiên bản vừa nộp: `tc` (FINANCE, giữ `supplier.qualify`, không giữ `rfq.invite`, không
+  // ---- [S1.293 / S3.7a2 / K8b] Thẩm định trên phiên bản vừa nộp: `tc` (FINANCE, giữ `supplier.qualify`, không giữ `rfq.invite`, không
   // dựng hồ sơ; nhà cung cấp thứ ba không được mời gói nào nên không ai trao thầu nó) — nhân chứng của `ncc_kiem_tham_dinh`,
   // `coi_kiem_tham_dinh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
   await chenNC(
