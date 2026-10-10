@@ -2413,7 +2413,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   // cho MỖI bảng đổi được sang UNLOGGED, nên thời gian lớn theo số bảng và số mục ghim. Đo 2026-10-07:
   // chạy riêng 61,5 s ở máy (nhánh S3.5a), 69 s ở T3 CI master; dưới tải evidence 124,5 s ở CI master
   // (69 % của 180 s) và QUÁ 180 s ở máy — tải, không phải hồi quy (hardening thêm 15 mục ghim: +4,4 % dòng).~~
-  // **[khoản 9401]** Cùng lớp với ca RULE bên dưới: tách MỘT CA MỖI BẢNG (`it.each`), mỗi ca tối đa một migrate() dưới trần 180 s
+  // **[khoản 349]** Cùng lớp với ca RULE bên dưới: tách MỘT CA MỖI BẢNG (`it.each`), mỗi ca tối đa một migrate() dưới trần 180 s
   // của describe. Bảng mà PostgreSQL không cho đổi sang UNLOGGED nay là một ca XANH CÓ LÝ DO — thông điệp từ chối của chính
   // PostgreSQL được đòi — thay vì một `continue` câm; ca kết đòi ít nhất hai bảng đổi được, như vế "test này rỗng" cũ.
   it.each(BANG_CHI_GHI_THEM_THAT)("mọi bảng chỉ-ghi-thêm đều LOGGED — `%s`: có TÊN thì hardening TỰ CHỮA, SUY RA thì hardening NÉM", async (bang) => {
@@ -3019,7 +3019,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
   // ~~[S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
   // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.~~
-  // **[khoản 9401]** Một ca cho cả vòng là một trần DUY NHẤT cho 30 lần migrate() (một mỗi bảng của `BANG_CHI_GHI_THEM_THAT`), và vòng
+  // **[khoản 349]** Một ca cho cả vòng là một trần DUY NHẤT cho 30 lần migrate() (một mỗi bảng của `BANG_CHI_GHI_THEM_THAT`), và vòng
   // lớn lên với mỗi bảng chỉ-ghi-thêm mới. Đo: Evidence pack CI master 79–310 s (56 lượt, 30/09 → 09/10); ở máy 194 s và 354 s; và
   // QUÁ 600 s trong lượt evidence 2026-10-10 lúc máy tải nặng (`migrations.int` 3 341 s so ~2 000 s) — không khẳng định nào sai. Tách
   // MỘT CA MỖI BẢNG (`it.each`), mỗi ca một migrate() dưới trần 180 s của describe; một lần đỏ nói đúng bảng nào. Tập bảng vẫn là tập
