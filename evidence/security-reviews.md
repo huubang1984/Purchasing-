@@ -27461,6 +27461,20 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
   evidence **vitest thoát mã 0**, **92/92** bất biến (70 nghiệp vụ + 22 hàng rào), **5230** khẳng định, 2 498 s. Ma trận: hàng K11 mới,
   ô *Số test* **33** ✅ (bốn tệp của sổ khai nhãn: `hieu-suat.int`, kịch bản 41 HTTP, `rls-coverage.int`, `hieu-suat-liet-ke`);
   `cap-so --kiem` sạch.
+- Gộp #269 (khoản 345–347) vào `5ed4c5bd`, không xung đột: `pnpm t0` 50 s, `pnpm test` 158 tệp / 2832 ca 154 s. Lượt evidence ba **vitest
+  thoát mã 1**, 3 676 s — ba ca QUÁ HẠN, không ca nào sai khẳng định, không ca nào chạm mã của vòng: `[sổ nợ 73] RULE` của
+  `hardening-suy-tu-tinh-chat.int` hết trần 600 s; hai ca `migrate()` của `thong-diep-khong-gia-tri.int` hết trần 30 s. Đo trước khi kết
+  luận: ⑴ so từng tệp với `vitest-report.json` của evidence CI master `74a18d3f` — máy chậm hơn CI trung vị 1,89 lần (24 tệp trên 20 s,
+  1,08–4,25), và ba ca ấy ngay trên CI đã dùng 50–58 % trần (346,6 s / 600; 17,2 và 15,1 s / 30); ⑵ `migrate()` lần hai (chỉ hardening)
+  trên cụm dùng một lần, HEAD so `origin/master`, sáu lượt luân phiên: trung vị 2 784 ms so 2 801 ms — hàng ghim view không làm chậm.
+  Tải, không hồi quy; không nới trần (nhánh `khoan-rule-tach-ca` của một phiên khác mang tên tách đúng ca RULE). Chạy lại nguyên lượt,
+  không đổi gì: **vitest thoát mã 0**, 92/92, 5258 khẳng định, 2 461 s (RULE 451 s; hai ca `thong-diep` 12,4 và 13,2 s).
+- Gộp #268 (S1.290 / J1, ADR-162, migration `122`) vào `55d4c0e1`: sáu xung đột gỡ tay (ba danh sách migration, hardening, ADR, biên bản,
+  cột mốc; lời khai đếm do `cap-so` viết lại — 119 migration, 162 ADR). Giao điểm: trigger `luot_cham_kiem_phien_ban` của `122` từ chối
+  hàng chấm của lời mời đã thu hồi và của phiên bản cũ; fixture chấm của `hieu-suat.int` đi qua `taoLuotDanhGia` nên không đụng; ADR-163
+  ⑵ ghi lớp CSDL mới ấy (`29f74b94`). Trên `29f74b94`: `pnpm t0` 50 s; `pnpm test` 159 tệp / 2837 ca (2 tệp, 14 ca bỏ qua), 134 s;
+  evidence **vitest thoát mã 0**, **92/92**, **5260** khẳng định, 2 135 s (bắt đầu 16:14 sau 2 lượt chờ); K11 33 ✅, J1 7 ✅; ma trận
+  không đổi so với bản đã commit.
 
 ## 10. Giới hạn
 - Lớp *một đường đọc* là lớp chữ (ADR-163 ⑻⒠); CSDL không biết người gọi giữ `bid.view`.
