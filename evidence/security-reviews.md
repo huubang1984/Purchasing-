@@ -27591,3 +27591,18 @@ cây trước bản sửa §5): vitest thoát mã 1, 5228 khẳng định, 2 573
 Trước evidence: mười hai tệp int chạy lẻ tuần tự (kịch bản 41 96/96, trao-thau 37/37, passport 20/20, xác minh 10/10, xung đột 13/13,
 rfq 60/60, check-an-ninh 4/4, rls 61/61, bac-chinh-sach 42/42, cạnh tranh 36/36; `migrations.int` 3 ca đỏ vì ba danh sách xếp `124` trước
 `121` — sửa thứ tự, lượt evidence xanh).
+
+### 8b. Số đo cây gộp `64a24d12` (origin/master #268, #270, #271 + `cap-so`: vòng 293, ADR-164, migration 124)
+
+| Bước | Kết quả |
+|---|---|
+| `pnpm test` | xanh, 201 s |
+| `pnpm t0` | xanh, 65 s |
+| `migrate()` hai lần, cụm dùng một lần | lượt 1 áp trọn chuỗi migration, 23,4 s; lượt 2 0 tệp, không ném, 6,3 s |
+| CI run `38053834698` trên `64a24d12` | Evidence pack: vitest thoát mã **0**, **93/93** bất biến (71/71 nghiệp vụ + 22/22 hàng rào), 5287 khẳng định; T3 tích hợp xanh, 49 phút 53 giây; T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh. Bước so ma trận đỏ vì `evidence/INV-matrix.md` đã commit còn bản trước gộp — commit này đưa ma trận của bộ sinh CI vào (71/71, cộng 93, D5 189) |
+| `pnpm evidence` cục bộ | vitest thoát mã 1, 6 115 s, 30 ca hỏng (F1, K6, H19) — **lượt chồng**: bắt đầu 20:19:03 trong khe rảnh, rồi phiên worktree `s0-foundation` chạy `pnpm evidence` từ 20:31:44 tới sau khi lượt này xong |
+
+Chữ ký tranh chấp của §S1.115 và §S1.280, không phải hồi quy: 24 ca quá hạn, hai ca `tuple concurrently updated`, phần còn lại chạy nhanh
+nhưng đọc trạng thái mà ca quá hạn trước nó bỏ lại (RULE chưa gỡ ⇒ `CAU_RULE_SAI` khác rỗng); `boundaries.test.ts` 671 s, `migrations.int`
+6 106 s, `hardening-suy-tu-tinh-chat.int` 3 554 s — gấp ba lượt sạch trước gộp (2 168 s, 1 037 s); ca K6 đỏ là phép đo thời gian (3 673 ms,
+trần 3 000 ms). CI cùng HEAD, trên máy không chung, xanh cả hai tầng. Một lượt cục bộ chạy lại đã xếp hàng sau phiên kia.

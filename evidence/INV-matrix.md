@@ -13,11 +13,11 @@
 Dự án có **hai cách đếm bất biến**, cả hai đều đúng trong phạm vi của mình, và việc lẫn lộn
 chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này chốt cách đếm:
 
-- **70 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
+- **71 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
 - **22 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 92 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 93 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,9 +27,9 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **70** | 70 |
+| Nghiệp vụ (A–G) | **71** | 71 |
 | Hàng rào (H) | **22** | 22 |
-| **Cộng** | **92** | **92** |
+| **Cộng** | **93** | **93** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -38,7 +38,7 @@ G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **70/70** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **71/71** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -64,7 +64,7 @@ Hôm nay: **70/70** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai. **[S1.142 / ADR-085]** RFQ dưới ngưỡng cần 1 phê duyệt của người khác người tạo; mọi phê duyệt đếm trên nội dung hiện tại | Cổng chính sách + ràng buộc DB | **T3**, T5 | 66 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 52 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 18 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 188 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 189 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 17 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 26 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -157,7 +157,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 92` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 93` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
