@@ -883,6 +883,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_passport_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_versions", quyen: "SELECT" },
       // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "supplier_qualifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
       // [S1.1] Hai bảng mới của 008 cũng chỉ hiện SELECT ở MỨC BẢNG — INSERT/UPDATE của chúng
@@ -1717,6 +1718,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "requested_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "requested_by_session_id", quyen: "INSERT" },
+      // [S1.9101 / S3.7a2 / K8b] Gói của yêu cầu TỰ SINH lúc đề xuất (`AWARD_PROPOSED`) — trigger ràng nó vào đề xuất sống.
+      { grantee: "app_api", bang: "supplier_passport_requests", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_passport_requests", cot: "supplier_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_passport_tokens", cot: "consumed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "supplier_passport_tokens", cot: "contact_id", quyen: "INSERT" },
@@ -1743,6 +1746,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_passport_versions", cot: "tax_code", quyen: "INSERT" },
       // [S1.196 / S3.3a / K8a] Xác minh: CHỈ INSERT — `thu_tu`, `bam_ho_so`, `het_han_at`, `created_at` do CSDL đặt, người xác
       // minh là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
+      // [S1.9101 / S3.7a2 / K8b] Thẩm định đầy đủ: bảy cột ghi; `thu_tu`, `het_han_at` do trigger đặt, ngoài GRANT.
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "passport_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_qualifications", cot: "supplier_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_verifications", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_verifications", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_verifications", cot: "loai", quyen: "INSERT" },
@@ -2315,6 +2326,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       // [S1.198 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
       "rfq_tra_ve",
       "sessions", "supplier_contacts",
+      // [S1.9101 / S3.7a2 / K8b] Thẩm định là việc nội bộ bên mua — nhà cung cấp (kể cả phiên Passport) không đọc được ai thẩm định hồ sơ mình.
+      "supplier_qualifications",
       // [S1.196 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
       "supplier_verifications",
       "suppliers", "unseal_approvals",

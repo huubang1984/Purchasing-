@@ -28,8 +28,9 @@ import { CHOT_THEO_RANG_BUOC, CHOT_VAO_SO } from "@trustprocure/identity";
 import { lapNgoaiLe, revokeInvitation, rutNgoaiLe } from "@trustprocure/invitation";
 import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import { approveRfq, closeRfq } from "@trustprocure/rfq";
+import { thamDinhNhaCungCap } from "@trustprocure/supplier";
 import { withTenant } from "@trustprocure/tenancy";
-import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
+import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, phienBanPassportTho, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { taoLuotDanhGia } from "./luot-danh-gia.js";
 import { deXuatTraoThau, docTraoThau, duyetTraoThau, rutDeXuatTraoThau } from "./trao-thau.js";
@@ -98,12 +99,12 @@ async function nguoi(org: string, vai: string): Promise<NguoiPhien> {
 }
 
 /** Phiên bản có bậc của `tc`, ký bởi `tc2` — lần bật S3 của tổ chức. Trả id phiên bản. */
-async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">, nguongKep = "5000000000.00"): Promise<string> {
+async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">, nguongKep = "5000000000.00", bac: readonly unknown[] = BAC): Promise<string> {
   const v2 = await motId(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, tiers, " +
       "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id) " +
       "VALUES ($1, 2, $6, 'VND', $2::jsonb, 0, $3::jsonb, 30, 12, true, now(), $4, $5) RETURNING id",
-    [t.org, TP_GIA, JSON.stringify(BAC), t.tc.u, t.tc.s, nguongKep],
+    [t.org, TP_GIA, JSON.stringify(bac), t.tc.u, t.tc.s, nguongKep],
   );
   await db.pool.query("INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)", [
     t.org,
@@ -114,7 +115,7 @@ async function batS3(t: Omit<ToChuc, "chinhSachId" | "categoryId" | "daBat">, ng
   return v2;
 }
 
-async function taoToChuc(bat = true, nguongKep = "5000000000.00"): Promise<ToChuc> {
+async function taoToChuc(bat = true, nguongKep = "5000000000.00", bac: readonly unknown[] = BAC): Promise<ToChuc> {
   const org = await motId("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [`ct-${randomBytes(4).toString("hex")}`]);
   const [pm, pm2, gd1, gd2, tc, tc2, tc3] = await Promise.all([
     nguoi(org, "PROCUREMENT_MANAGER"),
@@ -132,7 +133,7 @@ async function taoToChuc(bat = true, nguongKep = "5000000000.00"): Promise<ToChu
   );
   const nhap = await nguoiNhapNhaCungCap(db.pool, org);
   const goc = { org, pm, pm2, gd1, gd2, tc, tc2, tc3, nhap };
-  const chinhSachId = bat ? await batS3(goc, nguongKep) : v1;
+  const chinhSachId = bat ? await batS3(goc, nguongKep, bac) : v1;
   const categoryId = await motId(
     "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP', 'Thep', $2, $3) RETURNING id",
     [org, tc.u, tc.s],
@@ -1330,5 +1331,146 @@ describe("[S1.283 / S3.4b / K9] chữ ký trao thầu của người đã khai C
         expect((await duyet(t, g2.rfqId, dx2.awardId, t.gd1)).status, "đột biến: người khai xung đột là chữ ký độc lập").toBe("APPROVED");
       },
     );
+  });
+});
+
+
+// =============================================================================================
+// ⑹ K8b — THẨM ĐỊNH ĐẦY ĐỦ Ở CHỮ KÝ TRAO THẦU VÀ HÀNG APPROVED (S3.7a2, `9501`)
+// =============================================================================================
+describe("[S1.9101 / S3.7a2 / K8b] thẩm định đầy đủ ở bậc `tham_dinh_truoc_trao`: chữ ký bị chặn tới khi thẩm định, chữ ký chụp id thẩm định và thôi đếm khi phiên bản Passport mới, người thẩm định không đề xuất/ký, người đã ký không thẩm định", { timeout: 300000 }, () => {
+  /** Bậc 2 đòi thẩm định — mọi thứ khác như `BAC`. */
+  const BAC_TD = BAC.map((b, i) => (i === 2 ? { ...b, tham_dinh_truoc_trao: true } : b));
+  const toChucTD = () => taoToChuc(true, undefined, BAC_TD);
+  const mstCua = async (ncc: string) => (await db.pool.query<{ tax_code: string }>("SELECT tax_code FROM suppliers WHERE id = $1", [ncc])).rows[0]!.tax_code;
+  /** Nhà cung cấp của lời mời nộp một phiên bản Passport MỚI (yêu cầu bởi `tc2`); trả thứ tự. */
+  const nopPassport = async (t: ToChuc, lm: LoiMoi) =>
+    (await phienBanPassportTho(db.pool, t.org, { ncc: lm.ncc, lh: lm.lh, mst: await mstCua(lm.ncc), nguoiYeuCau: t.tc2 })).thuTu;
+  const thamDinh = (t: ToChuc, ncc: string, thuTu: number, ai: NguoiPhien) =>
+    withTenant(apiPool, t.org, (c) => thamDinhNhaCungCap(c, t.org, { supplierId: ncc, phienBanThuTu: thuTu, actorSessionId: ai.s }, apiPool));
+  const soChot = async (org: string, resourceId: string) =>
+    (await db.pool.query<{ ma: string }>(
+      "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+      [org, resourceId],
+    )).rows.map((r) => r.ma);
+  const thamDinhIdCuaChuKy = async (awardId: string) =>
+    (await db.pool.query<{ td: string | null }>("SELECT tham_dinh_id AS td FROM rfq_award_approvals WHERE award_id = $1 ORDER BY approved_at, id", [awardId])).rows.map((r) => r.td);
+  const hienHanh = async (t: ToChuc, ncc: string) =>
+    (await db.pool.query<{ id: string | null }>("SELECT public.ncc_tham_dinh_hien_hanh($1, $2) AS id", [t.org, ncc])).rows[0]!.id;
+  /** Lỗi của một lời hứa, chép tường minh (`name`/`message` của Error không liệt kê được qua spread). */
+  const loi = async (p: Promise<unknown>): Promise<{ ten?: string; lyDo?: string; message?: string; code?: string; constraint?: string }> =>
+    p.then(
+      () => ({ ten: "KHONG LOI" }),
+      (e: unknown) => {
+        const x = e as { name?: string; lyDo?: string; message?: string; code?: string; constraint?: string };
+        return { ten: x.name, lyDo: x.lyDo, message: x.message, code: x.code, constraint: x.constraint };
+      },
+    );
+
+  it("[INV-K8b] bậc đòi thẩm định: đề xuất đi qua và nói {doi, conHieuLuc false}; chữ ký đầu bị K8B_CHUA_THAM_DINH, một hàng CONTROL_DENIED, không chữ ký; bậc KHÔNG đòi ⇒ doi false", async () => {
+    const t = await toChucTD();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect(dx.status).toBe("PROPOSED");
+    expect(dx.thamDinh).toEqual({ doi: true, conHieuLuc: false });
+    expect(await loi(duyet(t, g.rfqId, dx.awardId, t.gd1))).toMatchObject({ ten: "ChotKiemSoatError", lyDo: "K8B_CHUA_THAM_DINH", message: CHOT_VAO_SO.K8B_CHUA_THAM_DINH.thongDiep });
+    expect(await soChot(t.org, g.rfqId)).toEqual(["K8B_CHUA_THAM_DINH"]);
+    expect(await chuKy(dx.awardId)).toHaveLength(0);
+    // Đối chứng: bậc 2 của `BAC` không đòi — đề xuất nói thế, chữ ký đi qua không hỏi thẩm định.
+    const t0 = await taoToChuc();
+    const g0 = await goiDaCham(t0, UL_BAC2, GIA_BAC2);
+    const dx0 = await deXuat(t0, g0.rfqId, g0.banRo[0]!);
+    expect(dx0.thamDinh).toEqual({ doi: false, conHieuLuc: false });
+    expect((await duyet(t0, g0.rfqId, dx0.awardId, t0.gd1)).status).toBe("PROPOSED");
+    expect(await thamDinhIdCuaChuKy(dx0.awardId)).toEqual([null]);
+  });
+
+  it("[INV-K8b] thẩm định ⇒ chữ ký đi qua và CHỤP id thẩm định; phiên bản Passport MỚI ⇒ chữ ký thôi đếm, chữ ký kế bị K8B_CHUA_THAM_DINH; thẩm định lại ⇒ người KHÁC ký đủ ⇒ APPROVED; ĐỘT BIẾN bỏ vế tham_dinh_id ⇒ chữ ký cũ vẫn đếm", async () => {
+    const t = await toChucTD();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const lm = g.loiMoi[0]!;
+    expect(await nopPassport(t, lm)).toBe(1);
+    expect((await thamDinh(t, lm.ncc, 1, t.tc3)).conHieuLuc).toBe(true);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect(dx.thamDinh).toEqual({ doi: true, conHieuLuc: true });
+    const sau1 = await duyet(t, g.rfqId, dx.awardId, t.gd1);
+    expect([sau1.status, sau1.approvals.map((a) => a.conHieuLuc), sau1.chuKyCan]).toEqual(["PROPOSED", [true], 2]);
+    const td1 = await hienHanh(t, lm.ncc);
+    expect(await thamDinhIdCuaChuKy(dx.awardId)).toEqual([td1]);
+
+    expect(await nopPassport(t, lm)).toBe(2);
+    expect(await hienHanh(t, lm.ncc), "phiên bản mới ⇒ thẩm định cũ thôi hiệu lực").toBeNull();
+    expect((await doc(t, g.rfqId))!.approvals.map((a) => a.conHieuLuc), "chữ ký cũ thôi đếm").toEqual([false]);
+    await voiDotBien("public.award_chu_ky_con_hieu_luc(uuid, uuid)", "OR ap.tham_dinh_id IS NOT DISTINCT FROM", "OR true OR ap.tham_dinh_id IS NOT DISTINCT FROM", async () => {
+      expect((await doc(t, g.rfqId))!.approvals.map((a) => a.conHieuLuc), "đột biến: vế tham_dinh_id tắt ⇒ chữ ký cũ vẫn đếm").toEqual([true]);
+    });
+    expect(await loi(duyet(t, g.rfqId, dx.awardId, t.gd2))).toMatchObject({ lyDo: "K8B_CHUA_THAM_DINH" });
+
+    expect((await thamDinh(t, lm.ncc, 2, t.tc3)).conHieuLuc).toBe(true);
+    const sau2 = await duyet(t, g.rfqId, dx.awardId, t.gd2);
+    expect([sau2.status, sau2.approvals.map((a) => a.conHieuLuc)], "gd1 cũ không đếm, gd2 mới đếm — chưa đủ hai").toEqual(["PROPOSED", [false, true]]);
+    // Người đã ký không ký lại được trên cùng đề xuất (chữ ký chỉ-ghi-thêm, một người một chữ ký) — người KHÁC ký: `tc2` (FINANCE, vai khác
+    // DIRECTOR của gd2 — bậc đòi hai vai khác nhau; là người xác minh nên không độc lập, nhưng gd2 đã là chữ ký độc lập của K5b).
+    const sau3 = await duyet(t, g.rfqId, dx.awardId, t.tc2);
+    expect([sau3.status, sau3.approvals.map((a) => a.conHieuLuc)]).toEqual(["APPROVED", [false, true, true]]);
+    expect(await hangAward(g.rfqId)).toEqual(["PROPOSED", "APPROVED"]);
+    const td2 = await hienHanh(t, lm.ncc);
+    expect(await thamDinhIdCuaChuKy(dx.awardId)).toEqual([td1, td2, td2]);
+  });
+
+  it("[INV-K8b] người thẩm định không KÝ (K8B_NGUOI_THAM_DINH_TRAO_THAU, vào sổ) và không ĐỀ XUẤT (cùng mã, ở đề xuất) cho nhà cung cấp ấy — ADR-081 ⑸", async () => {
+    const t = await toChucTD();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const lm = g.loiMoi[0]!;
+    await nopPassport(t, lm);
+    await thamDinh(t, lm.ncc, 1, t.tc3);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect(await loi(duyet(t, g.rfqId, dx.awardId, t.tc3))).toMatchObject({ lyDo: "K8B_NGUOI_THAM_DINH_TRAO_THAU", message: CHOT_VAO_SO.K8B_NGUOI_THAM_DINH_TRAO_THAU.thongDiep });
+    expect(await chuKy(dx.awardId)).toHaveLength(0);
+    // Gói thứ hai: `tc3` thẩm định rồi tự đề xuất (FINANCE giữ `award.recommend`).
+    const g2 = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    await nopPassport(t, g2.loiMoi[0]!);
+    await thamDinh(t, g2.loiMoi[0]!.ncc, 1, t.tc3);
+    expect(await loi(deXuat(t, g2.rfqId, g2.banRo[0]!, t.tc3))).toMatchObject({ lyDo: "K8B_NGUOI_THAM_DINH_TRAO_THAU" });
+    expect(await hangAward(g2.rfqId)).toEqual([]);
+    expect(await soChot(t.org, g.rfqId)).toEqual(["K8B_NGUOI_THAM_DINH_TRAO_THAU"]);
+    expect(await soChot(t.org, g2.rfqId)).toEqual(["K8B_NGUOI_THAM_DINH_TRAO_THAU"]);
+  });
+
+  it("[INV-K8b] người đã KÝ đi thẩm định ⇒ K8B_NGUOI_TRAO_THAU_THAM_DINH (sổ ở nhà cung cấp); người thẩm định nằm trong tập loại trừ của gói ⇒ chữ ký bị K8B_NGUOI_THAM_DINH_TRONG_GOI", async () => {
+    const t = await toChucTD();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const lm = g.loiMoi[0]!;
+    await nopPassport(t, lm);
+    await thamDinh(t, lm.ncc, 1, t.tc3);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    expect((await duyet(t, g.rfqId, dx.awardId, t.tc2)).status).toBe("PROPOSED");
+    await nopPassport(t, lm);
+    expect(await loi(thamDinh(t, lm.ncc, 2, t.tc2))).toMatchObject({ ten: "ChotKiemSoatError", lyDo: "K8B_NGUOI_TRAO_THAU_THAM_DINH" });
+    expect(await soChot(t.org, lm.ncc)).toEqual(["K8B_NGUOI_TRAO_THAU_THAM_DINH"]);
+    // `tc3` thẩm định lại phiên bản 2, rồi thành người DỰNG hồ sơ nhà cung cấp được mời (sửa tay của chủ CSDL — `created_by` không vào băm
+    // xác minh, không trigger nào canh) ⇒ nằm trong `rfq_tap_loai_tru` của gói: loại theo hành vi.
+    await thamDinh(t, lm.ncc, 2, t.tc3);
+    await db.pool.query("UPDATE suppliers SET created_by = $2 WHERE id = $1", [lm.ncc, t.tc3.u]);
+    expect(await loi(duyet(t, g.rfqId, dx.awardId, t.gd1))).toMatchObject({ lyDo: "K8B_NGUOI_THAM_DINH_TRONG_GOI", message: CHOT_VAO_SO.K8B_NGUOI_THAM_DINH_TRONG_GOI.thongDiep });
+    expect(await soChot(t.org, g.rfqId)).toEqual(["K8B_NGUOI_THAM_DINH_TRONG_GOI"]);
+  });
+
+  it("[INV-K8b] lớp chặn cuối: chữ ký THÔ dưới app_api khi chưa thẩm định ⇒ 23514 k8b_chua_tham_dinh, không hàng sổ; ĐỘT BIẾN `award_chot_tham_dinh` RETURN NULL ⇒ chữ ký thô đi qua và không chụp thẩm định", async () => {
+    const t = await toChucTD();
+    const g = await goiDaCham(t, UL_BAC2, GIA_BAC2);
+    const dx = await deXuat(t, g.rfqId, g.banRo[0]!);
+    const tho = () =>
+      withTenant(apiPool, t.org, (c) =>
+        c.query("INSERT INTO public.rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)", [t.org, dx.awardId, t.gd1.u, t.gd1.s]),
+      );
+    expect(await loi(tho())).toMatchObject({ code: "23514", constraint: "k8b_chua_tham_dinh" });
+    expect(await soChot(t.org, g.rfqId)).toEqual([]);
+    // Tín hiệu đóng sớm của fixture được ghi nhận trước, để câu thô chỉ còn gặp K8b (trigger K10c xếp sau theo tên).
+    await ghiNhanTT(t, g.rfqId, t.gd2, "EARLY_CLOSE");
+    await voiDotBien("public.award_chot_tham_dinh(uuid, uuid, uuid, uuid)", "RETURN 'K8B_CHUA_THAM_DINH';", "RETURN NULL;", async () => {
+      await tho();
+    });
+    expect(await thamDinhIdCuaChuKy(dx.awardId), "đột biến: chữ ký thô đi qua, không id thẩm định nào").toEqual([null]);
   });
 });

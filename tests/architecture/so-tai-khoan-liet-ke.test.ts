@@ -27,7 +27,13 @@ const THU_MUC_MIGRATION = fileURLToPath(new URL("../../db/migrations/", import.m
 const TEP_TS: Readonly<Record<string, string>> = {
   "packages/supplier/src/passport.ts":
     "GHI phiên bản (phiên Passport); ĐỌC của nhà cung cấp (bốn số cuối) và của bên mua sau `supplier.qualify` (số đầy đủ, hàng sổ)",
+  // [S1.9101 / S3.7a2 / K8b] Thẩm định đọc thứ tự phiên bản (mới nhất hay không) — không đọc cột hồ sơ nào.
+  "packages/supplier/src/tham-dinh.ts": "ĐỌC `thu_tu` của phiên bản được thẩm định và của phiên bản mới nhất",
+  // [S1.9101 / S3.7a2] Fixture test: GHI một phiên bản thô trên pool chủ cụm — số tài khoản trong danh sách cột, không sau RETURNING.
+  "packages/test-support/src/passport-tho.ts": "GHI phiên bản thô cho fixture thẩm định (pool chủ cụm, một giao dịch)",
 };
+/** Tệp có câu INSERT mang `so_tai_khoan` trong danh sách cột — đường nộp thật và fixture thô. */
+const TEP_GHI_SO = ["packages/supplier/src/passport.ts", "packages/test-support/src/passport-tho.ts"];
 const TEP_DOC_SO = "packages/supplier/src/passport.ts";
 const SO_CAU_DOC_SO = 3;
 
@@ -91,7 +97,12 @@ describe("[S1.287 / S3.7a1] số tài khoản Passport — mọi chỗ chạm c�
     // Hai trong ba câu chỉ đọc BỐN SỐ CUỐI (và phép so lag của lịch sử); đúng MỘT câu đọc số đầy đủ.
     expect(boDoc.filter((c) => docDayDu(c.sql)).length, "câu đọc số ĐẦY ĐỦ").toBe(1);
     // Chống rỗng ruột: câu INSERT CÓ mang `so_tai_khoan` trong danh sách cột.
-    expect(cau.filter((c) => /^\s*INSERT/iu.test(c.sql) && COT.test(c.sql)).length).toBe(1);
+    expect(
+      cau
+        .filter((c) => /^\s*INSERT/iu.test(c.sql) && COT.test(c.sql))
+        .map((c) => c.tep)
+        .sort(),
+    ).toEqual(TEP_GHI_SO);
   });
 
   it("không migration nào ngoài tệp dựng bảng và tệp ghim nhắc `so_tai_khoan` — không view, hàm hay trigger nào đọc nó", () => {

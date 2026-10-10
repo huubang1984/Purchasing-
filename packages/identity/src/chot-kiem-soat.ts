@@ -94,6 +94,12 @@ export type MaChotKiemSoat =
   | "K8A_LIEN_HE_HO_SO_NGUOI_KHAC"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
+  | "K8B_CHUA_THAM_DINH"
+  | "K8B_NGUOI_MOI_THAM_DINH"
+  | "K8B_NGUOI_TAO_TU_THAM_DINH"
+  | "K8B_NGUOI_THAM_DINH_TRAO_THAU"
+  | "K8B_NGUOI_THAM_DINH_TRONG_GOI"
+  | "K8B_NGUOI_TRAO_THAU_THAM_DINH"
   | "K9_CHUA_KHAI_XUNG_DOT"
   | "K9_CHU_KY_CO_XUNG_DOT"
   | "K9_CO_XUNG_DOT"
@@ -501,6 +507,63 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "ADR-084 ⑵). Tới được khi một người mang cả vai mời lẫn vai xác minh",
     thongDiep: "Người có quyền mời nhà cung cấp không được xác minh nhà cung cấp (K8a).",
   },
+  // [S1.9101 / S3.7a2 / ADR-9201 / K8b] Sáu dòng K8b — thẩm định đầy đủ trên phiên bản Passport mới nhất (`9501_tham_dinh_nha_cung_cap`).
+  // Ba luật người ở trigger `ncc_kiem_tham_dinh` (khuôn K8a) và ba vế ở trao thầu (`award_chot_tham_dinh`, `award_chot_tham_dinh_duyet`
+  // — tầng gói hỏi trước, hai trigger hỏi lại, tên ràng buộc bằng chính mã viết thường). Cả sáu vào sổ: thẩm định là thứ mở chữ ký
+  // trao thầu ở bậc `tham_dinh_truoc_trao`, nên mỗi lần đi tắt quanh nó là đúng ca kiểm toán viên cần thấy.
+  K8B_CHUA_THAM_DINH: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "ký duyệt (hay ghi hàng APPROVED) một trao thầu ở bậc đòi thẩm định cho nhà cung cấp chưa có thẩm định CÒN HIỆU LỰC — hàng mới " +
+      "nhất không phải QUALIFIED, đã hết hạn, không trỏ phiên bản Passport mới nhất, xác minh K8a đã thôi hiệu lực, hay người thẩm " +
+      "định đã khai có xung đột. Cổng này mở ở MỖI chữ ký: nhà cung cấp nộp phiên bản mới giữa hai chữ ký thì chữ ký sau gặp nó",
+    thongDiep:
+      "Nhà cung cấp được trao chưa có thẩm định còn hiệu lực trên phiên bản hồ sơ Passport mới nhất — người giữ quyền thẩm định " +
+      "thẩm định hồ sơ trước, rồi ký (K8b).",
+  },
+  K8B_NGUOI_THAM_DINH_TRAO_THAU: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "người đã thẩm định hồ sơ của nhà cung cấp đề xuất hay ký duyệt trao thầu cho chính nhà cung cấp ấy (ADR-081 ⑸): một người vừa " +
+      "nói hồ sơ này đáng tin vừa chọn nó thắng. Tới được khi FINANCE giữ cả `supplier.qualify` lẫn `po.approve`",
+    thongDiep: "Người đã thẩm định hồ sơ nhà cung cấp này không đề xuất và không ký duyệt trao thầu cho họ — cần người khác ký (K8b).",
+  },
+  K8B_NGUOI_THAM_DINH_TRONG_GOI: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "thẩm định hiện hành của nhà cung cấp được trao do một người nằm trong tập loại trừ của gói (người tạo, nộp, mời, đặt ngân sách, " +
+      "lập ngoại lệ, dựng hồ sơ nhà cung cấp hay người liên hệ được mời) — người chọn người dự thi đổi vai rồi tự thẩm định người mình " +
+      "chọn; loại theo HÀNH VI, không theo ma trận vai (lượt soi S3.7a1)",
+    thongDiep:
+      "Thẩm định của nhà cung cấp này do một người đã tham gia gói thầu thực hiện — cần một người ngoài gói thẩm định lại trước khi ký (K8b).",
+  },
+  K8B_NGUOI_MOI_THAM_DINH: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "người giữ `rfq.invite` thẩm định một nhà cung cấp — người chọn người dự thi không tự xác nhận hồ sơ người mình chọn (ADR-081 ⑵, " +
+      "khuôn K8a). Tới được khi một người mang cả vai mời lẫn vai thẩm định",
+    thongDiep: "Người có quyền mời nhà cung cấp không được thẩm định nhà cung cấp (K8b).",
+  },
+  K8B_NGUOI_TAO_TU_THAM_DINH: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "người tạo hồ sơ nhà cung cấp, hay một người liên hệ của nó, tự thẩm định hồ sơ ấy — cùng lối nhà cung cấp vỏ của K8a, ở cấp mở " +
+      "chữ ký trao thầu",
+    thongDiep: "Người tạo hồ sơ nhà cung cấp hay người liên hệ của nó không được tự thẩm định — cần một người khác thẩm định (K8b).",
+  },
+  K8B_NGUOI_TRAO_THAU_THAM_DINH: {
+    chot: "K8b",
+    vaoSo: true,
+    lyDo:
+      "người đã ĐỀ XUẤT hay đã KÝ một đề xuất trao thầu còn sống cho nhà cung cấp đi thẩm định chính nhà cung cấp ấy — ký trước rồi " +
+      "thẩm định sau là lách ADR-081 ⑸ (lượt soi S3.7a1, C1)",
+    thongDiep: "Bạn đã đề xuất hay ký trao thầu cho nhà cung cấp này — một người khác thẩm định hồ sơ của họ (K8b).",
+  },
   J3_PHIEN_DE_XUAT_DUYET: {
     chot: "J3",
     vaoSo: true,
@@ -561,9 +624,11 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     vaoSo: true,
     lyDo:
       "người đã khai CÓ xung đột với một nhà cung cấp — ở bất kỳ gói nào — xác minh hay thu hồi xác minh hồ sơ của chính nhà cung cấp " +
-      "ấy (ADR-082 ⒄: cổng ở xác minh). Xác minh là thứ cho nhà cung cấp được đếm vào K2, nên đó là lần người có quan hệ tự quyết " +
-      "cho người mình có quan hệ",
-    thongDiep: "Bạn đã khai có xung đột lợi ích với nhà cung cấp này — một người khác xác minh hay thu hồi xác minh hồ sơ của họ (K9).",
+      "ấy (ADR-082 ⒄: cổng ở xác minh), [S1.9101 / S3.7a2] hay thẩm định / thu hồi thẩm định hồ sơ ấy (cổng K9 thứ tám, cùng hàm vị " +
+      "từ). Xác minh là thứ cho nhà cung cấp được đếm vào K2, thẩm định là thứ mở chữ ký trao thầu ở bậc đòi — đó là lần người có " +
+      "quan hệ tự quyết cho người mình có quan hệ",
+    thongDiep:
+      "Bạn đã khai có xung đột lợi ích với nhà cung cấp này — một người khác xác minh hay thẩm định (hay thu hồi) hồ sơ của họ (K9).",
   },
   // [S1.231 / khoản 231 / 093] Vế *lượt chấm mới nhất* của J5 — trigger `award_kiem_de_xuat` đặt tên, `deXuatTraoThau` bắt
   // CHÍNH lỗi của nó. Vào sổ: `deXuatTraoThau` tự suy lượt mới nhất và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở
@@ -616,6 +681,14 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   k8a_lien_he_ho_so_nguoi_khac: "K8A_LIEN_HE_HO_SO_NGUOI_KHAC",
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.9101 / S3.7a2 / K8b] Ba nhánh của `ncc_kiem_tham_dinh` và ba mã của hai hàm vị từ K8b mà hai trigger trao thầu đặt bằng
+  // `lower(ly_do)` (`9501_tham_dinh_nha_cung_cap`).
+  k8b_chua_tham_dinh: "K8B_CHUA_THAM_DINH",
+  k8b_nguoi_moi_tham_dinh: "K8B_NGUOI_MOI_THAM_DINH",
+  k8b_nguoi_tao_tu_tham_dinh: "K8B_NGUOI_TAO_TU_THAM_DINH",
+  k8b_nguoi_tham_dinh_trao_thau: "K8B_NGUOI_THAM_DINH_TRAO_THAU",
+  k8b_nguoi_tham_dinh_trong_goi: "K8B_NGUOI_THAM_DINH_TRONG_GOI",
+  k8b_nguoi_trao_thau_tham_dinh: "K8B_NGUOI_TRAO_THAU_THAM_DINH",
   // [S1.280 / S3.5a] Tám tên của trao thầu theo bậc — ba trigger của `113` đặt tên ràng buộc bằng chính mã viết thường (`lower(ly_do)`).
   k7_khong_bac_ghim: "K7_KHONG_BAC_GHIM",
   k7_lech_tien_te: "K7_LECH_TIEN_TE",

@@ -82,11 +82,15 @@ import {
   createSupplier,
   docHoSoPassport,
   docHoSoXacMinh,
+  docThamDinhNhaCungCap,
   docXacMinhNhaCungCap,
   getSupplier,
   listSupplierContacts,
   listSuppliers,
   taoYeuCauPassport,
+  taoYeuCauPassportTuDeXuat,
+  thamDinhNhaCungCap,
+  thuHoiThamDinhNhaCungCap,
   thuHoiXacMinhNhaCungCap,
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
@@ -118,6 +122,7 @@ function chuoiBatBuoc(body: unknown, ten: string): string {
   return v;
 }
 /** [review H2-8] Định danh trong THÂN phải đúng dạng UUID trước khi chạm CSDL — sai dạng là 422, không phải 22P02 → 500. */
+
 function uuidBody(body: unknown, ten: string): string {
   const v = chuoiBatBuoc(body, ten);
   if (!UUID_RE.test(v)) throw new HttpError(422, `trường "${ten}" phải là UUID`);
@@ -331,6 +336,19 @@ const doc: readonly BuyerReadRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: { verification: await docXacMinhNhaCungCap(ctx.client, ctx.orgId, supplierIdParam(ctx.req)) },
+    }),
+  },
+  {
+    method: "GET",
+    path: "/suppliers/:supplierId/qualification",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.9101 / S3.7a2 / K8b] Trạng thái thẩm định đầy đủ — hàng mới nhất cộng `ncc_tham_dinh_con_hieu_luc`, thứ tự phiên bản được
+    // thẩm định và phiên bản mới nhất. KHÔNG cho agent, cùng lý do `…/verification`; màn thẩm định (S3.7a3) và `/mo-thau` đọc.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { qualification: await docThamDinhNhaCungCap(ctx.client, ctx.orgId, supplierIdParam(ctx.req)) },
     }),
   },
   {
@@ -923,24 +941,52 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.AWARD_RECOMMEND,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    handler: async (ctx) => ({
-      status: 201,
-      body: {
-        award: await deXuatTraoThau(
-          ctx.client,
-          ctx.orgId,
-          {
-            rfqId: rfqIdParam(ctx.req),
-            bidVersionId: uuidBody(ctx.req.body, "bidVersionId"),
-            reason: chuoiBatBuoc(ctx.req.body, "reason"),
-            // [S1.288 / S4.7c1 / L8] Tuỳ chọn ở đây; CSDL đòi nó khi hạng giá khác hạng chi phí và cấm nó khi bằng nhau.
-            giaiTrinhLechHang: giaiTrinhTuyChon(ctx.req.body),
-            actorSessionId: ctx.actor.sessionId,
-          },
-          ctx.auditPool,
-        ),
-      },
-    }),
+    handler: async (ctx) => {
+      const rfqId = rfqIdParam(ctx.req);
+      const award = await deXuatTraoThau(
+        ctx.client,
+        ctx.orgId,
+        {
+          rfqId,
+          bidVersionId: uuidBody(ctx.req.body, "bidVersionId"),
+          reason: chuoiBatBuoc(ctx.req.body, "reason"),
+          // [S1.288 / S4.7c1 / L8] Tuỳ chọn ở đây; CSDL đòi nó khi hạng giá khác hạng chi phí và cấm nó khi bằng nhau.
+          giaiTrinhLechHang: giaiTrinhTuyChon(ctx.req.body),
+          actorSessionId: ctx.actor.sessionId,
+        },
+        ctx.auditPool,
+      );
+      // [S1.9101 / S3.7a2 / K8b · spec §4.8] Bậc đòi thẩm định mà nhà cung cấp được trao chưa có thẩm định còn hiệu lực ⇒ YÊU CẦU HỒ SƠ
+      // PASSPORT TỰ SINH (`AWARD_PROPOSED`, dưới quyền đề xuất): link đúc cùng giao dịch tới người liên hệ ĐƯỢC MỜI của gói, gửi sau commit
+      // (khuôn `…/passport-requests`). Vị từ từ chối (chưa K8a, thiếu điện thoại, quá trần, link đang sống…) ⇒ đề xuất VẪN ghi, phản hồi nói
+      // lý do bỏ qua — chữ ký bị K8b chặn tới khi người giữ `supplier.qualify` gửi yêu cầu tay và thẩm định.
+      if (!award.thamDinh.doi) return { status: 201, body: { award, thamDinh: { can: false } } };
+      if (award.thamDinh.conHieuLuc) return { status: 201, body: { award, thamDinh: { can: true, conHieuLuc: true } } };
+      const supplierId = award.nhaCungCapId;
+      if (supplierId === null) throw new HttpError(422, "báo giá được trao không thuộc lời mời nào của gói");
+      const kq = await taoYeuCauPassportTuDeXuat(ctx.client, ctx.orgId, { rfqId, supplierId, actorSessionId: ctx.actor.sessionId }, ctx.auditPool);
+      if (!kq.ok) return { status: 201, body: { award, thamDinh: { can: true, conHieuLuc: false, yeuCau: null, boQua: kq.ma } } };
+      const link = await ducTokenPassport(ctx.client, ctx.orgId, {
+        requestId: kq.requestId,
+        supplierId,
+        contactId: kq.contactId,
+        actorSessionId: ctx.actor.sessionId,
+      });
+      const yeuCau = { requestId: kq.requestId, contactId: kq.contactId, linkHetHanAt: link.expiresAt, soLinkThuHoi: link.soLinkThuHoi, soPhienThuHoi: link.soPhienThuHoi };
+      const { orgId } = ctx;
+      const phienNguoiGui = ctx.actor.sessionId;
+      const chuaGui: ApiResponse = { status: 201, body: { award, thamDinh: { can: true, conHieuLuc: false, yeuCau: { ...yeuCau, daGui: false } } } };
+      ctx.afterCommitCoBu({
+        viec: () =>
+          ctx.services.passportLinkSender.send({ orgId, supplierId, channel: link.linkChannel, destination: kq.email, token: link.token }),
+        bu: async (client) => {
+          await thuHoiTokenPassport(client, orgId, { tokenId: link.tokenId, actorSessionId: phienNguoiGui, reason: "LINK_SEND_FAILED" });
+        },
+        phanHoiKhiHong: chuaGui,
+        phanHoiKhiBuHong: chuaGui,
+      });
+      return { status: 201, body: { award, thamDinh: { can: true, conHieuLuc: false, yeuCau: { ...yeuCau, daGui: true } } } };
+    },
   },
   // `awardId` đi trong ĐƯỜNG DẪN, không trong thân: người duyệt ký lên đúng đề xuất họ đã đọc, và
   // một lời gọi chỉ theo `rfqId` sẽ ký lên đề xuất MỚI trong im lặng nếu đề xuất kia vừa bị huỷ và
@@ -1199,6 +1245,50 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 200,
       body: {
         verification: await thuHoiXacMinhNhaCungCap(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/suppliers/:supplierId/qualify",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.7a2 / K8b · ADR-081 ⑵ ⑸] Thẩm định đầy đủ trên phiên bản Passport số `phienBanThuTu` — người thẩm định gửi lại đúng
+    // thứ tự đã xem ở `GET …/passport`; CSDL đòi nó là phiên bản MỚI NHẤT và MST khớp bản ghi. Cổng của bộ điều phối là `supplier.qualify`;
+    // trigger `ncc_kiem_tham_dinh` đòi thêm luật người, ba nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        qualification: await thamDinhNhaCungCap(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), phienBanThuTu: soNguyen(ctx.req.body, "phienBanThuTu"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/suppliers/:supplierId/qualification/revoke",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.7a2 / K8b] Thu hồi thẩm định — lý do bắt buộc và vào sổ.
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        qualification: await thuHoiThamDinhNhaCungCap(
           ctx.client,
           ctx.orgId,
           { supplierId: supplierIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },

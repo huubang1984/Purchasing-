@@ -43,6 +43,8 @@ import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocur
 // là dependency của worker (đường chạy của worker không chạm api). Test là nơi duy nhất nối hai app.
 import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.js";
 import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
+// [S1.9101 / S3.7a2 / K8b] Cookie phiên Passport — bước 12h2 đi trọn đường nhà cung cấp.
+import { COOKIE_PHIEN_PASSPORT } from "../../api/src/routes/passport.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
 // [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
@@ -1039,6 +1041,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           };
         case "POST /suppliers/:supplierId/verification/revoke":
           return { path: r.path.replace(":supplierId", nccHyId), body: { reason: "thu hoi xac minh de quet" }, cookie: trangThai.taiChinh.cookie };
+        // [S1.9101 / S3.7a2 / K8b] Thẩm định nhà cung cấp HY SINH: nó chưa có phiên bản Passport nào ⇒ 422 có tên ở tầng gói (không hàng
+        // thẩm định); thu hồi khi chưa thẩm định ⇒ trigger từ chối 422. Cả hai tới nghiệp vụ, không đụng nhà cung cấp của kịch bản.
+        case "POST /suppliers/:supplierId/qualify":
+          return { path: r.path.replace(":supplierId", nccHyId), body: { phienBanThuTu: 1 }, cookie: trangThai.taiChinh.cookie };
+        case "POST /suppliers/:supplierId/qualification/revoke":
+          return { path: r.path.replace(":supplierId", nccHyId), body: { reason: "thu hoi tham dinh de quet" }, cookie: trangThai.taiChinh.cookie };
         case "POST /rfqs":
           return { path: r.path, body: { title: "RFQ quet", deadlineAt: han }, cookie: m };
         case "POST /rfqs/:rfqId/items":
@@ -2148,6 +2156,23 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(aw.bidVersionId).toBe(nhat.bidVersionId);
     trangThai.awardId = aw.awardId;
 
+    // [S1.9101 / S3.7a2 / K8b] Luồng S3: bậc 1 tỷ của `BAC_MAC_DINH` đòi thẩm định và nhà cung cấp thắng chưa có thẩm định ⇒ YÊU CẦU HỒ SƠ
+    // PASSPORT TỰ SINH dưới quyền đề xuất của `pm2`, link đi tới người liên hệ ĐƯỢC MỜI (bộ gửi của test ghi lại). Luồng MVP1: không đòi.
+    const td = (ok.body as { thamDinh: { can: boolean; conHieuLuc?: boolean; yeuCau?: { daGui: boolean; contactId: string } | null; boQua?: string } }).thamDinh;
+    if (batS3) {
+      expect(td, JSON.stringify(td)).toMatchObject({ can: true, conHieuLuc: false });
+      expect(td.yeuCau?.daGui, "link Passport tự sinh đã gửi").toBe(true);
+      const { rows: thang } = await db.pool.query<{ ncc: string }>("SELECT public.award_ncc_cua_bao_gia($1, $2) AS ncc", [orgA, nhat.bidVersionId]);
+      expect(dv.passportDaGui.at(-1)?.supplierId, "link đi tới nhà cung cấp THẮNG").toBe(thang[0]!.ncc);
+      const { rows: yc } = await db.pool.query<{ ly_do: string; rfq_id: string; requested_by: string }>(
+        "SELECT ly_do, rfq_id, requested_by FROM supplier_passport_requests WHERE org_id = $1 AND supplier_id = $2 ORDER BY created_at DESC LIMIT 1",
+        [orgA, thang[0]!.ncc],
+      );
+      expect(yc).toEqual([{ ly_do: "AWARD_PROPOSED", rfq_id: trangThai.rfqId, requested_by: trangThai.pm2.id }]);
+    } else {
+      expect(td).toEqual({ can: false });
+    }
+
     // `AWARDED` nghĩa là *ĐANG CÓ một award còn sống* (ADR-057), nên nó đặt ngay ở hàng PROPOSED.
     expect(await trangThaiRfq()).toBe("AWARDED");
 
@@ -2174,6 +2199,49 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     );
     expect(luot.length, "tiền đề: phải có HAI lượt chấm sau một chu kỳ BAFO").toBe(2);
     expect(aw.evaluationId, "award phải dựa trên bảng xếp hạng SAU BAFO").toBe(luot[0]?.id);
+  });
+
+  it("[INV-K8b] bước 12h2 — luồng S3 đi trọn PASSPORT: nhà cung cấp thắng mở link tự sinh → OTP → nộp hồ sơ; tài chính thứ hai thẩm định qua HTTP (người đề xuất bị 403); luồng MVP1 không có gì để thẩm định", async () => {
+    const { rows: thang } = await db.pool.query<{ ncc: string; mst: string; phone: string }>(
+      "SELECT s.id AS ncc, s.tax_code AS mst, c.phone FROM rfq_awards a " +
+        "JOIN suppliers s ON s.id = public.award_ncc_cua_bao_gia(a.org_id, a.bid_version_id) " +
+        "JOIN rfq_invitations i ON i.rfq_id = a.rfq_id AND i.supplier_id = s.id " +
+        "JOIN supplier_contacts c ON c.id = i.contact_id WHERE a.id = $1",
+      [trangThai.awardId],
+    );
+    const ncc = thang[0]!;
+    const docTd = () => goi("GET", `/suppliers/${ncc.ncc}/qualification`, (batS3 ? trangThai.taiChinh2 : trangThai.taiChinh).cookie);
+    const chua = await docTd();
+    expect(chua.status, chua.text).toBe(200);
+    expect((chua.body as { qualification: { loai: unknown; conHieuLuc: boolean } }).qualification).toMatchObject({ loai: null, conHieuLuc: false });
+    if (!batS3) {
+      expect(dv.passportDaGui.filter((m) => m.orgId === orgA), "luồng MVP1 không sinh link Passport nào").toHaveLength(0);
+      return;
+    }
+    // Link tự sinh ở bước 12h: redeem → OTP (SMS, khác kênh email của link) → verify → cookie Passport → nộp hồ sơ MST khớp bản ghi.
+    const token = dv.passportDaGui.filter((m) => m.supplierId === ncc.ncc).at(-1)!.token;
+    expect((await goi("POST", "/guest/passport/redeem", undefined, { orgId: orgA, token })).status).toBe(200);
+    const truocOtp = dv.otpDaGui.length;
+    expect((await goi("POST", "/guest/passport/otp", undefined, { orgId: orgA, token, channel: "SMS" })).status).toBe(200);
+    const ma = dv.otpDaGui.slice(truocOtp).find((m) => m.destination === ncc.phone)?.code;
+    expect(ma, "mã OTP đi tới máy điện thoại của người liên hệ được mời").toBeDefined();
+    const xac = await goi("POST", "/guest/passport/otp/verify", undefined, { orgId: orgA, token, code: ma });
+    expect(xac.status, xac.text).toBe(200);
+    const gtPassport = new RegExp(`${COOKIE_PHIEN_PASSPORT}=([^;]+)`, "u").exec(xac.headers.get("set-cookie") ?? "")?.[1] ?? "";
+    expect(gtPassport, "verify phải đặt cookie Passport").not.toBe("");
+    const cookiePassport = `${COOKIE_PHIEN_PASSPORT}=${gtPassport}`;
+    const nop = await goi("POST", "/passport/versions", cookiePassport, {
+      legalName: "Cong ty TNHH Thang Thau", taxCode: ncc.mst, nguoiDaiDien: "Tran Thi B", diaChi: "1 Le Loi, Ha Noi",
+      nganHang: "Ngan hang TMCP Vi Du", soTaiKhoan: "123456789012", chungNhan: ["ISO 9001:2015"], nhomHang: ["Thep"],
+    });
+    expect(nop.status, nop.text).toBe(201);
+    expect((await docTd()).body).toMatchObject({ qualification: { loai: null, conHieuLuc: false, phienBanMoiNhatThuTu: 1 } });
+    // Người đề xuất (PM) không giữ `supplier.qualify` ⇒ 403 trước nghiệp vụ; tài chính thứ hai (ngoài gói: không tạo, không mời, không ký
+    // trao thầu) thẩm định phiên bản 1 ⇒ hiệu lực — đây là thứ mở chữ ký của bước 12i.
+    expect((await goi("POST", `/suppliers/${ncc.ncc}/qualify`, trangThai.pm2.cookie, { phienBanThuTu: 1 })).status).toBe(403);
+    const td = await goi("POST", `/suppliers/${ncc.ncc}/qualify`, trangThai.taiChinh2.cookie, { phienBanThuTu: 1 });
+    expect(td.status, td.text).toBe(201);
+    expect((td.body as { qualification: { conHieuLuc: boolean; phienBanThuTu: number } }).qualification).toMatchObject({ conHieuLuc: true, phienBanThuTu: 1 });
   });
 
   it("[INV-K10c] bước 12i — PHÊ DUYỆT qua HTTP: chữ ký đầu bị chặn vì ĐÓNG SỚM chưa ghi nhận (422 K10C), giám đốc thứ hai ghi nhận qua route dùng chung; người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {

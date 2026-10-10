@@ -644,6 +644,9 @@ describe("hình dạng file migration", () => {
       "supplier_passport_requests",
       "supplier_passport_tokens",
       "supplier_passport_versions",
+      // [S1.9101 / S3.7a2 / K8b] Thẩm định đầy đủ — chỉ-ghi-thêm, khoá ngoại hợp thành tới `suppliers` và `supplier_passport_versions`,
+      // policy khách ĐÓNG HẲN.
+      "supplier_qualifications",
       // [S1.196 / S3.3a / migration xác minh] Xác minh nhà cung cấp (K8a) — chỉ-ghi-thêm, khoá ngoại hợp thành `(org_id, supplier_id)` tới
       // `suppliers`, policy khách ĐÓNG HẲN.
       "supplier_verifications",

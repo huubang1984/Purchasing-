@@ -611,7 +611,8 @@ describe("[S1.287 / S3.7a1] F — đột biến lớp CSDL", () => {
     const t = await taoToChuc();
     const n = await ncc(t);
     expect(await thanhCong(chenYeuCauTho(t, n, t.pm))).toBe(false);
-    await voiDotBien("public.passport_kiem_yeu_cau()", "AND rp.permission_code = 'supplier.qualify') THEN", "AND rp.permission_code = 'supplier.qualify') AND false THEN", async () => {
+    // [S1.9101 / S3.7a2] Thân từ `9501`: mã quyền theo lý do (`ma_quyen` — `supplier.qualify` cho MANUAL, `award.recommend` cho AWARD_PROPOSED).
+    await voiDotBien("public.passport_kiem_yeu_cau()", "AND rp.permission_code = ma_quyen) THEN", "AND rp.permission_code = ma_quyen) AND false THEN", async () => {
       expect(await thanhCong(chenYeuCauTho(t, n, t.pm))).toBe(true);
     });
   });

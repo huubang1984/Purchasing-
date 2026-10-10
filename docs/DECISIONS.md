@@ -12894,3 +12894,86 @@ bước ghi nhận đóng sớm (201 ở S3, 422 ở MVP1 — bỏ qua) vì mọ
 
 Lập ngoại lệ ở OPEN; `gieo:demo --s3` ca thu hẹp/đóng sớm và lượt đi thử T4 cho ba tín hiệu ở chữ ký (một vòng màn); K8b
 `tham_dinh_truoc_trao` (S3.7); KPI tỷ lệ đóng sớm (S3.9).
+
+---
+
+## ADR-9201 — S3.7a2: K8b — thẩm định đầy đủ trên phiên bản Passport MỚI NHẤT chặn chữ ký duyệt trao thầu và hàng `APPROVED` ở bậc `tham_dinh_truoc_trao`; chữ ký chụp id thẩm định và thôi đếm khi thẩm định đổi; yêu cầu hồ sơ tự sinh lúc đề xuất; cổng K9 thứ tám; ADR (c) chốt cho S3.7b
+
+**Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"tiếp S3.7a2 và S3.7b"*, rồi chốt bốn câu hỏi theo
+đề xuất (⑴ chữ ký chụp id thẩm định, thôi đếm khi thẩm định đổi; ⑵ yêu cầu `AWARD_PROPOSED` dưới quyền đề xuất, link tới người liên hệ được
+mời; ⑶ cổng K9 thứ tám tái dùng `K9_XAC_MINH_NCC_XUNG_DOT`; ⑷ S3.7b: bytes thô qua `PUT`, kho tệp adapter, trần 10 MB, PDF/JPG/PNG, cờ đã
+quét) · **[S1.9101]** · **Migration:** `9501_tham_dinh_nha_cung_cap` · **Liên quan:** ADR-016, ADR-051, ADR-060, ADR-080, **ADR-081** ⑵ ⑸, ADR-084,
+ADR-108, ADR-120, ADR-155, **ADR-159** ⑴, ADR-161 · **Spec:** S3 §2.3 (c), §4.8, §5.1 K8b, K9, §9 S3.7 · **Biên bản:** `evidence/security-reviews.md`
+§S1.9101
+
+### Bối cảnh
+
+ADR-081 ⑵ tách hai cấp: XÁC MINH (K8a, `082`) cho K2 đếm, và THẨM ĐỊNH ĐẦY ĐỦ trên một phiên bản Passport chỉ đòi khi trao thầu ở bậc
+`tham_dinh_truoc_trao`. S3.7a1 (ADR-159) dựng đường Passport và để dành K8b cùng hai điểm CAO của lượt soi B: C1 — ký trước rồi thẩm định
+sau lách ADR-081 ⑸; C2 — K8b không đòi K8a. Tới vòng này `tham_dinh_truoc_trao` là một cờ chưa ai đọc (`113`: *"CHƯA cưỡng chế"*), nên
+bậc một tỷ của `BAC_MAC_DINH` trao được mà không cần hồ sơ nào.
+
+### Quyết định
+
+⑴ **Bảng `supplier_qualifications`, chỉ-ghi-thêm, khuôn `082`.** `QUALIFIED` trỏ một phiên bản Passport; `REVOKED` có lý do; `thu_tu` dưới
+khoá tư vấn theo nhà cung cấp hạt giống 7 — CÙNG hạt của xác minh và phiên bản, nên mọi lần ghi về độ tin của một nhà cung cấp xếp một
+hàng; `het_han_at` = lúc ghi + `tham_dinh_hieu_luc_thang` của phiên bản chính sách hiệu lực (cùng cột với xác minh). Trigger `ncc_kiem_tham_dinh`
+đọc dữ liệu thật lúc chèn: người giữ `supplier.qualify`, không giữ `rfq.invite`, không tạo hồ sơ hay người liên hệ, **và không là người đã đề
+xuất hay đã ký một đề xuất `PROPOSED` còn sống cho nhà cung cấp ấy** (C1); phiên bản thuộc nhà cung cấp và là MỚI NHẤT; MST phiên bản bằng
+MST bản ghi (ADR-081 ⑴); **xác minh K8a còn hiệu lực** (C2). Ba vế luật người mang tên `k8b_*` và vào sổ (K12); ba vế dữ liệu có tên riêng,
+không vào sổ (ADR-060) — tầng gói nói *đọc lại*.
+
+⑵ **Một câu hỏi: `ncc_tham_dinh_hien_hanh(org, ncc)`** — id thẩm định còn hiệu lực hay NULL: hàng mới nhất `QUALIFIED`, chưa hết hạn, trỏ
+phiên bản Passport MỚI NHẤT (nộp phiên bản mới ⇒ thôi hiệu lực, khuôn C-1 của `011`), K8a còn hiệu lực, và người thẩm định không khai
+`CO_XUNG_DOT` với nhà cung cấp (K9 ở thẩm định chỉ là cổng lúc ghi — hiệu lực đọc lại). Không SECURITY DEFINER.
+
+⑶ **K8b ở trao thầu — hai hàm vị từ, khuôn K7/K9/K10** (tầng gói hỏi trước, trigger hỏi lại, tên ràng buộc bằng mã viết thường, vào
+`CHOT_THEO_RANG_BUOC`). `award_chot_tham_dinh(gói, báo giá, người)`: NULL khi tổ chức chưa bật, K7 chưa qua, bậc cao hơn không đòi;
+`K8B_CHUA_THAM_DINH`; `K8B_NGUOI_THAM_DINH_TRONG_GOI` khi người thẩm định nằm trong `rfq_tap_loai_tru` của gói — người chọn người dự thi đổi
+vai rồi tự thẩm định: loại theo HÀNH VI, không theo ma trận; `K8B_NGUOI_THAM_DINH_TRAO_THAU` khi người ký hay người đề xuất là chính người
+thẩm định (ADR-081 ⑸). `award_chot_tham_dinh_duyet(đề xuất)` cho hàng `APPROVED` kiểm theo TẬP — người đề xuất ∪ chữ ký còn hiệu lực. Tầng
+gói hỏi ở đề xuất (chỉ vế người thẩm định), ở mỗi chữ ký, và ở nhánh đủ chữ ký TRƯỚC mọi hàng sổ (trigger từ chối sau hàng sổ `SIGNED` là
+500, không `CONTROL_DENIED`). Thiếu thẩm định KHÔNG chặn đề xuất — đó là lúc ⑸.
+
+⑷ **Chữ ký chụp id thẩm định (chủ dự án chốt).** Cột `rfq_award_approvals.tham_dinh_id` do trigger `award_kiem_tham_dinh_chu_ky` đặt khi
+bậc đòi; `award_chu_ky_con_hieu_luc` (`115`) viết lại: ở bậc đòi, chữ ký chỉ đếm khi `tham_dinh_id` BẰNG thẩm định hiện hành. Nhà cung cấp
+nộp phiên bản Passport mới giữa hai chữ ký ⇒ thẩm định cũ thôi hiệu lực ⇒ chữ ký cũ thôi đếm (như chữ ký của người khai xung đột, `115`),
+đề xuất đứng yên ở `PROPOSED`, lời trả về đánh dấu (`conHieuLuc`); không huỷ đề xuất, không chữ ký thô nào mang qua. Phương án loại: huỷ và
+đề xuất lại (tốn một vòng đề xuất, K9/K2b hỏi lại từ đầu).
+
+⑸ **Yêu cầu hồ sơ TỰ SINH lúc đề xuất (spec §4.8).** `supplier_passport_requests.ly_do` mở `AWARD_PROPOSED` kèm `rfq_id`; trigger
+`passport_kiem_yeu_cau` (`118`) viết lại: lý do ấy đòi `award.recommend` (thay `supplier.qualify`), một đề xuất `PROPOSED` còn sống của
+CHÍNH người yêu cầu cho nhà cung cấp ấy, và người liên hệ là người ĐƯỢC MỜI của gói — không ai chọn đích. Route đề xuất gọi
+`taoYeuCauPassportTuDeXuat` khi bậc đòi mà chưa có thẩm định hiện hành, đúc link cùng giao dịch, gửi sau commit (khuôn route yêu cầu tay).
+Hàm vị từ `passport_chot_yeu_cau` từ chối (chưa K8a, thiếu điện thoại, quá trần, link đang sống) ⇒ đề xuất VẪN ghi, phản hồi nói lý do bỏ
+qua — chữ ký bị K8b chặn tới khi người giữ `supplier.qualify` gửi yêu cầu tay và thẩm định.
+
+⑹ **Cổng K9 thứ tám** `coi_kiem_tham_dinh` trên bảng thẩm định tái dùng `coi_chot_xac_minh` — một hàm vị từ cho xác minh và thẩm định,
+tập mã K9 không đổi; thông điệp của `K9_XAC_MINH_NCC_XUNG_DOT` nói cả hai.
+
+⑺ **`award_tap_loai_tru` thêm người của hàng thẩm định mới nhất** — như người xác minh, người thẩm định không là chữ ký độc lập của K5b.
+
+⑻ **Bề mặt:** `POST /suppliers/:id/qualify` (`phienBanThuTu` — người thẩm định gửi lại đúng thứ tự đã xem), `POST …/qualification/revoke`,
+`GET …/qualification` (không cổng, `agent: false`, khai ở MCP); `POST /rfqs/:id/award` trả thêm `thamDinh` {can, conHieuLuc, yeuCau | boQua}.
+Sổ: `SUPPLIER_QUALIFIED` {thứ tự, id phiên bản}, `SUPPLIER_QUALIFICATION_REVOKED` {thứ tự, lý do}, `PASSPORT_REQUESTED` {…, lyDo
+`AWARD_PROPOSED`, rfqId}. Fixture dùng chung `phienBanPassportTho` (`test-support`): năm câu ghi của `118` bằng quyền chủ cụm, mọi trigger
+chạy.
+
+⑼ **S3.7b — ADR (c) chốt (spec §2.3):** tải tệp đính kèm Passport bằng bytes thô qua `PUT` (thân `application/octet-stream`, không multipart
+— ADR-020 giữ tầng HTTP); `supplier_documents` giữ sha256, kích thước, kiểu, cờ `da_quet`; kho tệp là adapter (thư mục cục bộ ở dev, S3 ở sản
+xuất, không URL công khai); trần 10 MB, kiểu PDF/JPG/PNG; quét mã độc là adapter tuỳ chọn — chưa quét thì bên mua chỉ thấy siêu dữ liệu,
+không tải; chỉ `supplier.qualify` đọc, mỗi lần một hàng sổ; giữ 12 tháng sau khi thẩm định cuối hết hạn. Cài ở PR S3.7b.
+
+### Cái giá, nói thẳng
+
+- **Người đã ký không ký lại được trên cùng đề xuất** (chữ ký chỉ-ghi-thêm, một người một chữ ký): sau phiên bản Passport mới và thẩm định
+  mới, đề xuất cần người KHÁC đủ vai ký; tổ chức không còn ai thì huỷ và đề xuất lại. Đo ở `trao-thau-theo-bac.int` ⑹.
+- **Bậc một tỷ của `BAC_MAC_DINH` và `BAC_DEMO` nay đòi thẩm định:** người demo không trao được gói bậc 2 trên màn tới S3.7a3 (màn thẩm định,
+  chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, kịch bản pilot) — khoảng trống cùng loại S3.6b1 → b2 mà ADR-159 ⑴ đã ghi.
+- **Yêu cầu tự sinh thất bại im lặng với người đề xuất** (chỉ một mã `boQua` trong phản hồi): người giữ `supplier.qualify` phải gửi tay.
+- Người thẩm định của nhà cung cấp thắng không ký được trao thầu ấy — ở tổ chức nhỏ, FINANCE duy nhất phải chọn một trong hai việc.
+
+### Điều ADR này KHÔNG nói
+
+Màn thẩm định ở `/nha-cung-cap`, chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, pilot, T4 (S3.7a3); tài liệu đính kèm (S3.7b — ⑼ chốt hướng,
+chưa cài); vế view hiệu suất của K11 (S3.8); chống ba pháp nhân cùng một chủ (ADR-058).
