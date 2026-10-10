@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [khoản 9402] CÂU CLAIM TÔN TRỌNG `batchSize` DƯỚI KẾ HOẠCH LÀM LỘ LỖI
+// [khoản 350] CÂU CLAIM TÔN TRỌNG `batchSize` DƯỚI KẾ HOẠCH LÀM LỘ LỖI
 //
 // Bản trước của `CAU_CLAIM` chọn lô bằng `j.id = ANY (SELECT … LIMIT $2 FOR UPDATE SKIP LOCKED)`: PostgreSQL chạy lại truy vấn con
 // cho MỖI hàng ngoài của một Nested Loop Semi Join, hàng đầu đã bị chính câu UPDATE sửa nên bị bỏ qua ở lần chạy lại, và lần chạy
@@ -22,7 +22,7 @@ import { JobRunner, enqueueJob, type OutboxJob } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
-/** Bản `CAU_CLAIM` TRƯỚC khoản 9402, nguyên văn (runner.ts ở master `74a18d3f`). Chỉ dùng làm đối chứng dương. */
+/** Bản `CAU_CLAIM` TRƯỚC khoản 350, nguyên văn (runner.ts ở master `74a18d3f`). Chỉ dùng làm đối chứng dương. */
 const CAU_CLAIM_CU = `
   UPDATE public.outbox_jobs AS j
      SET status = 'RUNNING',
@@ -82,7 +82,7 @@ async function demTheoTrangThai(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
 }
 
-describe("[khoản 9402] câu claim tôn trọng batchSize", () => {
+describe("[khoản 350] câu claim tôn trọng batchSize", () => {
   it("ĐỐI CHỨNG DƯƠNG: trên fixture này, bản câu CŨ với LIMIT 1 giành NHIỀU HƠN một job (vai app_api, giao dịch cuộn lại)", async () => {
     const c = await apiPool.connect();
     let gianh: number | null = null;

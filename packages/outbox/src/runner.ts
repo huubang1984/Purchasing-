@@ -285,7 +285,7 @@ class HetGioHandlerError extends Error {
 // ============================================================================================
 
 // ============================================================================================
-// [khoản 9402] `LIMIT` PHẢI ĐƯỢC TÔN TRỌNG DƯỚI MỌI KẾ HOẠCH — LÔ CHỌN NẰM TRONG MỘT CTE `MATERIALIZED`
+// [khoản 350] `LIMIT` PHẢI ĐƯỢC TÔN TRỌNG DƯỚI MỌI KẾ HOẠCH — LÔ CHỌN NẰM TRONG MỘT CTE `MATERIALIZED`
 //
 // Bản trước chọn lô bằng `j.id = ANY (SELECT … LIMIT $2 FOR UPDATE SKIP LOCKED)`. PostgreSQL biến vế ấy thành một Nested Loop
 // Semi Join mà phía trong là truy vấn con, và CHẠY LẠI truy vấn con cho MỖI hàng ngoài. Hàng đầu đã bị chính câu UPDATE này sửa,
