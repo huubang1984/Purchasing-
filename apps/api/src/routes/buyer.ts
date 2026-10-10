@@ -766,7 +766,7 @@ const doc: readonly BuyerReadRoute[] = [
 // trên ~~sáu~~ **[S1.241 / khoản 270]** bảy vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
 // và hạng của mọi nhà cung cấp ngay trong thân phản hồi của lần bấm chấm. ADR-054 khai `bid.view`
 // là cổng ĐỌC duy nhất của `rfq_evaluation_lines`: đường ấy là `GET /rfqs/:rfqId/ranking`
-// (`docBangXepHang`) — [S1.9101 / S3.8a] cộng `GET /supplier-performance` (hạng và khoảng cách gom qua view, cũng sau `bid.view`) —,
+// (`docBangXepHang`) — [S1.291 / S3.8a] cộng `GET /supplier-performance` (hạng và khoảng cách gom qua view, cũng sau `bid.view`) —,
 // và thân route này là một đường đọc thứ hai không đi qua cổng.
 //
 // VÌ SAO DỰNG TỪNG TRƯỜNG CHỨ KHÔNG BỎ `lines`: một phép bỏ (`{ ...ld, lines: undefined }`) để lọt

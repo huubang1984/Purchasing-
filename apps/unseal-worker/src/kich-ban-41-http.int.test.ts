@@ -412,7 +412,7 @@ async function soHangBenchmark(): Promise<number> {
 }
 
 /**
- * [S1.9101 / S3.8a / K11] Hiệu suất của NĂM nhà cung cấp của gói chính, đọc qua HTTP bằng một người giữ `bid.view` (giám đốc) — khoá theo
+ * [S1.291 / S3.8a / K11] Hiệu suất của NĂM nhà cung cấp của gói chính, đọc qua HTTP bằng một người giữ `bid.view` (giám đốc) — khoá theo
  * `supplierId`; nhà cung cấp phụ và gói hy sinh không vào. Mỗi lần đọc: 200, không một chữ số giá nào ở thân.
  */
 async function hieuSuatNamNcc(): Promise<
@@ -428,7 +428,7 @@ async function hieuSuatNamNcc(): Promise<
   return new Map(ds.filter((n) => cua.has(n.supplierId)).map((n) => [n.supplierId, n]));
 }
 
-/** [S1.9101 / S3.8a / K11] Năm hàng hiệu suất theo thứ tự lời mời: `[mời, nộp, sửa, xếp hạng, vào BAFO, thắng]`; thiếu hàng ⇒ `null`. */
+/** [S1.291 / S3.8a / K11] Năm hàng hiệu suất theo thứ tự lời mời: `[mời, nộp, sửa, xếp hạng, vào BAFO, thắng]`; thiếu hàng ⇒ `null`. */
 async function hieuSuatTheoLoiMoi(): Promise<(number[] | null)[]> {
   const hs = await hieuSuatNamNcc();
   return trangThai.loiMoi.map((l) => {
@@ -835,7 +835,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   });
 
   it("[INV-K11] HIỆU SUẤT ở OPEN — năm nhà cung cấp đã nộp, một người sửa giá, mà route hiệu suất chưa có hàng nào của họ", async () => {
-    // [S1.9101 / S3.8a] Spec S3 §6 T2: bộ quét phải KHÔNG thấy trước, và THẤY ngay sau lúc gói được phép đọc (khối đối chứng dương dưới).
+    // [S1.291 / S3.8a] Spec S3 §6 T2: bộ quét phải KHÔNG thấy trước, và THẤY ngay sau lúc gói được phép đọc (khối đối chứng dương dưới).
     expect(await hieuSuatTheoLoiMoi()).toEqual([null, null, null, null, null]);
   });
 
@@ -1383,7 +1383,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   });
 
   it("[INV-K11] HIỆU SUẤT ở CLOSED chưa mở niêm phong — vẫn không hàng nào: so trước và sau lúc đóng không được lộ ai đã nộp (góc C⑦)", async () => {
-    // [S1.9101 / S3.8a] Chủ dự án chốt 2026-10-10: ~~`≥ CLOSED`~~ của spec §4.9 — chỉ số phản hồi cũng chỉ đọc gói ĐÃ LỘ GIÁ.
+    // [S1.291 / S3.8a] Chủ dự án chốt 2026-10-10: ~~`≥ CLOSED`~~ của spec §4.9 — chỉ số phản hồi cũng chỉ đọc gói ĐÃ LỘ GIÁ.
     expect(await hieuSuatTheoLoiMoi()).toEqual([null, null, null, null, null]);
   });
 
@@ -1797,7 +1797,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
   it("[INV-K11] HIỆU SUẤT ở BAFO_OPEN — vòng một vẫn đếm (đối chứng dương lúc BAFO mở, spec §5.1 K11); hạng rời gói, chưa ai vào BAFO", async () => {
     // Vế *phiên bản BAFO chưa vào* KHÔNG đo được ở đây: mỗi người top-2 nộp đúng MỘT phiên bản vòng hai, nên số lần sửa của vòng ấy là 0
-    // dù có cổng hay không — vế ấy đo ở `apps/api/src/hieu-suat.int.test.ts` khối B (bốn phiên bản BAFO) và đột biến V15 (§S1.9101).
+    // dù có cổng hay không — vế ấy đo ở `apps/api/src/hieu-suat.int.test.ts` khối B (bốn phiên bản BAFO) và đột biến V15 (§S1.291).
     expect(await hieuSuatTheoLoiMoi()).toEqual(trangThai.loiMoi.map((_, i) => [1, 1, (i === 3 ? 1 : 0), 0, 0, 0]));
   });
 

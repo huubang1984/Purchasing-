@@ -4317,8 +4317,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
         "121_cam_ket_trao_thau.sql",
-        // [S1.9101 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-9201).
-        "9501_hieu_suat_nha_cung_cap.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8994,8 +8994,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
         "121_cam_ket_trao_thau.sql",
-        // [S1.9101 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-9201).
-        "9501_hieu_suat_nha_cung_cap.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9351,8 +9351,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "120_tin_hieu_moi_thau.sql",
         // [S1.288 / S4.7c1 / L8] Cam kết TCO lưu cùng đề xuất trao thầu; hạng giá khác hạng chi phí thì phải giải trình.
         "121_cam_ket_trao_thau.sql",
-        // [S1.9101 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-9201).
-        "9501_hieu_suat_nha_cung_cap.sql",
+        // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
+        "123_hieu_suat_nha_cung_cap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

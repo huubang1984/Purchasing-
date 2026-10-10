@@ -882,7 +882,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_passport_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_passport_versions", quyen: "SELECT" },
-      // [S1.9101 / S3.8a] View hiệu suất (security_invoker): chỉ SELECT — đọc ở tầng gói sau cổng `bid.view`.
+      // [S1.291 / S3.8a] View hiệu suất (security_invoker): chỉ SELECT — đọc ở tầng gói sau cổng `bid.view`.
       { grantee: "app_api", bang: "supplier_performance", quyen: "SELECT" },
       // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
@@ -4604,18 +4604,18 @@ describe("[S1.226 / khoản 110 — ADR-131] phạm vi FORCE của khoản 91 l�
 });
 
 // ================================================================================================
-// [S1.9101 / S3.8a / K11] VIEW MANG VỊ TỪ KHÁCH TRONG THÂN — khuôn khoản 29 cho view
+// [S1.291 / S3.8a / K11] VIEW MANG VỊ TỪ KHÁCH TRONG THÂN — khuôn khoản 29 cho view
 //
 // Policy `_khach` canh BẢNG; view không mang policy được. Phiên khách của lời mời đọc được hàng của CHÍNH nó ở năm bảng (`027`,
 // `060`), nên một view `security_invoker` BẮT ĐẦU từ một trong các bảng ấy không tự ra 0 hàng cho nó. Spec S3 §5.1 K11 đòi vị từ
 // khách trong THÂN view. Phép đo hành vi không giết được đột biến *bỏ vị từ khách* của `supplier_performance`: view ấy bắt đầu từ
 // `suppliers` — bảng đóng với khách — và mọi cột của nó đã qua `gia_da_lo`, mà dưới phiên khách hàm ấy ra false (`unseal_requests`
-// đóng với khách) — lượt soi trên mã §S1.9101 THẤP-1 sửa lời khai đầu, vốn nói khối C của `hieu-suat.int` đo được điều ấy;
+// đóng với khách) — lượt soi trên mã §S1.291 THẤP-1 sửa lời khai đầu, vốn nói khối C của `hieu-suat.int` đo được điều ấy;
 // nên lớp này đọc THÂN: mọi view `public` mà `app_api` SELECT được phải chứa nguyên văn vế *không phải phiên khách* (`KHACH_NULL`, dạng
 // `pg_get_expr`/`pg_get_viewdef` in ra). Hardening ghim thân của từng view là lớp deploy; đây là lớp đếm — một view MỚI chưa ai ghim
 // cũng bị đòi.
 // ================================================================================================
-describe("[S1.9101 / S3.8a / K11] view `app_api` đọc được mang vị từ khách trong thân", () => {
+describe("[S1.291 / S3.8a / K11] view `app_api` đọc được mang vị từ khách trong thân", () => {
   const CAU_VIEW_DOC_DUOC =
     "SELECT c.relname AS ten, pg_get_viewdef(c.oid) AS than FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
     "WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm') AND has_table_privilege('app_api', c.oid, 'SELECT') ORDER BY 1";

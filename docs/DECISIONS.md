@@ -12898,13 +12898,13 @@ bước ghi nhận đóng sớm (201 ở S3, 422 ở MVP1 — bỏ qua) vì mọ
 Lập ngoại lệ ở OPEN; `gieo:demo --s3` ca thu hẹp/đóng sớm và lượt đi thử T4 cho ba tín hiệu ở chữ ký (một vòng màn); K8b
 `tham_dinh_truoc_trao` (S3.7); KPI tỷ lệ đóng sớm (S3.9).
 
-## ADR-9201 — S3.8a: hiệu suất nhà cung cấp — một view `security_invoker` chỉ đọc gói ĐÃ LỘ GIÁ, kể cả ở các cột phản hồi (K11); vị từ khách trong THÂN view; một đường đọc, cổng `bid.view`, một hàng sổ mỗi lần
+## ADR-163 — S3.8a: hiệu suất nhà cung cấp — một view `security_invoker` chỉ đọc gói ĐÃ LỘ GIÁ, kể cả ở các cột phản hồi (K11); vị từ khách trong THÂN view; một đường đọc, cổng `bid.view`, một hàng sổ mỗi lần
 
 **Ngày:** 2026-10-10 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-10: *"chuẩn bị tiếp S3.8 và S3.9"*, chốt bốn câu của kế hoạch
 chuẩn bị (câu 1: ⒝ chỉ gói đã lộ giá; câu 2: hai PR, trang `/hieu-suat`; câu 3: S3.8a → S3.8b → S3.9b → chờ S3.7a2 và S4.7c2 → S3.9a; câu 4 của
-S3.9), rồi *"Làm S3.8a đi"* · **[S1.9101]** · **Migration:** `9501_hieu_suat_nha_cung_cap` · **Liên quan:** ADR-054, ADR-081 ⑶, ADR-128,
+S3.9), rồi *"Làm S3.8a đi"* · **[S1.291]** · **Migration:** `123_hieu_suat_nha_cung_cap` · **Liên quan:** ADR-054, ADR-081 ⑶, ADR-128,
 ADR-140 (L5, L6), spec S4 §2.5 ⒀ và góc C⑦ của S1.159 · **Spec:** S3 §4.9, §5.1 K11, §6 T2, §8.3 · **Kế hoạch:**
-`docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+`docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` · **Biên bản:** `evidence/security-reviews.md` §S1.291
 
 ### Bối cảnh
 
@@ -12929,7 +12929,7 @@ của vòng BAFO và mọi cột từ giá gác bằng `gia_da_lo(gói, now())`.
 
 ⑵ **Định nghĩa.** Lời mời ĐƯỢC ĐẾM là `revoked_at IS NULL AND status <> 'UNSENT'` (từ vựng ADR-128; chỉ mục bộ phận `024` giữ tối đa một lời
 mời sống mỗi (gói, nhà cung cấp), nên các cột VÒNG MỘT ghép báo giá theo đúng lời mời ấy — luồng của lời mời đã thu hồi không vào;
-**[lượt soi trên mã §S1.9101 THẤP-4]** phiên bản BAFO, hạng, vào BAFO, thắng ghép báo giá → lời mời KHÔNG lọc: chúng đọc báo giá đã mở
+**[lượt soi trên mã §S1.291 THẤP-4]** phiên bản BAFO, hạng, vào BAFO, thắng ghép báo giá → lời mời KHÔNG lọc: chúng đọc báo giá đã mở
 niêm phong, mà worker chỉ mở luồng còn sống và tầng gói chặn thu hồi sau lần mở thầu đầu — hai lớp NGOÀI view). Thời gian
 phản hồi: phiên bản vòng một đầu trừ `greatest(opened_at, lời mời.created_at)`, giây, sàn — mời sau khi mở thì tính từ lúc mời: **lệch §4.9 có
 chủ đích** (*"mở gói → phiên bản nộp đầu"* phạt người được mời muộn). Trung vị là `percentile_disc(0.5)` — phần tử thật, số chẵn thì phần tử
@@ -12971,7 +12971,7 @@ route và câu khai của MCP, không migration nào ngoài tệp dựng view v�
 được tính — hành vi phản hồi ở gói ấy mất khỏi chỉ số. ⒞ Gói có vòng BAFO đang mở hay đã đóng chưa lộ rời MỌI cột giá cho tới khi vòng ấy lộ.
 ⒟ `gia_da_lo` là hàm STABLE gọi hai lần mỗi gói của tổ chức — chưa đo ở quy mô vài trăm gói. ⒠ Lớp *một đường đọc* là lớp chữ: một câu SQL
 dựng động vượt qua nó; CSDL không biết người gọi giữ `bid.view` hay không (kho không có GUC người dùng). ⒡ Thời gian phản hồi của lời mời đi
-UNSENT→SENT tính từ lúc tạo lời mời, không từ lúc gửi thật — không cột nào lưu lúc gửi. ⒢ **[lượt soi trên mã §S1.9101 TRUNG-1 —
+UNSENT→SENT tính từ lúc tạo lời mời, không từ lúc gửi thật — không cột nào lưu lúc gửi. ⒢ **[lượt soi trên mã §S1.291 TRUNG-1 —
 chủ dự án chấp nhận 2026-10-10]** FINANCE và DIRECTOR — giữ `bid.view`, KHÔNG giữ `rfq.invite` — suy ra được ai đã được MỜI vào một gói,
 kể cả người được mời mà không nộp, sau khi gói mở niêm phong (một gói đã lộ thì đọc thẳng; nhiều gói thì so trước và sau). Hôm nay danh
 sách mời chỉ người giữ `rfq.invite` đọc được (`listInvitations`); bảng so sánh và bảng xếp hạng chỉ có người đã nộp. Chủ dự án chọn ghi
@@ -12992,7 +12992,7 @@ bản rõ cho FINANCE/DIRECTOR).
 
 `apps/api/src/hieu-suat.int.test.ts` (A tính đúng — view bằng bản tính lại TypeScript độc lập trên mười gói; B K11 theo thời gian; C cô lập; D
 HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.ts`, `tests/architecture/hieu-suat-liet-ke.test.ts`, kịch bản 41 HTTP
-(bảy khối T2, hai luồng), và đột biến ở biên bản §S1.9101.
+(bảy khối T2, hai luồng), và đột biến ở biên bản §S1.291.
 
 ### Điều ADR này KHÔNG nói
 

@@ -1208,7 +1208,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
 const DANH_SACH_TRANG_KIEM_SOAT = [
   "KiemSoatError",
   "LOAI_TIN_HIEU_TRAO_THAU",
-  // [S1.9101 / S3.8a] Hiệu suất nhà cung cấp: sàn lịch sử (giả định chờ pilot) và đường đọc có cổng `bid.view`.
+  // [S1.291 / S3.8a] Hiệu suất nhà cung cấp: sàn lịch sử (giả định chờ pilot) và đường đọc có cổng `bid.view`.
   "SAN_LICH_SU",
   "docHieuSuatNhaCungCap",
   "docKhaiBaoXungDot",

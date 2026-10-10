@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.8a] Route HIỆU SUẤT NHÀ CUNG CẤP của tổ chức (spec S3 §4.9, §5.1 K11; ADR-9201).
+// [S1.291 / S3.8a] Route HIỆU SUẤT NHÀ CUNG CẤP của tổ chức (spec S3 §4.9, §5.1 K11; ADR-163).
 //
 // Đường đọc CÓ CỔNG, khuôn `/items/:itemId/price-history`: route không khai mã quyền vì nó là GET, và cổng `bid.view` nằm TRONG
 // `docHieuSuatNhaCungCap` (rổ `HAM_DOC_CO_QUYEN`) — lần từ chối vào sổ qua `auditPool`, lần cho qua để lại một hàng

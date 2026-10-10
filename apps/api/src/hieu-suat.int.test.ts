@@ -1,8 +1,8 @@
 // =============================================================================================
-// [S1.9101 / S3.8a / K11] HIỆU SUẤT NHÀ CUNG CẤP — view `supplier_performance`, hàm `docHieuSuatNhaCungCap`, route
+// [S1.291 / S3.8a / K11] HIỆU SUẤT NHÀ CUNG CẤP — view `supplier_performance`, hàm `docHieuSuatNhaCungCap`, route
 // `GET /supplier-performance` — đo trên Postgres 16, dưới `app_api` và qua HTTP.
 //
-// Spec S3 §4.9, §5.1 K11, §6 T2; ADR-9201; kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §2. Chủ dự án chốt
+// Spec S3 §4.9, §5.1 K11, §6 T2; ADR-163; kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §2. Chủ dự án chốt
 // 2026-10-10: chỉ số PHẢN HỒI cũng chỉ đọc gói ĐÃ LỘ GIÁ (góc C⑦ của S1.159) — không đọc từ lúc đóng.
 //
 //   A  TÍNH ĐÚNG (khuôn J2): một tổ chức, mười gói phủ mọi nhánh của định nghĩa — đã lộ, đóng chưa lộ, đang mở, BAFO đang mở, BAFO đã lộ,
@@ -592,7 +592,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9101 / S3.8a] A — tính đúng: view bằng bản tính lại độc lập trên hàng thô", () => {
+describe("[S1.291 / S3.8a] A — tính đúng: view bằng bản tính lại độc lập trên hàng thô", () => {
   it("[INV-K11] mười gói phủ mọi nhánh của định nghĩa — từng hàng của view bằng bản tính lại; các con số dễ đoán sai khẳng định tay", { timeout: 240000 }, async () => {
     const t = await taoToChuc();
     const [a, b, c, d, e] = [await ncc(t, "NCC A"), await ncc(t, "NCC B"), await ncc(t, "NCC C"), await ncc(t, "NCC D"), await ncc(t, "NCC E")];
@@ -728,9 +728,9 @@ describe("[S1.9101 / S3.8a] A — tính đúng: view bằng bản tính lại đ
   });
 });
 
-describe("[S1.9101 / S3.8a] A2 — khoảng cách vượt bigint không làm hỏng view", () => {
+describe("[S1.291 / S3.8a] A2 — khoảng cách vượt bigint không làm hỏng view", () => {
   it("[INV-K11] giá thấp nhất 0,01 cạnh chi phí 10 nghìn tỷ: khoảng cách 9 999 999 999 999 990 000 phần vạn (vượt bigint) đi ra nguyên vẹn, view không ném", { timeout: 120000 }, async () => {
-    // Lượt soi trên mã §S1.9101 THẤP-6: bản đầu ép `::bigint` ⇒ "bigint out of range" làm hỏng view của CẢ tổ chức, route 500 — đầu vào
+    // Lượt soi trên mã §S1.291 THẤP-6: bản đầu ép `::bigint` ⇒ "bigint out of range" làm hỏng view của CẢ tổ chức, route 500 — đầu vào
     // nằm trong tay nhà cung cấp. ((10 000 000 000 000 − 0,01) × 20 000 + 0,01) / 0,02 = 9 999 999 999 999 990 000,5 ⇒ `div` cắt.
     const t = await taoToChuc();
     const re = await ncc(t, "NCC re");
@@ -748,7 +748,7 @@ describe("[S1.9101 / S3.8a] A2 — khoảng cách vượt bigint không làm h�
   });
 });
 
-describe("[S1.9101 / S3.8a] B — K11 theo thời gian: chỉ gói đã lộ giá, vòng một vẫn đếm lúc BAFO mở", () => {
+describe("[S1.291 / S3.8a] B — K11 theo thời gian: chỉ gói đã lộ giá, vòng một vẫn đếm lúc BAFO mở", () => {
   it("[INV-K11] OPEN → CLOSED: không hàng; UNSEALED: hàng xuất hiện (đối chứng dương); BAFO mở/đóng: vòng một đứng, BAFO và cột giá chưa vào; BAFO lộ: vào", { timeout: 120000 }, async () => {
     const t = await taoToChuc();
     const x = await ncc(t, "NCC dau");
@@ -812,7 +812,7 @@ describe("[S1.9101 / S3.8a] B — K11 theo thời gian: chỉ gói đã lộ gi�
   });
 });
 
-describe("[S1.9101 / S3.8a] B2 — vòng BAFO không ai nộp lại", () => {
+describe("[S1.291 / S3.8a] B2 — vòng BAFO không ai nộp lại", () => {
   it("[INV-K11] vòng BAFO đóng với 0 phong bì vẫn mở niêm phong được; trước đó cột giá rời gói, sau đó trở lại và hai người top-2 vào BAFO", { timeout: 120000 }, async () => {
     // Kế hoạch §5: vòng không phong bì có sinh `unseal_requests` EXECUTED không — nếu không, `gia_da_lo` loại gói ấy vĩnh viễn.
     const t = await taoToChuc();
@@ -833,7 +833,7 @@ describe("[S1.9101 / S3.8a] B2 — vòng BAFO không ai nộp lại", () => {
   });
 });
 
-describe("[S1.9101 / S3.8a / ADR-081 ⑶] C — cô lập", () => {
+describe("[S1.291 / S3.8a / ADR-081 ⑶] C — cô lập", () => {
   it("[INV-K11] phiên khách của lời mời thuộc gói ĐÃ LỘ ra 0 hàng; đối chứng dương: người mua cùng tổ chức thấy hàng; kết nối tổ chức khác không thấy hàng nào của nó", { timeout: 120000 }, async () => {
     const t = await taoToChuc();
     const khac = await taoToChuc();
@@ -857,7 +857,7 @@ describe("[S1.9101 / S3.8a / ADR-081 ⑶] C — cô lập", () => {
   });
 });
 
-describe("[S1.9101 / S3.8a] D — qua HTTP: cổng `bid.view`, sổ, sàn lịch sử", () => {
+describe("[S1.291 / S3.8a] D — qua HTTP: cổng `bid.view`, sổ, sàn lịch sử", () => {
   it("[INV-K11] [INV-D5] `bid.view` đọc được, một hàng `SUPPLIER_PERFORMANCE_READ`; BUYER 403 kèm một `PERMISSION_DENIED`, không hàng đọc", { timeout: 120000 }, async () => {
     const t = await taoToChuc();
     const x = await ncc(t, "NCC http");

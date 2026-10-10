@@ -27238,10 +27238,10 @@ hàm = bốn dòng `chot: K10c`; ba tên `k10c_*` không ở `CHOT_THEO_RANG_BUO
   93/93 48 s; `tin-hieu-chia-nho.int` 14/14 16 s; evidence vitest thoát mã **0**, **91/91**, **5186** khẳng định, 2 056 s (bắt đầu
   00:31 ngày 2026-10-10 sau 6 lượt chờ) — `INV-matrix.md` sinh lại trên bản gộp.
 
-# §S1.9101 — S3.8a: HIỆU SUẤT NHÀ CUNG CẤP — MỘT VIEW `security_invoker` CHỈ ĐỌC GÓI ĐÃ LỘ GIÁ, KỂ CẢ Ở CỘT PHẢN HỒI (GÓC C⑦); VỊ TỪ KHÁCH TRONG THÂN VIEW VÀ MỘT PHÉP ĐẾM CHO MỌI VIEW; MỘT ĐƯỜNG ĐỌC CÓ CỔNG `bid.view`; K11 VÀO SỔ — ADR-9201
+# §S1.291 — S3.8a: HIỆU SUẤT NHÀ CUNG CẤP — MỘT VIEW `security_invoker` CHỈ ĐỌC GÓI ĐÃ LỘ GIÁ, KỂ CẢ Ở CỘT PHẢN HỒI (GÓC C⑦); VỊ TỪ KHÁCH TRONG THÂN VIEW VÀ MỘT PHÉP ĐẾM CHO MỌI VIEW; MỘT ĐƯỜNG ĐỌC CÓ CỔNG `bid.view`; K11 VÀO SỔ — ADR-163
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — view đọc được ở mọi tổ chức (không sau công tắc S3), nhưng không câu
-ghi nào mới và không hành vi cũ nào đổi; route mới chỉ đọc. Migration `9501_hieu_suat_nha_cung_cap`, ADR-9201; một bất biến mới (K11), không
+ghi nào mới và không hành vi cũ nào đổi; route mới chỉ đọc. Migration `123_hieu_suat_nha_cung_cap`, ADR-163; một bất biến mới (K11), không
 khoản nợ mới.
 
 ## 1. Vòng này là gì
@@ -27279,7 +27279,7 @@ Bốn câu, khuyến nghị đứng đầu: ⑴ chỉ gói đã lộ giá — ch
 lần đọc, K12 vẫn không có hàng sổ đăng ký.
 
 ## 5. Thay đổi
-- **Migration `9501_hieu_suat_nha_cung_cap`** — view `supplier_performance` `WITH (security_invoker = true)`, CTE `goi` gọi `gia_da_lo` hai lần
+- **Migration `123_hieu_suat_nha_cung_cap`** — view `supplier_performance` `WITH (security_invoker = true)`, CTE `goi` gọi `gia_da_lo` hai lần
   mỗi gói (cổng vòng một tại `LEAST(now(), cancelled_at, lần mở BAFO đầu)`, cổng giá lúc đọc); lời mời được đếm `revoked_at IS NULL AND status <>
   'UNSENT'`; phản hồi từ `greatest(opened_at, lúc mời)`; `percentile_disc`; khoảng cách phần vạn bằng `div`, `nullif` chống chia 0; thắng = hàng
   award mới nhất `APPROVED`; vị từ khách nguyên văn `027` trong `WHERE`; `REVOKE ALL … FROM PUBLIC`, `GRANT SELECT … TO app_api`.
@@ -27290,7 +27290,7 @@ lần đọc, K12 vẫn không có hàng sổ đăng ký.
 - **API:** `GET /supplier-performance` (`apps/api/src/routes/hieu-suat.ts`, BUYER, `agent: false`), dòng khai ở `apps/mcp/src/cong-cu.ts`.
 - **Sổ và cổng:** `HAM_DOC_CO_QUYEN`, danh sách trắng barrel `kiem-soat`, `LOAI_DA_KHAI`, `role_table_grants` của `rls-coverage`, phép đếm view mới
   (`rls-coverage`), cổng mới `tests/architecture/hieu-suat-liet-ke.test.ts`, `so-khai-nhan` (K11 bốn tệp, D5 thêm một), hàng K11 ở TEST-PLAN.
-- **Tài liệu:** ADR-9201; spec S3 §4.9 (ba ô gạch, đoạn mới), K11 ở §5 và §5.1, §6 T2, §9 dòng S3.8; lời khai đếm STATE/Handoff (92 bất biến, 118
+- **Tài liệu:** ADR-163; spec S3 §4.9 (ba ô gạch, đoạn mới), K11 ở §5 và §5.1, §6 T2, §9 dòng S3.8; lời khai đếm STATE/Handoff (92 bất biến, 118
   migration, 161 ADR).
 
 ## 6. Phép đo
@@ -27312,7 +27312,7 @@ lần đọc, K12 vẫn không có hàng sổ đăng ký.
     người top-2 vào BAFO (kế hoạch §5 — đo ở vòng này).
   - Khối A cộng thêm sau lượt soi: đường `app_api` (RLS thật, giao dịch khác) ra cùng hàng như bản tính lại; khẳng định tay cho xếp hạng của A
     (3 gói, trung vị hạng 1) và thời gian phản hồi của C (khoảng 6 giờ — nhánh *mời lại sau khi mở*; nếu mốc là `opened_at` thì 8 giờ).
-- `db/rls-coverage.int.test.ts` khối `[S1.9101 / S3.8a / K11]` — mọi view `public` mà `app_api` SELECT được chứa nguyên văn `KHACH_NULL`; đối chứng
+- `db/rls-coverage.int.test.ts` khối `[S1.291 / S3.8a / K11]` — mọi view `public` mà `app_api` SELECT được chứa nguyên văn `KHACH_NULL`; đối chứng
   trong giao dịch huỷ: view thiếu vế bị nêu, thêm vế thì không.
 - `tests/architecture/hieu-suat-liet-ke.test.ts` — bốn vế và đối chứng biên từ.
 - Kịch bản 41 HTTP, bảy khối `[INV-K11]`, hai luồng (khoá theo `supplierId` của năm nhà cung cấp gói chính; mỗi lần đọc qua giám đốc, quét
@@ -27365,7 +27365,7 @@ Một lượt đối kháng đọc trọn bản vá (không chạy test): **0 CA
 TRƯỚC mở niêm phong. Mỗi phát hiện được đo lại bằng tay trước khi nhận.
 - **TRUNG-1** FINANCE/DIRECTOR (giữ `bid.view`, không giữ `rfq.invite`) suy ra được danh sách mời của một gói, kể cả người được mời mà không
   nộp, sau mở niêm phong — kiểm lại: `audit.read` không mở đường đọc nào khác ngoài bộ xuất (`bo-bang-chung.ts:406`), `listInvitations` cổng
-  `rfq.invite`. Trình chủ dự án: **chấp nhận, ghi vào ADR** (ADR-9201 ⑻⒢).
+  `rfq.invite`. Trình chủ dự án: **chấp nhận, ghi vào ADR** (ADR-163 ⑻⒢).
 - **TRUNG-2** bảy khối K11 của kịch bản 41 chưa chạy lúc soi, và vế BAFO của khối BAFO_OPEN rỗng — đã chạy (108/108); lời khai rỗng bỏ khỏi tên
   test, ghi chỗ đo thật.
 - THẤP-1 lời khai *"RLS một mình không đưa view về 0"* SAI — view bắt đầu từ `suppliers`, đóng với khách — sửa ở migration, `rls-coverage`, ADR,
@@ -27383,9 +27383,9 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
 evidence trên HEAD: ở commit evidence của vòng.
 
 ## 10. Giới hạn
-- Lớp *một đường đọc* là lớp chữ (ADR-9201 ⑻⒠); CSDL không biết người gọi giữ `bid.view`.
-- `gia_da_lo` gọi hai lần mỗi gói — chưa đo ở quy mô vài trăm gói (ADR-9201 ⑻⒟).
+- Lớp *một đường đọc* là lớp chữ (ADR-163 ⑻⒠); CSDL không biết người gọi giữ `bid.view`.
+- `gia_da_lo` gọi hai lần mỗi gói — chưa đo ở quy mô vài trăm gói (ADR-163 ⑻⒟).
 - Phiên PASSPORT và phiên khách: view ra 0 hàng hôm nay vì bắt đầu từ `suppliers` (đóng với mọi phiên khách); vị từ trong thân là lớp cho
   bản viết lại sau này, đo bằng phép đếm thân view và hàng ghim — không phép đo hành vi nào phân biệt được nó.
-- FINANCE/DIRECTOR suy ra được danh sách mời sau mở niêm phong — chủ dự án chấp nhận (ADR-9201 ⑻⒢).
+- FINANCE/DIRECTOR suy ra được danh sách mời sau mở niêm phong — chủ dự án chấp nhận (ADR-163 ⑻⒢).
 - Màn, `gieo:demo`, T4: S3.8b.

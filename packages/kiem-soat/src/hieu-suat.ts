@@ -1,6 +1,6 @@
 // ==============================================================================================
-// [S1.9101 / S3.8a] ĐỌC HIỆU SUẤT NHÀ CUNG CẤP — đường đọc DUY NHẤT của view `supplier_performance` từ mã ứng dụng (spec S3 §4.9,
-// §5.1 K11; ADR-9201; kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §2).
+// [S1.291 / S3.8a] ĐỌC HIỆU SUẤT NHÀ CUNG CẤP — đường đọc DUY NHẤT của view `supplier_performance` từ mã ứng dụng (spec S3 §4.9,
+// §5.1 K11; ADR-163; kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §2).
 //
 // CỔNG `bid.view` (spec §4.9): hạng, khoảng cách tới hạng nhất, thắng là dữ liệu SAU mở thầu, và cổng của dữ liệu ấy đã là `bid.view` —
 // cùng cổng của bảng so sánh, bảng xếp hạng, lịch sử giá. Cổng nằm TRONG hàm (rổ `HAM_DOC_CO_QUYEN` của `cong-quyen-route.test.ts`):

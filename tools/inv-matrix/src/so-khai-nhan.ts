@@ -154,7 +154,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/api.int.test.ts",
     // [S1.287 / S3.7a1] Đường Passport — cùng bất biến trên bảng phiên/token/OTP riêng (ADR-081 ⑶).
     "apps/api/src/passport.int.test.ts",
-    // [S1.9101 / S3.8a] Route hiệu suất: BUYER (không `bid.view`) bị 403 kèm đúng một `PERMISSION_DENIED`.
+    // [S1.291 / S3.8a] Route hiệu suất: BUYER (không `bid.view`) bị 403 kèm đúng một `PERMISSION_DENIED`.
     "apps/api/src/hieu-suat.int.test.ts",
     // [S1.86 / khoản 128] Ai GIỮ được khoá ghi sổ của tổ chức, và giữ được bao lâu: một phiên vai ứng dụng nay KHÔNG lấy
     // được khoá mức PHIÊN (42501), nên không còn đường CỐ Ý làm mọi lần ghi sổ của một tổ chức gãy 55P03 vô thời hạn.
@@ -504,7 +504,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/trao-thau-theo-bac.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
   ],
-  // K11 — [S1.9101 / S3.8a] hiệu suất nhà cung cấp chỉ đọc gói đã lộ giá. `hieu-suat` đo trên Postgres thật, dưới `app_api` và qua
+  // K11 — [S1.291 / S3.8a] hiệu suất nhà cung cấp chỉ đọc gói đã lộ giá. `hieu-suat` đo trên Postgres thật, dưới `app_api` và qua
   // HTTP: view bằng bản tính lại độc lập trên mười gói phủ mọi nhánh (khuôn J2), ảnh chụp sau từng cạnh của gói (không gì trước
   // UNSEALED, vòng một vẫn đếm lúc BAFO mở, BAFO chưa lộ không vào), phiên khách của gói đã lộ ra 0 hàng, cổng `bid.view` kèm hàng sổ,
   // sàn lịch sử, ghi sổ hỏng thì không chỉ số nào ra. `rls-coverage` đếm vị từ khách trong THÂN mọi view `app_api` đọc được;

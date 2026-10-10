@@ -965,7 +965,7 @@ DECLARE
           -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một
           -- view trên bảng tra cứu KHÔNG có dữ liệu tenant cũng phải đặt cờ; cửa ra là một dòng `ALTER VIEW` hoặc
           -- `NGOAI_LE_DOC_VONG`. ~~Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.~~
-          -- [S1.9101 / S3.8a] Từ `9501_hieu_suat_nha_cung_cap` lược đồ có MỘT view — `supplier_performance`, `security_invoker` —
+          -- [S1.291 / S3.8a] Từ `123_hieu_suat_nha_cung_cap` lược đồ có MỘT view — `supplier_performance`, `security_invoker` —
           -- thân, cờ và ACL ghim ở hàng của nó trong `bang` (tự chữa); vế này vẫn không kêu oan chỗ nào.
           -- [S1.50 / lượt soi 42 NHẸ-3] `reloptions` giữ NGUYÊN VĂN chuỗi người dùng gõ, và `parse_bool` của PostgreSQL nhận
           -- cả `yes`, `y`, `t`, `tr`, `tru`. Bản cũ chỉ nhận `true|on|1` nên `SET (security_invoker = yes)` — một view THẬT SỰ
@@ -17243,10 +17243,10 @@ $ham$;
                   'hàm public.luot_cham_kiem_hang() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_hang() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S3.8a / K11] View hieu suat nha cung cap — than, security_invoker va ACL. Mot than bo vi tu khach, bo mot cong gia_da_lo hay doi dinh nghia thang cho phien khach/Passport hay gia chua lo vao chi so; CREATE OR REPLACE thieu WITH xoa security_invoker (do 2026-10-10).
+    -- [S1.291 / S3.8a / K11] View hieu suat nha cung cap — than, security_invoker va ACL. Mot than bo vi tu khach, bo mot cong gia_da_lo hay doi dinh nghia thang cho phien khach/Passport hay gia chua lo vao chi so; CREATE OR REPLACE thieu WITH xoa security_invoker (do 2026-10-10).
     ARRAY[
-      $q$định nghĩa view supplier_performance (9501_hieu_suat_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_hieu_suat_nha_cung_cap.sql')$q$,
+      $q$định nghĩa view supplier_performance (123_hieu_suat_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '123_hieu_suat_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE VIEW public.supplier_performance WITH (security_invoker = true) AS
 WITH goi AS MATERIALIZED (
   SELECT r.org_id,

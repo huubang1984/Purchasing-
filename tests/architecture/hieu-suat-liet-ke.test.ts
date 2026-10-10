@@ -1,14 +1,14 @@
 // ==============================================================================================
-// [S1.9101 / S3.8a / K11] VIEW HIỆU SUẤT NHÀ CUNG CẤP — MỘT ĐƯỜNG ĐỌC, CÓ TÊN
+// [S1.291 / S3.8a / K11] VIEW HIỆU SUẤT NHÀ CUNG CẤP — MỘT ĐƯỜNG ĐỌC, CÓ TÊN
 //
-// Spec S3 §4.9, §5.1 K11; ADR-9201. `app_api` có SELECT trên `supplier_performance` (mọi mã ứng dụng chạy dưới vai ấy), và cổng
+// Spec S3 §4.9, §5.1 K11; ADR-163. `app_api` có SELECT trên `supplier_performance` (mọi mã ứng dụng chạy dưới vai ấy), và cổng
 // `bid.view` nằm ở tầng gói — CSDL không biết người gọi là ai (kho không có GUC người dùng nào; kế hoạch §5 phán ⑤). Một bộ đọc thứ hai
 // — một báo cáo, một route khác — đọc view mà không cổng thì mọi lớp khác vẫn xanh. Lớp này giữ đường đọc ấy là MỘT và có tên:
 //   ⑴ tệp TypeScript sản xuất nhắc tên view đúng bằng một: `packages/kiem-soat/src/hieu-suat.ts`;
 //   ⑵ ký hiệu `docHieuSuatNhaCungCap` chỉ ở nơi định nghĩa, mặt tiền gói, route của nó và câu khai `agent: false` của MCP;
 //   ⑶ hàm ấy hỏi `bid.view` đúng một lần và ghi `SUPPLIER_PERFORMANCE_READ`;
 //   ⑷ không migration nào ngoài tệp dựng view và tệp ghim nhắc tên view — nên không hàm SQL, view lồng hay trigger nào đọc nó.
-// Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó — cùng giới hạn của `so-tai-khoan-liet-ke.test.ts`, nói ra ở ADR-9201.
+// Vẫn là lớp chữ: một câu SQL dựng động vượt qua nó — cùng giới hạn của `so-tai-khoan-liet-ke.test.ts`, nói ra ở ADR-163.
 // ==============================================================================================
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

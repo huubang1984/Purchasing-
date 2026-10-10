@@ -217,7 +217,7 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "HIỆU SUẤT NHÀ CUNG CẤP CỦA CẢ TỔ CHỨC — số lần mời, nộp, sửa, thời gian phản hồi, hạng trung vị, khoảng cách tới hạng nhất, " +
     "vào BAFO và thắng, gom trên MỌI gói đã lộ giá. Hạng và thắng là thông tin về giá sau mở thầu, cùng hạng tiết lộ với bảng " +
     "xếp hạng, và gom xuyên gói như lịch sử giá. Cổng `bid.view` và hàng sổ `SUPPLIER_PERFORMANCE_READ` nằm trong " +
-    "`docHieuSuatNhaCungCap`. Route khai `agent: false` và dòng này khai vì sao. [S1.9101 / S3.8a]",
+    "`docHieuSuatNhaCungCap`. Route khai `agent: false` và dòng này khai vì sao. [S1.291 / S3.8a]",
   "/rfqs/:rfqId/items/:lineNo/benchmark":
     "DẢI LỊCH SỬ NỘI BỘ CỦA MỘT DÒNG — tứ phân vị và trung vị đơn giá quy đổi của các gói đã mở trước, cùng giá quy đổi của từng " +
     "báo giá của gói: con số tiền gom từ nhiều gói, cùng hạng với `/items/:itemId/price-history`. Spec S4 §3.5 khai `agent: false`; " +

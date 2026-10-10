@@ -2873,7 +2873,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // Đích của INSERT/UPDATE/DELETE là r (bảng), p (bảng phân mảnh), v (view), m (matview), f (bảng
     // ngoài). Chỉ 'r' đi qua đủ các lớp của H19 hôm nay: view nhận trigger INSTEAD OF (trả NULL là
     // nuốt hàng), bảng ngoài ghi ra một cụm khác, phân mảnh cần chốt trên từng lá (đã đo ở test lá).
-    // [S1.9101 / S3.8a] View CHỈ ĐỌC: không trigger INSTEAD OF (`CAU_QUAN_HE_KHAC_SAI` cấm), `app_api` chỉ SELECT (ghim ở hardening và ở
+    // [S1.291 / S3.8a] View CHỈ ĐỌC: không trigger INSTEAD OF (`CAU_QUAN_HE_KHAC_SAI` cấm), `app_api` chỉ SELECT (ghim ở hardening và ở
     // `rls-coverage`), nên nó không phải đường ghi nào H19 phải nhìn.
     const LOAI_DA_KHAI: readonly string[] = ["public.supplier_performance (v)"];
     // [S1.34 / khoản nợ 78] Vì sao loại `pg_temp%`: bảng tạm là của PHIÊN, không phải của lược đồ, và

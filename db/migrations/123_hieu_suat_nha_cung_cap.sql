@@ -1,7 +1,7 @@
 -- ==============================================================================================
--- 9501_hieu_suat_nha_cung_cap — [S1.9101 / S3.8a của spec S3] VIEW HIỆU SUẤT NHÀ CUNG CẤP — CHỈ ĐỌC GÓI ĐÃ LỘ GIÁ (K11)
+-- 123_hieu_suat_nha_cung_cap — [S1.291 / S3.8a của spec S3] VIEW HIỆU SUẤT NHÀ CUNG CẤP — CHỈ ĐỌC GÓI ĐÃ LỘ GIÁ (K11)
 --
--- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.9, §5.1 K11, §6 T2. ADR-9201. Kế hoạch chuẩn bị
+-- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.9, §5.1 K11, §6 T2. ADR-163. Kế hoạch chuẩn bị
 -- `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md`. Chủ dự án chốt 2026-10-10 (câu 1): ~~`≥ CLOSED`~~ — chỉ số PHẢN HỒI
 -- cũng chỉ đọc gói ĐÃ LỘ GIÁ, vì đọc từ lúc đóng làm lộ *ai đã nộp, sửa mấy lần* TRƯỚC mở niêm phong: so view trước và sau lúc gói
 -- đóng là biết (góc C⑦ của S1.159 — spec S4 `:755`, `:969`; spec S4b ㊾).
@@ -20,7 +20,7 @@
 --     lời mời được đếm — luồng của lời mời đã thu hồi không vào. Phiên bản BAFO, hạng, vào BAFO, thắng ghép báo giá → lời mời KHÔNG lọc:
 --     chúng đọc báo giá đã mở niêm phong, mà worker chỉ mở luồng còn sống và tầng gói chặn thu hồi sau lần mở thầu đầu (ADR-128);
 --   · thời gian phản hồi: phiên bản vòng một ĐẦU của lời mời được đếm trừ `greatest(opened_at, lời mời.created_at)`, theo giây (sàn);
---     mời sau khi mở thì tính từ lúc mời — lệch §4.9 có chủ đích, ADR-9201;
+--     mời sau khi mở thì tính từ lúc mời — lệch §4.9 có chủ đích, ADR-163;
 --   · trung vị là `percentile_disc(0.5)` — phần tử giữa, số chẵn thì phần tử DƯỚI: luôn là một giá trị có thật, tính lại được chính xác;
 --   · khoảng cách tới hạng nhất tính bằng PHẦN VẠN, số nguyên: `(chi phí − thấp nhất) / thấp nhất`, làm tròn nửa lên bằng `div` — không
 --     qua phép chia có làm tròn trung gian; thấp nhất bằng 0 thì khoảng cách của lượt ấy là NULL (không chia cho 0); kiểu `numeric`, KHÔNG
