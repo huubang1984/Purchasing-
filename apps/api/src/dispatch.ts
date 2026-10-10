@@ -442,6 +442,11 @@ function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResp
   // [S1.273 / S3.3e1] Lời từ chối của một chốt mang thêm MÃ của bảng (`CHOT_VAO_SO`) để màn gắn đúng chỉ dẫn. Thông điệp là hằng
   // của mã ấy — một mã một câu —, nên mã không nói thêm điều gì câu chưa nói; `cause` không bao giờ ra ngoài.
   if (err instanceof ChotKiemSoatError) return { status: 422, body: { error: err.message, ma: err.lyDo } };
+  // [S1.288 / S4.7c1] Lời từ chối của lớp trao thầu mang MÃ của nó, cùng lý do dòng trên: màn `/mo-thau` hiện hay ẩn ô giải trình lệch
+  // hạng theo mã (`THIEU_GIAI_TRINH_LECH_HANG` / `GIAI_TRINH_LECH_HANG_KHONG_CAN`) — người giữ `award.recommend` mà không giữ `bid.view`
+  // không đọc được bảng xếp hạng nên chỉ máy chủ nói được báo giá có lệch hạng. Mã là từ vựng `VAO_SO`, không nói thêm điều gì câu chưa nói.
+  const maTraoThau = err instanceof Error && err.name === "TraoThauTuChoiError" ? (err as Error & { lyDo?: unknown }).lyDo : undefined;
+  if (err instanceof Error && typeof maTraoThau === "string") return { status: 422, body: { error: err.message, ma: maTraoThau } };
   if (err instanceof Error && LOI_NGHIEP_VU_422.has(err.name)) {
     return { status: 422, body: { error: err.message } };
   }

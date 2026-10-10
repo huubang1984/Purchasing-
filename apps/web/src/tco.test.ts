@@ -1,11 +1,13 @@
 // [S1.286 / S4.7b2] Phép tính thuần của thước TCO ở `/nop-thau` và `/mo-thau` (`tco.ts`).
 import { describe, expect, it } from "vitest";
 import {
+  canGiaiTrinh,
   coThuocTco,
   docSoNgayKhai,
   docThuocTco,
   docTienKhai,
   loiOKhai,
+  moTaCamKet,
   moTaMaThieu,
   moTaQuyDoi,
   moTaThanhPhan,
@@ -192,5 +194,45 @@ describe("`/mo-thau` — phép tính cạnh con số, mã thiếu, cột hạng 
     expect(coThuocTco([{ components: [], maThieu: ["gia", "chi_phi_tre"] }])).toBe(true);
     expect(coThuocTco([{ components: [], maThieu: ["TONG_VUOT_MIEN"] }])).toBe(true);
     expect(coThuocTco([])).toBe(false);
+  });
+});
+
+// [S1.288 / S4.7c1 / L8] Ô giải trình lệch hạng và các dòng cam kết của bước 7 `/mo-thau`.
+describe("canGiaiTrinh — cùng phép so `IS DISTINCT FROM` của `award_kiem_giai_trinh`", () => {
+  it("hạng giá khác hạng chi phí ⇒ cần; bằng ⇒ không; hạng giá vắng trên hàng có hạng ⇒ cần; hàng không hạng hay không hàng ⇒ không", () => {
+    expect(canGiaiTrinh({ rank: 1, hangGia: 3 })).toBe(true);
+    expect(canGiaiTrinh({ rank: 2, hangGia: 2 })).toBe(false);
+    expect(canGiaiTrinh({ rank: 1, hangGia: null })).toBe(true);
+    expect(canGiaiTrinh({ rank: 1 })).toBe(true);
+    expect(canGiaiTrinh({ rank: null, hangGia: null })).toBe(false);
+    expect(canGiaiTrinh(null)).toBe(false);
+  });
+});
+
+describe("moTaCamKet — lời khai của ĐÚNG các mã bật, hai hạng, giải trình", () => {
+  const goc = {
+    hangTco: 1,
+    hangGia: 3,
+    khai: { freight: "25000.00", importCost: null, paymentDays: 30, leadTimeDays: 20 },
+    tapMa: ["gia", "van_chuyen", "nhap_khau", "chi_phi_thanh_toan", "chi_phi_tre"],
+    soNgayGiao: 14,
+    giaiTrinhLechHang: "giao dung han",
+  } as const;
+  it("năm mã: bốn lời khai theo thứ tự, ô vắng là `—`, số ngày giao kèm số ngày yêu cầu", () => {
+    expect(moTaCamKet(goc)).toEqual([
+      ["Hạng lúc đề xuất", "chi phí hiệu dụng 1 · giá 3"],
+      ["Lời khai cam kết", "phí vận chuyển 25000.00 · chi phí nhập khẩu — · số ngày thanh toán 30 · số ngày giao 20 (yêu cầu 14)"],
+      ["Giải trình lệch hạng", "giao dung han"],
+    ]);
+  });
+  it("ô của mã KHÔNG bật không hiện; gói chỉ giá nói rõ; không lệch thì nói không cần giải trình", () => {
+    expect(moTaCamKet({ ...goc, tapMa: ["gia", "chi_phi_tre"] })[1]).toEqual(["Lời khai cam kết", "số ngày giao 20 (yêu cầu 14)"]);
+    const chiGia = moTaCamKet({ ...goc, hangGia: 1, tapMa: ["gia"], giaiTrinhLechHang: null });
+    expect(chiGia).toEqual([
+      ["Hạng lúc đề xuất", "chi phí hiệu dụng 1 · giá 1"],
+      ["Lời khai cam kết", "gói chấm theo giá — không lời khai ngoài giá"],
+      ["Giải trình lệch hạng", "không lệch hạng — không cần giải trình"],
+    ]);
+    expect(moTaCamKet({ ...goc, tapMa: null, hangGia: null, giaiTrinhLechHang: null })[0]).toEqual(["Hạng lúc đề xuất", "chi phí hiệu dụng 1 · giá —"]);
   });
 });

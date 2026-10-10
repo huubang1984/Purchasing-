@@ -43,6 +43,9 @@ const HAM_SQL: Readonly<Record<string, string>> = {
   // [S1.280 / S3.5a / K7] Số tiền và tiền tệ của báo giá ĐƯỢC CHỌN để phân bậc trao thầu — đọc qua `bid_so_tien`/`bid_currency`, không
   // trả dòng nào ra ngoài; người gọi là các hàm theo bậc của `113` dưới `app_api`, vốn đã đọc được bảng (góc B⑧).
   award_so_tien_trao: "ĐỌC — số tiền và tiền tệ của báo giá được chọn, để phân bậc trao thầu (K7, `113`)",
+  // [S1.288 / S4.7c1 / L8] Bốn ô khai của báo giá ĐƯỢC ĐỀ XUẤT — qua đúng hai bộ đọc của lượt chấm (`bid_so_tien`, `bid_so_ngay`) —
+  // chụp vào `rfq_award_cam_ket` dưới `app_api` lúc đề xuất; đọc ra chỉ qua `docCamKetTraoThau` dưới cổng `bid.view`.
+  award_dien_cam_ket: "ĐỌC — bốn ô khai TCO của báo giá được đề xuất, chụp vào cam kết (L8, `121_cam_ket_trao_thau`)",
   goi_y_kiem_luat: "TỒN TẠI — gợi ý trên gói đã có bản rõ chỉ do người giữ `item.manage` ghi (`089`)",
   quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`096`)",
 };

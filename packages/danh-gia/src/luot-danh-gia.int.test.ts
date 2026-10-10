@@ -38,7 +38,9 @@ import {
   moVongBafo as moVongBafoThat,
 } from "./vong-bafo.js";
 import {
+  TraoThauTuChoiError,
   deXuatTraoThau,
+  docCamKetTraoThau,
   docTraoThau,
   duyetTraoThau,
   huyTraoThau,
@@ -616,12 +618,29 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
     return { evalId: rows[0]?.id ?? "", bidVersionId: banRo[0] ?? "" };
   }
 
+  // [S1.288 / S4.7c1 — rà soát TRUNG-1] Hàng chấm chỉ ghi trong CHÍNH giao dịch tạo lượt (`luot_cham_kiem_hang`): mỗi lần chèn là
+  // một lượt MỚI chép gói, phiên bản và người của lượt mẫu, cùng hàng ấy, trong một giao dịch. J1 đo hàng, không đo lượt.
   async function chenHang(evalId: string, bidVersionId: string, components: string): Promise<void> {
-    await db.pool.query(
-      "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
-        "VALUES ($1, $2, $3, '100.00', $4, 1)",
-      [orgA, evalId, bidVersionId, components],
-    );
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1 RETURNING id",
+        [evalId],
+      );
+      await c.query(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, '100.00', $4, 1)",
+        [orgA, rows[0]?.id ?? "", bidVersionId, components],
+      );
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
   }
 
   it("[INV-J1] tập thành phần KHỚP chính sách ⇒ đi qua (đối chứng dương)", async () => {
@@ -4249,22 +4268,20 @@ describe("[S1.279 / S4.7a] L8 — TCO có nguồn: mỗi mã một nguồn, ki�
   it("[INV-L8] `ma_thieu` chỉ ở hàng KHÔNG số — câu ghi thẳng một hàng có số mang `ma_thieu` bị CSDL từ chối", async () => {
     const { rfqId, banRo } = await goiTcoDaMo(TP_GIA, null, null, [{ totalAmount: "100.00", currency: "VND" }]);
     const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
-    const lai = await withTenant(apiPool, orgA, async (c) => {
-      const { rows } = await c.query<{ id: string }>(
-        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
-          "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1 RETURNING id",
-        [kq.evaluationId],
-      );
-      return rows[0]?.id ?? "";
-    });
+    // [S1.288] Lượt và hàng trong CÙNG giao dịch — hàng chấm không ghi được vào một lượt đã commit (`luot_cham_kiem_hang`).
     await expect(
-      withTenant(apiPool, orgA, (c) =>
-        c.query(
+      withTenant(apiPool, orgA, async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+            "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1 RETURNING id",
+          [kq.evaluationId],
+        );
+        return c.query(
           "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank, ma_thieu) " +
             "VALUES ($1, $2, $3, '100.00', $4::jsonb, 1, ARRAY['van_chuyen'])",
-          [orgA, lai, banRo[0], JSON.stringify([{ ma: "gia", tien: "100.00" }])],
-        ),
-      ),
+          [orgA, rows[0]?.id ?? "", banRo[0], JSON.stringify([{ ma: "gia", tien: "100.00" }])],
+        );
+      }),
     ).rejects.toMatchObject({ code: "23514", constraint: "rfq_evaluation_lines_ma_thieu_hinh_dang" });
   });
 });
@@ -4458,3 +4475,311 @@ describe("[S1.286 / S4.7b2] bảng xếp hạng: hạng giá trên báo giá có
     ]);
   });
 });
+
+// ================================================================================================
+// [S1.288 / S4.7c1 / L8 vế cam kết] LỜI KHAI TCO THÀNH CAM KẾT LƯU CÙNG ĐỀ XUẤT; HẠNG GIÁ KHÁC HẠNG CHI PHÍ THÌ PHẢI GIẢI TRÌNH
+//
+// Spec S4 §2.4 ⑻, §4.8. Chủ dự án chốt 2026-10-09: cam kết do CSDL TỰ CHỤP lúc đề xuất (ứng dụng chỉ ghi được khoá), và giải trình là
+// một Ô RIÊNG mà CSDL đòi khi hạng giá (`award_hang_gia`) khác hạng chi phí (`rank`) của chính báo giá được đề xuất. Cùng bốn báo giá
+// của khối S4.7b2: A hạng 1 / giá 3, B hạng 3 / giá 1, C hạng 2 / giá 1, D không hạng.
+// ================================================================================================
+const TP_CAM_KET =
+  '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"van_chuyen","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chi_phi_tre","don_vi":"TIEN","he_so":"1.0000"}]';
+
+async function goiCamKet(): Promise<{ rfqId: string; banRo: readonly string[]; evaluationId: string }> {
+  const { rfqId, banRo } = await goiTcoDaMo(TP_CAM_KET, '{"ty_le_tre_ngay":"0.001"}', 10, [
+    { totalAmount: "100.00", currency: "VND", freight: "0.00", leadTimeDays: "10" },
+    { totalAmount: "90.00", currency: "VND", freight: "20.00", leadTimeDays: "10" },
+    { totalAmount: "90.00", currency: "VND", freight: "5.00", leadTimeDays: "110" },
+    { totalAmount: "80.00", currency: "VND", freight: "0.00" },
+  ]);
+  const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+  return { rfqId, banRo, evaluationId: kq.evaluationId };
+}
+
+async function soHangSo(action: string, rfqId: string): Promise<number> {
+  const { rows } = await db.pool.query<{ n: string }>(
+    "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3",
+    [orgA, action, rfqId],
+  );
+  return Number(rows[0]?.n ?? "0");
+}
+
+describe("[S1.288 / S4.7c1] L8 vế cam kết — cam kết TCO chụp ở CSDL lúc đề xuất; lệch hạng thì phải giải trình", { timeout: 300000 }, () => {
+  it("[INV-L8] hạng giá SQL (`award_hang_gia`) bằng hạng giá của bảng xếp hạng (`xepHang`) ở MỌI báo giá của cùng lượt chấm", async () => {
+    const { rfqId, banRo, evaluationId } = await goiCamKet();
+    const bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    if (bang === null) throw new Error("gói đã chấm mà không có bảng xếp hạng");
+    const { rows } = await db.pool.query<{ bid: string; hang: number | null }>(
+      "SELECT b AS bid, public.award_hang_gia($1, $2, b) AS hang FROM unnest($3::uuid[]) AS b",
+      [orgA, evaluationId, banRo],
+    );
+    const sql = new Map(rows.map((r) => [r.bid, r.hang]));
+    expect(banRo.map((v) => sql.get(v))).toEqual([3, 1, 1, null]);
+    expect(banRo.map((v) => sql.get(v))).toEqual(banRo.map((v) => bang.rows.find((r) => r.bidVersionId === v)?.hangGia));
+
+    // Đường ghi thứ hai (vai chủ cụm): một hàng KHÔNG hạng mà còn thành phần giá rẻ hơn mọi hàng, và một `tien` khác dạng hai chữ số lẻ.
+    // Cả hai bản đều bỏ hai hàng ấy — tính chúng vào thì hạng giá của hàng khác đổi.
+    await db.pool.query(
+      `UPDATE rfq_evaluation_lines SET components = '[{"ma":"gia","donVi":"TIEN","heSo":"1.0000","giaTri":"10.00","tien":"10.00"}]'::jsonb
+        WHERE evaluation_id = $1 AND bid_version_id = $2`,
+      [evaluationId, banRo[3]],
+    );
+    await db.pool.query(
+      `UPDATE rfq_evaluation_lines SET components = jsonb_set(components, '{0,tien}', '"85.5"') WHERE evaluation_id = $1 AND bid_version_id = $2`,
+      [evaluationId, banRo[2]],
+    );
+    // …và một hàng mang HAI thành phần `gia` (J1 không đòi mã duy nhất): cả hai bản tính thành phần ĐẦU — bản SQL không ném 21000.
+    await db.pool.query(
+      `UPDATE rfq_evaluation_lines SET components = components || '[{"ma":"gia","donVi":"TIEN","heSo":"1.0000","giaTri":"1.00","tien":"1.00"}]'::jsonb
+        WHERE evaluation_id = $1 AND bid_version_id = $2`,
+      [evaluationId, banRo[0]],
+    );
+    const bang2 = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const { rows: rows2 } = await db.pool.query<{ bid: string; hang: number | null }>(
+      "SELECT b AS bid, public.award_hang_gia($1, $2, b) AS hang FROM unnest($3::uuid[]) AS b",
+      [orgA, evaluationId, banRo],
+    );
+    const sql2 = new Map(rows2.map((r) => [r.bid, r.hang]));
+    expect(banRo.map((v) => sql2.get(v))).toEqual([2, 1, null, null]);
+    expect(banRo.map((v) => sql2.get(v))).toEqual(banRo.map((v) => bang2?.rows.find((r) => r.bidVersionId === v)?.hangGia));
+  });
+
+  it("[INV-L8] đề xuất báo giá LỆCH hạng (chi phí 1, giá 3) không giải trình ⇒ `THIEU_GIAI_TRINH_LECH_HANG`: không hàng award, không cam kết, RFQ đứng yên, không vào sổ; kèm giải trình ⇒ đi qua và cam kết mang ĐÚNG lời khai của phong bì", async () => {
+    const { rfqId, banRo, evaluationId } = await goiCamKet();
+    const a = banRo[0] ?? "";
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: a, reason: "chi phi thap nhat", actorSessionId: sDeXuat }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(TraoThauTuChoiError);
+    expect((loi as TraoThauTuChoiError).lyDo).toBe("THIEU_GIAI_TRINH_LECH_HANG");
+    expect(await hangAward(rfqId)).toEqual([]);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    expect(await soHangSo("RFQ_STATE_DENIED", rfqId), "lỗi NHẬP — không vào sổ").toBe(0);
+    const { rows: ck0 } = await db.pool.query("SELECT 1 FROM rfq_award_cam_ket WHERE org_id = $1 AND rfq_id = $2", [orgA, rfqId]);
+    expect(ck0).toEqual([]);
+
+    const giaiTrinh = "gia cao nhat nhung giao dung han, khong phi van chuyen";
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: a, reason: "chi phi thap nhat", giaiTrinhLechHang: giaiTrinh, actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect([dx.status, dx.giaiTrinhLechHang]).toEqual(["PROPOSED", giaiTrinh]);
+    const { rows: so } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_AWARD_PROPOSED' AND resource_id = $2",
+      [orgA, dx.awardId],
+    );
+    // Sổ ghi CÓ giải trình, không ghi văn bản — lời giải trình bàn về giá, hàng sổ bất biến (rà soát §S1.288 THẤP-6).
+    expect(so.map((r) => [r.payload["coGiaiTrinhLechHang"], "giaiTrinhLechHang" in r.payload])).toEqual([[true, false]]);
+
+    const ck = await withTenant(apiPool, orgA, (c) => docCamKetTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(ck).toMatchObject({
+      awardId: dx.awardId,
+      evaluationId,
+      bidVersionId: a,
+      hangTco: 1,
+      hangGia: 3,
+      effectiveCost: "100.00",
+      khai: { freight: "0.00", importCost: null, paymentDays: null, leadTimeDays: 10 },
+      tapMa: ["gia", "van_chuyen", "chi_phi_tre"],
+      thamSo: { ty_le_tre_ngay: "0.001" },
+      soNgayGiao: 10,
+      giaiTrinhLechHang: giaiTrinh,
+    });
+    // Thành phần NGUYÊN VĂN của hàng chấm — mã quy đổi mang phép tính (`nguon`).
+    const { rows: dong } = await db.pool.query<{ components: unknown }>(
+      "SELECT components FROM rfq_evaluation_lines WHERE evaluation_id = $1 AND bid_version_id = $2",
+      [evaluationId, a],
+    );
+    expect(ck?.components).toEqual(dong[0]?.components);
+    expect(ck?.components.find((t) => t.ma === "chi_phi_tre")?.nguon).toEqual({ coSo: "100.00", ngayKhai: "10", ngayYeuCau: "10", tyLe: "0.001" });
+    expect(await soHangSo("AWARD_COMMITMENT_VIEWED", rfqId), "một lần đọc cam kết — một hàng sổ").toBe(1);
+  });
+
+  it("[INV-L8] giải trình gửi kèm một đề xuất KHÔNG lệch (gói chỉ giá, hạng 1 / giá 1) ⇒ `GIAI_TRINH_LECH_HANG_KHONG_CAN`; không giải trình thì đi qua — luồng chỉ giá không đổi — và cam kết vẫn chụp", async () => {
+    const { rfqId, banRo } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"], ["80.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const re = banRo[2] ?? "";
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: re, reason: "gia thap nhat", giaiTrinhLechHang: "khong co gi de giai trinh", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    ).catch((e: unknown) => e);
+    expect((loi as TraoThauTuChoiError).lyDo).toBe("GIAI_TRINH_LECH_HANG_KHONG_CAN");
+    expect(await hangAward(rfqId)).toEqual([]);
+
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: re, reason: "gia thap nhat", actorSessionId: sDeXuat }, apiPool),
+    );
+    expect(dx.giaiTrinhLechHang).toBeNull();
+    const ck = await withTenant(apiPool, orgA, (c) => docCamKetTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(ck).toMatchObject({
+      awardId: dx.awardId,
+      hangTco: 1,
+      hangGia: 1,
+      effectiveCost: "80.00",
+      khai: { freight: null, importCost: null, paymentDays: null, leadTimeDays: null },
+      giaiTrinhLechHang: null,
+    });
+  });
+
+  it("[INV-L8] cam kết thuộc ĐỀ XUẤT: duyệt không chụp thêm; rút rồi đề xuất báo giá KHÁC ⇒ cam kết mới, cam kết cũ ở lại; người không giữ `bid.view` không đọc được; gói chưa đề xuất ⇒ `null`, không hàng sổ", async () => {
+    const { rfqId, banRo } = await goiCamKet();
+    expect(await withTenant(apiPool, orgA, (c) => docCamKetTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool))).toBeNull();
+    expect(await soHangSo("AWARD_COMMITMENT_VIEWED", rfqId)).toBe(0);
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", giaiTrinhLechHang: "gia thap nhat du phi van chuyen cao", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) => rutDeXuatTraoThau(c, orgA, { rfqId, reason: "chon lai", actorSessionId: sDeXuat }, apiPool));
+    const dx2 = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: banRo[2] ?? "", reason: "can bang", giaiTrinhLechHang: "giao som, phi thap", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx2.awardId, actorSessionId: sDuyet }, apiPool));
+    const { rows } = await db.pool.query<{ award_id: string; bid_version_id: string; hang_tco: number; hang_gia: number; chi_phi: string }>(
+      "SELECT award_id, bid_version_id, hang_tco, hang_gia, effective_cost::text AS chi_phi FROM rfq_award_cam_ket " +
+        "WHERE org_id = $1 AND rfq_id = $2 ORDER BY chup_luc",
+      [orgA, rfqId],
+    );
+    // Chi phí hiệu dụng của hàng chấm — 90 giá + 20 vận chuyển, 90 giá + 5 vận chuyển + 9 trễ — không phải giá.
+    expect(rows).toEqual([
+      { award_id: dx.awardId, bid_version_id: banRo[1], hang_tco: 3, hang_gia: 1, chi_phi: "110.00" },
+      { award_id: dx2.awardId, bid_version_id: banRo[2], hang_tco: 2, hang_gia: 1, chi_phi: "104.00" },
+    ]);
+    const ck = await withTenant(apiPool, orgA, (c) => docCamKetTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect([ck?.awardId, ck?.giaiTrinhLechHang]).toEqual([dx2.awardId, "giao som, phi thap"]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => docCamKetTraoThau(c, orgA, { rfqId, actorSessionId: sKhongXem }, apiPool)),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("[INV-L8] lớp CSDL: câu INSERT thẳng dưới `app_api` — PROPOSED lệch không giải trình ⇒ 23514 `award_thieu_giai_trinh_lech_hang`; giải trình chỉ khoảng trắng hay quá 2000 ký tự ⇒ `CHECK`; ĐỐI CHỨNG DƯƠNG: kèm giải trình thì đi qua và có cam kết; hàng rút mang giải trình ⇒ `award_giai_trinh_ngoai_de_xuat`", async () => {
+    const { rfqId, banRo, evaluationId } = await goiCamKet();
+    const chen = (status: string, giaiTrinh: string | null): Promise<unknown> =>
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, " +
+            "acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, $5, 'cau INSERT thang', $6, $7, $8)",
+          [orgA, rfqId, evaluationId, banRo[0], status, giaiTrinh, uDeXuat, sDeXuat],
+        ),
+      ).catch((e: unknown) => e);
+    expect(await chen("PROPOSED", null)).toMatchObject({ code: "23514", constraint: "award_thieu_giai_trinh_lech_hang" });
+    expect(await chen("PROPOSED", "   ")).toMatchObject({ code: "23514", constraint: "rfq_awards_giai_trinh_lech_hang_check" });
+    expect(await chen("PROPOSED", "\u200b\u00a0\u3000\t\n"), "khoảng trắng Unicode và ký tự rộng 0").toMatchObject({
+      code: "23514",
+      constraint: "rfq_awards_giai_trinh_lech_hang_check",
+    });
+    expect(await chen("PROPOSED", "x".repeat(2001))).toMatchObject({ code: "23514", constraint: "rfq_awards_giai_trinh_lech_hang_check" });
+    expect(await chen("PROPOSED", "chon theo chi phi")).not.toBeInstanceOf(Error);
+    // Hàng RÚT đề xuất ấy (J7 cho qua — cùng người, 0 chữ ký) mà mang giải trình: giải trình thuộc về đề xuất, không về hàng sau nó.
+    expect(await chen("WITHDRAWN", "giai trinh lac cho")).toMatchObject({ code: "23514", constraint: "award_giai_trinh_ngoai_de_xuat" });
+    // Cùng giao dịch với lần đề xuất, trigger chụp đã ghi cam kết — câu ghi tay thứ hai đụng khoá chính.
+    const { rows: aw } = await db.pool.query<{ id: string }>("SELECT id FROM rfq_awards WHERE org_id = $1 AND rfq_id = $2", [orgA, rfqId]);
+    await withTenant(apiPool, orgA, (c) =>
+      c.query("INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'WITHDRAWN', 'rut', $5, $6)", [orgA, rfqId, evaluationId, banRo[0], uDeXuat, sDeXuat]),
+    );
+    const trung = await withTenant(apiPool, orgA, async (c) => {
+      const { rows: moi } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, " +
+          "acted_by_session_id) VALUES ($1, $2, $3, $4, 'PROPOSED', 'lai', 'chon theo chi phi', $5, $6) RETURNING id",
+        [orgA, rfqId, evaluationId, banRo[0], uDeXuat, sDeXuat],
+      );
+      return c.query("INSERT INTO rfq_award_cam_ket (org_id, award_id) VALUES ($1, $2)", [orgA, moi[0]?.id]);
+    }).catch((e: unknown) => e);
+    expect(trung).toMatchObject({ code: "23505" });
+    expect(aw).toHaveLength(1);
+    const { rows } = await db.pool.query("SELECT hang_tco, hang_gia FROM rfq_award_cam_ket WHERE org_id = $1 AND rfq_id = $2", [orgA, rfqId]);
+    expect(rows).toEqual([{ hang_tco: 1, hang_gia: 3 }]);
+  });
+
+  // [rà soát §S1.288 — TRUNG-1] Trước bản vá: một hàng có hạng, giá rẻ, chèn thẳng dưới `app_api` vào lượt mới nhất đã commit đổi hạng giá
+  // của A (3 → 4) — và cả bảng xếp hạng — mà không ai kêu. Nay hàng chấm chỉ ghi trong giao dịch tạo lượt, cho báo giá của đúng gói.
+  it("[INV-L8] [INV-J1] hàng chấm chèn sau vào lượt ĐÃ COMMIT ⇒ `hang_cham_ngoai_giao_dich_luot`; báo giá của gói KHÁC trong giao dịch tạo lượt ⇒ `hang_cham_bao_gia_goi_khac`; hạng giá không đổi", async () => {
+    const { rfqId, banRo, evaluationId } = await goiCamKet();
+    const khac = await goiDaMo([["10.00", "VND"]]);
+    const hangRe = JSON.stringify([{ ma: "gia", donVi: "TIEN", heSo: "1.0000", giaTri: "10.00", tien: "10.00" }]);
+    const sau = await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, '10.00', $4::jsonb, 1)",
+        [orgA, evaluationId, khac.banRo[0], hangRe],
+      ),
+    ).catch((e: unknown) => e);
+    expect(sau).toMatchObject({ code: "23514", constraint: "hang_cham_ngoai_giao_dich_luot" });
+    const cungGiaoDich = await withTenant(apiPool, orgA, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1 RETURNING id",
+        [evaluationId],
+      );
+      return c.query(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, '10.00', $4::jsonb, 1)",
+        [orgA, rows[0]?.id ?? "", khac.banRo[0], hangRe],
+      );
+    }).catch((e: unknown) => e);
+    expect(cungGiaoDich).toMatchObject({ code: "23514", constraint: "hang_cham_bao_gia_goi_khac" });
+    const { rows: hang } = await db.pool.query<{ hang: number | null }>("SELECT public.award_hang_gia($1, $2, $3) AS hang", [
+      orgA,
+      evaluationId,
+      banRo[0],
+    ]);
+    expect(hang[0]?.hang).toBe(3);
+    const { rows: soLuot } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1", [rfqId]);
+    expect(soLuot[0]?.n, "hai lần ghi hỏng không để lại lượt nào").toBe("1");
+  });
+
+  it("[INV-L8] `app_api` chỉ ghi được KHOÁ của cam kết: cột nào khác ⇒ 42501; cam kết viết SAU giao dịch đề xuất ⇒ `cam_ket_ngoai_giao_dich_de_xuat`; cho hàng không phải PROPOSED ⇒ `cam_ket_chi_cho_de_xuat`; UPDATE, DELETE, TRUNCATE ⇒ chặn, cả vai chủ cụm", async () => {
+    const { rfqId, banRo } = await goiCamKet();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", giaiTrinhLechHang: "gia thap nhat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    const api = (sql: string, ts: readonly unknown[]): Promise<unknown> =>
+      withTenant(apiPool, orgA, (c) => c.query(sql, [...ts])).catch((e: unknown) => e);
+    expect(await api("INSERT INTO rfq_award_cam_ket (org_id, award_id, hang_tco) VALUES ($1, $2, 1)", [orgA, dx.awardId])).toMatchObject({ code: "42501" });
+    // Một giao dịch SAU lần đề xuất: trigger từ chối trước cả khoá chính — một cam kết viết sau không phải lời khai lúc đề xuất.
+    expect(await api("INSERT INTO rfq_award_cam_ket (org_id, award_id) VALUES ($1, $2)", [orgA, dx.awardId])).toMatchObject({
+      code: "23514",
+      constraint: "cam_ket_ngoai_giao_dich_de_xuat",
+    });
+    expect(await api("UPDATE rfq_award_cam_ket SET hang_gia = 1 WHERE award_id = $1", [dx.awardId])).toMatchObject({ code: "42501" });
+    await withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool));
+    const { rows: duyet } = await db.pool.query<{ id: string }>(
+      "SELECT id FROM rfq_awards WHERE org_id = $1 AND rfq_id = $2 AND status = 'APPROVED'",
+      [orgA, rfqId],
+    );
+    expect(await api("INSERT INTO rfq_award_cam_ket (org_id, award_id) VALUES ($1, $2)", [orgA, duyet[0]?.id])).toMatchObject({
+      code: "23514",
+      constraint: "cam_ket_chi_cho_de_xuat",
+    });
+    const chu = (sql: string): Promise<unknown> => db.pool.query(sql, [dx.awardId]).catch((e: unknown) => e);
+    expect(await chu("UPDATE rfq_award_cam_ket SET khai = '{}'::jsonb WHERE award_id = $1")).toMatchObject({ code: "23514" });
+    expect(await chu("DELETE FROM rfq_award_cam_ket WHERE award_id = $1")).toMatchObject({ code: "23514" });
+    expect(await db.pool.query("TRUNCATE rfq_award_cam_ket CASCADE").catch((e: unknown) => e)).toMatchObject({ code: "23514" });
+    const { rows } = await db.pool.query("SELECT 1 FROM rfq_award_cam_ket WHERE award_id = $1", [dx.awardId]);
+    expect(rows).toHaveLength(1);
+  });
+});
+

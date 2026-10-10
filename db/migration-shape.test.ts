@@ -612,6 +612,9 @@ describe("hình dạng file migration", () => {
       // thành `(org_id, award_id)` tới `rfq_awards`, tức một chữ ký không trỏ sang tổ chức
       // khác được kể cả khi RLS bị tắt. Policy khách của CẢ HAI là vị từ ĐÓNG HẲN.
       "rfq_award_approvals",
+      // [S1.288 / S4.7c1 / L8] Cam kết TCO của đề xuất — khoá ngoại hợp thành `(org_id, award_id)` tới `rfq_awards`, cùng bộ ràng
+      // buộc tenant, policy khách ĐÓNG HẲN như hai bảng trên.
+      "rfq_award_cam_ket",
       "rfq_awards",
       // [S1.108 / 059] Vòng BAFO cũng có org_id nên nó chịu ĐÚNG cùng bộ ràng buộc, và
       // `NGOAI_LE_HINH_DANG` VẪN RỖNG sau S2.5. Bảng này đáng chú ý vì policy khách của nó là

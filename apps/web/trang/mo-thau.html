@@ -209,6 +209,13 @@
     <input id="bao-gia-thang" type="text" placeholder="uuid của bid version">
     <label for="ly-do-award">Lý do — <strong>bắt buộc</strong>, ở cả lần đề xuất, lần rút và lần huỷ</label>
     <input id="ly-do-award" type="text" placeholder="vì sao chọn báo giá này">
+    <!-- [S1.288 / S4.7c1 / L8] Báo giá được chọn có hạng giá khác hạng chi phí ⇒ ô giải trình bắt buộc (spec S4 §2.4 ⑻). CSDL phán
+         (`award_kiem_giai_trinh`) và lưu nó cùng cam kết; màn chỉ hiện ô khi hàng đã chọn ở bảng xếp hạng lệch hạng. -->
+    <div id="khoi-giai-trinh" hidden>
+      <label for="giai-trinh-lech-hang">Giải trình lệch hạng — <strong>bắt buộc</strong>: báo giá này có hạng giá khác hạng chi phí
+        hiệu dụng. Lời giải trình lưu cùng lời khai TCO của báo giá, thành cam kết của đề xuất.</label>
+      <textarea id="giai-trinh-lech-hang" rows="3" placeholder="vì sao chọn báo giá này khi hạng giá và hạng chi phí khác nhau"></textarea>
+    </div>
     <div class="doi">
       <button id="nut-de-xuat">Đề xuất trao thầu</button>
       <button id="nut-doc-award" class="phu">Đọc đề xuất</button>

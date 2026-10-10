@@ -127,14 +127,19 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "giữ `audit.read` + `bid.view`, tải hai tệp về và kiểm NGOÀI hệ thống bằng " +
     "`pnpm bang-chung kiem`; không việc nào của một tác tử chỉ-đọc cần nó. [mảnh 1]",
   "/rfqs/:rfqId/award":
-    "ĐỀ XUẤT TRAO THẦU của một gói thầu — AI THẮNG, cộng lý do người đề xuất viết ra, cộng " +
-    "chữ ký của người duyệt. Nó không mang một mức giá nào, và đó chính là chỗ dễ đọc sai: " +
+    "ĐỀ XUẤT TRAO THẦU của một gói thầu — AI THẮNG, cộng lý do và giải trình lệch hạng người đề xuất viết ra, cộng " +
+    "chữ ký của người duyệt. Nó không mang một cột giá nào (lời giải trình có thể nói về giá), và đó chính là chỗ dễ đọc sai: " +
     "danh tính người thắng là KẾT LUẬN của mọi thứ ADR-038 rút khỏi bề mặt này. Bảng so sánh " +
     "và bảng xếp hạng là dữ liệu để suy ra nó; dòng này LÀ nó. Rút một bề mặt rộng rồi phơi " +
     "chính kết luận của nó là phơi cả hai. Cổng quyền của route là `bid.view`, tức AI XEM " +
     "ĐƯỢC GIÁ THÌ XEM ĐƯỢC KẾT QUẢ — không rộng hơn, và một chứng chỉ `AGENT_READONLY` không " +
     "phải một con người có MFA. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.110 / S2.6]",
+  // [S1.288 / S4.7c1 / L8]
+  "/rfqs/:rfqId/award/commitment":
+    "CAM KẾT TCO của đề xuất trao thầu — chi phí hiệu dụng, từng thành phần kèm phép tính, bốn ô khai của người thắng, hai hạng " +
+    "và lời giải trình lệch hạng. Nó là kết luận của dòng `/rfqs/:rfqId/award` ngay trên CỘNG các con số của bảng xếp hạng, nên " +
+    "mọi lập luận của hai dòng ấy áp nguyên; cổng là `bid.view`. Route khai `agent: false` và dòng này khai vì sao.",
   // [S1.196 / S3.3a / K8a]
   "/suppliers/:supplierId/verification":
     "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +

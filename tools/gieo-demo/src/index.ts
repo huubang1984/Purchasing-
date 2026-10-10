@@ -936,6 +936,9 @@ async function chinh(): Promise<void> {
       ra.push("  số ngày thanh toán và số ngày giao; worker đã mở; soan2 đã chấm — gói ở EVALUATING. Ở /mo-thau: dán mã gói vào bước 2,");
       ra.push("  «Đọc»; bước 5 «Đọc bảng xếp hạng» — cột «Hạng giá» cạnh «Hạng», phép tính chi phí thanh toán và chi phí trễ cạnh con số,");
       ra.push("  câu «theo lời khai». Báo giá rẻ nhất theo giá đứng hạng 3 theo chi phí.");
+      // [S1.288 / S4.7c1 / L8] Hạng 1 theo chi phí đứng hạng 2 theo giá ⇒ đề xuất nó đòi giải trình; soan2 đã khai K9 ở gói này.
+      ra.push("  Bước 7 (soan2): «Chọn» hàng hạng 1 — hạng giá 2 — thì ô «Giải trình lệch hạng» hiện; đề xuất không giải trình bị");
+      ra.push("  từ chối gọi tên, kèm giải trình thì đi qua và bước 7 hiện cam kết TCO: hai hạng lúc đề xuất, lời khai, giải trình.");
       ra.push(`  ${"gói TCO".padEnd(24)} ${goiTco.rfqId}`);
     }
     ra.push("");

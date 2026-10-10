@@ -1936,6 +1936,133 @@ describe("bề mặt tệp", () => {
         expect(p.el("ok-nlhk").textContent).toMatch(/^Đã rút ngoại lệ hậu kiểm/u);
       });
 
+      // [S1.288 / S4.7c1 / L8] Ô giải trình lệch hạng (spec S4 §2.4 ⑻): hiện khi hàng đã Chọn có hạng giá khác hạng chi phí, đòi chữ trước
+      // khi gửi, đi vào thân CHỈ khi hiện; bước 7 đọc cam kết (`GET /award/commitment`) và hiện hai hạng, lời khai, giải trình.
+      it("[INV-L8] [S1.288 / S4.7c1] chọn báo giá lệch hạng ⇒ ô giải trình hiện, trống thì không gửi; có chữ thì thân mang nó; chọn báo giá không lệch ⇒ ô ẩn, thân không mang; bước 7 hiện cam kết", async () => {
+        const XEP_LECH = {
+          evaluationId: "e-7", policyVersion: 2, currency: "VND", evaluatedAt: "2026-10-01T00:00:00Z",
+          rows: [
+            { rank: 1, hangGia: 2, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [] },
+            { rank: 2, hangGia: 1, supplierName: "Công ty Thép Hai", effectiveCost: "1100.00", bidVersionId: "bv-2", components: [] },
+            { rank: 3, hangGia: 3, supplierName: "Công ty Thép Ba", effectiveCost: "1200.00", bidVersionId: "bv-3", components: [] },
+          ],
+        };
+        const CAM_KET = {
+          awardId: "aw-1", evaluationId: "e-7", bidVersionId: "bv-1", hangTco: 1, hangGia: 2, effectiveCost: "1000.00", components: [],
+          khai: { freight: "25000.00", importCost: null, paymentDays: null, leadTimeDays: 30 },
+          tapMa: ["gia", "van_chuyen", "chi_phi_tre"], thamSo: { ty_le_tre_ngay: "0.001" }, soNgayGiao: 30,
+          giaiTrinhLechHang: "giao đúng hạn", chupLuc: "2026-10-01T01:00:00Z",
+        };
+        let bang: unknown = XEP_LECH;
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) {
+              return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "EVALUATING", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false } });
+            }
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: bang } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: deXuat("aw-1") } });
+            if (l === `GET /rfqs/${RFQ}/award/commitment`) return Promise.resolve({ status: 200, body: { commitment: CAM_KET } });
+            if (l === `POST /rfqs/${RFQ}/award`) return Promise.resolve({ status: 201, body: { award: deXuat("aw-1") } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        expect(p.el("khoi-giai-trinh").hidden, "nạp gói: ô giải trình ẩn").toBe(true);
+        await p.bam("nut-xep-hang");
+        const chon = async (i: number) => {
+          for (const f of p.el("bang-hang").querySelector("tbody").con[i]?.con.at(-1)?.con[0]?.nghe["click"] ?? []) await f();
+        };
+        const deXuatGoi = () => p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award`);
+
+        await chon(0);
+        expect(p.el("khoi-giai-trinh").hidden, "hạng 1, hạng giá 2 ⇒ ô hiện").toBe(false);
+        expect(p.el("ok5").textContent).toMatch(/giải trình lệch hạng \(hạng giá 2\)/u);
+        p.el("ly-do-award").value = "chi phí thấp nhất";
+        await p.bam("nut-de-xuat");
+        expect(deXuatGoi(), "ô giải trình trống ⇒ không gửi").toEqual([]);
+        expect(p.el("loi7").textContent).toMatch(/viết giải trình lệch hạng/u);
+        p.el("giai-trinh-lech-hang").value = "  giao đúng hạn  ";
+        await p.bam("nut-de-xuat");
+        expect(deXuatGoi().at(-1)?.than).toEqual({ bidVersionId: "bv-1", reason: "chi phí thấp nhất", giaiTrinhLechHang: "giao đúng hạn" });
+        const tt = p.el("tt-award").con.map((x) => x.textContent).join("|");
+        expect(tt).toMatch(/Hạng lúc đề xuất\|chi phí hiệu dụng 1 · giá 2\|Lời khai cam kết\|phí vận chuyển 25000\.00 · số ngày giao 30 \(yêu cầu 30\)\|Giải trình lệch hạng\|giao đúng hạn\|/u);
+
+        // Báo giá KHÔNG lệch: ô ẩn, và chữ còn trong ô của lần chọn trước KHÔNG đi vào thân.
+        await chon(2);
+        expect(p.el("khoi-giai-trinh").hidden).toBe(true);
+        await p.bam("nut-de-xuat");
+        expect(deXuatGoi().at(-1)?.than).toEqual({ bidVersionId: "bv-3", reason: "chi phí thấp nhất" });
+        // Id dán tay: ô theo đúng hàng của bảng đang giữ.
+        p.el("bao-gia-thang").value = "bv-2";
+        for (const f of p.el("bao-gia-thang").nghe["input"] ?? []) await f();
+        expect(p.el("khoi-giai-trinh").hidden).toBe(false);
+        // Bảng đọc lại (lượt chấm mới sau BAFO) mà báo giá ở ô id thôi lệch hạng ⇒ ô ẩn theo bảng mới.
+        bang = { ...XEP_LECH, evaluationId: "e-8", rows: XEP_LECH.rows.map((h) => ({ ...h, hangGia: h.rank })) };
+        await p.bam("nut-xep-hang");
+        expect(p.el("khoi-giai-trinh").hidden, "bảng mới: bv-2 không lệch").toBe(true);
+        // Đọc gói khác: ô và chữ của gói trước không sống sang.
+        await p.bam("nut-doc");
+        expect([p.el("khoi-giai-trinh").hidden, p.el("giai-trinh-lech-hang").value]).toEqual([true, ""]);
+      });
+
+      // [rà soát §S1.288 — TRUNG-2, THẤP-4, THẤP-5] Người giữ `award.recommend` mà không giữ `bid.view` không đọc được bảng xếp hạng: ô
+      // giải trình theo MÃ của lời từ chối, không theo bảng; cam kết của báo giá khác không hiện; đề xuất trước S4.7c nói không có cam kết.
+      it("[INV-L8] [S1.288 / S4.7c1] không đọc được bảng: lời từ chối `THIEU_GIAI_TRINH_LECH_HANG` hiện ô, `GIAI_TRINH_LECH_HANG_KHONG_CAN` ẩn ô; bảng không bị đọc lại; cam kết lệch báo giá không hiện; `null` nói không có cam kết", async () => {
+        const traLoi: { status: number; body: unknown }[] = [
+          { status: 422, body: { error: "Báo giá được chọn có hạng giá khác hạng chi phí hiệu dụng: đề xuất trao thầu cần một lời giải trình lệch hạng.", ma: "THIEU_GIAI_TRINH_LECH_HANG" } },
+          { status: 422, body: { error: "Báo giá được chọn có hạng giá bằng hạng chi phí hiệu dụng: không có lệch hạng nào để giải trình.", ma: "GIAI_TRINH_LECH_HANG_KHONG_CAN" } },
+          { status: 201, body: { award: deXuat("aw-1") } },
+        ];
+        let camKet: unknown = null;
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) {
+              return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "EVALUATING", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false }, coQuyenMoi: false } });
+            }
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 403, body: { error: "khong co quyen" } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve({ status: 200, body: { award: deXuat("aw-1") } });
+            if (l === `GET /rfqs/${RFQ}/award/commitment`) return Promise.resolve({ status: 200, body: { commitment: camKet } });
+            if (l === `POST /rfqs/${RFQ}/award`) return Promise.resolve(traLoi.shift() ?? { status: 500, body: {} });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        p.el("bao-gia-thang").value = "bv-1";
+        p.el("ly-do-award").value = "chi phí thấp nhất";
+        await p.bam("nut-de-xuat");
+        expect(p.el("khoi-giai-trinh").hidden, "mã THIEU ⇒ ô hiện").toBe(false);
+        expect(p.el("loi7").textContent).toMatch(/Viết giải trình ở ô vừa hiện rồi bấm Đề xuất lại\.$/u);
+        p.el("giai-trinh-lech-hang").value = "giao đúng hạn";
+        await p.bam("nut-de-xuat");
+        expect(p.el("khoi-giai-trinh").hidden, "mã KHONG_CAN ⇒ ô ẩn").toBe(true);
+        expect(p.el("loi7").textContent).toMatch(/Ô giải trình đã ẩn — bấm Đề xuất lại\.$/u);
+        expect(p.trangThai.goi.filter((g) => g.includes("/ranking")), "lời từ chối không đọc lại bảng (403 vào sổ)").toEqual([]);
+        await p.bam("nut-de-xuat");
+        const than = p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award`).map((t) => t.than);
+        expect(than).toEqual([
+          { bidVersionId: "bv-1", reason: "chi phí thấp nhất" },
+          { bidVersionId: "bv-1", reason: "chi phí thấp nhất", giaiTrinhLechHang: "giao đúng hạn" },
+          { bidVersionId: "bv-1", reason: "chi phí thấp nhất" },
+        ]);
+        const tt = () => p.el("tt-award").con.map((x) => x.textContent).join("|");
+        expect(tt()).toMatch(/Cam kết TCO\|không có — đề xuất ghi trước khi có cam kết \(S4\.7c\)/u);
+        camKet = { awardId: "aw-0", evaluationId: "e-7", bidVersionId: "bv-9", hangTco: 1, hangGia: 2, effectiveCost: "1.00", components: [],
+          khai: { freight: null, importCost: null, paymentDays: null, leadTimeDays: null }, tapMa: ["gia"], thamSo: null, soNgayGiao: null,
+          giaiTrinhLechHang: "x", chupLuc: "2026-10-01T01:00:00Z" };
+        await p.bam("nut-doc-award");
+        expect(tt(), "cam kết của báo giá KHÁC không hiện cạnh hàng award").not.toMatch(/Cam kết|Hạng lúc đề xuất/u);
+      });
+
       it("khoản 321: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {
         let lan = 0;
         // Lần đọc thứ nhất (nút Đọc đề xuất) thấy aw-1; từ lần thứ hai máy chủ đã có aw-2.

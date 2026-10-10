@@ -227,6 +227,17 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.award_kiem_theo_bac_khi_de_xuat",
   "public.award_kiem_theo_bac_khi_duyet",
   "public.award_kiem_vai_theo_bac",
+  // [S1.288 / S4.7c1 / L8 / `121_cam_ket_trao_thau`] BA hàm của cam kết TCO, chỉ gắn INSERT ⇒ không thể là hàm canh:
+  // `award_kiem_giai_trinh` (BEFORE INSERT của `rfq_awards`) từ chối CÓ ĐIỀU KIỆN — đề xuất lệch hạng không giải trình, giải trình trên
+  // đề xuất không lệch hay trên hàng không phải PROPOSED; `award_chup_cam_ket` (AFTER INSERT `WHEN` PROPOSED) không bao giờ từ chối — nó
+  // GHI cam kết; `award_dien_cam_ket` (BEFORE INSERT của `rfq_award_cam_ket`) điền từ nguồn và chỉ từ chối hàng không trỏ một đề xuất.
+  // Đề xuất của chuỗi trao thầu trong `dungKichBan()` (gói chỉ giá, không lệch hạng) đi qua cả ba.
+  "public.award_kiem_giai_trinh",
+  "public.award_chup_cam_ket",
+  "public.award_dien_cam_ket",
+  // [S1.288 / S4.7c1 / J1 — rà soát TRUNG-1] `luot_cham_kiem_hang` (BEFORE INSERT của `rfq_evaluation_lines`) từ chối CÓ ĐIỀU KIỆN — hàng
+  // ghi ngoài giao dịch tạo lượt, hay báo giá của gói khác. Hàng chấm của `dungKichBan()` (cùng giao dịch với lượt của nó) đi qua.
+  "public.luot_cham_kiem_hang",
   // [S1.285 / S3.6d / K10b] `award_kiem_tin_hieu_khai_thap` (chữ ký — tín hiệu khai thấp chưa ai ghi nhận ⇒ NÉM). Tổ chức chưa bật, hay không tín hiệu, đi qua.
   "public.award_kiem_tin_hieu_khai_thap",
   // [S1.270 / S3.3d / K3] HAI hàm cạnh, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_xoay_vong_khi_nop` chỉ ngoài READ COMMITTED hay khi danh sách

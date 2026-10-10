@@ -63,6 +63,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, laMaChot, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import type { ThanhPhanHien } from "./doc-bang-xep-hang.js";
 // [S1.285 / S3.6d / K10b] Tín hiệu khai thấp ước lượng ghi ở cạnh đề xuất — gói `kiem-soat` giữ lớp có trạng thái của tín hiệu (§3.2).
 import { ghiTinHieuKhiDeXuat } from "@trustprocure/kiem-soat";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
@@ -154,6 +155,9 @@ export type LyDoTuChoiTraoThau = Extract<
   | "KHONG_PHAI_NGUOI_DE_XUAT"
   | "DE_XUAT_DA_CO_CHU_KY"
   | "DA_KY_DE_XUAT_NAY"
+  // [S1.288 / S4.7c1 / L8] hai lối của ô giải trình lệch hạng — CSDL phán (`award_kiem_giai_trinh`), lớp này gọi tên.
+  | "THIEU_GIAI_TRINH_LECH_HANG"
+  | "GIAI_TRINH_LECH_HANG_KHONG_CAN"
 >;
 
 export class TraoThauTuChoiError extends Error {
@@ -169,7 +173,10 @@ export class TraoThauTuChoiError extends Error {
 // [S1.231 / khoản 232 / ADR-133] `WITHDRAWN` — trạng thái thứ tư (`094`): người đề xuất rút đề xuất chưa chữ ký.
 export type TrangThaiTraoThau = "PROPOSED" | "APPROVED" | "CANCELLED" | "WITHDRAWN";
 
-/** Một hàng sự kiện của `rfq_awards` — KHÔNG mang một mức giá nào. */
+/**
+ * Một hàng sự kiện của `rfq_awards` — KHÔNG mang một cột giá nào. ~~KHÔNG mang một mức giá nào.~~ **[S1.288 / S4.7c1]** Lời giải trình lệch
+ * hạng là văn bản tự do của người đề xuất và có thể nói về giá — nên hàng này chỉ đi ra dưới `bid.view` (`docTraoThau`), như trước.
+ */
 export interface TraoThau {
   readonly awardId: string;
   readonly rfqId: string;
@@ -177,6 +184,11 @@ export interface TraoThau {
   readonly bidVersionId: string;
   readonly status: TrangThaiTraoThau;
   readonly reason: string;
+  /**
+   * [S1.288 / S4.7c1 / L8] Giải trình của người đề xuất khi báo giá được chọn có hạng giá khác hạng chi phí — chỉ hàng `PROPOSED`
+   * mang nó (`award_kiem_giai_trinh`); hàng duyệt, huỷ, rút luôn `null`. Bản lưu cùng lời khai TCO ở `docCamKetTraoThau`.
+   */
+  readonly giaiTrinhLechHang: string | null;
   readonly actedBy: string;
   readonly actedAt: Date;
 }
@@ -206,6 +218,11 @@ export interface DeXuatTraoThauInput {
   readonly rfqId: string;
   readonly bidVersionId: string;
   readonly reason: string;
+  /**
+   * [S1.288 / S4.7c1 / L8] BẮT BUỘC khi hạng giá của báo giá được chọn khác hạng chi phí của nó, và PHẢI vắng khi hai hạng bằng
+   * nhau. CSDL phán ở câu `INSERT` (`award_kiem_giai_trinh`) — lớp này không tính lại hạng nào, chỉ đổi tên ràng buộc thành lỗi có tên.
+   */
+  readonly giaiTrinhLechHang?: string | null;
   readonly actorSessionId: string;
 }
 
@@ -259,6 +276,7 @@ interface HangAward {
   readonly bid_version_id: string;
   readonly status: TrangThaiTraoThau;
   readonly reason: string;
+  readonly giai_trinh_lech_hang: string | null;
   readonly acted_by: string;
   readonly acted_at: Date;
 }
@@ -273,7 +291,7 @@ interface HangAward {
 //
 // Phần đáng ghi hơn là hai câu KHÔNG đỏ: `SELECT ${COT_AWARD} FROM …` thành `SELECT 1 FROM …`, một
 // câu phân tích được — nên cổng XANH trong khi nó đọc một câu KHÁC hẳn câu sẽ chạy. Đó là *cổng
-// xanh vì phạm vi*, và nó khó thấy hơn một lần đỏ. Nên tám cột được lặp ở mỗi câu, cố ý.
+// xanh vì phạm vi*, và nó khó thấy hơn một lần đỏ. Nên ~~tám~~ **[S1.288 / S4.7c1]** chín cột được lặp ở mỗi câu, cố ý.
 
 function doiAward(h: HangAward): TraoThau {
   return {
@@ -283,6 +301,7 @@ function doiAward(h: HangAward): TraoThau {
     bidVersionId: h.bid_version_id,
     status: h.status,
     reason: h.reason,
+    giaiTrinhLechHang: h.giai_trinh_lech_hang,
     actedBy: h.acted_by,
     actedAt: h.acted_at,
   };
@@ -302,7 +321,7 @@ async function awardMoiNhat(
   rfqId: string,
 ): Promise<HangAward | undefined> {
   const { rows } = await client.query<HangAward>(
-    `SELECT id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at
+    `SELECT id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at
        FROM public.rfq_awards
       WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
@@ -312,6 +331,31 @@ async function awardMoiNhat(
   );
   return rows[0];
 }
+
+/** [S1.288 / S4.7c1] Tên ràng buộc của lỗi `pg` — `null` khi lỗi không mang. */
+function rangBuocCua(loi: unknown): string | null {
+  const c = (loi as { constraint?: unknown } | null)?.constraint;
+  return typeof c === "string" ? c : null;
+}
+
+/** [S1.288 / S4.7c1 / L8] Hai nhánh có tên của `award_kiem_giai_trinh` (`121_cam_ket_trao_thau`) — câu người đề xuất đọc. */
+const LOI_GIAI_TRINH = new Map<string, { readonly lyDo: LyDoTuChoiTraoThau; readonly thongDiep: string }>([
+  [
+    "award_thieu_giai_trinh_lech_hang",
+    {
+      lyDo: "THIEU_GIAI_TRINH_LECH_HANG",
+      thongDiep:
+        "Báo giá được chọn có hạng giá khác hạng chi phí hiệu dụng: đề xuất trao thầu cần một lời giải trình lệch hạng.",
+    },
+  ],
+  [
+    "award_giai_trinh_khong_can",
+    {
+      lyDo: "GIAI_TRINH_LECH_HANG_KHONG_CAN",
+      thongDiep: "Báo giá được chọn có hạng giá bằng hạng chi phí hiệu dụng: không có lệch hạng nào để giải trình.",
+    },
+  ],
+]);
 
 /**
  * ĐỀ XUẤT trao thầu cho một báo giá, và chuyển gói thầu sang `AWARDED`.
@@ -401,11 +445,11 @@ export async function deXuatTraoThau(
   try {
     ({ rows: award } = await client.query<HangAward>(
       `INSERT INTO public.rfq_awards
-         (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
+         (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang,
           acted_by, acted_by_session_id)
        VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
-               $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+               $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.text, $8::pg_catalog.uuid, $9::pg_catalog.uuid)
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at`,
       [
         orgId,
         input.rfqId,
@@ -413,11 +457,18 @@ export async function deXuatTraoThau(
         input.bidVersionId,
         "PROPOSED",
         input.reason,
+        input.giaiTrinhLechHang ?? null,
         actor.id,
         input.actorSessionId,
       ],
     ));
   } catch (loi) {
+    // [S1.288 / S4.7c1 / L8] Ô giải trình lệch hạng: CSDL so hạng giá với hạng chi phí của chính hàng chấm (`award_kiem_giai_trinh`)
+    // — một nguồn sự thật, không bản tính hạng thứ hai ở đây. Hai tên ràng buộc thành hai lỗi có tên (422), không vào sổ.
+    const giaiTrinh = LOI_GIAI_TRINH.get(rangBuocCua(loi) ?? "");
+    if (giaiTrinh !== undefined) {
+      return nemTuChoi(auditPool, orgId, actor.id, input.rfqId, new TraoThauTuChoiError(giaiTrinh.lyDo, giaiTrinh.thongDiep));
+    }
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
     // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.180] theo chốt).
     // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `093` đi cùng đường: tên `j5_luot_cham_khong_moi_nhat` có dòng ở
@@ -469,6 +520,9 @@ export async function deXuatTraoThau(
       evaluationId: lv.id,
       bidVersionId: input.bidVersionId,
       reason: input.reason,
+      // [S1.288 / S4.7c1 / L8] Sổ ghi CÓ giải trình hay không — không ghi văn bản: lời giải trình bàn về giá (*"đắt hơn B 2 triệu"*), và
+      // hàng sổ thì bất biến, đọc được bởi mọi vai đọc sổ (ràng buộc `audit_events_payload_khong_mang_gia`). Văn bản ở hàng award và cam kết.
+      coGiaiTrinhLechHang: a.giai_trinh_lech_hang !== null,
       proposedBySessionId: input.actorSessionId,
     },
   });
@@ -512,7 +566,7 @@ export async function duyetTraoThau(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows: deXuat } = await client.query<HangAward>(
-    `SELECT id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at
+    `SELECT id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at
        FROM public.rfq_awards
       WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
@@ -675,7 +729,7 @@ export async function duyetTraoThau(
           acted_by, acted_by_session_id)
        VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
                $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at`,
       [
         orgId,
         dx.rfq_id,
@@ -840,7 +894,7 @@ export async function huyTraoThau(
           acted_by, acted_by_session_id)
        VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
                $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at`,
       [
         orgId,
         input.rfqId,
@@ -1010,7 +1064,7 @@ export async function rutDeXuatTraoThau(
         acted_by, acted_by_session_id)
      VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
              $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, giai_trinh_lech_hang, acted_by, acted_at`,
     [
       orgId,
       input.rfqId,
@@ -1132,4 +1186,129 @@ export async function docTraoThau(
     [orgId, rfqId],
   );
   return docDayDu(client, orgId, h, can[0]?.can ?? null);
+}
+
+/** [S1.288 / S4.7c1 / L8] Bốn ô khai của phong bì qua đúng bộ đọc của lượt chấm — `null` khi vắng hay không đọc được. */
+export interface KhaiCamKet {
+  readonly freight: string | null;
+  readonly importCost: string | null;
+  readonly paymentDays: number | null;
+  readonly leadTimeDays: number | null;
+}
+
+/**
+ * [S1.288 / S4.7c1 / L8] CAM KẾT TCO của một đề xuất trao thầu — chụp ở CSDL lúc đề xuất (`rfq_award_cam_ket`), không một ô nào do
+ * ứng dụng gửi. Mang con số của người thắng (chi phí hiệu dụng, thành phần, lời khai) nên đọc dưới cổng `bid.view`, như bảng xếp hạng.
+ */
+export interface CamKetTraoThau {
+  readonly awardId: string;
+  readonly evaluationId: string;
+  readonly bidVersionId: string;
+  /** Hạng theo chi phí hiệu dụng (`rank` của hàng chấm) LÚC đề xuất. */
+  readonly hangTco: number;
+  /** Hạng theo giá trên tập hàng có hạng (`award_hang_gia`) LÚC đề xuất — `null` khi hàng không có giá đọc được ở dạng lượt chấm ghi. */
+  readonly hangGia: number | null;
+  readonly effectiveCost: string;
+  /** Thành phần của hàng chấm nguyên văn — mã quy đổi mang `nguon`. */
+  readonly components: readonly ThanhPhanHien[];
+  readonly khai: KhaiCamKet;
+  /** Ảnh chụp lúc gói mở: tập mã và nhóm khoá `tco` của phiên bản ghim, số ngày giao yêu cầu. */
+  readonly tapMa: readonly string[] | null;
+  readonly thamSo: Readonly<Record<string, string>> | null;
+  readonly soNgayGiao: number | null;
+  readonly giaiTrinhLechHang: string | null;
+  readonly chupLuc: Date;
+}
+
+export interface DocCamKetTraoThauInput {
+  readonly rfqId: string;
+  readonly actorSessionId: string;
+}
+
+/**
+ * [S1.288 / S4.7c1 / L8] Cam kết của đề xuất MỚI NHẤT của gói — cùng hàng `PROPOSED` mà chữ ký của `docTraoThau` thuộc về. `null`
+ * khi gói chưa có đề xuất, hay đề xuất có trước `121_cam_ket_trao_thau` (không lấp ngược — cam kết là lời khai LÚC đề xuất).
+ *
+ * Cổng `bid.view` đứng thẳng ở đây (khoản 33), và lần đọc có cam kết để lại một hàng `AWARD_COMMITMENT_VIEWED` trên chính `client` —
+ * cùng luật của ADR-102: hàm đọc có cổng trả GIÁ của bên bán sau mở thầu thì ghi.
+ */
+export async function docCamKetTraoThau(
+  client: pg.PoolClient,
+  orgId: string,
+  input: DocCamKetTraoThauInput,
+  auditPool: pg.Pool,
+): Promise<CamKetTraoThau | null> {
+  await assertTenantBound(client, orgId, "docCamKetTraoThau");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.BID_VIEW,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  const { rows } = await client.query<{
+    award_id: string;
+    evaluation_id: string;
+    bid_version_id: string;
+    hang_tco: number;
+    hang_gia: number | null;
+    effective_cost: string;
+    components: readonly ThanhPhanHien[];
+    khai: KhaiCamKet;
+    tap_ma: string[] | null;
+    tham_so: Record<string, string> | null;
+    so_ngay_giao: number | null;
+    giai_trinh_lech_hang: string | null;
+    chup_luc: Date;
+  }>(
+    `SELECT k.award_id, k.evaluation_id, k.bid_version_id, k.hang_tco, k.hang_gia,
+            k.effective_cost::pg_catalog.text AS effective_cost, k.components, k.khai, k.tap_ma, k.tham_so,
+            k.so_ngay_giao, k.giai_trinh_lech_hang, k.chup_luc
+       FROM public.rfq_award_cam_ket k
+      WHERE k.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND k.award_id OPERATOR(pg_catalog.=) (
+              SELECT dx.id
+                FROM public.rfq_awards dx
+               WHERE dx.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+                 AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+                 AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
+               ORDER BY dx.acted_at DESC, dx.id DESC
+               LIMIT 1)`,
+    [orgId, input.rfqId],
+  );
+  const k = rows[0];
+  if (k === undefined) return null;
+
+  // Sau mọi câu đọc, trên chính `client`: ghi hỏng thì NÉM và cam kết không đi ra. Payload: đề xuất đã đọc và phiên, không một giá nào.
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: actor.id,
+    action: "AWARD_COMMITMENT_VIEWED",
+    resourceType: "RFQ",
+    resourceId: input.rfqId,
+    payload: { awardId: k.award_id, viewedBySessionId: input.actorSessionId },
+  });
+
+  return {
+    awardId: k.award_id,
+    evaluationId: k.evaluation_id,
+    bidVersionId: k.bid_version_id,
+    hangTco: k.hang_tco,
+    hangGia: k.hang_gia,
+    effectiveCost: k.effective_cost,
+    components: k.components,
+    khai: k.khai,
+    tapMa: k.tap_ma,
+    thamSo: k.tham_so,
+    soNgayGiao: k.so_ngay_giao,
+    giaiTrinhLechHang: k.giai_trinh_lech_hang,
+    chupLuc: k.chup_luc,
+  };
 }

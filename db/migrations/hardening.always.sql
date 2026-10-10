@@ -1825,10 +1825,11 @@ $ham$;
        ('public.procurement_category_changes', ARRAY['procurement_category_changes_chan_truncate', 'procurement_category_changes_chi_ghi_them', 'procurement_category_changes_kiem_danh_tinh', 'procurement_category_changes_kiem_doi']),
        ('public.rfq_approvals', ARRAY['rfq_approvals_dat_bam_danh_sach', 'rfq_approvals_dat_bam_giao_hang', 'rfq_approvals_kiem_xung_dot', 'rfq_approvals_kiem_nguoi_duyet', 'rfq_approvals_so_lan_nop']),
        ('public.rfq_award_approvals', ARRAY['rfq_award_approvals_chan_truncate', 'rfq_award_approvals_chi_ghi_them', 'rfq_award_approvals_kiem_danh_tinh', 'rfq_award_approvals_kiem_nguoi_duyet', 'rfq_award_approvals_kiem_tin_hieu_khai_thap', 'rfq_award_approvals_kiem_vai_theo_bac', 'rfq_award_approvals_kiem_xung_dot']),
-       ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song', 'rfq_awards_kiem_theo_bac_khi_de_xuat', 'rfq_awards_kiem_theo_bac_khi_duyet', 'rfq_awards_kiem_xung_dot']),
+       ('public.rfq_award_cam_ket', ARRAY['rfq_award_cam_ket_chan_truncate', 'rfq_award_cam_ket_chi_ghi_them', 'rfq_award_cam_ket_dien']),
+       ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_chup_cam_ket', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song', 'rfq_awards_kiem_theo_bac_khi_de_xuat', 'rfq_awards_kiem_theo_bac_khi_duyet', 'rfq_awards_kiem_xung_dot', 'rfq_awards_xet_giai_trinh']),
        ('public.rfq_bafo_rounds', ARRAY['rfq_bafo_rounds_kiem_danh_tinh', 'rfq_bafo_rounds_kiem_vong']),
        ('public.rfq_budgets', ARRAY['rfq_budgets_chi_sua_khi_soan', 'rfq_budgets_khong_ghim_ban_chua_ky', 'rfq_budgets_kiem_danh_tinh', 'rfq_budgets_xep_bac']),
-       ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_thanh_phan']),
+       ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_luot', 'rfq_evaluation_lines_kiem_thanh_phan']),
        ('public.rfq_evaluations', ARRAY['rfq_evaluations_kiem_danh_tinh', 'rfq_evaluations_kiem_phien_ban_ghim', 'rfq_evaluations_kiem_xung_dot']),
        ('public.rfq_invitation_tokens', ARRAY['rfq_invitation_tokens_ghi_goi_da_mo', 'rfq_invitation_tokens_kiem_danh_tinh', 'rfq_invitation_tokens_kiem_goi_da_mo', 'rfq_invitation_tokens_thu_hoi_don_dieu']),
        ('public.rfq_invitations', ARRAY['rfq_invitations_khong_song_lai', 'rfq_invitations_kiem_danh_sach', 'rfq_invitations_kiem_danh_tinh', 'rfq_invitations_kiem_nguoi_thu_hoi', 'rfq_invitations_thu_hoi_don_dieu']),
@@ -3042,6 +3043,9 @@ $ham$;
   -- [S1.247 / khoản 283 / ADR-139] Hai dòng `users_email_khong_dau_cham_cuoi`/`supplier_contacts_email_khong_dau_cham_cuoi`
   -- (`100_email_khong_dau_cham_cuoi`): email không kết thúc bằng dấu chấm — cùng vế ấy; gỡ một trong hai là mở lại `dot@x.vn.` cạnh `dot@x.vn`
   -- (dạng tuyệt đối của cùng một tên miền: hai hàng, một hộp thư). Định nghĩa khai là deparse dưới `standard_conforming_strings = on`.
+  -- [S1.288 / S4.7c1 / L8] `rfq_awards_giai_trinh_lech_hang_check` (`121_cam_ket_trao_thau`): giải trình lệch hạng có ít nhất một ký tự
+  -- không phải khoảng trắng (kể cả khoảng trắng Unicode và ký tự rộng 0), tối đa 2000 ký tự — trigger `award_kiem_giai_trinh` chỉ đòi cột
+  -- KHÔNG NULL, nên gỡ ràng buộc này là một chuỗi khoảng trắng thoả lời đòi của L8 (vế cam kết).
   CHECK_AN_NINH_KHAI constant text :=
     $q$(VALUES
          ('public', 'audit_chain_anchors', 'audit_chain_anchors_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
@@ -3069,6 +3073,7 @@ $ham$;
          ('public', 'passport_sessions', 'passport_sessions_han_sau_tao', '118_passport_nha_cung_cap', 'CHECK ((expires_at > created_at))'),
          ('public', 'passport_sessions', 'passport_sessions_han_toi_da', '118_passport_nha_cung_cap', 'CHECK ((expires_at <= (created_at + ''12:00:00''::interval)))'),
          ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '085_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
+         ('public', 'rfq_awards', 'rfq_awards_giai_trinh_lech_hang_check', '121_cam_ket_trao_thau', 'CHECK (((giai_trinh_lech_hang IS NULL) OR ((char_length(giai_trinh_lech_hang) <= 2000) AND (giai_trinh_lech_hang ~ ''[^[:space:]\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]''::text))))'),
          ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
          ('public', 'rfq_awards', 'rfq_awards_status_check', '094_award_withdrawn', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text, ''WITHDRAWN''::text])))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
@@ -3838,6 +3843,7 @@ $ham$;
          ('public', 'procurement_category_changes', '085_nhom_hang'),
          ('public', 'rfq_approvals', '009_rfq'),
          ('public', 'rfq_award_approvals', '061_trao_thau'),
+         ('public', 'rfq_award_cam_ket', '121_cam_ket_trao_thau'),
          ('public', 'rfq_awards', '061_trao_thau'),
          ('public', 'rfq_bafo_rounds', '059_vong_bafo'),
          ('public', 'rfq_budgets', '014_procurement_policy'),
@@ -6904,6 +6910,28 @@ $ham$;
              CREATE TRIGGER rfq_sourcing_exceptions_chan_truncate BEFORE TRUNCATE ON rfq_sourcing_exceptions FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_sourcing_exceptions ENABLE ALWAYS TRIGGER rfq_sourcing_exceptions_chan_truncate;
            END IF;
+           IF to_regclass('public.rfq_award_cam_ket') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                                 AND t.tgname = 'rfq_award_cam_ket_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_cam_ket_chi_ghi_them ON public.rfq_award_cam_ket;
+             CREATE TRIGGER rfq_award_cam_ket_chi_ghi_them BEFORE UPDATE OR DELETE ON rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_award_cam_ket ENABLE ALWAYS TRIGGER rfq_award_cam_ket_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_award_cam_ket') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                                 AND t.tgname = 'rfq_award_cam_ket_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_chan_truncate BEFORE TRUNCATE ON public.rfq_award_cam_ket FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_cam_ket_chan_truncate ON public.rfq_award_cam_ket;
+             CREATE TRIGGER rfq_award_cam_ket_chan_truncate BEFORE TRUNCATE ON rfq_award_cam_ket FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_award_cam_ket ENABLE ALWAYS TRIGGER rfq_award_cam_ket_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -7339,6 +7367,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_sourcing_exceptions_chan_truncate BEFORE TRUNCATE ON public.rfq_sourcing_exceptions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_award_cam_ket') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                               AND t.tgname = 'rfq_award_cam_ket_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_award_cam_ket') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                               AND t.tgname = 'rfq_award_cam_ket_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_chan_truncate BEFORE TRUNCATE ON public.rfq_award_cam_ket FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
@@ -7352,7 +7396,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.coi_declarations, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_sourcing_exceptions, public.rfq_tra_ve, public.rfq_unsealed_bids, public.supplier_passport_requests, public.supplier_passport_versions, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.coi_declarations, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_award_cam_ket, public.rfq_awards, public.rfq_sourcing_exceptions, public.rfq_tra_ve, public.rfq_unsealed_bids, public.supplier_passport_requests, public.supplier_passport_versions, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -16820,6 +16864,382 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_tco_khi_mo()')),
                   'hàm public.rfq_tco_khi_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_tco_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.288 / S4.7c1 / L8] Hang gia cua bao gia tren tap hang CO hang cua luot cham. Mot than tra hang so lam lech hang khong bao gio doi giai trinh, hay doi giai trinh tren de xuat khong lech.
+    ARRAY[
+      $q$định nghĩa hàm award_hang_gia(uuid, uuid, uuid) (121_cam_ket_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '121_cam_ket_trao_thau.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.award_hang_gia(p_org uuid, p_evaluation uuid, p_bid uuid) RETURNS integer
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  WITH dau AS (
+    SELECT DISTINCT ON (l.bid_version_id) l.bid_version_id, c.value ->> 'tien' AS tien
+      FROM public.rfq_evaluation_lines l,
+           jsonb_array_elements(l.components) WITH ORDINALITY AS c(value, thu_tu)
+     WHERE l.org_id = p_org
+       AND l.evaluation_id = p_evaluation
+       AND l.rank IS NOT NULL
+       AND c.value ->> 'ma' = 'gia'
+     ORDER BY l.bid_version_id, c.thu_tu
+  ), gia AS (
+    SELECT d.bid_version_id, d.tien::numeric AS tien
+      FROM dau d
+     WHERE d.tien ~ '^[0-9]{1,16}\.[0-9]{2}$'
+  )
+  SELECT CASE WHEN m.tien IS NULL THEN NULL
+              ELSE 1 + (SELECT count(*) FROM gia g WHERE g.tien < m.tien)::integer
+         END
+    FROM (SELECT (SELECT g.tien FROM gia g WHERE g.bid_version_id = p_bid) AS tien) m
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$WITH dau AS ( SELECT DISTINCT ON (l.bid_version_id) l.bid_version_id, c.value ->> 'tien' AS tien FROM public.rfq_evaluation_lines l, jsonb_array_elements(l.components) WITH ORDINALITY AS c(value, thu_tu) WHERE l.org_id = p_org AND l.evaluation_id = p_evaluation AND l.rank IS NOT NULL AND c.value ->> 'ma' = 'gia' ORDER BY l.bid_version_id, c.thu_tu ), gia AS ( SELECT d.bid_version_id, d.tien::numeric AS tien FROM dau d WHERE d.tien ~ '^[0-9]{1,16}\.[0-9]{2}$' ) SELECT CASE WHEN m.tien IS NULL THEN NULL ELSE 1 + (SELECT count(*) FROM gia g WHERE g.tien < m.tien)::integer END FROM (SELECT (SELECT g.tien FROM gia g WHERE g.bid_version_id = p_bid) AS tien) m$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proisstrict IS FALSE
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.int4'::regtype
+            AND p.proretset IS FALSE
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_hang_gia(uuid, uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_hang_gia(uuid, uuid, uuid)')),
+                  'hàm public.award_hang_gia(uuid, uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm award_hang_gia(uuid, uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.288 / S4.7c1 / L8] De xuat co hang gia khac hang chi phi phai giai trinh. Than `RETURN NEW` cho de xuat lech hang di qua khong mot cau giai trinh.
+    ARRAY[
+      $q$hàm + trigger award_kiem_giai_trinh (121_cam_ket_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '121_cam_ket_trao_thau.sql')$q$,
+      $q$DO $fn345$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_giai_trinh()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_giai_trinh();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_giai_trinh() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  hang_tco integer;
+  hang_gia integer;
+BEGIN
+  IF NEW.status <> 'PROPOSED' THEN
+    IF NEW.giai_trinh_lech_hang IS NOT NULL THEN
+      RAISE EXCEPTION 'Giai trinh lech hang chi thuoc ve hang de xuat trao thau (L8)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'award_giai_trinh_ngoai_de_xuat';
+    END IF;
+    RETURN NEW;
+  END IF;
+  SELECT l.rank INTO hang_tco
+    FROM public.rfq_evaluation_lines l
+   WHERE l.org_id = NEW.org_id AND l.evaluation_id = NEW.evaluation_id AND l.bid_version_id = NEW.bid_version_id;
+  hang_gia := public.award_hang_gia(NEW.org_id, NEW.evaluation_id, NEW.bid_version_id);
+  IF hang_gia IS DISTINCT FROM hang_tco THEN
+    IF NEW.giai_trinh_lech_hang IS NULL THEN
+      RAISE EXCEPTION 'Bao gia duoc de xuat co hang gia khac hang chi phi: de xuat trao thau can giai trinh lech hang (L8)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'award_thieu_giai_trinh_lech_hang';
+    END IF;
+  ELSIF NEW.giai_trinh_lech_hang IS NOT NULL THEN
+    RAISE EXCEPTION 'Bao gia duoc de xuat co hang gia bang hang chi phi: khong co lech hang nao de giai trinh (L8)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'award_giai_trinh_khong_can';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_xet_giai_trinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_kiem_giai_trinh()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_xet_giai_trinh BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_giai_trinh()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_xet_giai_trinh ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_xet_giai_trinh BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION public.award_kiem_giai_trinh();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_xet_giai_trinh;
+           END IF;
+         END
+         $fn345$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE hang_tco integer; hang_gia integer; BEGIN IF NEW.status <> 'PROPOSED' THEN IF NEW.giai_trinh_lech_hang IS NOT NULL THEN RAISE EXCEPTION 'Giai trinh lech hang chi thuoc ve hang de xuat trao thau (L8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'award_giai_trinh_ngoai_de_xuat'; END IF; RETURN NEW; END IF; SELECT l.rank INTO hang_tco FROM public.rfq_evaluation_lines l WHERE l.org_id = NEW.org_id AND l.evaluation_id = NEW.evaluation_id AND l.bid_version_id = NEW.bid_version_id; hang_gia := public.award_hang_gia(NEW.org_id, NEW.evaluation_id, NEW.bid_version_id); IF hang_gia IS DISTINCT FROM hang_tco THEN IF NEW.giai_trinh_lech_hang IS NULL THEN RAISE EXCEPTION 'Bao gia duoc de xuat co hang gia khac hang chi phi: de xuat trao thau can giai trinh lech hang (L8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'award_thieu_giai_trinh_lech_hang'; END IF; ELSIF NEW.giai_trinh_lech_hang IS NOT NULL THEN RAISE EXCEPTION 'Bao gia duoc de xuat co hang gia bang hang chi phi: khong co lech hang nao de giai trinh (L8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'award_giai_trinh_khong_can'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_xet_giai_trinh'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_kiem_giai_trinh()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_xet_giai_trinh BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_giai_trinh()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_giai_trinh()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_giai_trinh()')),
+                  'hàm public.award_kiem_giai_trinh() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_giai_trinh() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.288 / S4.7c1 / L8] Cam ket dien tu nguon (hang award, hang cham, ban ro, hang goi). Than `RETURN NEW` de cot rong lam cam ket NOT NULL hong; than sua mot o lam cam ket noi khac loi khai.
+    ARRAY[
+      $q$hàm + trigger award_dien_cam_ket (121_cam_ket_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '121_cam_ket_trao_thau.sql')$q$,
+      $q$DO $fn346$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_dien_cam_ket()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_dien_cam_ket();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_dien_cam_ket() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  aw record;
+  dong record;
+  goi record;
+  ban_ro jsonb;
+BEGIN
+  SELECT a.rfq_id, a.evaluation_id, a.bid_version_id, a.status, a.giai_trinh_lech_hang, a.acted_at INTO aw
+    FROM public.rfq_awards a
+   WHERE a.org_id = NEW.org_id AND a.id = NEW.award_id;
+  IF NOT FOUND OR aw.status <> 'PROPOSED' THEN
+    RAISE EXCEPTION 'Cam ket TCO chi ghi cho mot hang de xuat trao thau (L8)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'cam_ket_chi_cho_de_xuat';
+  END IF;
+  IF aw.acted_at IS DISTINCT FROM now() THEN
+    RAISE EXCEPTION 'Cam ket TCO chi ghi trong chinh giao dich de xuat trao thau (L8)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'cam_ket_ngoai_giao_dich_de_xuat';
+  END IF;
+  SELECT l.rank, l.effective_cost, l.components INTO dong
+    FROM public.rfq_evaluation_lines l
+   WHERE l.org_id = NEW.org_id AND l.evaluation_id = aw.evaluation_id AND l.bid_version_id = aw.bid_version_id;
+  SELECT u.payload INTO ban_ro
+    FROM public.rfq_unsealed_bids u
+   WHERE u.org_id = NEW.org_id AND u.bid_version_id = aw.bid_version_id;
+  SELECT r.tco_ma_ghim, r.tco_tham_so_ghim, r.so_ngay_giao INTO goi
+    FROM public.rfq_packages r
+   WHERE r.org_id = NEW.org_id AND r.id = aw.rfq_id;
+
+  NEW.rfq_id := aw.rfq_id;
+  NEW.evaluation_id := aw.evaluation_id;
+  NEW.bid_version_id := aw.bid_version_id;
+  NEW.hang_tco := dong.rank;
+  NEW.hang_gia := public.award_hang_gia(NEW.org_id, aw.evaluation_id, aw.bid_version_id);
+  NEW.effective_cost := dong.effective_cost;
+  NEW.components := dong.components;
+  NEW.khai := jsonb_build_object(
+    'freight', round(public.bid_so_tien(ban_ro ->> 'freight'), 2)::text,
+    'importCost', round(public.bid_so_tien(ban_ro ->> 'importCost'), 2)::text,
+    'paymentDays', public.bid_so_ngay(ban_ro ->> 'paymentDays'),
+    'leadTimeDays', public.bid_so_ngay(ban_ro ->> 'leadTimeDays')
+  );
+  NEW.tap_ma := goi.tco_ma_ghim;
+  NEW.tham_so := goi.tco_tham_so_ghim;
+  NEW.so_ngay_giao := goi.so_ngay_giao;
+  NEW.giai_trinh_lech_hang := aw.giai_trinh_lech_hang;
+  NEW.chup_luc := now();
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_award_cam_ket') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                                 AND t.tgname = 'rfq_award_cam_ket_dien'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_dien_cam_ket()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_dien BEFORE INSERT ON public.rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION award_dien_cam_ket()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_cam_ket_dien ON public.rfq_award_cam_ket;
+             CREATE TRIGGER rfq_award_cam_ket_dien BEFORE INSERT ON public.rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION public.award_dien_cam_ket();
+             ALTER TABLE public.rfq_award_cam_ket ENABLE ALWAYS TRIGGER rfq_award_cam_ket_dien;
+           END IF;
+         END
+         $fn346$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE aw record; dong record; goi record; ban_ro jsonb; BEGIN SELECT a.rfq_id, a.evaluation_id, a.bid_version_id, a.status, a.giai_trinh_lech_hang, a.acted_at INTO aw FROM public.rfq_awards a WHERE a.org_id = NEW.org_id AND a.id = NEW.award_id; IF NOT FOUND OR aw.status <> 'PROPOSED' THEN RAISE EXCEPTION 'Cam ket TCO chi ghi cho mot hang de xuat trao thau (L8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'cam_ket_chi_cho_de_xuat'; END IF; IF aw.acted_at IS DISTINCT FROM now() THEN RAISE EXCEPTION 'Cam ket TCO chi ghi trong chinh giao dich de xuat trao thau (L8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'cam_ket_ngoai_giao_dich_de_xuat'; END IF; SELECT l.rank, l.effective_cost, l.components INTO dong FROM public.rfq_evaluation_lines l WHERE l.org_id = NEW.org_id AND l.evaluation_id = aw.evaluation_id AND l.bid_version_id = aw.bid_version_id; SELECT u.payload INTO ban_ro FROM public.rfq_unsealed_bids u WHERE u.org_id = NEW.org_id AND u.bid_version_id = aw.bid_version_id; SELECT r.tco_ma_ghim, r.tco_tham_so_ghim, r.so_ngay_giao INTO goi FROM public.rfq_packages r WHERE r.org_id = NEW.org_id AND r.id = aw.rfq_id; NEW.rfq_id := aw.rfq_id; NEW.evaluation_id := aw.evaluation_id; NEW.bid_version_id := aw.bid_version_id; NEW.hang_tco := dong.rank; NEW.hang_gia := public.award_hang_gia(NEW.org_id, aw.evaluation_id, aw.bid_version_id); NEW.effective_cost := dong.effective_cost; NEW.components := dong.components; NEW.khai := jsonb_build_object( 'freight', round(public.bid_so_tien(ban_ro ->> 'freight'), 2)::text, 'importCost', round(public.bid_so_tien(ban_ro ->> 'importCost'), 2)::text, 'paymentDays', public.bid_so_ngay(ban_ro ->> 'paymentDays'), 'leadTimeDays', public.bid_so_ngay(ban_ro ->> 'leadTimeDays') ); NEW.tap_ma := goi.tco_ma_ghim; NEW.tham_so := goi.tco_tham_so_ghim; NEW.so_ngay_giao := goi.so_ngay_giao; NEW.giai_trinh_lech_hang := aw.giai_trinh_lech_hang; NEW.chup_luc := now(); RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_award_cam_ket')
+                           AND t.tgname = 'rfq_award_cam_ket_dien'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_dien_cam_ket()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_cam_ket_dien BEFORE INSERT ON public.rfq_award_cam_ket FOR EACH ROW EXECUTE FUNCTION award_dien_cam_ket()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_dien_cam_ket()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_dien_cam_ket()')),
+                  'hàm public.award_dien_cam_ket() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_dien_cam_ket() và bảng public.rfq_award_cam_ket (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.288 / S4.7c1 / L8] Moi de xuat mot cam ket trong chinh giao dich de xuat. Than `RETURN NULL` khong ghi gi de de xuat song khong cam ket.
+    ARRAY[
+      $q$hàm + trigger award_chup_cam_ket (121_cam_ket_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '121_cam_ket_trao_thau.sql')$q$,
+      $q$DO $fn347$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_chup_cam_ket()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_chup_cam_ket();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_chup_cam_ket() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  INSERT INTO public.rfq_award_cam_ket (org_id, award_id) VALUES (NEW.org_id, NEW.id);
+  RETURN NULL;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_chup_cam_ket'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.award_chup_cam_ket()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chup_cam_ket AFTER INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'PROPOSED'::text)) EXECUTE FUNCTION award_chup_cam_ket()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_chup_cam_ket ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_chup_cam_ket AFTER INSERT ON public.rfq_awards FOR EACH ROW WHEN (NEW.status = 'PROPOSED') EXECUTE FUNCTION public.award_chup_cam_ket();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_chup_cam_ket;
+           END IF;
+         END
+         $fn347$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN INSERT INTO public.rfq_award_cam_ket (org_id, award_id) VALUES (NEW.org_id, NEW.id); RETURN NULL; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_chup_cam_ket'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.award_chup_cam_ket()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chup_cam_ket AFTER INSERT ON public.rfq_awards FOR EACH ROW WHEN ((new.status = 'PROPOSED'::text)) EXECUTE FUNCTION award_chup_cam_ket()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_chup_cam_ket()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_chup_cam_ket()')),
+                  'hàm public.award_chup_cam_ket() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_chup_cam_ket() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.288 / S4.7c1 / J1 · L8 — rà soát TRUNG-1] Hang cham chi ghi trong giao dich tao luot, cho bao gia cua dung goi. Than `RETURN NEW` cho mot hang chen sau vao luot da commit doi hang gia ma loi doi giai trinh dua vao.
+    ARRAY[
+      $q$hàm + trigger luot_cham_kiem_hang (121_cam_ket_trao_thau)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '121_cam_ket_trao_thau.sql')$q$,
+      $q$DO $fn348$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.luot_cham_kiem_hang()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.luot_cham_kiem_hang();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.luot_cham_kiem_hang() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  luot record;
+BEGIN
+  SELECT e.rfq_id, e.created_at INTO luot
+    FROM public.rfq_evaluations e
+   WHERE e.org_id = NEW.org_id AND e.id = NEW.evaluation_id;
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+  IF luot.created_at IS DISTINCT FROM now() THEN
+    RAISE EXCEPTION 'Hang xep hang chi ghi trong chinh giao dich tao luot cham % (J1)', NEW.evaluation_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_ngoai_giao_dich_luot';
+  END IF;
+  IF NOT EXISTS (SELECT 1
+                   FROM public.vendor_bid_versions v
+                   JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+                   JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+                  WHERE v.org_id = NEW.org_id AND v.id = NEW.bid_version_id AND i.rfq_id = luot.rfq_id) THEN
+    RAISE EXCEPTION 'Bao gia % khong thuoc goi thau cua luot cham % (J1)', NEW.bid_version_id, NEW.evaluation_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_bao_gia_goi_khac';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_evaluation_lines') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                                 AND t.tgname = 'rfq_evaluation_lines_kiem_luot'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.luot_cham_kiem_hang()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_luot BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION luot_cham_kiem_hang()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_evaluation_lines_kiem_luot ON public.rfq_evaluation_lines;
+             CREATE TRIGGER rfq_evaluation_lines_kiem_luot BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION public.luot_cham_kiem_hang();
+             ALTER TABLE public.rfq_evaluation_lines ENABLE ALWAYS TRIGGER rfq_evaluation_lines_kiem_luot;
+           END IF;
+         END
+         $fn348$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE luot record; BEGIN SELECT e.rfq_id, e.created_at INTO luot FROM public.rfq_evaluations e WHERE e.org_id = NEW.org_id AND e.id = NEW.evaluation_id; IF NOT FOUND THEN RETURN NEW; END IF; IF luot.created_at IS DISTINCT FROM now() THEN RAISE EXCEPTION 'Hang xep hang chi ghi trong chinh giao dich tao luot cham % (J1)', NEW.evaluation_id USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_ngoai_giao_dich_luot'; END IF; IF NOT EXISTS (SELECT 1 FROM public.vendor_bid_versions v JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id WHERE v.org_id = NEW.org_id AND v.id = NEW.bid_version_id AND i.rfq_id = luot.rfq_id) THEN RAISE EXCEPTION 'Bao gia % khong thuoc goi thau cua luot cham % (J1)', NEW.bid_version_id, NEW.evaluation_id USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_bao_gia_goi_khac'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                           AND t.tgname = 'rfq_evaluation_lines_kiem_luot'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.luot_cham_kiem_hang()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_luot BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION luot_cham_kiem_hang()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.luot_cham_kiem_hang()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.luot_cham_kiem_hang()')),
+                  'hàm public.luot_cham_kiem_hang() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.luot_cham_kiem_hang() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.204 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
     ARRAY[

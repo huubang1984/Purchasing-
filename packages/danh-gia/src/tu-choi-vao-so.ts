@@ -56,6 +56,7 @@ export type MaTuChoiTrangThai =
   | "CHUA_CHAM_LAN_NAO"
   | "DA_KY_DE_XUAT_NAY"
   | "DE_XUAT_DA_CO_CHU_KY"
+  | "GIAI_TRINH_LECH_HANG_KHONG_CAN"
   | "KHONG_CO_AWARD_CON_SONG"
   | "KHONG_CO_BAO_GIA_DOC_DUOC"
   | "KHONG_CO_DE_XUAT_DANG_CHO"
@@ -65,7 +66,8 @@ export type MaTuChoiTrangThai =
   | "RFQ_KHONG_CHAM_DUOC"
   | "RFQ_KHONG_DE_XUAT_DUOC"
   | "RFQ_KHONG_MO_VONG_DUOC"
-  | "THANH_PHAN_CHUA_CO_NGUON";
+  | "THANH_PHAN_CHUA_CO_NGUON"
+  | "THIEU_GIAI_TRINH_LECH_HANG";
 
 export interface DongVaoSo {
   /** `true` ⇒ lần từ chối này để lại một hàng `RFQ_STATE_DENIED` ở giao dịch ĐỘC LẬP. */
@@ -78,7 +80,8 @@ export interface DongVaoSo {
  * Mỗi mã, một quyết định, một lý do. `Record` đầy đủ nên quên một mã là một lỗi BIÊN DỊCH.
  *
  * ~~Bảy~~ **[S1.231 / khoản 232] CHÍN** mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không
- * đúng thứ tự*. ~~Năm~~ **[S1.279 / S4.7a] SÁU** mã `false` đều nói: *cấu hình chưa sẵn sàng*.
+ * đúng thứ tự*. ~~Năm~~ **[S1.279 / S4.7a] SÁU** mã `false` đều nói: *cấu hình chưa sẵn sàng*. **[S1.288 / S4.7c1]** Thêm HAI mã
+ * `false` của một lớp thứ ba — *lời gọi thiếu hay thừa một ô mà CSDL đòi*: một lỗi NHẬP, cùng hạng các 422 kiểm hình dạng thân.
  */
 export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   // ---- ~~BẢY~~ [S1.231] CHÍN mã CHUỖI — vào sổ
@@ -146,6 +149,15 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   LECH_TIEN_TE: {
     vaoSo: false,
     lyDo: "các báo giá đọc được không cùng một đơn vị tiền nhận ra được, SAU khi `bid_currency` đã gộp các cách viết của VND và USD — một vấn đề DỮ LIỆU của vòng thầu (một nhà cung cấp báo bằng tiền khác, hay một chuỗi ngoài tập đóng). [S1.165 / khoản 244] Bản trước viết *gặp một lần rồi chuẩn hoá*: sai, vì báo giá đã niêm phong không sửa được. Lối ra là huỷ gói kèm lý do, và lần huỷ ấy vào sổ (`RFQ_CANCELLED`), nên lần từ chối này không cần một hàng thứ hai",
+  },
+  // ---- [S1.288 / S4.7c1 / L8] HAI mã của ô giải trình lệch hạng — KHÔNG vào sổ
+  THIEU_GIAI_TRINH_LECH_HANG: {
+    vaoSo: false,
+    lyDo: "[S1.288 / S4.7c1 / L8] đề xuất chọn một báo giá có hạng giá khác hạng chi phí mà không kèm lời giải trình — CSDL từ chối (`award_kiem_giai_trinh`) và màn đòi ô ấy trước khi gửi. Một lỗi NHẬP, không một bước đi tắt của chuỗi: người đề xuất gửi lại kèm giải trình, và lần đề xuất ĐƯỢC ghi mang giải trình vào sổ (`RFQ_AWARD_PROPOSED`) lẫn cam kết",
+  },
+  GIAI_TRINH_LECH_HANG_KHONG_CAN: {
+    vaoSo: false,
+    lyDo: "[S1.288 / S4.7c1 / L8] lời giải trình lệch hạng gửi kèm một đề xuất KHÔNG lệch hạng — cùng hạng mã trên: một lỗi NHẬP; một câu *vì sao lệch* trên đề xuất không lệch sẽ là một dòng sai trong hồ sơ, nên CSDL từ chối thay vì lưu",
   },
   KHONG_CO_BAO_GIA_DOC_DUOC: {
     vaoSo: false,

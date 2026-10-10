@@ -1784,7 +1784,11 @@ describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => 
 
     // Người KHÁC rút ⇒ 422 có tên; thiếu lý do ⇒ 422 của bộ đọc thân; REQUESTER (không `award.recommend`) ⇒ 403.
     const rutHo = await goi("POST", `/rfqs/${rfqId}/award/withdraw`, buyer2, { reason: "rut ho" });
-    expect([rutHo.status, rutHo.body]).toEqual([422, { error: "Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve." }]);
+    // [S1.288 / S4.7c1] Lời từ chối của lớp trao thầu mang mã (khuôn `ChotKiemSoatError`).
+    expect([rutHo.status, rutHo.body]).toEqual([
+      422,
+      { error: "Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve.", ma: "KHONG_PHAI_NGUOI_DE_XUAT" },
+    ]);
     expect((await goi("POST", `/rfqs/${rfqId}/award/withdraw`, buyer, {})).status).toBe(422);
     expect((await goi("POST", `/rfqs/${rfqId}/award/withdraw`, req, { reason: "x" })).status).toBe(403);
     expect(await trangThai()).toBe("AWARDED");
