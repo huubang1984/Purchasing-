@@ -377,6 +377,9 @@ export const DANH_MUC_LOAI_TAI_NGUYEN: ReadonlySet<string> = new Set([
   "RFQ_INVITATION",
   "SESSION",
   "SUPPLIER",
+  // [S1.291 / S3.8a] Lần đọc hiệu suất nhà cung cấp của CẢ tổ chức có cổng (hàm đọc của `packages/kiem-soat/src/hieu-suat.ts`;
+  // `resourceId` là tổ chức).
+  "SUPPLIER_PERFORMANCE",
   "UNSEAL_REQUEST",
   // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức (`apps/api/src/routes/du-lieu.ts`).
   "UOM_ALIAS",

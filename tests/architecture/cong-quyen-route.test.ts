@@ -346,6 +346,9 @@ const HAM_DOC_CO_QUYEN = [
   "docBenchmark",
   // [S1.260 / S4.5c1] *Xem dải* một dòng: số của dải và giá quy đổi — cổng `bid.view` THẲNG trong thân, hàng sổ `BENCHMARK_BAND_READ`.
   "docDaiBenchmark",
+  // [S1.291 / S3.8a] Hiệu suất nhà cung cấp: hạng, khoảng cách tới hạng nhất, thắng là dữ liệu SAU mở thầu gom xuyên gói — cổng
+  // `bid.view` THẲNG trong thân `docHieuSuatNhaCungCap`, hàng sổ `SUPPLIER_PERFORMANCE_READ` mỗi lần đọc (spec S3 §4.9, K11).
+  "docHieuSuatNhaCungCap",
   // [S1.272 / S4.6a] Lô và hàng của mốc ngoài, lịch sử ngoài hệ thống — KHÔNG cột giá; cổng `item.manage` THẲNG trong thân (người
   // quản lý dữ liệu mù giá đọc lại thứ mình nhập; chủ dự án chốt 2026-10-06).
   "lietKeLoDuLieuNgoai",
