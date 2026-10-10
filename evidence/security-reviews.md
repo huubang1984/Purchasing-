@@ -27379,8 +27379,16 @@ TRƯỚC mở niêm phong. Mỗi phát hiện được đo lại bằng tay trư
 ## 9. Số đo
 Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `pnpm t0` xanh (kiểm kiểu, lint, depcruise 580 module — 245 s); `pnpm test`
 2832 qua / 0 đỏ / 14 bỏ qua (741 s, máy chung với lượt int của phiên khác); `hieu-suat.int` 9/9; `rls-coverage.int` 62/62 và
-`hardening-suy-tu-tinh-chat.int` 38/38 (lượt nền tảng); kịch bản 41 HTTP 108/108; `migrate()` hai lần trên CSDL mới: lần hai 0 tệp. Lượt
-evidence trên HEAD: ở commit evidence của vòng.
+`hardening-suy-tu-tinh-chat.int` 38/38 (lượt nền tảng); kịch bản 41 HTTP 108/108; `migrate()` hai lần trên CSDL mới: lần hai 0 tệp.
+- Lượt evidence một, trên cây gộp `594932c4` (sau #266): `pnpm test` 158 tệp / 2832 ca, 151 s; evidence **vitest thoát mã 1**, 2 348 s —
+  ba ca của `db/migrations.int.test.ts` đỏ vì ba danh sách migration viết tay thiếu `123_hieu_suat_nha_cung_cap` (lượt int trước commit
+  chạy các tệp chạm K11 mà bỏ sót tệp này), cùng cổng mốc ghim *độ phủ tăng 92 > 91* (nâng tay `MOC_GHIM.soPhuToiThieu`). Cùng 92/92 và
+  5230 khẳng định — số khẳng định không phải tín hiệu, dòng *vitest thoát mã* mới là. Vá ở `194d3e19`, cấp số ở `a8406698`.
+- Lượt evidence hai, trên `a8406698` (ngày 2026-10-10, giờ máy UTC+7; bắt đầu 13:29 sau ~40 phút xếp hàng sau lượt evidence của một phiên
+  khác — không giết): `pnpm t0` 48 s (depcruise 580 module, 0 vi phạm); `pnpm test` 158 tệp / 2832 ca (2 tệp, 14 ca bỏ qua), 133 s;
+  evidence **vitest thoát mã 0**, **92/92** bất biến (70 nghiệp vụ + 22 hàng rào), **5230** khẳng định, 2 498 s. Ma trận: hàng K11 mới,
+  ô *Số test* **33** ✅ (bốn tệp của sổ khai nhãn: `hieu-suat.int`, kịch bản 41 HTTP, `rls-coverage.int`, `hieu-suat-liet-ke`);
+  `cap-so --kiem` sạch.
 
 ## 10. Giới hạn
 - Lớp *một đường đọc* là lớp chữ (ADR-163 ⑻⒠); CSDL không biết người gọi giữ `bid.view`.
