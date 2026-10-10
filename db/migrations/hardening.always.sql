@@ -1831,7 +1831,7 @@ $ham$;
        ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_chup_cam_ket', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song', 'rfq_awards_kiem_theo_bac_khi_de_xuat', 'rfq_awards_kiem_theo_bac_khi_duyet', 'rfq_awards_kiem_xung_dot', 'rfq_awards_xet_giai_trinh']),
        ('public.rfq_bafo_rounds', ARRAY['rfq_bafo_rounds_kiem_danh_tinh', 'rfq_bafo_rounds_kiem_vong']),
        ('public.rfq_budgets', ARRAY['rfq_budgets_chi_sua_khi_soan', 'rfq_budgets_khong_ghim_ban_chua_ky', 'rfq_budgets_kiem_danh_tinh', 'rfq_budgets_xep_bac']),
-       ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_luot', 'rfq_evaluation_lines_kiem_thanh_phan']),
+       ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_luot', 'rfq_evaluation_lines_kiem_phien_ban', 'rfq_evaluation_lines_kiem_thanh_phan']),
        ('public.rfq_evaluations', ARRAY['rfq_evaluations_kiem_danh_tinh', 'rfq_evaluations_kiem_phien_ban_ghim', 'rfq_evaluations_kiem_xung_dot']),
        ('public.rfq_invitation_tokens', ARRAY['rfq_invitation_tokens_ghi_goi_da_mo', 'rfq_invitation_tokens_kiem_danh_tinh', 'rfq_invitation_tokens_kiem_goi_da_mo', 'rfq_invitation_tokens_thu_hoi_don_dieu']),
        ('public.rfq_invitations', ARRAY['rfq_invitations_khong_song_lai', 'rfq_invitations_kiem_danh_sach', 'rfq_invitations_kiem_danh_tinh', 'rfq_invitations_kiem_nguoi_thu_hoi', 'rfq_invitations_thu_hoi_don_dieu']),
@@ -17242,6 +17242,87 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.luot_cham_kiem_hang()')),
                   'hàm public.luot_cham_kiem_hang() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_hang() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.290 / J1 — tiep TRUNG-1 cua §S1.288] Hang cham chi nhan phien ban moi nhat da mo cua luong, loi moi con song. Than `RETURN NEW` cho mot luot cham dung tron o duong ghi thu hai chon gia vong mot da bi BAFO thay, hay bao gia cua loi moi da thu hoi.
+    ARRAY[
+      $q$hàm + trigger luot_cham_kiem_phien_ban (122_hang_cham_phien_ban_moi_nhat)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '122_hang_cham_phien_ban_moi_nhat.sql')$q$,
+      $q$DO $fn349$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.luot_cham_kiem_phien_ban()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.luot_cham_kiem_phien_ban();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.luot_cham_kiem_phien_ban() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  luong record;
+BEGIN
+  SELECT v.bid_id, v.version, i.revoked_at INTO luong
+    FROM public.vendor_bid_versions v
+    JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id
+    JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id
+   WHERE v.org_id = NEW.org_id AND v.id = NEW.bid_version_id;
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+  IF luong.revoked_at IS NOT NULL THEN
+    RAISE EXCEPTION 'Bao gia % thuoc loi moi da thu hoi, khong vao luot cham (J1)', NEW.bid_version_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_loi_moi_thu_hoi';
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.vendor_bid_versions v
+               JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id
+              WHERE v.org_id = NEW.org_id AND v.bid_id = luong.bid_id AND v.version > luong.version) THEN
+    RAISE EXCEPTION 'Bao gia % da co phien ban moi hon da mo, khong vao luot cham (J1)', NEW.bid_version_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_phien_ban_cu';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_evaluation_lines') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                                 AND t.tgname = 'rfq_evaluation_lines_kiem_phien_ban'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.luot_cham_kiem_phien_ban()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_phien_ban BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION luot_cham_kiem_phien_ban()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_evaluation_lines_kiem_phien_ban ON public.rfq_evaluation_lines;
+             CREATE TRIGGER rfq_evaluation_lines_kiem_phien_ban BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION public.luot_cham_kiem_phien_ban();
+             ALTER TABLE public.rfq_evaluation_lines ENABLE ALWAYS TRIGGER rfq_evaluation_lines_kiem_phien_ban;
+           END IF;
+         END
+         $fn349$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE luong record; BEGIN SELECT v.bid_id, v.version, i.revoked_at INTO luong FROM public.vendor_bid_versions v JOIN public.vendor_bids b ON b.org_id = v.org_id AND b.id = v.bid_id JOIN public.rfq_invitations i ON i.org_id = b.org_id AND i.id = b.invitation_id WHERE v.org_id = NEW.org_id AND v.id = NEW.bid_version_id; IF NOT FOUND THEN RETURN NEW; END IF; IF luong.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'Bao gia % thuoc loi moi da thu hoi, khong vao luot cham (J1)', NEW.bid_version_id USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_loi_moi_thu_hoi'; END IF; IF EXISTS (SELECT 1 FROM public.vendor_bid_versions v JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id WHERE v.org_id = NEW.org_id AND v.bid_id = luong.bid_id AND v.version > luong.version) THEN RAISE EXCEPTION 'Bao gia % da co phien ban moi hon da mo, khong vao luot cham (J1)', NEW.bid_version_id USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_cham_phien_ban_cu'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                           AND t.tgname = 'rfq_evaluation_lines_kiem_phien_ban'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.luot_cham_kiem_phien_ban()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_phien_ban BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW EXECUTE FUNCTION luot_cham_kiem_phien_ban()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.luot_cham_kiem_phien_ban()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.luot_cham_kiem_phien_ban()')),
+                  'hàm public.luot_cham_kiem_phien_ban() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.luot_cham_kiem_phien_ban() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.291 / S3.8a / K11] View hieu suat nha cung cap — than, security_invoker va ACL. Mot than bo vi tu khach, bo mot cong gia_da_lo hay doi dinh nghia thang cho phien khach/Passport hay gia chua lo vao chi so; CREATE OR REPLACE thieu WITH xoa security_invoker (do 2026-10-10).
     ARRAY[
