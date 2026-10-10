@@ -12978,7 +12978,9 @@ của vòng BAFO và mọi cột từ giá gác bằng `gia_da_lo(gói, now())`.
 ⑵ **Định nghĩa.** Lời mời ĐƯỢC ĐẾM là `revoked_at IS NULL AND status <> 'UNSENT'` (từ vựng ADR-128; chỉ mục bộ phận `024` giữ tối đa một lời
 mời sống mỗi (gói, nhà cung cấp), nên các cột VÒNG MỘT ghép báo giá theo đúng lời mời ấy — luồng của lời mời đã thu hồi không vào;
 **[lượt soi trên mã §S1.291 THẤP-4]** phiên bản BAFO, hạng, vào BAFO, thắng ghép báo giá → lời mời KHÔNG lọc: chúng đọc báo giá đã mở
-niêm phong, mà worker chỉ mở luồng còn sống và tầng gói chặn thu hồi sau lần mở thầu đầu — hai lớp NGOÀI view). Thời gian
+niêm phong, mà worker chỉ mở luồng còn sống và tầng gói chặn thu hồi sau lần mở thầu đầu — hai lớp NGOÀI view; **[gộp #268 / ADR-162]**
+cho hạng, khoảng cách và vào BAFO nay thêm một lớp ở CSDL: trigger `luot_cham_kiem_phien_ban` (`122`) từ chối hàng chấm của lời mời đã
+thu hồi LÚC CHẤM và của phiên bản không phải bản mới nhất đã mở của luồng). Thời gian
 phản hồi: phiên bản vòng một đầu trừ `greatest(opened_at, lời mời.created_at)`, giây, sàn — mời sau khi mở thì tính từ lúc mời: **lệch §4.9 có
 chủ đích** (*"mở gói → phiên bản nộp đầu"* phạt người được mời muộn). Trung vị là `percentile_disc(0.5)` — phần tử thật, số chẵn thì phần tử
 dưới — để tính lại được chính xác. Khoảng cách tới hạng nhất là PHẦN VẠN số nguyên `div((chi phí − thấp nhất) × 20000 + thấp nhất, 2 × thấp
