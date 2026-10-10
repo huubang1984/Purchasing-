@@ -76,6 +76,9 @@
 #
 # Biến bắt buộc `email_canh_bao` (⑴–⑸, ⑺) và `email_van_hanh` (⑹, ADR-088) — KHÔNG commit giá trị; truyền bằng -var hay
 # tệp *.tfvars ngoài git. AWS gửi thư xác nhận tới từng địa chỉ; chưa bấm xác nhận thì địa chỉ ấy chưa nhận gì.
+# [2026-10-10] `email_canh_bao` là DANH SÁCH, cùng hình với `email_van_hanh`: APPLY-LAN-DAU mục 9 đòi người nhận cảnh báo
+# không chỉ là người giữ KeyAdmin, mà một chuỗi chỉ chứa được một người. Mỗi địa chỉ một đăng ký riêng — một người bấm
+# "unsubscribe" thì chỉ người ấy mất thư, và ⑻ báo địa chỉ ấy trong vòng 6 giờ.
 
 terraform {
   required_version = ">= 1.10"
@@ -97,11 +100,11 @@ terraform {
 module "chung" { source = "../chung" }
 
 variable "email_canh_bao" {
-  description = "Địa chỉ nhận cảnh báo sửa key policy (người giữ KeyAdmin KHÔNG nên là người duy nhất nhận)."
-  type        = string
+  description = "Người nhận cảnh báo an ninh ⑴–⑸, ⑺ — danh sách; người giữ KeyAdmin KHÔNG nên là người duy nhất nhận."
+  type        = list(string)
   validation {
-    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.email_canh_bao))
-    error_message = "email_canh_bao phải là một địa chỉ email."
+    condition     = length(var.email_canh_bao) > 0 && alltrue([for e in var.email_canh_bao : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "email_canh_bao phải là danh sách ít nhất một địa chỉ email."
   }
 }
 
@@ -374,9 +377,10 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
 
 resource "aws_sns_topic_subscription" "email" {
   provider  = aws.audit
+  for_each  = toset(var.email_canh_bao)
   topic_arn = aws_sns_topic.canh_bao_khoa.arn
   protocol  = "email"
-  endpoint  = var.email_canh_bao
+  endpoint  = each.value
 }
 
 resource "aws_cloudwatch_event_rule" "put_key_policy_audit" {
@@ -979,7 +983,7 @@ resource "aws_lambda_function" "canh_dang_ky" {
   environment {
     variables = {
       MONG_DOI = jsonencode([
-        { topic = aws_sns_topic.canh_bao_khoa.arn, bien = "email_canh_bao", nhan = [var.email_canh_bao] },
+        { topic = aws_sns_topic.canh_bao_khoa.arn, bien = "email_canh_bao", nhan = var.email_canh_bao },
         { topic = aws_sns_topic.van_hanh.arn, bien = "email_van_hanh", nhan = var.email_van_hanh },
       ])
     }
