@@ -27237,3 +27237,155 @@ hàm = bốn dòng `chot: K10c`; ba tên `k10c_*` không ở `CHOT_THEO_RANG_BUO
   sách migration gỡ tay; lời khai 116 migration, 159 ADR, 91 bất biến): `pnpm t0` 54 s; `pnpm test` 157 tệp / 2820 ca; kịch bản 41 HTTP
   93/93 48 s; `tin-hieu-chia-nho.int` 14/14 16 s; evidence vitest thoát mã **0**, **91/91**, **5186** khẳng định, 2 056 s (bắt đầu
   00:31 ngày 2026-10-10 sau 6 lượt chờ) — `INV-matrix.md` sinh lại trên bản gộp.
+
+# §S1.9101 — S3.8a: HIỆU SUẤT NHÀ CUNG CẤP — MỘT VIEW `security_invoker` CHỈ ĐỌC GÓI ĐÃ LỘ GIÁ, KỂ CẢ Ở CỘT PHẢN HỒI (GÓC C⑦); VỊ TỪ KHÁCH TRONG THÂN VIEW VÀ MỘT PHÉP ĐẾM CHO MỌI VIEW; MỘT ĐƯỜNG ĐỌC CÓ CỔNG `bid.view`; K11 VÀO SỔ — ADR-9201
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi — view đọc được ở mọi tổ chức (không sau công tắc S3), nhưng không câu
+ghi nào mới và không hành vi cũ nào đổi; route mới chỉ đọc. Migration `9501_hieu_suat_nha_cung_cap`, ADR-9201; một bất biến mới (K11), không
+khoản nợ mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-10: *"chuẩn bị tiếp S3.8 và S3.9, nếu bắt buộc đợi các session khác thì đợi"*. Lượt chuẩn bị (kế hoạch
+`docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md`, commit `ab440f18`): hai lượt đo trước, hai lượt soi đối kháng trên hình dạng chưa cài,
+bốn câu hỏi — chủ dự án chốt câu 1–3 theo đề xuất, câu 4 (lớp governance của S3.9) chọn *trọn hồ sơ bản rõ*. Rồi: *"Làm S3.8a đi"*. Nhánh
+`s3-8-hieu-suat` dựng từ `master` `cc807f97` (PR #265). S3.9a chờ S3.7a2 (phiên khác) và S4.7c2 (phiên bản bộ 3); S3.8 không chờ ai.
+
+## 2. Đo trước (đọc mã trên `cc807f97`)
+- Không view nào trong lược đồ; hardening (C) `CAU_DOC_VONG` đòi `security_invoker` nhưng không ghim thân view (`hardening.always.sql:971-973`);
+  tổng điều tra `LOAI_DA_KHAI = []` (`db/hardening-suy-tu-tinh-chat.int.test.ts:2876`).
+- Trạng thái gói KHÔNG đơn điệu (`071:62-89`); `AWARDED` là *đã đề xuất* (`trao-thau.ts:487-494`); không có `unsealed_at`; `gia_da_lo` (`096`,
+  L5) là vị từ *giá đã lộ* duy nhất, đã ghim.
+- Phiên KHÁCH đọc hàng của CHÍNH nó ở `rfq_invitations`, `vendor_bids`, `vendor_bid_versions`, `rfq_packages`, `rfq_bafo_rounds` (`027`, `060`);
+  hai bộ quét cô lập hiện có chỉ đọc `relkind = 'r'`.
+- Không dòng mã nào về hiệu suất — lượt tìm `git grep -i -E "hiệu suất|hieu_suat|responsiveness|ty_le_phan_hoi|S3\.8"` trên `packages apps db
+  tools tests`: 0.
+- Spec S3 §4.9 viết cột phản hồi `≥ CLOSED`; S1.159 đã chốt ngược ở spec S4 `:755`, `:969` và S4b ㊾ (góc C⑦) — spec S3 không được sửa theo.
+- Đo trên cụm `postgres:16-alpine` dùng một lần: `CREATE OR REPLACE VIEW` thiếu `WITH (…)` XOÁ `security_invoker`, GRANT giữ nguyên; `EXECUTE`
+  của PL/pgSQL chạy được nhiều câu một chuỗi (câu sửa của hàng ghim gộp `CREATE OR REPLACE` với REVOKE/GRANT).
+
+## 3. Lượt soi hình dạng — hai lượt đối kháng trên bản chốt CHƯA CÀI (2026-10-10)
+Ghi đủ ở kế hoạch chuẩn bị §1–§3; mỗi phát hiện CAO đo lại bằng tay trước khi nhận.
+**S3.8 — 1 CAO, 5 TRUNG, 3 THẤP.** CAO-1 cột phản hồi đọc theo `closed_at` lộ ai đã nộp trước mở niêm phong (góc C⑦) — thành câu 1 của chủ
+dự án. TRUNG: chia cho 0 khi một báo giá bằng 0 làm sập trang cả tổ chức (⇒ `nullif`); định nghĩa chưa đủ để tính lại độc lập (mẫu số tỷ lệ thắng,
+sàn trên mọi trung vị, ghép theo ĐÚNG lời mời được đếm, ACCEPTED/DECLINED không lối nào ghi); phép đo cô lập rỗng ruột ở ba chỗ (⇒ phép đếm thân
+view mới); đột biến bỏ `requirePermission` không ca hành vi nào giết (⇒ ca BUYER 403 + đột biến đổi mã quyền); năm bẫy của ghim view ở hardening
+(tiền điều kiện neo `schema_migrations`, `WITH` và GRANT trong câu sửa, `search_path` của `pg_get_viewdef`, thông điệp chỉ vân tay, kiểu cột cố
+định).
+**S3.9 — 4 CAO, 5 TRUNG** — để dành S3.9 (kế hoạch §3, §4).
+
+## 4. Câu hỏi của chủ dự án (2026-10-10)
+Bốn câu, khuyến nghị đứng đầu: ⑴ chỉ gói đã lộ giá — chọn; ⑵ hai PR, trang `/hieu-suat` — chọn; ⑶ S3.8a → S3.8b → S3.9b → chờ → S3.9a — chọn;
+⑷ lớp governance của S3.9 mang trọn hồ sơ bản rõ (khác khuyến nghị *tối thiểu*). Ba điểm theo tiền lệ, không hỏi: `agent: false`, một hàng sổ mỗi
+lần đọc, K12 vẫn không có hàng sổ đăng ký.
+
+## 5. Thay đổi
+- **Migration `9501_hieu_suat_nha_cung_cap`** — view `supplier_performance` `WITH (security_invoker = true)`, CTE `goi` gọi `gia_da_lo` hai lần
+  mỗi gói (cổng vòng một tại `LEAST(now(), cancelled_at, lần mở BAFO đầu)`, cổng giá lúc đọc); lời mời được đếm `revoked_at IS NULL AND status <>
+  'UNSENT'`; phản hồi từ `greatest(opened_at, lúc mời)`; `percentile_disc`; khoảng cách phần vạn bằng `div`, `nullif` chống chia 0; thắng = hàng
+  award mới nhất `APPROVED`; vị từ khách nguyên văn `027` trong `WHERE`; `REVOKE ALL … FROM PUBLIC`, `GRANT SELECT … TO app_api`.
+- **Hardening:** một hàng tự chữa trong `bang` (thân + `reloptions` + ACL; vân tay `pg_get_viewdef`), chú thích `CAU_DOC_VONG` gạch câu *"không có
+  view nào"*.
+- **Gói:** `packages/kiem-soat/src/hieu-suat.ts` — `docHieuSuatNhaCungCap`, `SAN_LICH_SU = 5`; `rbac.ts` thêm loại tài nguyên
+  `SUPPLIER_PERFORMANCE`.
+- **API:** `GET /supplier-performance` (`apps/api/src/routes/hieu-suat.ts`, BUYER, `agent: false`), dòng khai ở `apps/mcp/src/cong-cu.ts`.
+- **Sổ và cổng:** `HAM_DOC_CO_QUYEN`, danh sách trắng barrel `kiem-soat`, `LOAI_DA_KHAI`, `role_table_grants` của `rls-coverage`, phép đếm view mới
+  (`rls-coverage`), cổng mới `tests/architecture/hieu-suat-liet-ke.test.ts`, `so-khai-nhan` (K11 bốn tệp, D5 thêm một), hàng K11 ở TEST-PLAN.
+- **Tài liệu:** ADR-9201; spec S3 §4.9 (ba ô gạch, đoạn mới), K11 ở §5 và §5.1, §6 T2, §9 dòng S3.8; lời khai đếm STATE/Handoff (92 bất biến, 118
+  migration, 161 ADR).
+
+## 6. Phép đo
+- `apps/api/src/hieu-suat.int.test.ts` — bốn khối, bảy ca:
+  - **A** (`[INV-K11]`) mười gói phủ mọi nhánh: view BẰNG bản tính lại TypeScript độc lập (hàng thô, cùng giao dịch, không `gia_da_lo`, không view;
+    thời gian micro giây), cộng khẳng định tay: A mời 5 nộp 5 sửa 2 thắng 1; C mời 4 nộp 3 sửa 1 (luồng lời mời cũ không đếm); D mời 2 (UNSENT không
+    đếm), trung vị phản hồi 2 giờ trên hai gói (phần tử DƯỚI); E mời 1 thắng 0 (trao bị huỷ); B sửa 2, vào BAFO 1, thắng 0 (trao bị rút), khoảng cách
+    trung vị 13 phần vạn (12,5 làm tròn nửa lên).
+  - **B** (`[INV-K11]`) một gói qua bảy cạnh: không hàng ở OPEN và CLOSED; ngay sau UNSEALED hàng xuất hiện (đối chứng dương) với sửa 5; BAFO_OPEN
+    và BAFO_CLOSED: vòng một đứng, BAFO và cột giá chưa vào; BAFO lộ: sửa 8, xếp hạng 1, vào BAFO 1; gói đóng rồi huỷ trước mở niêm phong không bao
+    giờ hiện; gói huỷ sau mở niêm phong giữ vòng một, mất hạng.
+  - **C** (`[INV-K11]`) phiên khách của lời mời thuộc gói đã lộ — tiền đề: nó đọc được phiên bản của chính mình — ra 0 hàng; người mua cùng tổ chức
+    thấy; tổ chức khác 0.
+  - **D** (`[INV-K11] [INV-D5]`) PM 200 và đúng một `SUPPLIER_PERFORMANCE_READ`; BUYER 403 và đúng một `PERMISSION_DENIED` loại
+    `SUPPLIER_PERFORMANCE`, không hàng đọc; sàn 5/4 gói; ghi sổ bị trigger chặn ⇒ hàm ném, không chỉ số nào ra.
+  - **A2** (`[INV-K11]`) giá thấp nhất 0,01 cạnh chi phí 10 nghìn tỷ: khoảng cách `9999999999999990000` phần vạn (vượt `bigint`) đi ra nguyên
+    vẹn, view không ném (thêm sau lượt soi trên mã, THẤP-6).
+  - **B2** (`[INV-K11]`) vòng BAFO đóng với 0 phong bì: mở niêm phong được (`BAFO_UNSEALED`), trước đó cột giá rời gói, sau đó trở lại và hai
+    người top-2 vào BAFO (kế hoạch §5 — đo ở vòng này).
+  - Khối A cộng thêm sau lượt soi: đường `app_api` (RLS thật, giao dịch khác) ra cùng hàng như bản tính lại; khẳng định tay cho xếp hạng của A
+    (3 gói, trung vị hạng 1) và thời gian phản hồi của C (khoảng 6 giờ — nhánh *mời lại sau khi mở*; nếu mốc là `opened_at` thì 8 giờ).
+- `db/rls-coverage.int.test.ts` khối `[S1.9101 / S3.8a / K11]` — mọi view `public` mà `app_api` SELECT được chứa nguyên văn `KHACH_NULL`; đối chứng
+  trong giao dịch huỷ: view thiếu vế bị nêu, thêm vế thì không.
+- `tests/architecture/hieu-suat-liet-ke.test.ts` — bốn vế và đối chứng biên từ.
+- Kịch bản 41 HTTP, bảy khối `[INV-K11]`, hai luồng (khoá theo `supplierId` của năm nhà cung cấp gói chính; mỗi lần đọc qua giám đốc, quét
+  rò giá trên thân): không hàng ở OPEN và CLOSED; ngay sau UNSEALED năm hàng `[mời 1, nộp 1, sửa 0|1, xếp hạng 0]`; sau chấm xếp hạng 1;
+  BAFO_OPEN vòng một vẫn đếm, hạng rời; BAFO lộ: hạng về, top-2 vào BAFO; sau duyệt: đúng người được trao một lần thắng. **108/108 xanh**
+  (177 s, hai luồng). Vế *phiên bản BAFO chưa vào* KHÔNG đo được ở T2 — mỗi người top-2 nộp đúng một phiên bản vòng hai (lượt soi TRUNG-2);
+  vế ấy đo ở khối B và đột biến V15. Lượt evidence chạy lại tệp trên mã cuối (khối của bước cuối dời lên trên chú thích của bước 12j).
+- `migrate()` hai lần trên CSDL mới (cụm dùng một lần): lần hai 0 tệp, không WARNING; đột biến bỏ vị từ khách lúc chạy ⇒ WARNING *"SAI TRƯỚC khi
+  sửa (… vân tay viewdef: 391c9cf1391f0de9 …)"* rồi thân chuẩn trở lại (md5 khớp bản gốc).
+
+## 7. Đột biến — 21/21 bị giết trên mã cuối
+Script `dot-bien-s38.py` (scratchpad): đột biến VIEW áp LÚC CHẠY — tiêm `CREATE OR REPLACE VIEW` thân đột biến vào `beforeAll` sau `migrate()` kèm
+khẳng định md5 `pg_get_viewdef` khác bản gốc (hardening âm thầm khôi phục mọi đột biến sửa tệp migration); đột biến TS sửa thẳng tệp; mỗi lượt
+`--reporter=json`, so tập đỏ với tập dự kiến theo `fullName`, khôi phục và kiểm sha256 cả bốn tệp.
+
+Tên ca trong cột *Đỏ*: A, A2; B1 = khối B ca bảy cạnh, B2 = khối B ca huỷ, B3 = khối B2 (vòng BAFO 0 phong bì); C; D1 HTTP, D2 sàn,
+D3 fail-closed; cổng ⑶ của `hieu-suat-liet-ke`.
+
+| Mã | Đột biến | Đỏ |
+|---|---|---|
+| V01 | cổng vòng một = `closed_at IS NOT NULL` (spec gốc) | A, B1, B2 |
+| V02 | cổng giá = `true` | A, B1, B2, B3 |
+| V03 | mốc vòng một bỏ lần mở BAFO | A, B1, B3 |
+| V04 | mốc vòng một bỏ lúc huỷ | A, B2 |
+| V05 | đếm lời mời UNSENT | A |
+| V06 | đếm lời mời đã thu hồi | A |
+| V07 | thắng = mọi trạng thái của hàng mới nhất | A |
+| V08 | thắng đọc hàng ĐẦU tiên thay mới nhất | A |
+| V09 | báo giá của mọi lời mời của nhà cung cấp trong gói | A |
+| V10 | mốc phản hồi = `opened_at` | A |
+| V11 | bỏ vị từ khách | phép đếm view của `rls-coverage` (khối C của `hieu-suat` XANH — như đã nói trước: dưới phiên khách `gia_da_lo` ra false) |
+| V12 | bỏ `nullif` | A (chia cho 0) |
+| V13 | cắt thay làm tròn nửa lên | A (trung vị khoảng cách của B: 12 thay 13) |
+| V14 | `percentile_cont` cho thời gian phản hồi | A (trung vị của D trên hai gói) |
+| V15 | phiên bản BAFO không cần vòng đã lộ | A, B1 |
+| V16 | ép lại `::bigint` ở khoảng cách | A2 |
+| T16 | mã quyền `bid.view` → `rfq.invite` (BUYER giữ) | D1, D3, cổng ⑶ |
+| T17 | bỏ `requirePermission` | D1, D3, cổng ⑶ |
+| T18 | sàn `<` → `<=` | D2 |
+| T19 | lời ghi sổ sau một điều kiện không bao giờ đúng | D1, D3 |
+| T20 | bỏ sàn | D2 |
+
+Lượt đầu chạy 20 đột biến trên bản trước lượt soi trên mã; lượt cuối chạy 21 (thêm V16; tiêm bằng `DROP VIEW` + `CREATE VIEW` + `GRANT` vì
+V16 đổi kiểu cột) trên mã cuối sau mọi sửa — 21/21 đúng tập dự kiến. Hai lần dự kiến sai ở lượt đầu, nói ra: **V12** lượt đầu đỏ thêm B1 — không phải B1 đo gì: `doiChieu` trả kết nối về pool trong một giao dịch đã hỏng (không
+`ROLLBACK` sau câu đọc ném), ca kế tiếp nhận *"current transaction is aborted"* (đọc `failureMessages` từng ca); sửa fixture, chạy lại: chỉ A. **T19**
+dự kiến cả cổng ⑶ đỏ — sai: ⑶ là phép kiểm CHỮ, đòi lời gọi `appendAuditEvent` có mặt chứ không đòi nó chạy; đột biến bị hai ca hành vi giết.
+
+## 8. Lượt soi đối kháng trên mã
+Một lượt đối kháng đọc trọn bản vá (không chạy test): **0 CAO, 2 TRUNG, 9 THẤP**; không đường nào lộ chỉ số, hạng hay sự tồn tại báo giá
+TRƯỚC mở niêm phong. Mỗi phát hiện được đo lại bằng tay trước khi nhận.
+- **TRUNG-1** FINANCE/DIRECTOR (giữ `bid.view`, không giữ `rfq.invite`) suy ra được danh sách mời của một gói, kể cả người được mời mà không
+  nộp, sau mở niêm phong — kiểm lại: `audit.read` không mở đường đọc nào khác ngoài bộ xuất (`bo-bang-chung.ts:406`), `listInvitations` cổng
+  `rfq.invite`. Trình chủ dự án: **chấp nhận, ghi vào ADR** (ADR-9201 ⑻⒢).
+- **TRUNG-2** bảy khối K11 của kịch bản 41 chưa chạy lúc soi, và vế BAFO của khối BAFO_OPEN rỗng — đã chạy (108/108); lời khai rỗng bỏ khỏi tên
+  test, ghi chỗ đo thật.
+- THẤP-1 lời khai *"RLS một mình không đưa view về 0"* SAI — view bắt đầu từ `suppliers`, đóng với khách — sửa ở migration, `rls-coverage`, ADR,
+  TEST-PLAN, đầu `hieu-suat.int`. THẤP-2 phiên Passport không có phép đo hành vi — ghi là suy từ cấu tạo. THẤP-3 ca *tổ chức khác* rỗng ruột —
+  nay hỏi `org_id` của tổ chức này dưới kết nối gắn tổ chức khác. THẤP-4 ADR ⑵ rộng hơn mã (chỉ cột vòng một ghép theo lời mời được đếm) —
+  thu hẹp. THẤP-5 sàn của trung vị khoảng cách xét số gói xếp hạng — thu hẹp lời khai. THẤP-6 tràn `bigint` — sửa (kiểu `numeric`), ca A2,
+  đột biến V16. THẤP-7 tài liệu thiu (dòng *Tổng* của TEST-PLAN đứng ở 85 mã từ S1.279, câu lặp ở spec, chú thích bước 12j, `buyer.ts:768`) —
+  sửa. THẤP-8 ca vòng BAFO 0 phong bì kế hoạch hứa — thêm (B2). THẤP-9 bản tính lại chép cùng cách định nghĩa — đó là khuôn J2 (tính lại định
+  nghĩa từ bảng gốc); bù bằng khẳng định tay thêm và đường `app_api`.
+
+## 9. Số đo
+Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `pnpm t0` xanh (kiểm kiểu, lint, depcruise 580 module — 245 s); `pnpm test`
+2832 qua / 0 đỏ / 14 bỏ qua (741 s, máy chung với lượt int của phiên khác); `hieu-suat.int` 9/9; `rls-coverage.int` 62/62 và
+`hardening-suy-tu-tinh-chat.int` 38/38 (lượt nền tảng); kịch bản 41 HTTP 108/108; `migrate()` hai lần trên CSDL mới: lần hai 0 tệp. Lượt
+evidence trên HEAD: ở commit evidence của vòng.
+
+## 10. Giới hạn
+- Lớp *một đường đọc* là lớp chữ (ADR-9201 ⑻⒠); CSDL không biết người gọi giữ `bid.view`.
+- `gia_da_lo` gọi hai lần mỗi gói — chưa đo ở quy mô vài trăm gói (ADR-9201 ⑻⒟).
+- Phiên PASSPORT và phiên khách: view ra 0 hàng hôm nay vì bắt đầu từ `suppliers` (đóng với mọi phiên khách); vị từ trong thân là lớp cho
+  bản viết lại sau này, đo bằng phép đếm thân view và hàng ghim — không phép đo hành vi nào phân biệt được nó.
+- FINANCE/DIRECTOR suy ra được danh sách mời sau mở niêm phong — chủ dự án chấp nhận (ADR-9201 ⑻⒢).
+- Màn, `gieo:demo`, T4: S3.8b.
