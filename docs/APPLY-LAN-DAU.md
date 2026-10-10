@@ -218,6 +218,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       Xin ra khỏi sandbox SMS, đặt trần chi tiêu. Zalo: nạp secret `tp/api/zalo-oa` (README, stack 85, bước 3).
       **[2026-10-10]** Chỉ Zalo, chưa có brandname: apply stack 85 KHÔNG truyền `sender_id` — stack chỉ dựng secret
       `tp/api/zalo-oa` (rỗng) và quyền của `tp-api` trên nó, output `sms` là null. Apply TRƯỚC khi nạp secret.
+      **[2026-10-11]** Template duyệt xong và secret nạp xong: gửi thử ba loại tin bằng `pnpm thu-zalo` (README, stack 85,
+      bước 5) TRƯỚC khi bật `zalo` ở stack 90.
 
 ## 6. Stack 90 — chạy thật
 
