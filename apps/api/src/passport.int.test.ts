@@ -13,17 +13,17 @@
 //   E  từng trigger ở tầng CSDL: token ràng vào yêu cầu, một token sống, OTP khác lớp đích, phiên dẫn xuất từ thách thức đã đối chiếu
 //      và token chưa thu hồi, phiên bản dưới phiên sống của đúng nhà cung cấp, trần năm phiên bản.
 // =============================================================================================
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomInt } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createPool, migrate } from "@trustprocure/db";
-import { createProcurementPolicy } from "@trustprocure/rfq";
+import { addRfqItem, approveRfq, createProcurementPolicy, createRfq, openRfq, setRfqBudget, submitRfqForApproval } from "@trustprocure/rfq";
 import { nopPhienBanPassport, taoYeuCauPassport, type HoSoPassport } from "@trustprocure/supplier";
-import { ducTokenPassport } from "@trustprocure/invitation";
+import { createInvitation, ducTokenPassport } from "@trustprocure/invitation";
 import { withPassportSession, withTenant } from "@trustprocure/tenancy";
-import { nguoiNhapNhaCungCap, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
+import { nguoiNhapNhaCungCap, nhaCungCapDemDuoc, startPostgres, type NguoiPhien, type TestDatabase } from "@trustprocure/test-support";
 import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_PASSPORT } from "./routes/passport.js";
@@ -78,19 +78,22 @@ async function motId(sql: string, thamSo: readonly unknown[]): Promise<string> {
   return id;
 }
 
-async function taoToChuc(batS3 = true): Promise<ToChuc> {
+async function taoNguoi(org: string, vai: string): Promise<Nguoi> {
+  const ten = `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}`;
+  const u = await motId("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, $3, 'ACTIVE') RETURNING id", [org, `${ten}@vidu.vn`, ten]);
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, u, vai]);
+  const token = randomBytes(32).toString("base64url");
+  const s = await motId(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '20 minutes', now()) RETURNING id",
+    [org, u, createHash("sha256").update(token, "utf8").digest()],
+  );
+  return { u, s, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}` };
+}
+
+/** `tco`: nhóm khoá `tco` của phiên bản 2 (S4.7, `112`) — để một gói mở trong tổ chức này CHỤP tham số (`117`). */
+async function taoToChuc(batS3 = true, tco: Readonly<Record<string, string>> | null = null): Promise<ToChuc> {
   const org = await motId("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [`pp-${randomBytes(4).toString("hex")}`]);
-  const nguoi = async (vai: string): Promise<Nguoi> => {
-    const ten = `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}`;
-    const u = await motId("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, $3, 'ACTIVE') RETURNING id", [org, `${ten}@vidu.vn`, ten]);
-    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, u, vai]);
-    const token = randomBytes(32).toString("base64url");
-    const s = await motId(
-      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '20 minutes', now()) RETURNING id",
-      [org, u, createHash("sha256").update(token, "utf8").digest()],
-    );
-    return { u, s, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}` };
-  };
+  const nguoi = (vai: string): Promise<Nguoi> => taoNguoi(org, vai);
   const pm = await nguoi("PROCUREMENT_MANAGER");
   const tc = await nguoi("FINANCE");
   const tc2 = await nguoi("FINANCE");
@@ -102,9 +105,9 @@ async function taoToChuc(batS3 = true): Promise<ToChuc> {
       await withTenant(apiPool, org, (c) =>
         c.query<{ id: string }>(
           "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, " +
-            "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id) " +
-            "VALUES ($1, 2, '1000000000.00', 'VND', $2::jsonb, 30, 12, true, now(), $3, $4) RETURNING id",
-          [org, JSON.stringify(BAC), tc.u, tc.s],
+            "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id, tco) " +
+            "VALUES ($1, 2, '1000000000.00', 'VND', $2::jsonb, 30, 12, true, now(), $3, $4, $5::jsonb) RETURNING id",
+          [org, JSON.stringify(BAC), tc.u, tc.s, tco === null ? null : JSON.stringify(tco)],
         ),
       )
     ).rows[0]!.id;
@@ -139,6 +142,59 @@ async function ncc(t: ToChuc, o: { readonly xacMinh?: boolean; readonly coDienTh
     );
   }
   return { ncc: id, lh, email, phone, mst };
+}
+
+// Bộ sinh cặp khoá tổ chức GIẢ, khuôn `token-goi-da-mo.int.test.ts`. *** KHÔNG PHẢI MÃ HOÁ. ***
+const boBocGia = {
+  name: "gia-cho-test-passport",
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    return Promise.resolve({
+      orgId,
+      keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+    });
+  },
+};
+
+/** Tham số quy đổi TCO hợp hình dạng `org_procurement_policies_tco_hinh_dang` (`112`). */
+const THAM_SO_TCO = { chi_phi_von_nam: "0.12", ngay_thanh_toan_chuan: "60", ty_le_tre_ngay: "0.001" } as const;
+
+/**
+ * [lượt rà giao điểm sau gộp master vào #263 — THẤP-1] Một gói ĐÃ MỞ trong tổ chức `t`, bằng hàm gói thật, khuôn
+ * `token-goi-da-mo.int.test.ts`: nhóm hàng (FINANCE), gói, ngân sách, một dòng, một lời mời tới nhà cung cấp đếm được (K2), nộp duyệt,
+ * một chữ ký của PM KHÁC người tạo, mở. Cạnh mở chụp tham số TCO của phiên bản ghim vào hàng gói (`117`). Không gói này, bảng
+ * `rfq_packages` (và các bảng của gói) có 0 hàng ở cả hai phía của phép kiểm cô lập D — vế ấy xanh mà không đo gì.
+ */
+async function goiDaMo(t: ToChuc): Promise<string> {
+  const pm2 = await taoNguoi(t.org, "PROCUREMENT_MANAGER");
+  const nhom = (
+    await withTenant(apiPool, t.org, (c) =>
+      c.query<{ id: string }>(
+        "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP', 'Thep', $2, $3) RETURNING id",
+        [t.org, t.tc.u, t.tc.s],
+      ),
+    )
+  ).rows[0]!.id;
+  const rfqId = await withTenant(apiPool, t.org, async (c) =>
+    (await createRfq(c, t.org, { title: "Mua thep tam", deadlineAt: new Date(Date.now() + 7 * 86400_000), createdBySessionId: t.pm.s, categoryId: nhom })).id,
+  );
+  await withTenant(apiPool, t.org, async (c) => {
+    await setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s });
+    await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep tam SS400 3mm", quantity: "100.0000", unit: "tam", actorSessionId: t.pm.s });
+  });
+  const [n] = await nhaCungCapDemDuoc(db.pool, t.org, { nguoiXacMinh: t.tc2, nguoiNhap: t.nhap });
+  await withTenant(apiPool, t.org, (c) =>
+    createInvitation(c, t.org, { rfqId, supplierId: n!.ncc, contactId: n!.lh, linkChannel: "EMAIL", actorSessionId: t.pm.s }, apiPool),
+  );
+  await withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
+  await withTenant(apiPool, t.org, async (c) => {
+    const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
+    await approveRfq(c, t.org, { rfqId, sessionId: pm2.s, lanNopDaXem: lan }, apiPool);
+  });
+  await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
+  return rfqId;
 }
 
 interface PhanHoi {
@@ -398,7 +454,15 @@ describe("[S1.287 / S3.7a1] C — link mới thu hồi link và phiên cũ; gử
 
 describe("[S1.287 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () => {
   it("[INV-A5] phiên Passport của A thấy phiên bản của A và 0 hàng ở MỌI bảng RLS khác; đối chứng: kết nối người mua thấy cả hai nhà cung cấp", async () => {
-    const t = await taoToChuc();
+    const t = await taoToChuc(true, THAM_SO_TCO);
+    // Tiền đề: một gói ĐÃ MỞ mang ảnh chụp TCO trong CHÍNH tổ chức này — để `rfq_packages` (và các bảng của gói) có hàng ở phía đối
+    // chứng, nên con số 0 dưới phiên Passport là một phép đo chứ không phải bảng rỗng.
+    const rfqId = await goiDaMo(t);
+    const { rows: goiMo } = await db.pool.query<{ status: string; tco_tham_so_ghim: unknown }>(
+      "SELECT status, tco_tham_so_ghim FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    expect(goiMo, "tiền đề: gói đã mở, chụp tham số TCO của phiên bản ghim").toEqual([{ status: "OPEN", tco_tham_so_ghim: THAM_SO_TCO }]);
     const a = await ncc(t);
     const b = await ncc(t);
     const cookieA = await moPhien(t, a, (await yeuCau(t, a)).token!);
@@ -435,6 +499,12 @@ describe("[S1.287 / S3.7a1 / ADR-081 ⑶] D — cô lập phiên Passport", () =
     expect(duoiNguoiMua.supplier_passport_versions).toBe(2);
     expect(duoiNguoiMua.suppliers).toBeGreaterThanOrEqual(2);
     expect(duoiNguoiMua.passport_sessions).toBeGreaterThanOrEqual(2);
+    // Gói đã mở và các bảng của nó có hàng ở phía người mua — vế cô lập của chúng nay đo được.
+    expect(
+      Object.fromEntries(["rfq_packages", "rfq_items", "rfq_invitations"].map((ten) => [ten, (duoiNguoiMua[ten] ?? 0) > 0])),
+      "đối chứng: người mua thấy gói đã mở, dòng và lời mời của nó",
+    ).toEqual({ rfq_packages: true, rfq_items: true, rfq_invitations: true });
+    expect([duoiPassport.rfq_packages, duoiPassport.rfq_items, duoiPassport.rfq_invitations]).toEqual([0, 0, 0]);
   });
 
   it("[INV-A5] phiên khách của LỜI MỜI (GUC khách đặt, GUC Passport rỗng) thấy 0 phiên bản Passport; GUC Passport của nhà cung cấp khác không mở gì", async () => {

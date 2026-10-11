@@ -2412,48 +2412,67 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(VI_TU_BANG_CHI_GHI_THEM, "vị từ đã giải phải chứa vế schema khai triển").toContain("n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'");
   });
 
-  it("mọi bảng chỉ-ghi-thêm đều LOGGED — bảng có TÊN thì hardening TỰ CHỮA, bảng SUY RA thì hardening NÉM", async () => {
-    const { rows } = await db.pool.query<{ relname: string; relpersistence: string }>(
-      `${VI_TU_BANG_CHI_GHI_THEM} ORDER BY c.relname`,
-    );
-    expect(rows.filter((r) => r.relpersistence !== "p").map((r) => r.relname)).toEqual([]);
-
-    // [CR5] đo hậu quả bằng SIGKILL postgres thật: trước-crash 4 hàng, sau-crash 0. Cửa sổ phơi
-    // là VĨNH VIỄN vì `SET UNLOGGED` đòi quyền SỞ HỮU, không phải quyền ghi.
-    //
-    // KHÔNG ép danh sách bảng: PostgreSQL TỪ CHỐI `SET UNLOGGED` cho một bảng đang được một bảng
-    // LOGGED tham chiếu (`vendor_bid_versions`, `rfq_unsealed_bids` rơi vào đó — đã đo). Đó là một
-    // lớp khác, của chính PostgreSQL, và nó KHÔNG phủ hết: `audit_chain_anchors` và `bid_receipts`
-    // đổi được. Test thử từng bảng và chỉ đòi hỏi ở những bảng mà đột biến THÀNH CÔNG.
-    //
-    // HAI KẾT QUẢ ĐÚNG KHÁC NHAU, và sự khác nhau ấy CHÍNH LÀ ADR-028 §2⑵ đo được:
-    //   - bảng có TÊN trong `BANG_CHI_GHI_THEM` -> hardening TỰ CHỮA: migrate() OK, bảng về LOGGED;
-    //   - bảng SUY RA (ba bảng của S1)          -> hardening chỉ PHÁN XÉT: migrate() NÉM.
-    // `migrate()` không bao giờ tự tay đổi trạng thái vật lý của một bảng mà nó chỉ SUY RA.
-    let soDotBien = 0;
-    for (const r of rows) {
-      if ((await thu(db, `ALTER TABLE public.${r.relname} SET UNLOGGED`)) !== "OK") continue;
-      soDotBien += 1;
-      const ketQua = await migrateLai(db);
-      if (BANG_CO_TEN.includes(r.relname)) {
-        expect(ketQua, `${r.relname} có tên trong danh sách nên hardening TỰ CHỮA`).toBe("OK");
-        const { rows: sau } = await db.pool.query<{ p: string }>(
-          `SELECT relpersistence AS p FROM pg_class WHERE oid = to_regclass('public.${r.relname}')`,
-        );
-        expect(sau[0]?.p, `${r.relname} phải được đưa về LOGGED`).toBe("p");
-      } else {
-        expect(ketQua, `${r.relname} là bảng SUY RA nên hardening chỉ phán xét`).toMatch(/UNLOGGED/u);
-        expect(await thu(db, `ALTER TABLE public.${r.relname} SET LOGGED`)).toBe("OK");
-      }
+  // [CR5] đo hậu quả bằng SIGKILL postgres thật: trước-crash 4 hàng, sau-crash 0. Cửa sổ phơi
+  // là VĨNH VIỄN vì `SET UNLOGGED` đòi quyền SỞ HỮU, không phải quyền ghi.
+  //
+  // KHÔNG ép danh sách bảng: PostgreSQL TỪ CHỐI `SET UNLOGGED` cho một bảng đang được một bảng
+  // LOGGED tham chiếu (`vendor_bid_versions`, `rfq_unsealed_bids` rơi vào đó — đã đo). Đó là một
+  // lớp khác, của chính PostgreSQL, và nó KHÔNG phủ hết: `audit_chain_anchors` và `bid_receipts`
+  // đổi được. Test thử từng bảng và chỉ đòi hỏi ở những bảng mà đột biến THÀNH CÔNG.
+  //
+  // HAI KẾT QUẢ ĐÚNG KHÁC NHAU, và sự khác nhau ấy CHÍNH LÀ ADR-028 §2⑵ đo được:
+  //   - bảng có TÊN trong `BANG_CHI_GHI_THEM` -> hardening TỰ CHỮA: migrate() OK, bảng về LOGGED;
+  //   - bảng SUY RA (ba bảng của S1)          -> hardening chỉ PHÁN XÉT: migrate() NÉM.
+  // `migrate()` không bao giờ tự tay đổi trạng thái vật lý của một bảng mà nó chỉ SUY RA.
+  //
+  // ~~[S1.280] Trần 600 s, cùng lý do với ca `[sổ nợ 73] RULE` (S1.198): ca này chạy một lần migrate() đầy đủ
+  // cho MỖI bảng đổi được sang UNLOGGED, nên thời gian lớn theo số bảng và số mục ghim. Đo 2026-10-07:
+  // chạy riêng 61,5 s ở máy (nhánh S3.5a), 69 s ở T3 CI master; dưới tải evidence 124,5 s ở CI master
+  // (69 % của 180 s) và QUÁ 180 s ở máy — tải, không phải hồi quy (hardening thêm 15 mục ghim: +4,4 % dòng).~~
+  // **[khoản 349]** Cùng lớp với ca RULE bên dưới: tách MỘT CA MỖI BẢNG (`it.each`), mỗi ca tối đa một migrate() dưới trần 180 s
+  // của describe. Bảng mà PostgreSQL không cho đổi sang UNLOGGED nay là một ca XANH CÓ LÝ DO — thông điệp từ chối của chính
+  // PostgreSQL được đòi — thay vì một `continue` câm; ca kết đòi ít nhất hai bảng đổi được, như vế "test này rỗng" cũ.
+  it.each(BANG_CHI_GHI_THEM_THAT)("mọi bảng chỉ-ghi-thêm đều LOGGED — `%s`: có TÊN thì hardening TỰ CHỮA, SUY RA thì hardening NÉM", async (bang) => {
+    const tap = (await db.pool.query<{ relname: string; relpersistence: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows;
+    const hang = tap.find((r) => r.relname === bang);
+    expect(hang, `${bang} phải còn trong tập chỉ-ghi-thêm suy ra`).toBeDefined();
+    expect(hang?.relpersistence, `${bang} phải LOGGED trước đột biến`).toBe("p");
+    const doi = await thu(db, `ALTER TABLE public.${bang} SET UNLOGGED`);
+    if (doi !== "OK") {
+      // Lớp của chính PostgreSQL (khối trên): khoá ngoại giữa bảng LOGGED và bảng UNLOGGED không được phép. Thông điệp của PostgreSQL
+      // nói "it references logged table" cả khi chính bảng kia mới là bên tham chiếu (`ATPrepChangePersistence`, Postgres 16).
+      expect(doi, `${bang}: PostgreSQL từ chối SET UNLOGGED — phải vì khoá ngoại với bảng LOGGED`).toMatch(/could not change table ".+" to unlogged because it references logged table/u);
+      return;
     }
-    expect(soDotBien, "phải có ít nhất hai bảng đổi được sang UNLOGGED, nếu không test này rỗng")
-      .toBeGreaterThan(1);
+    try {
+      const ketQua = await migrateLai(db);
+      if (BANG_CO_TEN.includes(bang)) {
+        expect(ketQua, `${bang} có tên trong danh sách nên hardening TỰ CHỮA`).toBe("OK");
+        const { rows: sau } = await db.pool.query<{ p: string }>(`SELECT relpersistence AS p FROM pg_class WHERE oid = to_regclass('public.${bang}')`);
+        expect(sau[0]?.p, `${bang} phải được đưa về LOGGED`).toBe("p");
+      } else {
+        expect(ketQua, `${bang} là bảng SUY RA nên hardening chỉ phán xét`).toMatch(/UNLOGGED/u);
+        expect(await thu(db, `ALTER TABLE public.${bang} SET LOGGED`)).toBe("OK");
+      }
+    } finally {
+      // Một assert đỏ giữa chừng để bảng UNLOGGED ⇒ mọi migrate() sau đó ném vì chính mục hardening ⇒ đỏ dây chuyền. Đưa về LOGGED dù
+      // đỏ hay xanh; bảng đã LOGGED thì câu này là no-op.
+      await thu(db, `ALTER TABLE public.${bang} SET LOGGED`);
+    }
+  });
+
+  it("mọi bảng chỉ-ghi-thêm đều LOGGED — chống rỗng ruột và đối chứng dương: ít nhất hai bảng đổi được sang UNLOGGED, và lược đồ đúng vẫn migrate() được", async () => {
+    let doiDuoc = 0;
+    for (const bang of BANG_CHI_GHI_THEM_THAT) {
+      if ((await thu(db, `ALTER TABLE public.${bang} SET UNLOGGED`)) !== "OK") continue;
+      doiDuoc += 1;
+      expect(await thu(db, `ALTER TABLE public.${bang} SET LOGGED`), `${bang}: đưa về LOGGED ngay`).toBe("OK");
+    }
+    expect(doiDuoc, "phải có ít nhất hai bảng đổi được sang UNLOGGED, nếu không các ca trên rỗng").toBeGreaterThan(1);
+    const { rows } = await db.pool.query<{ relname: string; relpersistence: string }>(VI_TU_BANG_CHI_GHI_THEM);
+    expect(rows.filter((r) => r.relpersistence !== "p").map((r) => r.relname)).toEqual([]);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-    // [S1.280] Trần 600 s, cùng lý do với ca `[sổ nợ 73] RULE` (S1.198): ca này chạy một lần migrate() đầy đủ
-    // cho MỖI bảng đổi được sang UNLOGGED, nên thời gian lớn theo số bảng và số mục ghim. Đo 2026-10-07:
-    // chạy riêng 61,5 s ở máy (nhánh S3.5a), 69 s ở T3 CI master; dưới tải evidence 124,5 s ở CI master
-    // (69 % của 180 s) và QUÁ 180 s ở máy — tải, không phải hồi quy (hardening thêm 15 mục ghim: +4,4 % dòng).
-  }, 600_000);
+  });
 
   it("mọi bảng chỉ-ghi-thêm CHẶN CẢ TRUNCATE — không chỉ UPDATE và DELETE", async () => {
     // Ba bảng của S1 chỉ có trigger BEFORE DELETE OR UPDATE (tgtype 27). TRUNCATE đi qua chúng.
@@ -3014,36 +3033,44 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
-  it("[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm: bảng có TÊN thì hardening TỰ GỠ, bảng SUY RA thì hardening NÉM", async () => {
-    // Đo trước khi viết mục hardening: rule trên bid_receipts SỐNG QUA migrate() — [CR1] chỉ với tới
-    // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
-    const { rows } = await db.pool.query<{ relname: string }>(`${VI_TU_BANG_CHI_GHI_THEM} ORDER BY c.relname`);
-    expect(rows.length).toBeGreaterThan(0);
+  // Đo trước khi viết mục hardening: rule trên bid_receipts SỐNG QUA migrate() — [CR1] chỉ với tới
+  // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
+  // ~~[S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
+  // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.~~
+  // **[khoản 349]** Một ca cho cả vòng là một trần DUY NHẤT cho 30 lần migrate() (một mỗi bảng của `BANG_CHI_GHI_THEM_THAT`), và vòng
+  // lớn lên với mỗi bảng chỉ-ghi-thêm mới. Đo: Evidence pack CI master 79–310 s (56 lượt, 30/09 → 09/10); ở máy 194 s và 354 s; và
+  // QUÁ 600 s trong lượt evidence 2026-10-10 lúc máy tải nặng (`migrations.int` 3 341 s so ~2 000 s) — không khẳng định nào sai. Tách
+  // MỘT CA MỖI BẢNG (`it.each`), mỗi ca một migrate() dưới trần 180 s của describe; một lần đỏ nói đúng bảng nào. Tập bảng vẫn là tập
+  // SUY RA: ca đầu của describe đòi vị từ trả ĐÚNG `BANG_CHI_GHI_THEM_THAT`, và mỗi ca dưới đây đòi bảng của nó còn trong tập suy ra.
+  // [lượt soi 21] Một assert đỏ giữa chừng để rule sống ⇒ mọi migrate() sau đó ném vì chính mục hardening ⇒ đỏ dây chuyền với thông
+  // điệp không liên quan; nên mỗi ca gỡ rule của CHÍNH nó trong `finally`, dù đỏ hay xanh.
+  it.each(BANG_CHI_GHI_THEM_THAT)("[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm `%s`: có TÊN thì hardening TỰ GỠ, SUY RA thì hardening NÉM", async (bang) => {
+    const tap = (await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.map((r) => r.relname);
+    expect(tap, `${bang} phải còn trong tập chỉ-ghi-thêm suy ra`).toContain(bang);
+    const conRule = async (): Promise<string[]> =>
+      (await db.pool.query<{ rulename: string }>(`SELECT rulename FROM pg_rewrite WHERE ev_class = to_regclass('public.${bang}')`)).rows.map((x) => x.rulename);
     try {
-      for (const r of rows) {
-        await db.pool.query(`CREATE RULE zz_nuot AS ON DELETE TO public.${r.relname} DO INSTEAD NOTHING`);
-        const ketQua = await migrateLai(db);
-        const conRule = async (): Promise<string[]> =>
-          (await db.pool.query<{ rulename: string }>(`SELECT rulename FROM pg_rewrite WHERE ev_class = to_regclass('public.${r.relname}')`)).rows.map((x) => x.rulename);
-        if (BANG_CO_TEN.includes(r.relname)) {
-          expect(ketQua, `${r.relname} có tên trong danh sách nên hardening TỰ GỠ rule`).toBe("OK");
-          expect(await conRule(), `${r.relname}: rule phải bị gỡ`).toEqual([]);
-        } else {
-          expect(ketQua, `${r.relname} là bảng SUY RA nên hardening chỉ phán xét`).toMatch(/RULE trên bảng CHỈ-GHI-THÊM/u);
-          expect(await conRule()).toEqual(["zz_nuot"]);
-          await db.pool.query(`DROP RULE zz_nuot ON public.${r.relname}`);
-        }
+      await db.pool.query(`CREATE RULE zz_nuot AS ON DELETE TO public.${bang} DO INSTEAD NOTHING`);
+      const ketQua = await migrateLai(db);
+      if (BANG_CO_TEN.includes(bang)) {
+        expect(ketQua, `${bang} có tên trong danh sách nên hardening TỰ GỠ rule`).toBe("OK");
+        expect(await conRule(), `${bang}: rule phải bị gỡ`).toEqual([]);
+      } else {
+        expect(ketQua, `${bang} là bảng SUY RA nên hardening chỉ phán xét`).toMatch(/RULE trên bảng CHỈ-GHI-THÊM/u);
+        expect(await conRule()).toEqual(["zz_nuot"]);
       }
     } finally {
-      // [lượt soi 21] Một assert đỏ giữa vòng để rule sống ⇒ mọi migrate() sau đó ném vì chính mục
-      // hardening mới ⇒ đỏ dây chuyền với thông điệp không liên quan. Gỡ sạch dù đỏ hay xanh.
-      for (const r of rows) await db.pool.query(`DROP RULE IF EXISTS zz_nuot ON public.${r.relname}`);
+      await db.pool.query(`DROP RULE IF EXISTS zz_nuot ON public.${bang}`);
     }
-    expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
+  });
+
+  it("[sổ nợ 73] RULE — chống rỗng ruột và đối chứng dương: có cả bảng TÊN lẫn bảng SUY RA, và lược đồ đúng vẫn migrate() được", async () => {
+    expect(BANG_CHI_GHI_THEM_THAT.filter((b) => BANG_CO_TEN.includes(b)).length, "phải có bảng có TÊN để đo vế tự gỡ").toBeGreaterThan(0);
+    expect(BANG_CHI_GHI_THEM_THAT.filter((b) => !BANG_CO_TEN.includes(b)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_rewrite WHERE rulename = 'zz_nuot'");
+    expect(rows[0]?.n, "không rule thử nào sống sót qua các ca trên").toBe("0");
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-    // [S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
-    // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.
-  }, 600_000);
+  });
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";

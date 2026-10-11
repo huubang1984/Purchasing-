@@ -368,11 +368,15 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // J2 — TÁI LẬP ĐƯỢC. Năm tệp vì bất biến này sống ở năm chỗ khác nhau: hàm thuần, luật làm
   // tròn đối chiếu với Postgres, dữ liệu ĐÃ GHI, và hai nửa của bộ bằng chứng S2.7 — trong đó
   // `kiem.test.ts` mang ba mũi đột biến của ADR-059.
+  // [S1.294 / S4.7c2] Vế QUY ĐỔI (`DAC-TA.md` §9): `kiem-tco` đo hai lớp tính lại phép quy đổi TCO (ca tay, nửa xu, 20 000 bộ đối
+  // chiếu, từng trường bị sửa, hai lớp bất đồng); `kich-ban-41-http` đo bộ v3 xuất qua HTTP rồi kiểm ngoại tuyến tính lại quy đổi.
   J2: [
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/danh-gia/src/chi-phi-hieu-dung.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/danh-gia/src/nua-xu.int.test.ts",
     "tools/bo-xuat-danh-gia/src/bo-xuat.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
     "tools/bo-xuat-danh-gia/src/kiem.test.ts",
   ],
   // J3 — ba vế phân tách nhiệm vụ; tệp HTTP đo vế ấy trên đường sản xuất thật.
@@ -603,14 +607,20 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // chép luật L8 của màn với `kiemChinhSachTco` trên mười tám ca.
   // [S1.288 / S4.7c1] Vế CAM KẾT: `luot-danh-gia` đo hạng giá SQL bằng hạng giá TS, lời đòi giải trình ở CSDL, cam kết chụp đúng lời khai
   // và chỉ trong giao dịch đề xuất, quyền cột, chỉ-ghi-thêm; `phuc-vu` đo ô giải trình của `/mo-thau` (theo hàng đã chọn và theo mã).
+  // [S1.294 / S4.7c2] Vế KIỂM LẠI cam kết (`DAC-TA.md` §10): `kiem-tco` đo cam kết khớp hàng và gói, luật giải trình hai chiều, mỗi
+  // trường bị sửa, cam kết bị xoá sau mốc chụp; `bo-xuat.int` và `kich-ban-41-http` đo cam kết + giải trình nguyên văn trong bộ v3 và bộ
+  // kiểm ngoại tuyến bắt lời giải trình bị xoá.
   L8: [
     "apps/api/src/buyer.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "apps/web/src/chinh-sach.test.ts",
     "apps/web/src/phuc-vu.test.ts",
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/danh-gia/src/tco.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
     "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
+    "tools/bo-xuat-danh-gia/src/bo-xuat.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
   ],
   // L16 — [S1.279 / S4.7a] thước TCO cố định trước khi giá lộ — vế TCO và form nhà cung cấp của L14 (số mới theo ADR-097 ⒇).
   // `luot-danh-gia` đo tập mã chụp lúc mở và lượt chấm dùng chính tập ấy (phiên bản khai sau, quyền cột, ảnh chụp lệch, đột biến);
@@ -622,6 +632,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // `guest.int` đo thước ở route khách (gói không ảnh chụp ⇒ `null`, tham số chỉ của mã bật, mã lạ lọc, không hệ số hay ngưỡng);
   // `phuc-vu` đo ô của mã bật, ô bắt buộc chặn nút nộp, ô ẩn không vào phong bì, ô xoá khi đổi phiên; `bac-mac-dinh-dong-bo` khoá bốn khoá
   // phong bì của màn với bốn khoá bộ đọc SQL của lượt chấm.
+  // [S1.294 / S4.7c2] Vế BỘ BẰNG CHỨNG: `kiem-tco` đo bộ kiểm báo đỏ khi tập mã của một lượt chấm khác tập mã ghim của gói (`goiTco`).
   L16: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/guest.int.test.ts",
@@ -630,6 +641,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/danh-gia/src/luot-danh-gia.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
     "tests/architecture/bac-mac-dinh-dong-bo.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem-tco.test.ts",
   ],
   // L15 — [S1.272 / S4.6a] vế GHI của lịch sử ngoài hệ thống (và mốc giá ngoài). `csv-ngoai` đo bộ đọc văn bản dán (T1: mỗi luật
   // hình dạng một ca, không câu lỗi nào lặp lại ô); `du-lieu-ngoai` (gói) đo lô tất-cả-hoặc-không, đơn vị quy đổi được khi ghi ở

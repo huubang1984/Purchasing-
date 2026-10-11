@@ -24912,8 +24912,10 @@ Một lượt độc lập đọc mã và hình dạng đề xuất. Không CAO.
 - **THẤP — đường đọc dựa vào READ COMMITTED** (`withTenant` mở `BEGIN` trần): dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao
   dịch. Không sửa: lượt đọc khi ấy đúng tại ảnh chụp ấy, vẫn nhất quán; bên gọi duy nhất là route (READ COMMITTED) — mục 6.
 - **THẤP — khoá còn lại ở đường ghi có trần.** Một cửa sổ mỗi lần mở thầu (bản lưu `UNIQUE (org_id, unseal_request_id)`), lấy SAU phép
-  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. Xấu nhất ở quy mô lớn
-  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu. Mở thêm lần mở thầu cần
+  tính; chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được, và pool một tiến trình có 10 kết nối. ~~Xấu nhất ở quy mô lớn
+  (phép tính 18–19 s): một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng mỗi lần mở thầu.~~ **[2026-10-11 — ĐO,
+  mục 8]** Sai: mỗi lần đọc đầu giữ hàng gói từ câu khoá tới commit, không suốt phép tính; ở 5.000 gói, tám lần đọc đầu dồn hay trải
+  2,4 s ⇒ cạnh chờ hàng lâu nhất 22,0 ms, 0/317 lần hỏng. Mở thêm lần mở thầu cần
   người xin và người duyệt. Ghi ở ADR-143.
 - **Xác nhận, không phải lỗi** (tự kiểm lại): bảng so sánh — chuẩn *"bảng so sánh mở"* của L6 — đọc trạng thái một lần, không khoá
   (`packages/unseal/src/comparison.ts`), rồi ghi `COMPARISON_VIEWED`; không ai dựa vào thứ tự sổ của hàng `BENCHMARK_*` (chỉ đếm hay
@@ -24978,8 +24980,9 @@ mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá 
   ADR-143).
 - Đường đọc giả định READ COMMITTED; dưới REPEATABLE READ câu hỏi lại đọc ảnh chụp đầu giao dịch (lượt đọc khi ấy đúng tại ảnh chụp
   ấy). Không có phép kiểm mức cô lập.
-- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); không đo một loạt lần đọc đầu ở quy mô 5.000 gói.
-- Bộ đo ở tầng hàm, không qua HTTP; luồng đọc liên tục là tải tổng hợp.
+- Khoá của đường ghi còn đó: một cửa sổ mỗi lần mở thầu (mục 2); ~~không đo một loạt lần đọc đầu ở quy mô 5.000 gói.~~ **[2026-10-11]**
+  đo ở mục 8.
+- Bộ đo ở tầng hàm, ~~không qua HTTP~~ **[2026-10-11]** qua HTTP đo ở mục 8; luồng đọc liên tục là tải tổng hợp.
 
 ## 7. Số đo
 - `cap-so` cấp S1.274 (trailer `Cap-So` ở `53097e00`); `cap-so --kiem` sạch; Handoff 342 khoản, 54 còn mở.
@@ -24989,6 +24992,63 @@ mà hai ca chờ khoá dò trong `pg_stat_activity` — cả hai ca chờ khoá 
   L7 116 → 123 — bảy ca thêm của ⑻ (tám ca mới, một ca bỏ); bản mới vào commit này. 23 ca bỏ qua như §S1.271 mục 6 (13 ca
   `skipIf(win32)`).
 - Trước đó, trên mã chưa commit: trọn `benchmark.int` 69/69 (máy rảnh); đột biến và hai lượt đo ở mục 4–5.
+
+## 8. [2026-10-11] Hai phép đo còn treo của mục 6: lần đọc đầu ở 5.000 gói, và qua HTTP thật
+Chủ dự án, 2026-10-11: *"Quay lại hai phép đo còn treo của khoản 342"*. Không đổi mã; số đo ghi ở đây, ADR-143 và hàng 342 gạch tại
+chỗ.
+
+**Bộ đo.** Một tệp tạm `apps/api/src/zz-do-342.ts` (không commit, xoá sau lượt đo) chạy bằng `node --experimental-transform-types` trên
+mã của `457cfe07` (`doc-benchmark.ts` không đổi từ S1.274). Cụm Postgres 16 dùng một lần, `migrate()` của kho. Dữ liệu là
+`tools/do-lich-su-gia/gieo.sql` (5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, 1.681 s), chạy từ một bản sao tạm có thêm
+nhóm khoá `benchmark` vào phiên bản chính sách (bản của kho không có nhóm ấy). Mọi kết nối đo đi qua `createPool` sản xuất dưới
+`app_api`: `lock_timeout` và `statement_timeout` đọc lại lúc chạy đều 15 s. Cạnh là cạnh trọn của mục 4 (câu khoá của
+`duyetTraoThau`, một hàng sổ, COMMIT), chạy trên pool riêng hai kết nối. Máy rảnh trước và sau mỗi pha.
+
+**Pha A — lần đọc đầu ở quy mô.** Mỗi cách đo trên một gói `UNSEALED` chưa có bản lưu, với tám lần `docBenchmark` (pool 10 kết nối,
+một phiên người mua). Cạnh thử lại cách nhau 100 ms suốt loạt.
+
+| Cách | Lần đọc đầu | Lần thử cạnh | Chờ hàng | Chờ sổ | Cả cạnh | Hỏng |
+|---|---|---|---|---|---|---|
+| Dồn (cả tám cùng lúc) | một `TINH_MOI` 14,8 s; bảy tính trọn rồi gặp bản lưu (`BAN_LUU`) 14,9–15,3 s | 128 | p50 1,0 · p95 1,7 · lâu nhất 22,0 ms | lâu nhất 8,6 ms | p95 23,9 · lâu nhất 73,4 ms | 0 |
+| Trải (một lần mỗi 2,4 s, cả tám bắt đầu trong 16,8 s) | `TINH_MOI` 11,3 s; bốn lần bắt đầu ở +2,4 … +9,6 s tính trọn rồi gặp bản lưu, 11,4–11,8 s; ba lần từ +12,0 s đọc bản lưu, dưới 0,1 s | 189 | p50 0,8 · p95 1,1 · lâu nhất 6,0 ms | lâu nhất 2,5 ms | p95 12,6 · lâu nhất 30,0 ms | 0 |
+
+Lời khai *"một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s"* (mục 2, ADR-143) là **SAI**: nó lấy thời gian tính làm thời gian giữ
+khoá. `kiemLaiDuoiKhoa` chạy SAU phép tính và sau cờ mốc ngoài. Mỗi lần đọc đầu chỉ giữ `FOR SHARE` qua đoạn từ câu khoá tới commit:
+ghi bản lưu (hay gặp `ON CONFLICT` với bản của lần trước), đọc lại, một hàng sổ. Cửa sổ của các lần đọc chỉ phủ nhau khi phép tính
+của chúng xong cách nhau vài mili giây. Muốn giữ hàng gói liền 15 s thì phải có hàng trăm lần đọc đầu trên một lần mở thầu, xong nối
+nhau; một tiến trình chỉ có 10 kết nối (suy ra, không đo). Lần gặp bản lưu gọi cờ mốc ngoài lần hai, dưới khoá. Đọc mã: lần gọi ấy
+không chờ lô nhập giá ngoài nào, vì khoá tư vấn dùng chung của hai bảng ngoài (`choGhiXong` của `gia-ngoai.ts`, mức giao dịch) đã lấy
+ở phép tính trước khoá. Ngoại lệ là khi tập hàng chuẩn đo được rỗng: lần gọi trước khoá trả `[]` mà không lấy khoá tư vấn. Dữ liệu
+gieo không có giá ngoài.
+
+**Pha B — qua HTTP thật.** `createApiServer(createDispatcher({ pool, auditPool, services: dichVuTest().services }))` nghe ở
+`127.0.0.1`: pool API 10 kết nối, pool sổ 4. Phiên người mua là một hàng `sessions` thật đã qua MFA, gửi bằng cookie. Gói đo là gói
+`UNSEALED` đã có bản lưu từ pha A; tiền đề `GET /rfqs/:id/benchmark` ⇒ 200 `CO/BAN_LUU`. N vòng gọi `GET` liên tục (mỗi vòng chờ trả
+lời rồi gọi lại), rồi 30 lần cạnh cách nhau 20 ms ở mỗi mức. Ba lượt: *Sau* (mã hiện tại), *Trước* (đột biến D1 + D2 của mục 5 lúc
+chạy: hai đường đọc khoá lại `FOR SHARE` như trước bản sửa; khôi phục kiểm sha256), *Sau* lần hai.
+
+| Vòng HTTP | Trước: chờ hàng | Trước: hỏng | Sau: chờ hàng (hai lượt) | Sau: chờ sổ | Sau: cả cạnh | Sau: hỏng | Sau: lượt đọc HTTP, p50 |
+|---|---|---|---|---|---|---|---|
+| 0 | lâu nhất 4,2 ms | 0/30 | lâu nhất 3,0 / 3,3 ms | 5,1 / 5,9 ms | 22,0 / 23,9 ms | 0/30, 0/30 | — |
+| 6 | p95 4,0 · lâu nhất 15,6 ms | 0/30 | 1,4 / 1,7 ms | 6,3 / 3,5 ms | 12,7 / 12,3 ms | 0/30, 0/30 | 261 / 247 lượt, 25,4 / 26,8 ms |
+| 12 | lần duy nhất qua chờ 5,8 s | **29/30** (`57014`) | 3,1 / 4,1 ms | 13,2 / 13,0 ms | 27,2 / 24,2 ms | 0/30, 0/30 | 348 / 371 lượt, 51,4 / 44,8 ms |
+
+- Qua HTTP, bản sửa đứng như ở tầng hàm: mười hai vòng đọc liên tục, 0/60 lần cạnh hỏng, cạnh lâu nhất 27,2 ms. Mã trước: 29/30 hỏng.
+- Ở mã trước, sáu vòng HTTP KHÔNG bỏ đói được cạnh (0/30), trong khi sáu luồng ở tầng hàm làm hỏng 6/30 (mục 4). Suy ra, không
+  đo riêng: mỗi lượt HTTP dài ~25 ms mà khoá chỉ giữ ở đuôi giao dịch đọc, nên giữa các lượt còn khe. Ngưỡng qua HTTP ở máy này nằm
+  giữa 6 và 12 vòng.
+- Lượt *Trước* mất 445 s, phần lớn là 29 lần cạnh chờ tới trần 15 s ở mức mười hai vòng. Trong lúc ấy route phục vụ 139.442 lượt
+  đọc, mã 200 cả, p50 36,6 ms. Mỗi lượt là một hàng sổ `BENCHMARK_READ`, tức ~313 hàng mỗi giây từ một phiên. Route đọc không có
+  hạn mức (ADR-143, *"tải của chính tổ chức, có hàng sổ"*); số này cho thấy cỡ của tải ấy.
+
+**Giới hạn còn lại.**
+- Một tiến trình API trên một máy; nhiều tiến trình không đo. Đường đọc không khoá nên số tiến trình không đổi nó; cửa sổ của lần đọc
+  đầu vẫn là một mỗi lần mở thầu.
+- Cạnh chạy trên pool riêng, nên không đo tranh kết nối trong pool 10 của một tiến trình. Tám lần đọc đầu dồn chiếm tám kết nối trong
+  11–15 s, mà các route khác của tiến trình ấy dùng chung pool.
+- Lần đọc đầu một mình ở máy này mất 11,3 s; §S1.256 đo 18,1–19,1 s trên cùng `gieo.sql`. Không so hai số: khác lúc đo, và mã
+  đã khác (S1.276 thêm nhãn ngoài vào phép tính). Kết luận về khoá không phụ thuộc thời gian tính, vì khoá lấy sau phép tính.
+- Một gói, tải tổng hợp, mỗi mức 30 lần cạnh.
 
 # §S1.273 — S3.3e1: MÀN KIỂM SOÁT — Ô CHỌN NHÀ CUNG CẤP, NGOẠI LỆ, CHỈ DẪN THEO MÃ CHỐT, MÀN XÁC MINH RÀNG BĂM ĐÃ THẤY; KHOẢN 340 ĐÓNG — ADR-150
 
@@ -27483,6 +27543,171 @@ Trên cây trước commit (mọi sửa sau lượt soi trên mã đã vào): `p
   bản viết lại sau này, đo bằng phép đếm thân view và hàng ghim — không phép đo hành vi nào phân biệt được nó.
 - FINANCE/DIRECTOR suy ra được danh sách mời sau mở niêm phong — chủ dự án chấp nhận (ADR-163 ⑻⒢).
 - Màn, `gieo:demo`, T4: S3.8b.
+
+---
+
+# §S1.294 — S4.7c2: BỘ BẰNG CHỨNG PHIÊN BẢN 3 — PHÉP QUY ĐỔI TCO TÍNH LẠI ĐƯỢC Ở MỌI HÀNG, CAM KẾT CỦA ĐỀ XUẤT LÀ ĐIỀU KHOẢN CỦA BỘ
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi hành vi của hệ thống ghi — vòng này chỉ đổi thứ bộ bằng chứng
+mang và thứ bộ kiểm ngoại tuyến phán. Đổi ở bề mặt: bộ xuất qua `GET /rfqs/:rfqId/evidence-bundle` và `pnpm bang-chung xuat` nay mang
+thêm lời khai ngày, tham số TCO của gói và lời giải trình lệch hạng nguyên văn — sau đúng hai cổng cũ (`audit.read` + `bid.view`).
+Không migration. ADR-165. Không bất biến mới (J2, L8), không khoản mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-10: *"Tiếp S4.7c2"*, rồi chốt ba câu theo đề xuất — tính lại phép quy đổi ở MỌI hàng mọi lượt; bộ kiểm phán cam kết
+cả khớp lẫn luật giải trình; lời giải trình vào bộ nguyên văn. Phần thứ hai của S4.7c (spec §9) — S4.7 khép.
+
+## 2. Đo trước (đọc mã trên `9f14db8`)
+- `chepThanhPhan` của bộ v2 chép năm khoá (`ma`, `donVi`, `heSo`, `giaTri`, `tien`): `nguon` mà lượt chấm ghi cho hai mã quy đổi từ
+  S4.7a rơi mất; `docMoiTraoThau` không đọc `rfq_award_cam_ket`; thước của gói (`tco_ma_ghim`, `tco_tham_so_ghim`, `so_ngay_giao`)
+  không vào bộ. DAC-TA §3 tính `tien = giaTri × he_so` — với `chi_phi_thanh_toan`, `chi_phi_tre`, `giaTri` là đầu vào bộ kiểm phải tin.
+- Hai công thức ở `tco.ts` (`bigint`, một phép chia `(2·tử + mẫu)/(2·mẫu)`), `nguon` ghi `coSo = tongTien`, ngày qua `String(...)`;
+  lượt chấm từ chối chấm khi ảnh chụp tham số khác phiên bản ghim (`tham_so_khop`, `117`). `award_hang_gia` (`121`): `tien` của phần
+  tử `gia` đầu tiên, lọc khuôn tiền, chỉ hàng có hạng, `1 + count(<)`.
+
+## 3. Thay đổi
+- **Xuất** (`packages/danh-gia/src/bo-bang-chung.ts`, `dac-ta.ts`): `PHIEN_BAN_BUNDLE` 3, `DAC_TA_PHIEN_BAN` 3; `nguon` nguyên văn,
+  `maThieu`, `goiTco`, `traoThau[].camKet` (LEFT JOIN `rfq_award_cam_ket` theo khoá chính, dưới `app_api` + RLS); DAC-TA §9, §10.
+  Ba hàm thuần ra cửa gói (`chiPhiThanhToan`, `chiPhiTre`, `xepHang`), phân loại thuần ở `cong-quyen-route`, ghi ở `barrel-exports`.
+- **Kiểm** (`tools/bo-xuat-danh-gia`): bộ đọc v3 (`nguon`/`thamSo` ≤ 16 khoá chuỗi, từ chối `__proto__`); lớp độc lập
+  `doc-lap/quy-doi-lai.ts` (mảng chữ số, chia ngắn cho 365 giữ thêm một chữ số lẻ, `thuVe`; bảng hạng giá); `kiem-tco.ts` hai lớp;
+  `kiem.ts` đặt §9 trước §3 cho từng hàng, thêm tập mã vào lỗi bộ, cam kết vào điều kiện ĐẠT; CLI in `LECH-CAM-KET` và dòng `cam-ket`.
+- **Test**: `kiem-tco.test` (ca tay, nửa xu, tỷ lệ nguyên, 20 000 bộ ngẫu nhiên hai lớp bằng nhau, bundle sửa đúng một chỗ ⇒ đỏ gọi tên,
+  hai lớp bất đồng, cam kết, các ca của rà soát); `bo-xuat.int` (gói TCO thật → đề xuất lệch hạng có giải trình → xuất → kiểm khi đã xoá
+  `DATABASE_URL`; sửa tỷ lệ, xoá giải trình ⇒ đỏ); kịch bản 41 (bộ v3 qua HTTP, kiểm ngoại tuyến ok, `quy-doi=4`).
+- **Tài liệu**: ADR-165; ADR-160 hai dòng gạch tại chỗ; TEST-PLAN J2, L8; spec §9 S4.7c2; STATE.
+
+## 4. Đột biến
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| D1 | chia ngắn không giữ chữ số lẻ thêm | sống ở lượt đầu (chỉ lộ khi tỷ lệ là số nguyên) ⇒ thêm ca tỷ lệ nguyên + 10 % số bộ ngẫu nhiên ⇒ ĐỎ |
+| D2 | cắt cụt thay làm tròn (thanh toán) | ĐỎ |
+| D3 | bỏ `max(0, …)` | ĐỎ |
+| D4 | hạng giá không lọc hàng có hạng | sống ở lượt đầu ⇒ thêm ca hàng không hạng giá rẻ ⇒ ĐỎ |
+| K1 | bỏ kiểm `coSo` | ĐỎ |
+| K2 | bỏ kiểm tỷ lệ thanh toán | ĐỎ |
+| K3 | bỏ luật thiếu giải trình | ĐỎ |
+| K4 | cam kết không vào điều kiện ĐẠT | ĐỎ |
+| K5 | bỏ qua lỗi quy đổi của hàng | ĐỎ |
+| K6 | bỏ kiểm tập mã | ĐỎ |
+| K7 | bỏ kiểm `khai.paymentDays` | sống ở lượt đầu ⇒ thêm ca ⇒ ĐỎ |
+| E1 | bộ xuất bỏ `nguon` | ĐỎ (`bo-xuat.int`) |
+| E2 | bộ xuất không cam kết | ĐỎ |
+| E3 | bộ xuất `goiTco.soNgayGiao` null | ĐỎ |
+
+## 5. Không đổi, đã kiểm
+- Gói không TCO: không mã quy đổi, `goiTco.tapMa = ["gia"]` ⇒ ĐẠT (`bo-xuat.int` ca cũ, kịch bản 41 bước 12j, `benchmark.int`).
+- `g17-`: `doc-lap/quy-doi-lai.ts` chỉ import `./tinh-lai.js`; `depcruise` sạch.
+
+## 6. Rà soát đối kháng (một lượt soi đọc-không-sửa trên diff `9f14db8..HEAD`)
+**Không CAO.** Hai TRUNG, bốn THẤP — xử lý ở ADR-165 ⑹:
+- **TRUNG-1 — xoá `camKet` né được §10.** Một hàng `PROPOSED` mất cam kết chỉ được đếm. **Sửa:** §10 bước 6 (`chupLuc` = `actedAt`;
+  đề xuất không cam kết sau cam kết chụp sớm nhất ⇒ đỏ); dư lượng khi bộ không còn cam kết nào nói ra.
+- **TRUNG-2 — bộ độc làm treo:** hạng giá dựng lại mỗi cam kết. **Sửa:** một bảng mỗi lượt, chỉ mục `Map`; ca 3 000 × 3 000 < 5 s.
+- **THẤP-1** — §10 lỏng hơn mã (khuôn tiền, cách loại hàng, so số với chuỗi): văn bản chép đúng luật. **THẤP-2** — giải trình rỗng được
+  tính là có: áp `CHECK` của `121`. **THẤP-3** — `__proto__` bị nuốt: bộ đọc từ chối. **THẤP-4** — ô khai của mã không có trong hàng:
+  giữ, nói rõ ở §10 bước 3.
+Đã kiểm không phải lỗi: toán hai lớp (quyết định làm tròn chính xác), khớp `luot-danh-gia.ts`/`tco.ts`/`award_hang_gia`, RLS dưới
+`app_api`, bộ v2 bị từ chối là thiết kế (khuôn ADR-144), lộ thông tin cùng mức route cam kết.
+
+## 7. Số đo
+- `pnpm t0` sạch; các bộ `tools/bo-xuat-danh-gia` 153/153 (gồm `bo-xuat.int` 13/13); kịch bản 41 + `benchmark.int` 187/187.
+- `pnpm evidence` trên cây của vòng: vitest thoát mã 0, 5286 khẳng định, **92/92** (70/70 nghiệp vụ + 22/22 hàng rào). Lượt đầu cổng
+  ĐỎ sáu cặp nhãn chưa khai (`[INV-J2]`, `[INV-L8]`, `[INV-L16]` ở `kiem-tco.test`, `bo-xuat.int`, kịch bản 41) — các tệp ấy THẬT đo
+  bất biến ấy (§9 là vế quy đổi của J2, §10 là vế kiểm lại cam kết của L8, `kiemTapMa` là tập mã ghim của L16), nên thêm cặp vào
+  `so-khai-nhan.ts` kèm lời; dựng lại ma trận, cổng XANH. Ma trận: J2 9 → 22 ca, L8 60 → 71, L16 38 → 39.
+
+---
+
+# §S1.292 — S3.8b: MÀN `/hieu-suat` CHỈ ĐỌC, BỘ GIEO CHẠM SÀN, KỊCH BẢN 41 ĐỌC MÀN, LƯỢT ĐI THỬ T4 — S3.8 KHÉP
+
+Ngày 2026-10-10 (giờ máy UTC+7). Nhánh `s3-8b-man-hieu-suat`, xếp chồng lên S3.8a (#271) rồi gộp `origin/master` sau khi #271 merge. Không
+migration, không route mới, không mã quyền mới. ADR-163 ⑼.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-10: *"ok, merge xong thì làm tiếp S3.8b"*. Hình dạng trình trước khi viết mã (đọc trước bằng một agent chỉ đọc: bộ gieo,
+ràng buộc khi thêm gói đã mở, chỗ dựa vào trạng thái gieo, điều hướng), chủ dự án: *"ok, làm theo hình dạng đó"*. Phần S3.8b của kế hoạch
+`docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` câu 2: trang `/hieu-suat`, `gieo:demo --s3` đủ 5 gói đã mở niêm phong cho một nhà
+cung cấp, kịch bản 41, lượt đi thử T4.
+
+## 2. Thay đổi
+- `apps/web/src/hieu-suat.ts` (phục vụ ở `/lib/hieu-suat.js`): `docHieuSuat` (thân sai ⇒ `null`; hàng sai hình dạng bị bỏ và ĐẾM —
+  `soHangBoQua`), `phanTramTuPhanVan` (cận dưới trên `Number.MAX_SAFE_INTEGER`), `thoiLuongGiay`, `oCuaHang` (mười hai ô, ô dưới sàn theo mẫu số
+  của chính chỉ số), `tomTat`, `COT_HIEU_SUAT`.
+- `apps/web/trang/hieu-suat.html` / `.js`: bước 1 dùng chung `/lib/dang-nhap.js`; bước 2 chỉ đọc; `luotNap` — chỉ lần nạp mới nhất vẽ, đổi người
+  và đăng xuất làm lần nạp đang chờ thành cũ; mọi ô qua `textContent`. `TRANG`, `MODULE_WEB`; link ở header `/mo-thau`, `/chinh-sach`.
+- `tools/gieo-demo`: `--s3` — soan2 chấm ba gói đã mở sau lượt worker (`chamGoiTraoThau`, hàm không đọc gì riêng của gói trao thầu); khối
+  «HIỆU SUẤT NHÀ CUNG CẤP» trong phần tóm tắt với link `/hieu-suat` của PM, FINANCE, DIRECTOR và người quản lý dữ liệu (bị từ chối).
+- Kịch bản 41 HTTP: khối `[INV-K11]` cuối đưa thân THẬT của route qua `docHieuSuat` và `oCuaHang`.
+
+## 3. Phép đo
+- `apps/web/src/hieu-suat.test.ts`: đọc thân (chín hàng hỏng bị bỏ và đếm), phần trăm (kể cả cận dưới), thời lượng, mười hai ô trên và dưới
+  sàn, «—», tóm tắt (sàn đọc từ máy chủ, hàng bị bỏ), tiêu đề cột khớp HTML, phép quét chữ đánh giá (biên chữ Unicode, khoảng trắng gộp, đối
+  chứng dương và âm).
+- `apps/web/src/phuc-vu.test.ts`: `/hieu-suat` vào năm danh sách trang người mua; ba ca DOM — bảng mười hai ô có nhãn và Đọc lại; 403 ở lần
+  Đọc lại xoá bảng CŨ; hai lần nạp chồng nhau vẽ đúng hai hàng và lần nạp của người trước không vẽ sau khi đổi người. Đột biến bỏ chốt
+  `luotNap` ⇒ ca thứ ba đỏ (*"lần nạp của người trước không vẽ lên màn của người sau"*, 2 hàng thay vì 0), khôi phục tự kiểm sha256.
+- Kịch bản 41 HTTP 110/110 (108 + khối đọc màn ở hai luồng), 113 s.
+
+## 4. Lượt soi đối kháng trên mã (một agent chỉ đọc, không chạy test)
+1 CAO, 2 TRUNG, 7 THẤP; em đo lại từng mục trước khi vá.
+- **CAO-1 — ĐÚNG, đã vá.** Câu lỗi *"Máy chủ trả một bảng màn này không đọc được"* khớp luật của hàng *"Kể cả chúng tôi cũng không xem được"*
+  (`cau-cam-tren-giao-dien`) — đo bằng chính regex của cổng trên node. Chủ ngữ đổi sang màn; câu mới và hai câu mới của `tomTat` đo lại: không
+  khớp.
+- **TRUNG-1 — ĐÚNG, đã vá.** Bản đầu xoá bảng TRƯỚC khi chờ GET: hai lần nạp chồng nhau vẽ 2N hàng; lần nạp của người trước vẽ bảng của họ sau
+  khi đổi người. Vá: `luotNap`, xoá và vẽ cùng nhịp sau khi máy chủ trả lời; ca DOM và đột biến ở §3.
+- **TRUNG-2 — ĐÚNG, tự khép.** Khối kịch bản 41 mới đổi ô *Số test* của K11 — `INV-matrix.md` sinh lại ở lượt evidence của vòng.
+- **THẤP đã vá:** hàng bị bỏ được đếm và nói ra (1); phép quét gộp khoảng trắng và thêm bảy chữ (2); ca 403 nay xoá bảng có thật (3); câu về
+  sàn đọc từ máy chủ, không viết cứng trong HTML (4).
+- **THẤP để nguyên, nói lý do:** cận dưới cho khoảng cách lớn là lựa chọn (ADR-163 ⑼⒞) (5); tên hàm `chamGoiTraoThau` giữ nguyên, chú thích
+  sửa (6); vệ sinh commit (7) — tự khép.
+- **Cổng bắt sau lượt soi:** `pnpm test` đỏ ở `ma-chep-api-worker` — `phanTram`, `thoiLuong` và biểu thức nhóm nghìn trùng tên với
+  `tools/pilot-gia-lap` (khác đầu vào, khác mục đích). Đổi tên và nhóm nghìn bằng vòng lặp (`d7332a84`).
+
+## 5. Lượt đi thử T4 — 21/21
+Cụm `pilot:gia-lap` trên CSDL mới trong container `tp-pilot-gia-lap`, `gieo:demo --s3`, Chromium 1228 qua `playwright-core` (script ngoài kho,
+một lần, không phải cổng; đăng nhập bằng link MỚI qua `POST /auth/link` + hộp thư dev, mã TOTP tính từ bí mật ghi danh).
+- PM: năm hàng — Kim khi Hai Phong, Thep Dong Anh, Thep Hoa Sen, Vat lieu Phu My, Vat tu Truong Thanh; không nhà cung cấp nào chỉ có gói OPEN
+  hay DRAFT (các nhà cung cấp luân phiên của ba gói tín hiệu, nhà cung cấp của gói một nguồn) — K11 trên dữ liệu demo thật.
+- Ba người đầu: 5 gói mời, 5 nộp, 100%, 5 gói xếp hạng, 0 thắng, 0%; hạng trung vị 1 / 2 / 3 (Trường Thành bằng hạng nhất; Đông Anh cao hơn
+  2,04%; Hải Phòng cao hơn 5,1%).
+- Thep Hoa Sen: 2 / 2 / 2 gói, mọi tỷ lệ và trung vị *"chưa đủ lịch sử (2/5 gói)"*; Vat lieu Phu My: mời 2, nộp 0, xếp hạng 0 — tỷ lệ phản hồi
+  *"(2/5 gói)"*, các ô khác *"(0/5 gói)"*: mỗi ô nói mẫu số của chính nó.
+- Câu tóm tắt *"5 nhà cung cấp …; 3 người đủ 5 gói ở mọi chỉ số"*; Đọc lại vẽ lại đúng năm hàng; nhãn ô trùng tiêu đề cột.
+- FINANCE (taichinh1), DIRECTOR (duyet1): cùng bảng. Người quản lý dữ liệu: 403, câu nói quyền xem báo giá, bảng trống.
+- 375×812: `scrollWidth` 375, ô mang nhãn cột (`::before`). Điều hướng `/mo-thau` → link → `/hieu-suat` hỏi phiên còn hạn, «Tiếp tục» ⇒ bảng.
+- Sổ: 6 hàng `SUPPLIER_PERFORMANCE_READ` cho 6 lần đọc thành công trên trình duyệt; đúng một `PERMISSION_DENIED` trên `SUPPLIER_PERFORMANCE`;
+  không lời gọi 4xx nào khác.
+- Đo ra ở lượt này: ô *"Phản hồi trung vị"* hiện *"0 giây"* — công cụ nộp ngay sau lúc mở gói. Phần tóm tắt của `gieo:demo` nay nói trước điều
+  ấy. Ở khung rộng bảng mười hai cột chật trong khung trang chung, ô *"chưa đủ lịch sử (m/s gói)"* xuống dòng nhiều — đọc được, không sửa CSS
+  chung ở vòng này.
+- Hai lần dựng: lượt đầu dừng ở bước 375 px vì script dùng lại mã TOTP trong cùng cửa sổ 30 s (máy chủ từ chối mã đã dùng); script sửa để chờ
+  mã mới, dựng lại trên CSDL mới (bí mật ghi danh chỉ hiện một lần), lượt hai 21/21. Dừng cụm (0 cổng), xoá hai CSDL tạm.
+
+## 6. Số đo
+Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng chờ máy rảnh — vòng ấy chỉ kiểm lúc khởi động.
+- Trước gộp: `pnpm t0` 60 s (depcruise 586 module, 0 vi phạm); `pnpm test` 160 tệp / 2875 ca, 333 s; kịch bản 41 HTTP 110/110, 113 s. Lần
+  `pnpm test` đầu đỏ ở `ma-chep-api-worker` (§4).
+- Trên `73dadbd8` (sau gộp #271, #270 và `cap-so`): `pnpm t0` 172 s; `pnpm test` 160 / 2875, 596 s. Evidence lượt một **vitest thoát mã 1**,
+  5 423 s — 30 ca ở 8 tệp CSDL/API: 21 QUÁ HẠN, 9 sai khẳng định là dư chất của ca quá hạn trong CSDL dùng chung (fixture `zz98b…` của
+  `rls-coverage`, *"NÉM: Hardening"* của `hardening-suy-tu`, một hàng thừa ở `auth`, thứ tự xoay vòng ở `outbox`). Hai lượt evidence của phiên
+  khác chạy chồng (`rule600` và `s3-5-award-theo-bac`, báo cáo xong 21:59 và 22:00; lượt này 20:31–22:02). Không tệp nào thuộc vòng. Chạy lại
+  không đổi gì: **vitest thoát mã 0**, **92/92**, **5300** khẳng định, 2 199 s; K11 33 → **35** (khối đọc màn ở hai luồng).
+- Gộp #276 (S1.294 / S4.7c2) vào `e7d29b46` — ba xung đột tài liệu gỡ tay; #276 thêm một khối riêng ở phần TCO của kịch bản 41, không chạm
+  khối đọc màn: `pnpm t0` 87 s; `pnpm test` 161 / 2896, 388 s; evidence **vitest thoát mã 1**, 2 609 s — 0 ca đỏ, một tệp
+  (`loi-giao-thuc.int`) hỏng ở mức tệp, 0 s: testcontainers *"No host port found for host IP"* lúc dựng container (đồng hồ Docker khớp
+  máy); 92/92, 5326 khẳng định.
+- Gộp #273 (khoản 348) vào `3e7d65b1`, không xung đột: `pnpm t0` 73 s; `pnpm test` 161 / 2896, 172 s; evidence **vitest thoát mã 1**,
+  3 397 s — đúng một ca QUÁ HẠN: `[sổ nợ 73] RULE` của `hardening-suy-tu-tinh-chat` hết trần 600 s (`migrations.int` 3 391 s — máy tải; ca ấy
+  346,6 s ở evidence CI master `74a18d3f`, 451 và 302 s ở hai lượt xanh của §S1.291), ca khoản 349 / #272 đang tách một ca mỗi bảng; 92/92,
+  5326 khẳng định. Ma trận commit: chỉ hàng K11 đổi (33 → 35) so với bản đã commit — hàng H19 của lượt đỏ không vào.
+- Lượt chạy lại trên `3e7d65b1`: ghi ở thân PR và thân merge (lệ S1.70).
+
+## 7. Giới hạn
+- T4 là lượt đi thử một lần, không phải cổng (TEST-PLAN T4).
+- Số trên màn đứng ĐÚNG ở sàn 5 cho ba nhà cung cấp — bớt một gói đã chấm khỏi bộ gieo là về dưới sàn (ADR-163 ⑼⒠).
+- Phép quét chữ đánh giá chỉ ở ba tệp của màn; một luật chung cho mọi màn cần một hàng §5 của `docs/PRODUCT.md` — việc của chủ dự án.
 
 ---
 

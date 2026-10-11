@@ -23,6 +23,7 @@ export {
   MA_THANH_PHAN_GIA,
   TRANG_THAI_CHAM_DUOC,
   taoLuotDanhGia,
+  xepHang,
   type HangXepHang,
   type LuotDanhGia,
   type LyDoTuChoiLuot,
@@ -32,6 +33,9 @@ export {
 // [S1.284 / S4.7b1] Luật L8 của phiên bản ghim (S4.7a, `tco.ts`) ra cửa — màn `/chinh-sach` chép nó (không import được gói), và
 // `tests/architecture/bac-mac-dinh-dong-bo.test.ts` đối chiếu bản chép với bản này trên một bảng ca. Thuần, không kết nối.
 export { MA_CO_NGUON, docNhomTco, kiemChinhSachTco, type LoiChinhSachTco, type ThamSoTco } from "./tco.js";
+// [S1.294 / S4.7c2] Lớp hàm thuần của bộ kiểm bộ bằng chứng tính lại phép quy đổi (`DAC-TA.md` §9) và hạng giá (§10) bằng CHÍNH ba
+// hàm lượt chấm dùng — thuần, không kết nối. Lớp độc lập (`tools/bo-xuat-danh-gia/src/doc-lap/`) không đọc chúng (`g17-`).
+export { chiPhiThanhToan, chiPhiTre } from "./tco.js";
 
 // [S1.106 / S2.4] Đường ĐỌC bảng xếp hạng — cổng `bid.view` nằm THẲNG trong thân hàm
 // (khoản 33), vì `cong-quyen-route.test.ts` đọc mã nguồn chứ không đọc một danh sách tên.
@@ -97,7 +101,10 @@ export {
   xuatBoBangChung,
   type BoBangChung,
   type BoBangChungDaXuat,
+  type CamKetBundle,
+  type GoiTcoBundle,
   type HangBundle,
+  type KhaiCamKetBundle,
   type LuotChamBundle,
   type MocThoiGian,
   type ThanhPhanChinhSachBundle,

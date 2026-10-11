@@ -62,6 +62,8 @@ import {
   type CamKetHien,
   type ThanhPhanXepHang,
 } from "../../web/src/tco.js";
+// [S1.292 / S3.8b] Hàm đọc và hàm trình bày của màn `/hieu-suat` — khối K11 cuối đưa thân THẬT của route qua chính chúng.
+import { docHieuSuat, oCuaHang } from "../../web/src/hieu-suat.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
@@ -2370,6 +2372,29 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(hs.map((h) => h?.[5])).toEqual(trangThai.loiMoi.map((l) => (l.supplierId === thang ? 1 : 0)));
   });
 
+  // [S1.292 / S3.8b] Kịch bản 41 ĐỌC MÀN: thân thật của `GET /supplier-performance` đi qua đúng hàm đọc và hàm trình bày của `/hieu-suat`.
+  // Một trường đổi tên hay đổi kiểu ở route làm `docHieuSuat` bỏ hàng (hay trả `null`), và ca này đỏ — phép đo T1 của màn chạy trên thân
+  // viết tay, nên chỉ ở đây hình dạng của màn và hình dạng của route gặp nhau.
+  it("[INV-K11] MÀN /hieu-suat đọc thân thật của route — năm nhà cung cấp của gói chính, mỗi người một gói: mọi tỷ lệ và trung vị «chưa đủ lịch sử (1/5 gói)», số đếm hiện", async () => {
+    const r = await goi("GET", "/supplier-performance", trangThai.gd1.cookie);
+    expect(r.status, r.text).toBe(200);
+    const bang = docHieuSuat(r.body);
+    expect(bang, "thân route không qua được hàm đọc của màn").not.toBeNull();
+    if (bang === null) return;
+    // Không hàng nào bị bỏ: mọi hàng route trả đều qua hàm đọc.
+    expect(bang.nhaCungCap).toHaveLength((r.body as { hieuSuat: { nhaCungCap: unknown[] } }).hieuSuat.nhaCungCap.length);
+    const theoId = new Map(bang.nhaCungCap.map((h) => [h.supplierId, h]));
+    const chuaDu = `chưa đủ lịch sử (1/${String(bang.sanLichSu)} gói)`;
+    for (const [i, l] of trangThai.loiMoi.entries()) {
+      const h = theoId.get(l.supplierId);
+      expect(h, l.ten).toBeDefined();
+      if (h === undefined) continue;
+      const o = oCuaHang(h, bang.sanLichSu).map((x) => x.noiDung);
+      expect([o[1], o[2], o[5], o[6]], l.ten).toEqual(["1 gói", "1 gói", i === 3 ? "1" : "0", "1 gói"]);
+      expect([o[3], o[4], o[7], o[8], o[11]], l.ten).toEqual([chuaDu, chuaDu, chuaDu, chuaDu, chuaDu]);
+    }
+  });
+
   // [mảnh 1 / màn xuất bằng chứng] Bước cuối của kịch bản `docs/PRODUCT.md` §11 — *"xuất được
   // bộ bằng chứng kiểm toán của trọn chuỗi ấy"* — nay có đường HTTP dưới phiên một con người.
   // Ba điều được đo, và điều thứ ba là điều chịu lực:
@@ -3548,5 +3573,49 @@ describe("[S1.286 / S4.7b2] TCO qua HTTP — nhà cung cấp THẤY thước và
       ["Lời khai cam kết", "phí vận chuyển 500000.00 · số ngày thanh toán 60 · số ngày giao 30 (yêu cầu 30)"],
       ["Giải trình lệch hạng", giaiTrinh],
     ]);
+  });
+
+  // [S1.294 / S4.7c2] Bộ bằng chứng v3 của gói TCO qua HTTP: cam kết đi vào bộ (kể cả lời giải trình nguyên văn), và bộ kiểm độc
+  // lập — chạy với `DATABASE_URL` đã xoá — tính lại phép quy đổi của MỌI hàng cùng cam kết. Đi trọn chuỗi màn → route → CSDL → bộ.
+  it("[INV-L8] [INV-J2] bộ bằng chứng v3 qua HTTP: cam kết + giải trình trong bộ; bộ kiểm độc lập tính lại phép quy đổi và cam kết", async () => {
+    const ok = await goi("GET", `/rfqs/${st.rfqId}/evidence-bundle`, st.gd1.cookie);
+    expect(ok.status, ok.text).toBe(200);
+    const tep = (ok.body as { evidenceBundle: { tep: Record<string, string> } }).evidenceBundle.tep;
+    const bo = JSON.parse(tep["bo-bang-chung.json"] ?? "") as {
+      phienBan: number;
+      goiTco: { soNgayGiao: number | null };
+      traoThau: { status: string; camKet: { hangTco: number; hangGia: number | null; giaiTrinhLechHang: string | null } | null }[];
+    };
+    expect(bo.phienBan).toBe(3);
+    expect(bo.goiTco.soNgayGiao).toBe(SO_NGAY_GIAO);
+    expect(bo.traoThau.map((t) => [t.status, t.camKet?.hangTco, t.camKet?.hangGia, t.camKet?.giaiTrinhLechHang])).toEqual([
+      ["PROPOSED", 1, 2, "dat hon B 2 trieu theo gia nhung giao dung han va thanh toan dung ky"],
+    ]);
+    const goc = fileURLToPath(new URL("../../../", import.meta.url));
+    const thuMuc = await mkdtemp(join(tmpdir(), "tp-bang-chung-tco-"));
+    try {
+      for (const [ten, noiDung] of Object.entries(tep)) await writeFile(join(thuMuc, ten), Buffer.from(noiDung, "utf8"));
+      const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "test" };
+      delete env["DATABASE_URL"];
+      const kq = spawnSync(
+        execPath,
+        [
+          "--experimental-transform-types",
+          "--import",
+          pathToFileURL(join(goc, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href,
+          join(goc, "tools", "bo-xuat-danh-gia", "src", "index.ts"),
+          "kiem",
+          "--bo",
+          thuMuc,
+        ],
+        { env, encoding: "utf8", cwd: goc },
+      );
+      expect(kq.status, `${kq.stdout}\n${kq.stderr}`).toBe(0);
+      expect(kq.stdout).toContain("ok=true");
+      // Hai báo giá có số (A, B) × hai mã quy đổi = bốn thành phần tính lại; C thiếu số ngày giao nên không hạng, không thành phần.
+      expect(kq.stdout).toContain("cam-ket\tso=1\tdat=1\tde-xuat-khong-cam-ket=0\tquy-doi=4");
+    } finally {
+      await rm(thuMuc, { recursive: true, force: true });
+    }
   });
 });

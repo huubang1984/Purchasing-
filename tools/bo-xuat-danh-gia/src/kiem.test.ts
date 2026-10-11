@@ -60,7 +60,7 @@ function xuRaChuoi(xu: bigint): string {
 }
 
 function hang(bidVersionId: string, thanhPhan: readonly ThanhPhanLuu[], effectiveCost: string | null, rank: number | null): HangBundle {
-  return { bidVersionId, supplierName: `NCC ${bidVersionId}`, effectiveCost, rank, components: thanhPhan };
+  return { bidVersionId, supplierName: `NCC ${bidVersionId}`, effectiveCost, rank, components: thanhPhan, maThieu: null };
 }
 
 const NGUON = "đồng hồ của cơ sở dữ liệu lúc ghi — nguồn thời gian CHƯA được chứng thực (khoản 196)";
@@ -72,12 +72,14 @@ function boVoi(
 ): BoBangChung {
   return {
     dang: "trustprocure/bo-bang-chung-danh-gia",
-    phienBan: 2,
-    dacTaPhienBan: 2,
+    phienBan: 3,
+    dacTaPhienBan: 3,
     dacTaSha256: "khong-doc-o-tang-nay",
     orgId: "org-1",
     rfqId: "rfq-1",
     xuatLuc: { giaTri: "2026-09-23T00:00:00.000Z", nguon: "đồng hồ tiến trình xuất" },
+    // [S1.294 / S4.7c2] Gói không TCO: không ảnh chụp tập mã — §9.3 đoạn cuối không áp.
+    goiTco: { tapMa: null, thamSo: null, soNgayGiao: null },
     luotCham: [
       {
         evaluationId: "ev-1",
@@ -132,6 +134,7 @@ describe("bundle lành lặn", () => {
             status: "APPROVED",
             reason: "nhà cung cấp hạng 1 rút",
             actedAt: { giaTri: "2026-09-22T01:00:00.000Z", nguon: NGUON },
+            camKet: null,
           },
         ],
       ),
@@ -285,6 +288,7 @@ describe("lối từ chối ở mức bundle", () => {
             status: "APPROVED",
             reason: "r",
             actedAt: { giaTri: "2026-09-22T01:00:00.000Z", nguon: NGUON },
+            camKet: null,
           },
         ],
       ),
@@ -307,6 +311,7 @@ describe("lối từ chối ở mức bundle", () => {
             status: "APPROVED",
             reason: "r",
             actedAt: { giaTri: "2026-09-22T01:00:00.000Z", nguon: NGUON },
+            camKet: null,
           },
         ],
       ),
