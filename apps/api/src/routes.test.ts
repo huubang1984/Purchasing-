@@ -413,7 +413,7 @@ describe("[S1.216 / khoản 195] đường tự xem link đăng nhập gần đ�
   });
 });
 
-describe("[khoản 351 / ADR-9201] `tranDocPhien` — trần đọc theo phiên trên bảng route", () => {
+describe("[khoản 351 / ADR-168] `tranDocPhien` — trần đọc theo phiên trên bảng route", () => {
   const tim = (path: string): Route | undefined => ROUTES.find((r) => r.method === "GET" && r.path === path);
 
   it("hai route benchmark khai 900 (đọc bản lưu) và 120 (*Xem dải*); không route nào khác khai", () => {

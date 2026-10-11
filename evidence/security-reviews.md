@@ -27709,9 +27709,9 @@ Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng c
 - Số trên màn đứng ĐÚNG ở sàn 5 cho ba nhà cung cấp — bớt một gói đã chấm khỏi bộ gieo là về dưới sàn (ADR-163 ⑼⒠).
 - Phép quét chữ đánh giá chỉ ở ba tệp của màn; một luật chung cho mọi màn cần một hàng §5 của `docs/PRODUCT.md` — việc của chủ dự án.
 
-# §S1.9101 — KHOẢN 351 ĐÓNG: HAI ROUTE ĐỌC BENCHMARK CÓ TRẦN THEO PHIÊN — MỘT LƯỢT MỖI (PHIÊN, ROUTE) TẠI MỘT LÚC, RỒI 900 / 120 LẦN MỖI CỬA SỔ 900 S, TRƯỚC HANDLER VÀ TRƯỚC HÀNG SỔ (ADR-9201)
+# §S1.297 — KHOẢN 351 ĐÓNG: HAI ROUTE ĐỌC BENCHMARK CÓ TRẦN THEO PHIÊN — MỘT LƯỢT MỖI (PHIÊN, ROUTE) TẠI MỘT LÚC, RỒI 900 / 120 LẦN MỖI CỬA SỔ 900 S, TRƯỚC HANDLER VÀ TRƯỚC HÀNG SỔ (ADR-168)
 
-**Rổ và mảnh (ADR-043):** khoản 351 đóng. Không migration, không route mới, một ADR mới (ADR-9201), đoạn gạch tại chỗ ở ADR-143. Mã
+**Rổ và mảnh (ADR-043):** khoản 351 đóng. Không migration, không route mới, một ADR mới (ADR-168), đoạn gạch tại chỗ ở ADR-143. Mã
 sản xuất: `apps/api/src/dispatch.ts`, `apps/api/src/route-types.ts`, `apps/api/src/routes/benchmark.ts`, `apps/web/trang/mo-thau.js`.
 
 ## 1. Vòng này là gì
@@ -27728,15 +27728,15 @@ ADR-091), 900 / 120, câu 429 ở `/mo-thau`.
   15 s, lỗi ném ngoài handler ⇒ 500. Sửa: cổng `pg_try_advisory_xact_lock` KHÔNG CHỜ theo (phiên, route) trước bộ đếm — lượt thứ hai
   nhận 429 `retry-after: 1` ngay và nhả kết nối; hai nút của `/mo-thau` khoá trong lúc gọi.
 - **TRUNG-1 — handler NÉM thì lần đếm cuộn theo giao dịch.** 404, lỗi CSDL, trần 15 s của lần đọc đầu không tiêu ngân sách. Không sửa:
-  cùng tư thế trần agent (ADR-091); cổng một-lượt-một-lúc giữ lượt hỏng ở một mỗi (phiên, route). Ghi ở ADR-9201; ca ⒟ đo nó.
-- **TRUNG-2 — trần theo phiên nhân lên được** bằng nhiều phiên của một người. Chủ dự án đã chọn theo phiên; ADR-9201 nói ra con số
+  cùng tư thế trần agent (ADR-091); cổng một-lượt-một-lúc giữ lượt hỏng ở một mỗi (phiên, route). Ghi ở ADR-168; ca ⒟ đo nó.
+- **TRUNG-2 — trần theo phiên nhân lên được** bằng nhiều phiên của một người. Chủ dự án đã chọn theo phiên; ADR-168 nói ra con số
   (link đăng nhập 5 mỗi 15 phút, phiên mặc định 8 giờ, không thấy trần số phiên sống).
 - **THẤP-1 — `tranDocPhien` không có lớp canh:** `NaN` ⇒ `soLan > NaN` luôn sai, trần không bao giờ đóng. Sửa: `timViPhamBangRoute`
   đòi số nguyên dương và chỉ trên route đọc của người mua.
 - **THẤP-2 — khoá bucket:** dựng qua `moTaRoute(route)` (nhận `Route`, không nhận chuỗi người gọi), tiền tố riêng `doc-phien|`. Đã làm.
 - **THẤP-3 — `loiCua` chung mọi lời gọi của trang**, và 429 của trần từ chối mang cùng thân ⇒ câu chung; harness `phuc-vu.test.ts` chỉ
   kéo hằng `THAN_403` theo `loiCua` ⇒ viết chữ thẳng trong hàm. Đã làm.
-- **THẤP-4 — cửa sổ nhảy**, tới 2× trần quanh mốc — khuôn ADR-091, ghi ở ADR-9201. **THẤP-5 — lời khai thiu** ở ADR-143 và hàng 351
+- **THẤP-4 — cửa sổ nhảy**, tới 2× trần quanh mốc — khuôn ADR-091, ghi ở ADR-168. **THẤP-5 — lời khai thiu** ở ADR-143 và hàng 351
   — gạch tại chỗ.
 - **Xác nhận, không phải lỗi** (tự kiểm lại): người gọi không chạm được khoá bucket (`route.path` là mẫu tĩnh, id phiên đọc từ CSDL, băm
   qua pepper); không trùng bucket khác; không oracle (khoá không mang `rfqId`, 429 cùng thân); phiên không có `bid.view` nhận 403 ném
@@ -27752,7 +27752,7 @@ ADR-091), 900 / 120, câu 429 ở `/mo-thau`.
 - `/mo-thau`: `loiCua` nói 429; nút *Đọc benchmark* và mọi nút *Xem dải* khoá trong lúc gọi.
 
 ## 4. Test
-- `auth.int.test.ts`, khối `[khoản 351 / ADR-9201]` (Postgres 16, qua `createApiServer`, gói DRAFT — cả hai handler ghi một hàng sổ
+- `auth.int.test.ts`, khối `[khoản 351 / ADR-168]` (Postgres 16, qua `createApiServer`, gói DRAFT — cả hai handler ghi một hàng sổ
   `KHONG_HIEN`): ⒜ TRAN lần 200 + TRAN hàng sổ, rồi 429 `retry-after: 900` không hàng sổ; ⒝ bucket theo route (*Xem dải* còn ngân sách
   riêng); ⒞ bucket theo phiên (phiên khác của cùng người đi qua); ⒟ 404 không tiêu ngân sách; ⒠ khoá (phiên, route) bị giữ ⇒ 429
   `retry-after: 1` dưới 1,5 s, không hàng sổ, không đếm, phiên khác vẫn đi qua; ⒡ tám lượt cùng lúc ⇒ chỉ 200 hay 429, không quá TRAN
@@ -27779,7 +27779,7 @@ lệch). Mã nguyên bản trước: 6 + 2 + 1 ca xanh. Máy rảnh trước m�
 9/9 đỏ đúng ca. ⒡ sống ở M2 — có chủ đích: cổng đã giữ lượt cùng lúc ở một, ⒡ chỉ đòi bất biến (không 500, hàng sổ bằng số lần 200).
 
 ## 6. Giới hạn, nói ra
-- Trần đếm lần đọc đã commit; theo phiên, không theo người; cửa sổ nhảy (ADR-9201).
+- Trần đếm lần đọc đã commit; theo phiên, không theo người; cửa sổ nhảy (ADR-168).
 - Pool chỉ được che theo (phiên, route): nhiều phiên, hay các route đọc khác, vẫn dùng chung pool như trước.
 - Hai tab của CÙNG một phiên bấm cùng lúc: một tab nhận 429 `retry-after: 1` — trước vòng này cả hai cùng tính.
 - Sáu route cùng lớp (`RANKING_VIEWED`, `COMPARISON_VIEWED`, `PRICE_HISTORY_READ`, `SUPPLIER_PERFORMANCE_READ`,

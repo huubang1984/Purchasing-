@@ -11260,12 +11260,12 @@ Giới hạn nói thêm:
   `chinh_sach_ghim_id`, nay là cột của một khoá duy nhất, nên lần `UPDATE` ấy lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là
   cập nhật HOT — một lần chèn đồng thời có khoá ngoại tới gói chờ tới lúc commit. Một lần mỗi gói.
 - **Cột *Benchmark* của bảng xếp hạng là nhãn của BẢN LƯU**, không của lượt chấm đang xếp hạng (hai mốc đọc, mục "Hai bản" ở trên).
-- **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước. **[S1.9101 / ADR-9201]** Của
+- **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước. **[S1.297 / ADR-168]** Của
   HAI phiên; cùng một phiên thì lượt thứ hai nhận 429 `retry-after: 1` ở cổng một-lượt-một-lúc, không tính.
 - ~~**Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
   cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.~~
   **[2026-10-11 / khoản 351 MỞ]** Câu ấy chỉ đúng ở vế sổ: pool API và CSDL dùng chung mọi tổ chức. Đo qua HTTP, một phiên lặp route
-  đọc bản lưu ghi ~313 hàng sổ mỗi giây (§S1.274 mục 8); *Xem dải* ở quy mô chưa đo. **[S1.9101 / khoản 351 ĐÓNG — ADR-9201]** Cả
+  đọc bản lưu ghi ~313 hàng sổ mỗi giây (§S1.274 mục 8); *Xem dải* ở quy mô chưa đo. **[S1.297 / khoản 351 ĐÓNG — ADR-168]** Cả
   hai route khai `tranDocPhien`: một lượt mỗi (phiên, route) tại một lúc, rồi 900 lần đọc bản lưu và 120 lần *Xem dải* mỗi phiên mỗi
   cửa sổ 900 s — 429 trước handler và trước hàng sổ.
 - ~~**Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.~~ **[S1.274]** Đột biến M4 nay ĐỎ: luôn tính lại đưa mọi lượt đọc về
@@ -13153,11 +13153,11 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 
 ---
 
-## ADR-9201 — Trần đọc theo phiên cho hai route benchmark: cổng một-lượt-một-lúc theo (phiên, route), rồi một bộ đếm mỗi cửa sổ 900 s, trước handler và trước hàng sổ
+## ADR-168 — Trần đọc theo phiên cho hai route benchmark: cổng một-lượt-một-lúc theo (phiên, route), rồi một bộ đếm mỗi cửa sổ 900 s, trước handler và trước hàng sổ
 
 **Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Sửa khoản 351, chốt theo đề xuất"* — trần theo
-PHIÊN; phạm vi hai route benchmark; *Xem dải* trần thấp hơn nhiều so với lần đọc bản lưu · **[S1.9101 / khoản 351]** · **Migration:**
-không · **Liên quan:** ADR-015 §5, ADR-091, ADR-092, ADR-143 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+PHIÊN; phạm vi hai route benchmark; *Xem dải* trần thấp hơn nhiều so với lần đọc bản lưu · **[S1.297 / khoản 351]** · **Migration:**
+không · **Liên quan:** ADR-015 §5, ADR-091, ADR-092, ADR-143 · **Biên bản:** `evidence/security-reviews.md` §S1.297
 
 ### Bối cảnh
 

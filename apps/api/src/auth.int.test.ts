@@ -2461,11 +2461,11 @@ describe("[S1.240 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, t
 });
 
 // ==============================================================================================
-// [khoản 351 / ADR-9201] TRẦN ĐỌC THEO PHIÊN CỦA HAI ROUTE BENCHMARK — cổng một-lượt-một-lúc rồi bộ đếm, TRƯỚC handler và trước
+// [khoản 351 / ADR-168] TRẦN ĐỌC THEO PHIÊN CỦA HAI ROUTE BENCHMARK — cổng một-lượt-một-lúc rồi bộ đếm, TRƯỚC handler và trước
 // hàng sổ. Gói DRAFT: cả hai handler vẫn ghi đúng một hàng sổ (`trangThai: KHONG_HIEN`) mỗi lần cho qua — đủ để đếm "429 không hàng
 // sổ" mà không phải dựng một lần mở thầu. Bộ điều phối riêng tiêm `tranDocPhien` nhỏ (khuôn `tranDocAgent` của ca ⒟ khoản 142).
 // ==============================================================================================
-describe("[khoản 351 / ADR-9201] trần đọc theo phiên của hai route benchmark", () => {
+describe("[khoản 351 / ADR-168] trần đọc theo phiên của hai route benchmark", () => {
   const TRAN = 3;
   let s2: ReturnType<typeof createApiServer>;
   let goc2 = "";

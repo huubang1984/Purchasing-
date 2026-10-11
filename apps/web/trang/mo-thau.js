@@ -84,7 +84,7 @@ function loiCua(r, macDinh) {
     return `${macDinh}: tài khoản đang đăng nhập không có quyền làm việc này — vai hiện tại không được cấp quyền ấy. ` +
       "Đổi sang người phù hợp ở bước 1.";
   }
-  // [khoản 351 / ADR-9201] 429 thân `qua nhieu yeu cau`: trần đọc theo phiên (benchmark, *Xem dải*) hay trần từ chối — cùng thân,
+  // [khoản 351 / ADR-168] 429 thân `qua nhieu yeu cau`: trần đọc theo phiên (benchmark, *Xem dải*) hay trần từ chối — cùng thân,
   // nên câu chung; in nguyên văn thì người dùng đọc một chuỗi không dấu.
   if (r.status === 429 && r.body?.error === "qua nhieu yeu cau") {
     return `${macDinh}: phiên này vừa gọi quá nhiều lần, hoặc một lần gọi trước chưa xong — đợi một lúc rồi thử lại.`;

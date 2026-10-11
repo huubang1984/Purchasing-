@@ -10,7 +10,7 @@
 // ghi ấy là dữ liệu dẫn xuất, một lần cho mỗi lần mở thầu, không đổi trạng thái nghiệp vụ nào — khuôn hàng sổ của mọi route đọc —
 // nên route vẫn `mutates: false`.
 //
-// [khoản 351 / ADR-9201] Cả hai route khai `tranDocPhien`: bộ điều phối đặt cổng một-lượt-một-lúc và trần theo phiên TRƯỚC handler.
+// [khoản 351 / ADR-168] Cả hai route khai `tranDocPhien`: bộ điều phối đặt cổng một-lượt-một-lúc và trần theo phiên TRƯỚC handler.
 //
 // KHÔNG ĐỌC QUERY (E6).
 // ==============================================================================================
@@ -21,12 +21,12 @@ import type { BuyerReadRoute } from "../route-types.js";
 import { lineNoParam, rfqIdParam } from "./anh-xa.js";
 
 /**
- * [khoản 351 / ADR-9201] Trần đọc bản lưu của MỘT phiên mỗi cửa sổ 900 s — cùng số với trần đọc của phiên agent (ADR-091): trung bình
+ * [khoản 351 / ADR-168] Trần đọc bản lưu của MỘT phiên mỗi cửa sổ 900 s — cùng số với trần đọc của phiên agent (ADR-091): trung bình
  * một lần mỗi giây, rộng cho người bấm *Đọc benchmark*, hẹp so với ~313 lần mỗi giây đo được của một vòng lặp (§S1.274 mục 8).
  */
 export const BENCHMARK_DOC_TRAN_MOI_CUA_SO = 900;
 /**
- * [khoản 351 / ADR-9201] Trần *Xem dải* của MỘT phiên mỗi cửa sổ 900 s. Mỗi lần hai lần đọc `quan_sat_gia` cho hàng chuẩn của dòng
+ * [khoản 351 / ADR-168] Trần *Xem dải* của MỘT phiên mỗi cửa sổ 900 s. Mỗi lần hai lần đọc `quan_sat_gia` cho hàng chuẩn của dòng
  * (~1 s ở 5.000 gói, ADR-143) — đắt hơn lần đọc bản lưu nhiều lần; 120 là một cú bấm mỗi 7,5 s suốt cửa sổ.
  */
 export const XEM_DAI_TRAN_MOI_CUA_SO = 120;
