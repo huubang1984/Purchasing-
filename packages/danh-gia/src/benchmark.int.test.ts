@@ -50,7 +50,7 @@ import { TEP_DAC_TA, TEP_DU_LIEU, docBenchmark, docDaiBenchmark, dungBoBangChung
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
-// [khoản 9401] Hai khẳng định "hàng sổ không mang giá" của ⑽ tìm DÃY CHỮ SỐ của giá (`112`, `107.5`, `103.25`) trong cả chuỗi JSON
+// [khoản 352] Hai khẳng định "hàng sổ không mang giá" của ⑽ tìm DÃY CHỮ SỐ của giá (`112`, `107.5`, `103.25`) trong cả chuỗi JSON
 // của payload — mà payload mang `rfqId`, `snapshotId`, `viewedBySessionId` (UUID ngẫu nhiên), và ba chữ số `112` nằm trong một UUID
 // với xác suất cỡ 0,7 %: evidence cục bộ của S3.7a2 (2026-10-10) đỏ đúng hai ca ấy mà không giá nào lọt. Cùng lớp khoản 347 — lượt
 // tìm của khoản ấy chỉ quét dãy từ bốn chữ số. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm; mọi chỗ khác của chuỗi vẫn bị tìm.
