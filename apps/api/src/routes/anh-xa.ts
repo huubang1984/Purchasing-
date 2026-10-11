@@ -77,6 +77,13 @@ function trongYeuTuyChon(body: unknown): readonly string[] | undefined {
   if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new HttpError(422, 'trường "thuocTinhTrongYeu" phải là mảng chuỗi');
   return v as readonly string[];
 }
+/** [S1.9101 / S4.8] Nhóm hàng: vắng hay `null` là không gán; có thì phải là UUID — nhóm có thật, còn dùng là việc của CSDL (`9501`). */
+function nhomHangTuyChon(body: unknown): string | null {
+  const v = truong(body, "nhomHangId");
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, 'trường "nhomHangId" phải là UUID hoặc null');
+  return v;
+}
 /**
  * Tham số đường dẫn; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). [S1.260 / S4.5c1] Xuất cho route benchmark — cùng
  * bộ đọc cho cùng hai tham số `:rfqId`, `:lineNo`.
@@ -176,6 +183,7 @@ const ghi: readonly BuyerWriteRoute[] = [
           donViGoc: chuoiBatBuoc(ctx.req.body, "donViGoc"),
           thuocTinh: thuocTinhTuyChon(ctx.req.body),
           thuocTinhTrongYeu: trongYeuTuyChon(ctx.req.body),
+          nhomHangId: nhomHangTuyChon(ctx.req.body),
         },
         lyDo: lyDoTuyChon(ctx.req.body),
         taoBiDanh: taoBiDanhTuyChon(ctx.req.body),

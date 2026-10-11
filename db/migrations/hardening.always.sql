@@ -1805,7 +1805,7 @@ $ham$;
   TRIGGER_DUOC_PHEP constant text :=
     $q$(VALUES
        ('public.bid_receipts', ARRAY['bid_receipts_chan_truncate', 'bid_receipts_chi_ghi_them']),
-       ('public.canonical_item_versions', ARRAY['canonical_item_versions_chan_truncate', 'canonical_item_versions_chi_ghi_them', 'canonical_item_versions_dat_thu_tu', 'canonical_item_versions_kiem_danh_tinh', 'canonical_item_versions_kiem_quyen_ghi']),
+       ('public.canonical_item_versions', ARRAY['canonical_item_versions_chan_truncate', 'canonical_item_versions_chi_ghi_them', 'canonical_item_versions_dat_thu_tu', 'canonical_item_versions_kiem_danh_tinh', 'canonical_item_versions_kiem_quyen_ghi', 'canonical_item_versions_nhom_hang']),
        ('public.canonical_items', ARRAY['canonical_items_chan_truncate', 'canonical_items_chi_ghi_them', 'canonical_items_dat_thu_tu', 'canonical_items_kiem_danh_tinh', 'canonical_items_kiem_quyen_ghi']),
        ('public.coi_declarations', ARRAY['coi_declarations_chan_truncate', 'coi_declarations_chi_ghi_them', 'coi_declarations_kiem_danh_tinh', 'coi_declarations_kiem_khai_bao']),
        ('public.external_price_references', ARRAY['external_price_references_chan_truncate', 'external_price_references_chi_ghi_them', 'external_price_references_dat_thu_tu', 'external_price_references_kiem_danh_tinh', 'external_price_references_kiem_ngoai', 'external_price_references_kiem_quyen_ghi']),
@@ -17323,6 +17323,82 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.luot_cham_kiem_phien_ban()')),
                   'hàm public.luot_cham_kiem_phien_ban() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_phien_ban() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.9101 / S4.8] Nhom hang cua hang chuan: gan moi chi nhom con dung (duoi khoa chia se theo nhom), giu nhom cua phien ban truoc thi duoc. Than `RETURN NEW` cho mot phien ban tro nhom da ngung, hay vuot lan ngung dung dang chay.
+    ARRAY[
+      $q$hàm + trigger hang_chuan_kiem_nhom_hang (9501_nhom_hang_cua_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang_cua_hang_chuan.sql')$q$,
+      $q$DO $fn350$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.hang_chuan_kiem_nhom_hang()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.hang_chuan_kiem_nhom_hang();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.hang_chuan_kiem_nhom_hang() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  IF NEW.category_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock_shared(
+            pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8));
+  IF public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN
+    RETURN NEW;
+  END IF;
+  IF (SELECT v.category_id
+        FROM public.canonical_item_versions v
+       WHERE v.org_id = NEW.org_id AND v.canonical_item_id = NEW.canonical_item_id
+       ORDER BY v.seq DESC
+       LIMIT 1) IS NOT DISTINCT FROM NEW.category_id THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'Nhom hang da ngung dung — chi giu duoc nhom cua phien ban truoc (S4.8)'
+    USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_chuan_nhom_hang_da_ngung_dung';
+END
+$ham$;
+           IF to_regclass('public.canonical_item_versions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.canonical_item_versions')
+                                 AND t.tgname = 'canonical_item_versions_nhom_hang'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.hang_chuan_kiem_nhom_hang()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER canonical_item_versions_nhom_hang BEFORE INSERT ON public.canonical_item_versions FOR EACH ROW EXECUTE FUNCTION hang_chuan_kiem_nhom_hang()$def$) THEN
+             DROP TRIGGER IF EXISTS canonical_item_versions_nhom_hang ON public.canonical_item_versions;
+             CREATE TRIGGER canonical_item_versions_nhom_hang BEFORE INSERT ON public.canonical_item_versions FOR EACH ROW EXECUTE FUNCTION public.hang_chuan_kiem_nhom_hang();
+             ALTER TABLE public.canonical_item_versions ENABLE ALWAYS TRIGGER canonical_item_versions_nhom_hang;
+           END IF;
+         END
+         $fn350$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF NEW.category_id IS NULL THEN RETURN NEW; END IF; PERFORM pg_catalog.pg_advisory_xact_lock_shared( pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8)); IF public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN RETURN NEW; END IF; IF (SELECT v.category_id FROM public.canonical_item_versions v WHERE v.org_id = NEW.org_id AND v.canonical_item_id = NEW.canonical_item_id ORDER BY v.seq DESC LIMIT 1) IS NOT DISTINCT FROM NEW.category_id THEN RETURN NEW; END IF; RAISE EXCEPTION 'Nhom hang da ngung dung — chi giu duoc nhom cua phien ban truoc (S4.8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_chuan_nhom_hang_da_ngung_dung'; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.canonical_item_versions')
+                           AND t.tgname = 'canonical_item_versions_nhom_hang'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.hang_chuan_kiem_nhom_hang()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER canonical_item_versions_nhom_hang BEFORE INSERT ON public.canonical_item_versions FOR EACH ROW EXECUTE FUNCTION hang_chuan_kiem_nhom_hang()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.hang_chuan_kiem_nhom_hang()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.hang_chuan_kiem_nhom_hang()')),
+                  'hàm public.hang_chuan_kiem_nhom_hang() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.hang_chuan_kiem_nhom_hang() và bảng public.canonical_item_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
     -- [S1.291 / S3.8a / K11] View hieu suat nha cung cap — than, security_invoker va ACL. Mot than bo vi tu khach, bo mot cong gia_da_lo hay doi dinh nghia thang cho phien khach/Passport hay gia chua lo vao chi so; CREATE OR REPLACE thieu WITH xoa security_invoker (do 2026-10-10).
     ARRAY[

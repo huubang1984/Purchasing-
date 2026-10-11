@@ -281,7 +281,7 @@ liệu thông đồng với người tạo gói. Thứ còn lại là dấu vế
 | `packages/danh-gia` | S3.5 dựng lại cổng trao thầu: `trao-thau.ts`, trigger của `061` | S4.7 nới tập mã thành phần: `chi-phi-hieu-dung.ts`, `luot-danh-gia.ts`, ~~`CHECK` và trigger J1 của `057`~~ **[S1.159]** không sửa `057` (§2.5 ⒃); nhưng lời khai TCO lưu cùng award (§2.4 ⑻) chạm đúng đường đề xuất trao của `trao-thau.ts` | Cùng gói, khác tệp, khác hàm ghim. Đo lại lúc làm; nếu S3.5 hóa ra sửa `057` thì S4.7 nhường. **[S1.159]** Vế cam kết của S4.7 đi SAU S3.5 |
 | Bộ xuất ADR-059 | S3.9 thêm lớp governance | S4.5 thêm lớp dữ liệu nền | Hai lớp riêng trong cùng một bundle; `DAC-TA.md` có hai mục |
 | Dải nhãn bất biến | S3 thêm hàng K từ S3.1 | S4.0 nới `[A-HJK]`→`[A-HJ-L]` | Nới một lần ở S4.0. Hàng K và hàng L vào sổ độc lập |
-| Nhóm hàng | S3.6 dựng `procurement_categories` | `canonical_items.category_id` cho phép `NULL` | Khoá ngoại thêm ở hạng mục đầu tiên SAU khi S3.6 vào `master` — không trước. **[S1.159]** Chưa hạng mục nào của §9 mang việc ấy — thêm vào bảng thay đổi |
+| Nhóm hàng | S3.6 dựng `procurement_categories` | `canonical_items.category_id` cho phép `NULL` | Khoá ngoại thêm ở hạng mục đầu tiên SAU khi S3.6 vào `master` — không trước. **[S1.159]** Chưa hạng mục nào của §9 mang việc ấy — thêm vào bảng thay đổi. **[S1.9101 / S4.8]** Xong: cột ở `canonical_item_versions` (`9501`), tuỳ chọn, khoá ngoại theo (tổ chức, nhóm), gán mới chỉ nhóm còn dùng — ADR-9201 |
 | **[S1.159]** `tools/gieo-demo` | S3.1 gieo lại theo bảng vai của spec S3 §7 | §7.1 cần gói cũ có `lines` thật, vai `DATA_STEWARD`, bí danh | Một lần gieo, hai phần. Hôm nay `gieo:demo` có 0 `FINANCE`, đúng MỘT gói ở `OPEN`, hạng mục theo `tam`/`cay`/`bo` (`tools/gieo-demo/src/index.ts:90-94,145-150`) |
 | **[S1.159]** Kịch bản 41 | S3.2 đổi thứ tự mời | S4.4 thêm `lines` và kim đơn giá (§2.5 ⒅) | Cùng tệp. Đi sau S3.2 |
 | **[S1.159]** `/tao-thau`, `/nop-thau`, `/mo-thau` | S3.2 dựng lại `/tao-thau` | S4 thêm số ngày giao, ô TCO, bảng so sánh theo dòng | Cùng tệp. Đi sau S3.2 ở `/tao-thau` |
@@ -427,7 +427,9 @@ hay mâu thuẫn thì bộ chuẩn hoá KHÔNG được gộp (§4.4 bước 5).
 Hàng chuẩn KHÔNG dùng chung giữa các tổ chức (§2.2 ⑷, ADR-013). Hai tổ chức cùng mua thép D10 có hai hàng chuẩn riêng.
 
 > **[S1.197 / S4.2a] Dựng — chủ dự án chốt 2026-09-29.** `don_vi_goc` là khoá ngoại tới `uom_units` — không đơn vị đóng gói.
-> `category_id` CHƯA có cột: nó vào cùng nhóm hàng của S3.6 (ADR-084 ⑶), không vào trước như một cột NULL. `ma` do người quản lý
+> `category_id` CHƯA có cột: nó vào cùng nhóm hàng của S3.6 (ADR-084 ⑶), không vào trước như một cột NULL. **[S1.9101 / S4.8]** Nay có, ở
+> bảng phiên bản (`9501`, ADR-9201): tuỳ chọn; gán MỚI chỉ nhóm còn dùng của chính tổ chức, giữ đúng nhóm của phiên bản trước thì được
+> dù nhóm ấy đã ngừng; người giữ `item.manage` gán. `ma` do người quản lý
 > dữ liệu nhập, viết hoa, duy nhất trong tổ chức. `trang_thai` ∈ {`DANG_DUNG`, `NGUNG_DUNG`} ở bảng phiên bản; `thuoc_tinh` là đối
 > tượng phẳng khoá viết thường → chuỗi không rỗng, `thuoc_tinh_trong_yeu` phải là khoá có mặt. Người GHI mọi bảng nền phải giữ
 > `item.manage` — kiểm ở CSDL (`du_lieu_nen_kiem_quyen_ghi`), dưới cổng của route (ADR-116 ⑹).
@@ -1158,7 +1160,7 @@ migration một mình là no-op.
 | ↳ **S4.7c** | Cam kết | Lời khai TCO của báo giá được đề xuất lưu cùng award, vào bộ bằng chứng như điều khoản cam kết; giải trình khi hạng giá khác hạng TCO; bộ kiểm ngoại tuyến tính lại phép quy đổi; **L8** vế cam kết | S3.5 |
 | ↳ **S4.7c1** [S1.288] | Cam kết + giải trình | Cam kết TCO do CSDL chụp lúc đề xuất (bảng chỉ-ghi-thêm, `app_api` chỉ ghi khoá); ô giải trình riêng, CSDL đòi khi hạng giá khác hạng chi phí và cấm khi bằng; route đọc cam kết; `/mo-thau` ô giải trình và các dòng cam kết ở bước 7; kịch bản 41; **L8** vế cam kết. **[S1.288] XONG** — `121_cam_ket_trao_thau`, ADR-160. Chủ dự án chốt 2026-10-09: hai PR, CSDL tự chụp, ô riêng do CSDL chốt | S4.7b2 |
 | ↳ **S4.7c2** [S1.294] | Bộ bằng chứng | Cam kết vào bộ bằng chứng (phiên bản 3) như điều khoản cam kết; DAC-TA; bộ kiểm ngoại tuyến hai lớp tính lại phép quy đổi từ lời khai và tham số. **Đã làm:** bộ v3 mang `nguon` của mã quy đổi ở mọi hàng mọi lượt, `maThieu`, ảnh chụp TCO của gói (`goiTco`) và cam kết của mỗi đề xuất kèm lời giải trình nguyên văn; DAC-TA v3 §9 (phép quy đổi, nguồn khớp thước) và §10 (cam kết: khớp hàng, thước, lời khai, hạng giá, có giải trình ⇔ lệch hạng); lớp độc lập mảng chữ số + chia ngắn; ADR-165. S4.7 khép | S4.7c1 |
-| **S4.8** | Khoá ngoại nhóm hàng | `canonical_items`… `category_id` → `procurement_categories` (qua phiên bản hàng chuẩn) | S3.6 |
+| **S4.8** [S1.9101] | Khoá ngoại nhóm hàng | `canonical_items`… `category_id` → `procurement_categories` (qua phiên bản hàng chuẩn). **Đã làm:** `9501_nhom_hang_cua_hang_chuan` — cột ở `canonical_item_versions`, khoá ngoại theo (tổ chức, nhóm), trigger gán mới chỉ nhóm còn dùng dưới khoá chia sẻ (giữ nhóm của phiên bản trước được); gói, ba route và `/du-lieu` mang `nhomHangId`; `gieo:demo --s3` gắn `KET-CAU` cho ba hàng chuẩn demo; **L1**, **L3**. Chủ dự án chốt 2026-10-11: tuỳ chọn, một PR — ADR-9201 | S3.6 |
 | **S4b.1** | Rủi ro cao không một chạm | **L11**; mức `KHONG_XAC_DINH` từ yếu tố đã có (độ lệch benchmark, độ phủ); không chờ cổng (e) | S3.5, S4.5 |
 | **S4b.0** | Cổng dữ liệu | Công cụ chỉ xuất số đếm theo từng tổ chức, chạy với đồng ý của khách; lượt soi hình dạng riêng cho §4.9 | Pilot |
 | **S4b.2–4** | Risk Score, Supplier Score, phân tích người mua | Như bảng gốc; phân tích người mua chỉ sau câu trả lời pháp lý §8.7 | Cổng (e) |

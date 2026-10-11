@@ -1130,6 +1130,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "caller_rate_limits", cot: "window_start", quyen: "INSERT" },
       // [S1.197 / S4.2a] Hàng chuẩn: ghi thêm theo cột; `id`, `seq`, `ghi_luc` ngoài GRANT (L1).
       { grantee: "app_api", bang: "canonical_item_versions", cot: "canonical_item_id", quyen: "INSERT" },
+      // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn — tuỳ chọn, ghi trong chính phiên bản (`9501`).
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "category_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_item_versions", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_item_versions", cot: "session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_item_versions", cot: "tac_gia", quyen: "INSERT" },

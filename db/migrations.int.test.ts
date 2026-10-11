@@ -2511,6 +2511,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.290 / J1 — tiếp TRUNG-1 của §S1.288] Hàng chấm chỉ nhận phiên bản mới nhất đã mở của luồng, lời mời còn sống. Thân `RETURN NEW`
     // cho một lượt chấm dựng trọn ở đường ghi thứ hai chọn giá vòng một đã bị BAFO thay, hay báo giá của lời mời đã thu hồi.
     { ham: "luot_cham_kiem_phien_ban", migration: "122_hang_cham_phien_ban_moi_nhat.sql", trigger: ["rfq_evaluation_lines_kiem_phien_ban"] },
+    // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn: gán mới chỉ nhóm còn dùng, dưới khoá chia sẻ theo nhóm. Thân `RETURN NEW` cho một phiên
+    // bản trỏ nhóm đã ngừng dùng, hay vượt lần ngừng dùng đang chạy.
+    { ham: "hang_chuan_kiem_nhom_hang", migration: "9501_nhom_hang_cua_hang_chuan.sql", trigger: ["canonical_item_versions_nhom_hang"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.

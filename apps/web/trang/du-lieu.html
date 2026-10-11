@@ -52,7 +52,7 @@
     <label for="loc">Lọc theo mã hoặc tên</label>
     <input id="loc" autocomplete="off" spellcheck="false" placeholder="thép d10">
     <table id="bang-hang">
-      <thead><tr><th>Mã</th><th>Tên</th><th>Đơn vị gốc</th><th>Trạng thái</th><th></th></tr></thead>
+      <thead><tr><th>Mã</th><th>Tên</th><th>Đơn vị gốc</th><th>Nhóm hàng</th><th>Trạng thái</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="bao luu" id="con-nua" hidden></div>
@@ -74,6 +74,9 @@
     <textarea id="tao-thuoc-tinh" rows="4" spellcheck="false" placeholder="nha_san_xuat: Hòa Phát&#10;mac: CB300"></textarea>
     <label for="tao-trong-yeu">Thuộc tính trọng yếu — khoá cách nhau bằng dấu phẩy</label>
     <input id="tao-trong-yeu" autocomplete="off" spellcheck="false" placeholder="mac">
+    <!-- [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn — tuỳ chọn. Danh sách do Tài chính quản lý ở `/nhom-hang`; chỉ nhóm còn dùng. -->
+    <label for="tao-nhom-hang">Nhóm hàng — không bắt buộc; danh sách do Tài chính quản lý ở màn nhóm hàng</label>
+    <select id="tao-nhom-hang"></select>
     <button id="nut-tao">Tạo hàng chuẩn</button>
     <div class="bao loi" id="loi3" hidden></div>
     <div class="bao ok" id="ok3" hidden></div>
@@ -84,7 +87,7 @@
     <dl class="tt" id="tt-hang"></dl>
     <h3>Các phiên bản</h3>
     <table id="bang-phien-ban">
-      <thead><tr><th class="so">Bản</th><th>Tên</th><th>Thuộc tính</th><th>Trọng yếu</th><th>Trạng thái</th><th>Người ghi</th><th>Lúc</th></tr></thead>
+      <thead><tr><th class="so">Bản</th><th>Tên</th><th>Thuộc tính</th><th>Trọng yếu</th><th>Nhóm hàng</th><th>Trạng thái</th><th>Người ghi</th><th>Lúc</th></tr></thead>
       <tbody></tbody>
     </table>
     <div id="khoi-phien-ban" hidden>
@@ -96,6 +99,8 @@
       <textarea id="pb-thuoc-tinh" rows="4" spellcheck="false"></textarea>
       <label for="pb-trong-yeu">Thuộc tính trọng yếu</label>
       <input id="pb-trong-yeu" autocomplete="off" spellcheck="false">
+      <label for="pb-nhom-hang">Nhóm hàng — nhóm đã ngừng dùng chỉ giữ được khi phiên bản trước đang mang nó</label>
+      <select id="pb-nhom-hang"></select>
       <label><input type="checkbox" id="pb-ngung"> Ngừng dùng hàng chuẩn này</label>
       <button id="nut-phien-ban">Thêm phiên bản</button>
     </div>
@@ -203,6 +208,8 @@
       <input id="xl-don-vi" autocomplete="off" spellcheck="false" placeholder="cai">
       <label for="xl-ten">Tên</label>
       <input id="xl-ten" autocomplete="off">
+      <label for="xl-nhom-hang">Nhóm hàng — không bắt buộc</label>
+      <select id="xl-nhom-hang"></select>
       <button id="nut-tao-duyet" class="phu">Tạo hàng chuẩn rồi duyệt</button>
       <p class="ghi">Sửa thuộc tính hay khai thêm bí danh cho một hàng chuẩn: mở hàng ấy ở bước 2.</p>
       <button id="nut-chuan-hoa-lai" class="phu">Chuẩn hoá lại cả gói</button>
