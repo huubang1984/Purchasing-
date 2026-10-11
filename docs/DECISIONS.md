@@ -13209,3 +13209,73 @@ nút *Đọc benchmark* và mọi nút *Xem dải* khoá trong lúc một lần 
 ### Điều ADR này KHÔNG nói
 
 Trần theo người hay theo tổ chức; trần ở tầng hạ tầng (WAF, ALB); hạn mức cho các route đọc khác của lớp trên.
+
+## ADR-166 — S3.9b: điều tra K12 — mọi câu `RAISE` của lược đồ thuộc đúng một lớp, đối chiếu hai chiều; hai lời từ chối của đường chính sách có tên và vào sổ; chín khoảng trống ghi nợ
+
+**Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Làm S3.9b đi"*, rồi chốt sáu câu: phạm vi *"Mọi RAISE trong
+lược đồ"*; hai nợ đã gọi tên *"Phân loại 'không vào sổ có lý do'"*; người tạo tự ký *"Sửa trong vòng này"*; phiên bản không bậc ở tổ chức đã bật
+*"Sửa trong vòng này"*; tám khoảng trống *"Ghi khoản nợ có tên, sửa vòng riêng"*; lỗi 500 của đường đua Passport *"Sửa ngay trong vòng này"*.
+
+### Bối cảnh
+
+K12 (spec S3 §5, §5.1; ADR-084 ⑷ ⑸; ADR-060) đo theo từng hạng mục từ S3.1, và kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §3
+hẹn một phép ĐIỀU TRA trên toàn bộ: mọi chỗ từ chối thuộc đúng một lớp, hai chiều. Đo trước (cụm dùng một lần, thân cuối sau `migrate()`): 362 câu
+`RAISE` mức EXCEPTION trong 119 hàm PL/pgSQL; 87 tên tĩnh (19 trong `CHOT_THEO_RANG_BUOC`), 12 tên động `lower(ly_do)`, 250 câu không tên. Một phép
+đếm bằng biểu thức chính quy cho 363 — chữ `RAISE` trong một chú thích của `unseal_kiem_chuyen_trang_thai`.
+
+### Quyết định
+
+⑴ **Phạm vi: mọi câu `RAISE` mức EXCEPTION trong thân cuối của mọi hàm PL/pgSQL** — không chỉ của S3, để một `RAISE` mới ở BẤT KỲ đâu phải khai lớp.
+Bộ đọc `db/doc-raise.ts` tách mã / chuỗi (`''`, `E'…'`, `$tag$`) / chú thích (dòng, khối lồng) TRƯỚC khi tìm từ khoá; văn bản mẫu đi qua từng nhánh.
+⑵ **Sáu lớp, mỗi chỗ đúng một** (`db/dieu-tra-k12.int.test.ts`, bảng `db/phan-loai-tu-choi.ts`; **[lượt soi trên mã T1–T3]** mọi chỗ có tên khoá
+(tên, hàm, số câu); THEO_TEN đòi errcode `check_violation` — `maChotTuLoi` chỉ nhận 23514 — và một tệp gói bắt tên; dòng tên động có lớp tường minh,
+số câu, và mọi phép gán cho biến của nó phải gọi một hàm vị từ đã khai): THEO_TEN — tên ràng buộc trong `CHOT_THEO_RANG_BUOC`
+(vế vào sổ là `CHOT_VAO_SO`, không khai lại), kể cả tên động khi MỌI mã các hàm vị từ của nó trả về có trong bảng hay trong `TU_VUNG_NGOAI`; HOI_TRUOC
+— tầng ứng dụng hỏi trước và từ chối ở đó; SO_RIENG — tầng gói bắt chính lỗi theo tên và ghi hàng sổ của riêng nó (`BID_STATE_DENIED`,
+`BID_DEADLINE_DENIED`, `UNSEAL_NOT_FOUND_DENIED`); KHONG_VAO_SO — dữ liệu / cấu hình (ADR-060); BAT_BIEN — không đường hợp lệ nào tới được trừ câu SQL
+thô; KHOANG_TRONG — người dùng đi tắt một chốt mà không để hàng sổ, mỗi dòng trỏ khoản 353. Câu không tên khoá theo (hàm, errcode) và ĐẾM số câu.
+⑶ **Hai chiều:** mọi chỗ sống có dòng; mọi dòng còn chỗ sống (khoá không tên khớp đúng số câu); mọi tên của `CHOT_THEO_RANG_BUOC` còn một chỗ ném nó —
+tĩnh, hay suy từ mã của hàm vị từ sau một tên động; một hàm vị từ (`*_chot_*`) mà thân trigger gọi mà dòng tên động không khai thì đỏ; mã của
+`TU_VUNG_NGOAI` còn được trả về. Một hàm nạp chồng mang `RAISE` làm phép đo đỏ — bảng khoá theo tên hàm. Đối chứng: một hàm mới mang bốn câu chưa phân
+loại (không tên, tên mới, tên động mới, tên của bảng chốt dưới errcode khác `check_violation`) bị nêu cả bốn.
+⑷ **Hai nợ đã gọi tên của §S1.202** — từ chối vế ngân sách và danh sách K4b ở cạnh mở gói khi chữ ký không còn khớp — phân loại KHONG_VAO_SO: dữ
+liệu đổi dưới chân người mở gói, cùng lý lẽ đã chốt cho `K9_KHAI_BAO_LOI_THOI`. Không đổi mã.
+⑸ **Hai lời từ chối của đường chính sách có tên và vào sổ** (`125_k1_chinh_sach_co_ten`, khuôn ADR-108): người TẠO phiên bản tự ký
+(`k1_nguoi_tao_tu_ky` → `K1_NGUOI_TAO_TU_KY`, `kyPhienBanChinhSach` bắt tên) — cùng loại `D2_NGUOI_TAO_TU_DUYET` vốn vào sổ; phiên bản KHÔNG bậc ở tổ
+chức đã bật (`k1_ban_khong_bac` → `K1_BAN_KHONG_BAC`, `createProcurementPolicy` bắt tên, tài nguyên là tổ chức) — phiên bản ấy có hiệu lực mà không
+cần chữ ký thứ hai, cùng hình dạng `THIEU_NGAN_SACH`. Hai hàm nay nhận `auditPool`; bảy nhánh khác của `chinh_sach_kiem_nguoi_ky` (sáu
+`check_violation`, một `foreign_key_violation`) giữ nguyên lớp.
+⑹ **Lỗi 500 của đường đua Passport:** `PassportYeuCauError` đặt `name` riêng nên không thuộc `LOI_NGHIEP_VU_422` dù kế thừa `SupplierError`; bộ điều
+phối nay ánh xạ nó như nhánh thường của route (422 mang mã, 429 kèm `retry-after` cho trần).
+⑺ **Vế `PERMISSION_DENIED` không đo ở đây** — cổng quyền ở bộ điều phối và hàm gói, đo bằng `tests/architecture/cong-quyen-route.test.ts`; một `RAISE`
+về quyền trong trigger là lớp chặn cuối (HOI_TRUOC).
+
+### Cái giá, nói ra
+
+⒜ Lớp của một chỗ là LỜI KHAI có lý do, đọc từ mã lúc viết (ba lượt tra chỉ đọc, em kiểm lại từng khoảng trống) — phép đo giữ lời khai không trôi khỏi
+thân hàm, không chứng minh lời khai đúng. ⒝ Lớp theo NHÓM (hàm, errcode): một nhóm gom nhánh khác lớp thì lý do nói nhánh khác ấy, phép đo không
+tách. ⒞ Chín khoảng trống (khoản 353 — tám của lượt tra, một của lượt soi trên mã) còn mở: sửa ngân sách hay thêm hạng mục sau khi nộp, mở gói chưa chờ duyệt, duyệt yêu cầu mở thầu không còn chờ,
+xin mở thầu khi gói chưa đóng (C3), xin mở thầu với mã gói lạ (khoản 133), ánh xạ bởi người trong tập loại trừ (spec S4 L12), rút ngoại lệ của gói
+khác; cùng họ gia hạn ở PENDING_APPROVAL; **[lượt soi trên mã T4]** và duyệt gói không ở PENDING_APPROVAL (`rfq_kiem_nguoi_duyet`, song sinh của
+nhánh *không PENDING* ở `unseal_kiem_nguoi_duyet` — một luật cho cả hai). ⒟ Ca đua của các chốt hỏi trước (trigger chặn sau khi vị từ đã cho qua)
+vẫn ra 422 không hàng sổ — giới hạn đã nhận ở `packages/danh-gia/src/tu-choi-vao-so.ts`. ⒠ **[lượt soi trên mã THẤP]** `K1_BAN_KHONG_BAC` ghi sổ
+cả ca đua trung thực: một người nộp phiên bản không bậc ĐÚNG lúc chữ ký của người khác bật S3 (câu ghi chờ khoá tư vấn rồi gặp tổ chức đã bật) —
+cấu hình đổi dưới chân, ADR-060 nói không ghi. Mỗi tổ chức bật S3 một lần; ghi thừa một hàng ở ca ấy được nhận thay vì thêm một câu đọc trước. ⒡
+Hàng sổ của lần tạo phiên bản trỏ tài nguyên `PROCUREMENT_POLICY` mang mã TỔ CHỨC — phiên bản chưa có mã; lần từ chối quyền của cùng route để
+`resource_id` rỗng.
+
+### Phương án loại
+
+- **Chỉ chỗ từ chối của S3** — ranh giới *"của S3"* mờ, và một `RAISE` mới ở MVP1 không bị bắt.
+- **Khoá theo vị trí câu trong thân** — lệch theo mọi lần sửa thân; khoá (hàm, errcode) cộng số câu lệch đúng khi số câu đổi.
+- **Một hàng `CHOT_VAO_SO` cho mỗi chỗ không tên** — biến từ vựng chốt thành danh mục mọi lỗi; lớp KHONG_VAO_SO / BAT_BIEN không có thông điệp cho người.
+
+### Đo bằng
+
+`db/dieu-tra-k12.int.test.ts` (bộ đọc trên văn bản mẫu, sáu lớp, hai chiều, tên động, `TU_VUNG_NGOAI`, đối chứng); `packages/rfq/src/bac-chinh-sach.int`
+(hai tên ràng buộc ở mức CSDL; hai đường gói ghi đúng một `CONTROL_DENIED`; nhánh không tên không để hàng sổ); `apps/api/src/buyer.int` (route ký);
+`apps/api/src/passport.int` (đường đua 422/429); đột biến ở biên bản §S1.295.
+
+### Điều ADR này KHÔNG nói
+
+Sửa chín khoảng trống (khoản 353); lớp governance của bộ bằng chứng (S3.9a — chờ S3.7a2); KPI (S3.9c).

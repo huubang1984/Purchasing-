@@ -1065,7 +1065,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         // nhóm khoá mà route không chuyển, nên không đường HTTP nào khai được nó.
         tco: objectChuoiTuyChon(ctx.req.body, "tco"),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       return { status: 201, body: { policy } };
     },
   },
@@ -1083,10 +1083,12 @@ const ghi: readonly BuyerWriteRoute[] = [
       if (!ctx.choKyChinhSach) {
         throw new HttpError(409, "Ký phiên bản chính sách chưa mở trên máy chủ này: S3 chưa đủ chốt để bật (ADR-105)");
       }
-      const chuKy = await kyPhienBanChinhSach(ctx.client, ctx.orgId, {
-        policyId: policyIdParam(ctx.req),
-        actorSessionId: ctx.actor.sessionId,
-      });
+      const chuKy = await kyPhienBanChinhSach(
+        ctx.client,
+        ctx.orgId,
+        { policyId: policyIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
       return { status: 201, body: { chuKy } };
     },
   },

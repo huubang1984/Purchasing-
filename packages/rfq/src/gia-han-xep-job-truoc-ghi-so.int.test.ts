@@ -88,7 +88,7 @@ beforeAll(async () => {
   ).rows[0]!.id;
   apiPool = db.poolAs("app_api");
   await withTenant(apiPool, orgA, (c) =>
-    createProcurementPolicy(c, orgA, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: s1 }),
+    createProcurementPolicy(c, orgA, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: s1 }, apiPool),
   );
 }, 180_000);
 

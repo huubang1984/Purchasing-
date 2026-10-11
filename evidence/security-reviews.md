@@ -27793,3 +27793,146 @@ lệch). Mã nguyên bản trước: 6 + 2 + 1 ca xanh. Máy rảnh trước m�
   nhánh của #280 rồi chạy lại. Ba nhánh giữ `cap-so/vong/296`, `cap-so/adr/167`, `cap-so/khoan/354` vẫn còn trên remote — lệnh xoá
   bị chặn ở phiên này; `--don` không dọn chúng (số chưa vào base).
 - `pnpm t0`, `pnpm test`, `pnpm evidence` trên cây đã gộp `master`: ghi ở thân PR và thân merge (lệ S1.70).
+
+---
+
+# §S1.295 — S3.9b: ĐIỀU TRA K12 — MỌI CÂU `RAISE` CỦA LƯỢC ĐỒ THUỘC ĐÚNG MỘT LỚP, HAI CHIỀU; HAI LỜI TỪ CHỐI CỦA ĐƯỜNG CHÍNH SÁCH VÀO SỔ; CHÍN KHOẢNG TRỐNG GHI NỢ — ADR-166
+
+Ngày 2026-10-11 (giờ máy UTC+7). Nhánh `s3-9b-dieu-tra-k12` từ `e4721cae` (master sau #278). Migration `125_k1_chinh_sach_co_ten`, ADR-166, khoản 353.
+
+## 1. Vòng này là gì
+Chủ dự án: *"Làm S3.9b đi"* — phần S3.9b của kế hoạch `docs/superpowers/plans/2026-10-10-chuan-bi-s3-8-s3-9.md` §3: đọc thân cuối của mọi hàm có
+`RAISE`, mỗi chỗ từ chối thuộc đúng một lớp, hai chiều; hai nợ đã gọi tên và ca *người tạo tự ký* được phân loại, sửa hay ghi nợ do chủ dự án chọn
+lúc mở vòng.
+
+## 2. Đo trước (cụm `postgres:16-alpine` dùng một lần, thân cuối sau `migrate()`)
+- 195 hàm; 362 câu `RAISE` mức EXCEPTION trong 119 hàm PL/pgSQL (không hàm nạp chồng, mọi chỗ ở `public`, mọi errcode viết trong nháy).
+- 87 tên tĩnh — 19 trong `CHOT_THEO_RANG_BUOC`, 68 ngoài; 12 chỗ tên động `lower(ly_do)` ở 11 hàm; 250 câu không tên ở 96 hàm (218 `check_violation`,
+  23 `foreign_key_violation`, 8 `insufficient_privilege`, 1 mặc định).
+- 38 mã trả về từ hàm vị từ; 6 mã `PASSPORT_*` ngoài `CHOT_VAO_SO`.
+- Phép đếm đầu bằng biểu thức chính quy cho 363: một chữ `RAISE` trong chú thích của `unseal_kiem_chuyen_trang_thai`. Bộ đọc của vòng tách mã / chuỗi
+  / chú thích trước khi tìm từ khoá và đếm 362 — đối chiếu từng hàm, lệch đúng hàm ấy.
+
+## 3. Câu chốt của chủ dự án (2026-10-11)
+1. Phạm vi: **mọi `RAISE` trong lược đồ** (không chỉ của S3).
+2. Hai nợ đã gọi tên (§S1.202 — vế ngân sách và danh sách K4b ở cạnh mở gói): **phân loại *không vào sổ có lý do*** (dữ liệu đổi dưới chân, cùng lý lẽ
+   `K9_KHAI_BAO_LOI_THOI`).
+3. Người tạo tự ký phiên bản chính sách: **sửa trong vòng này**.
+4. (sau ba lượt tra) Phiên bản không bậc ở tổ chức đã bật (#33): **sửa trong vòng này**.
+5. Tám khoảng trống: **ghi khoản nợ có tên, sửa vòng riêng** (khoản 353).
+6. Lỗi 500 của đường đua Passport: **sửa ngay trong vòng này**.
+
+## 4. Ba lượt tra chỉ đọc — 192 nhóm
+Danh mục 192 nhóm cần phân loại tay (68 tên ngoài bảng, 11 nhóm tên động, 113 nhóm không tên theo (hàm, errcode)) chia ba agent chỉ đọc; mỗi nhóm:
+đường ghi sản xuất nào tới, tầng ứng dụng có hỏi trước không, có hàng sổ không, lớp đề xuất kèm `file:line`. Kết quả gộp: HOI_TRUOC 33 + 21, BAT_BIEN
+18 + 71, KHONG_VAO_SO 12 + 14, SO_RIENG 4 (lớp thứ năm, em thêm cho bốn ca bắt theo tên rồi ghi sổ riêng), KHOANG_TRONG 1 + 6, cộng #33 và ca biên #60.
+Em kiểm lại bằng đọc mã từng khoảng trống trước khi trình: #33 (`chinh_sach_da_bat_thi_phai_co_bac` không tên, `createProcurementPolicy` không bắt),
+#75 (`setRfqBudget` không hỏi trạng thái), #121 (`requestUnseal` hỏi quyền rồi ghi thẳng), #133 (tên có nhưng ERRCODE `42501`, `ghiDuLieuNen` → 422),
+#60 (`rutNgoaiLe` không kiểm `exceptionId` thuộc `rfqId`), và lỗi 500 Passport (`PassportYeuCauError` đặt `name` riêng, không thuộc `LOI_NGHIEP_VU_422`,
+route chỉ xử lý nhánh trả về).
+
+## 5. Thay đổi
+- `db/doc-raise.ts` — bộ đọc câu `RAISE`; `db/phan-loai-tu-choi.ts` — năm bảng phủ đủ 362 câu: `BANG_TEN` 72 dòng (68 tên) / 82 câu,
+  `BANG_THEO_TEN` 21 / 21, `BANG_DONG` 11 / 12, `BANG_KHONG_TEN` 112 nhóm / 247 câu, và 6 mã `TU_VUNG_NGOAI`;
+  `db/dieu-tra-k12.int.test.ts` — mười một ca (văn bản mẫu, nạp chồng, ngôn ngữ thủ tục và `ASSERT`, khoá duy nhất, đúng một lớp, hai chiều,
+  THEO_TEN có tệp bắt tên, tên động, `TU_VUNG_NGOAI` hai chiều, THEO_TEN ↔ `CHOT_VAO_SO`, đối chứng bốn câu chưa phân loại).
+- `125_k1_chinh_sach_co_ten`: `chinh_sach_kiem_nguoi_ky` (thân `097`) và `chinh_sach_da_bat_thi_phai_co_bac` (thân `069`) mang tên ràng buộc
+  `k1_nguoi_tao_tu_ky`, `k1_ban_khong_bac`; hai khối ghim hardening cùng commit.
+- `K1_NGUOI_TAO_TU_KY`, `K1_BAN_KHONG_BAC` vào `CHOT_VAO_SO` (vào sổ), `CHOT_THEO_RANG_BUOC`, `DANH_MUC_VE_CONG`; `kyPhienBanChinhSach`,
+  `createProcurementPolicy` nhận `auditPool`, bắt tên và ghi `CONTROL_DENIED` ở giao dịch độc lập (32 lời gọi ở 21 tệp: hai route, bốn ở
+  `gieo-demo`, 26 ở test).
+- `apps/api/src/dispatch.ts`: `PassportYeuCauError` → 422 mang mã / 429 + `retry-after` như nhánh thường của route.
+- Khoản 353 (chín khoảng trống: tám của lượt tra, ⑨ của lượt soi trên mã) ở sổ nợ `docs/STATE.md`.
+
+## 6. Phép đo
+- `db/dieu-tra-k12.int` 11/11; `packages/rfq/src/bac-chinh-sach.int` + `apps/api/src/passport.int` 65/65 (hai ca mới của đường gói, đường đua 422/429).
+- `migrate()` hai lần trên CSDL mới: lần một 120 tệp, lần hai 0, không cảnh báo nào nhắc hai hàm ghim.
+
+## 7. Đột biến — 21/21 bị giết trên mã cuối, một tương đương
+Script `dot-bien-s39b.py` (scratchpad): sửa thẳng tệp (năm bảng, bộ đọc, bảng chốt, migration `125` cùng hai khối ghim hardening, gói, bộ điều
+phối); mỗi lượt `--reporter=json`, so tập đỏ với tập dự kiến theo `fullName`, khôi phục và kiểm sha256 cả bảy tệp. Đột biến tên ràng buộc sửa CẢ
+tệp `125` LẪN hai khối ghim — hardening âm thầm khôi phục thân ghim mỗi lần `migrate()`, sửa một phía là đột biến chết vì hardening chứ không vì
+phép đo.
+
+Tên ca trong cột *Đỏ*: MẪU = văn bản mẫu của bộ đọc; MỘT = đúng một lớp; HAI = hai chiều; ĐỘNG = tên động; TỆP = THEO_TEN có tệp bắt tên;
+TK-CSDL / TK-GÓI = người tạo tự ký ở CSDL / qua `kyPhienBanChinhSach`; KB-CSDL / KB-GÓI = phiên bản không bậc ở CSDL / qua
+`createProcurementPolicy`; ĐUA = đường đua Passport.
+
+| Mã | Đột biến | Đỏ |
+|---|---|---|
+| C01 | bỏ một dòng không tên (`award_chot_doc_lap`, FK) | MỘT |
+| C02 | dòng không tên khai 2 câu thay 1 | HAI |
+| C03 | bỏ một dòng tên (`anh_xa_bi_danh_trong_tap_loai_tru`) | MỘT |
+| C04 | thêm một dòng tên không còn ở thân nào | HAI |
+| C05 | bỏ `k9_co_xung_dot` khỏi `CHOT_THEO_RANG_BUOC` | ĐỘNG |
+| C06 | bỏ mã `PASSPORT_NCC_CHUA_XAC_MINH` khỏi `TU_VUNG_NGOAI` | ĐỘNG |
+| C07 | bỏ `award_chot_hau_kiem` khỏi `viTu` của một dòng tên động | ĐỘNG |
+| C08 | bộ đọc gắn chú thích dòng là MÃ | MẪU, HAI |
+| C09 | bộ đọc bỏ nhánh `''` trong chuỗi | — tương đương |
+| C10 | dòng THEO_TEN `d2_nguoi_tao_tu_duyet` đổi hàm | MỘT, HAI |
+| C11 | tệp bắt tên trỏ một tệp không gọi `maChotTuLoi` | TỆP |
+| C12 | dòng tên khai 2 câu thay 1 | HAI |
+| C13 | dòng tên động THEO_TEN mất tệp bắt tên | TỆP |
+| C14 | bộ đọc bỏ nhánh định danh trong nháy kép | MẪU |
+| C15 | bộ đọc đánh chỉ số theo điểm mã (`[...s]`) | MẪU |
+| C16 | chuỗi hằng nối biểu thức (`'k1_' \|\| x`) đọc thành tên | MẪU |
+| C17 | dòng tên động `coi_kiem_xac_minh` khai hàm vị từ khác | ĐỘNG, HAI |
+| F10 | bỏ `CONSTRAINT = 'k1_nguoi_tao_tu_ky'` (`125` + hai khối ghim) | TK-CSDL, TK-GÓI, HAI |
+| F11 | bỏ `CONSTRAINT = 'k1_ban_khong_bac'` (`125` + hai khối ghim) | KB-CSDL, KB-GÓI, MỘT, HAI |
+| F12 | `kyPhienBanChinhSach` không bắt tên | TK-GÓI |
+| F13 | `createProcurementPolicy` không bắt tên | KB-GÓI |
+| F14 | bộ điều phối bỏ nhánh `PassportYeuCauError` | ĐUA |
+
+F10 không đỏ MỘT còn F11 thì có: câu tự ký mất tên rơi vào nhóm `(chinh_sach_kiem_nguoi_ky, check_violation)` đã có dòng — vẫn phân loại được,
+chỉ lệch số câu; câu không bậc mất tên là câu `check_violation` duy nhất của hàm ấy — không dòng nào nhận.
+
+Lượt đầu chạy 14 đột biến (C01–C09, F10–F14) trên bản trước lượt soi trên mã: 12 đúng tập dự kiến. **C08** dự kiến MỘT + MẪU — sai: chữ `RAISE`
+trong chú thích của `unseal_kiem_chuyen_trang_thai` thành một câu thuộc nhóm (hàm, errcode) đã có dòng, nên phân loại được và chỉ lệch số câu (HAI).
+**C09 sống — tương đương:** bỏ nhánh `''` thì `'it''s'` đọc thành hai chuỗi liền nhau `'it'` `'s'`, mọi ký tự vẫn gắn loại CHUỖI; không đầu vào
+nào phân biệt được. Lượt cuối chạy 22 (thêm C10–C17 cho các nhánh mới của lượt soi) trên mã cuối: 21/21 đúng tập dự kiến. **C17** dự kiến chỉ
+ĐỘNG — sai: mã của `coi_chot_xac_minh` rời tập tên động, nên các tên của bảng chốt chỉ hàm ấy trả về thành *"không chỗ nào ném"* ở phép đếm hai
+chiều — phát hiện thứ hai, thật; chỉ sửa chuỗi dự kiến. F14 chạy lại sau khi bản vá THẤP của bộ điều phối đổi dòng neo.
+
+## 8. Lượt soi đối kháng trên mã
+Một agent chỉ đọc (không chạy test), trên cây trước commit: 0 CAO, 4 TRUNG, 10 THẤP. Em đọc lại từng mục.
+- **T1 — ĐÚNG, đã vá.** THEO_TEN không kiểm errcode, mà `maChotTuLoi` chỉ nhận 23514 — chính hình dạng của khoảng trống ⑺ (`42501`). Nay tên của bảng
+  chốt dưới errcode khác `check_violation` là lỗi phân loại; ca đối chứng thêm một câu như thế.
+- **T2 — ĐÚNG, đã vá.** Chỗ có tên chỉ khoá theo tên: chép một tên sang trigger mới vẫn qua; `rfq_kiem_chu_ky_xung_dot_khi_mo` tự thành THEO_TEN dù
+  câu ghi của nó không bắt tên. Nay mọi chỗ có tên khoá (tên, hàm, số câu); bảng mới `BANG_THEO_TEN` (21 chỗ) ghi tệp gói bắt tên và phép đo đòi tệp
+  ấy gọi `maChotTuLoi`; dòng tên động có lớp tường minh — `rfq_kiem_chu_ky_xung_dot_khi_mo` thành HOI_TRUOC, `passport_kiem_yeu_cau` KHONG_VAO_SO.
+- **T3 — ĐÚNG, đã vá.** Phép kiểm tên động lách được (viTu rỗng, gán từ hàm không tên `*_chot_*`, không đếm số câu, đọc `RETURN` trong chú thích).
+  Nay: viTu khác rỗng; mọi phép gán cho biến của biểu thức là lời gọi một hàm của viTu, mọi hàm của viTu được gán, không `INTO <biến>`; số câu; mã
+  đọc trên văn bản đã bỏ chú thích; `RETURN` không phải mã hằng hay NULL là lỗi.
+- **T4 — ĐÚNG, đã vá (phân loại).** `rfq_kiem_nguoi_duyet` (duyệt gói không ở PENDING) xếp KHONG_VAO_SO trong khi song sinh của nó ở
+  `unseal_kiem_nguoi_duyet` xếp KHOANG_TRONG. `approveRfq` *"đi thẳng như cũ"* là ghi chú hiện trạng, không phải chốt ADR-060. Một luật cho cả hai:
+  KHOANG_TRONG, mục ⑨ của khoản 353 (theo câu 5 của chủ dự án — khoảng trống thì ghi nợ).
+- **THẤP đã vá:** chuỗi hằng nối biểu thức (`'k1_' || x`) không còn đọc thành tên; bộ đọc đánh chỉ số theo đơn vị UTF-16 (ký tự ngoài mặt phẳng cơ
+  bản từng lệch mặt nạ một ô); định danh trong nháy kép; cổng ngôn ngữ thủ tục và câu `ASSERT`; khoá duy nhất của mọi bảng; `TU_VUNG_NGOAI` gắn với
+  ĐÚNG hàm vị từ; bộ điều phối chỉ đưa `ma` ra khi nó thuộc `MA_TU_CHOI_PASSPORT`; số nhánh (bảy nhánh còn lại: sáu `check_violation`, một FK);
+  ghi chú thứ tự khoá (khoá tư vấn 2 trước khoá chuỗi sổ 0) ở đầu `125`.
+- **THẤP để nguyên, nói lý do:** `K1_BAN_KHONG_BAC` ghi sổ cả ca đua bật S3 giữa chừng — mỗi tổ chức bật một lần, ghi thừa một hàng được nhận
+  (ADR-166 ⒠); hàng sổ của lần tạo phiên bản trỏ mã tổ chức (ADR-166 ⒡).
+- Đã kiểm bằng đọc (agent): hai khối ghim trùng thân `125` đã chuẩn hoá; `tuChoiTheoChotTaiNguyen` luôn ném nên không ghi đôi; mọi chỗ gọi truyền
+  pool; mười dòng mẫu của bảng đúng lớp, trừ T4.
+
+## 9. Số đo
+Ngày 2026-10-11, giờ máy UTC+7.
+- Trên cây trước lượt soi trên mã: `pnpm t0` xanh (594 module); `pnpm test` 161 tệp / 2898 ca, 0 đỏ.
+- Lượt đột biến cuối (9:47–10:05) chạy CHỒNG lượt evidence của một phiên khác (worktree `bac-1-pilot`, bắt đầu 9:45) — em kiểm máy trước lượt
+  t0 mà không kiểm trước lượt đột biến. Mọi đột biến ra đúng tập dự kiến; lượt evidence của phiên kia có thể mang đỏ giả do lượt này.
+- Trên `3b17f44e` (sau gộp #277 và `cap-so`; bắt đầu 10:32 sau ~25 phút xếp hàng sau lượt evidence ấy): `pnpm t0` 60 s (depcruise 595
+  module, 0 vi phạm); `pnpm test` 162 / 165 tệp qua, **5 ca đỏ ở một tệp** — P11 của H20: hàng 353 trỏ `§S1.295` khi biên bản này chưa nối
+  vào `evidence/security-reviews.md` (bốn ca kia của P11 đọc cùng tệp thật). Nối biên bản (`a390a5e5`): `pnpm test` 163 / 165 tệp,
+  2922 ca, 0 đỏ, 135 s.
+- Lượt evidence một, trên `a390a5e5` (10:40–11:16, máy chỉ có lượt này): **vitest thoát mã 1**, 2 151 s; 92/92, 5426 khẳng định, cổng
+  *XANH* — dòng *vitest thoát mã* mới là tín hiệu. Hai ca đỏ, CẢ HAI do vòng này: ⑴ `rfq.int` — phép so hai chiều giữa tên trong thân 13
+  hàm và `CHOT_THEO_RANG_BUOC` thiếu hai tên K1 mới (thêm hai trigger chính sách vào phép đọc, 15 hàm); ⑵ `buyer.int` ⑹ — bản không bậc
+  nay nói bằng thông điệp của bảng chốt chứ không bằng lời của `069` (sửa chuỗi, thêm khẳng định đúng một hàng `CONTROL_DENIED` trỏ tổ
+  chức ở tầng route). Lượt int trước commit chạy hai tệp ấy bằng `-t` — lọc theo tên bỏ qua mọi ca khác của tệp (khuôn đã có trong bộ
+  nhớ phiên, vi phạm lần nữa). Chú thích tự ký của kịch bản 41 HTTP sửa theo (kịch bản xanh — không khẳng định lời; hai phép đếm sổ của
+  nó lọc theo mã gói). Lượt chạy lại: ở thân PR.
+
+## 10. Giới hạn
+- Lớp là LỜI KHAI có lý do đọc từ mã — phép đo giữ nó không trôi khỏi thân hàm, không chứng minh nó đúng (ADR-166 ⒜). Lớp theo nhóm (hàm, errcode).
+- Chín khoảng trống còn mở (khoản 353). Ca đua của các chốt hỏi trước vẫn ra 422 không hàng sổ.
+- Vế `PERMISSION_DENIED` đo ở `cong-quyen-route`, không ở đây.

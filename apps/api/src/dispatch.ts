@@ -96,6 +96,7 @@ import {
 import { InvitationError, resolveGuestSessionByToken, resolvePassportSessionByToken } from "@trustprocure/invitation";
 import { OTP_RATE_WINDOW_SECONDS, tangBucketNguoiGoi } from "@trustprocure/invitation";
 import { layDauXepViec } from "@trustprocure/outbox";
+import { MA_TU_CHOI_PASSPORT } from "@trustprocure/supplier";
 import { TenantError, withGuestSession, withPassportSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
@@ -452,6 +453,16 @@ function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResp
   // không đọc được bảng xếp hạng nên chỉ máy chủ nói được báo giá có lệch hạng. Mã là từ vựng `VAO_SO`, không nói thêm điều gì câu chưa nói.
   const maTraoThau = err instanceof Error && err.name === "TraoThauTuChoiError" ? (err as Error & { lyDo?: unknown }).lyDo : undefined;
   if (err instanceof Error && typeof maTraoThau === "string") return { status: 422, body: { error: err.message, ma: maTraoThau } };
+  // [S1.295 / S3.9b — phép điều tra K12] Lời từ chối Passport ném ở ĐƯỜNG ĐUA: hàm vị từ cho qua mà trigger của câu INSERT từ chối
+  // (`taoYeuCauPassport` bắt tên ràng buộc rồi ném `PassportYeuCauError`). Lớp ấy đặt `name` riêng nên không có trong `LOI_NGHIEP_VU_422`
+  // dù kế thừa `SupplierError` — trước vòng này nó đi ra 500. Cùng hợp đồng với nhánh thường của route (`buyer.ts`, `POST
+  // /suppliers/:supplierId/passport-requests`): 422 mang mã, 429 kèm `retry-after` cho trần yêu cầu.
+  // [lượt soi §S1.295 THẤP] Mã đi ra thân trả lời chỉ khi nó thuộc từ vựng của chính gói — không tin một trường của lỗi.
+  const maPassport = err instanceof Error && err.name === "PassportYeuCauError" ? (err as Error & { ma?: unknown }).ma : undefined;
+  if (err instanceof Error && typeof maPassport === "string" && (MA_TU_CHOI_PASSPORT as readonly string[]).includes(maPassport)) {
+    const quaTran = maPassport === "PASSPORT_QUA_TRAN_YEU_CAU";
+    return { status: quaTran ? 429 : 422, body: { error: err.message, ma: maPassport }, ...(quaTran ? { headers: { "retry-after": "3600" } } : {}) };
+  }
   if (err instanceof Error && LOI_NGHIEP_VU_422.has(err.name)) {
     return { status: 422, body: { error: err.message } };
   }

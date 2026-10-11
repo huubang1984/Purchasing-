@@ -354,9 +354,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
           chiaNhoCuaSoNgay: MUC_MAC_DINH.chiaNhoCuaSoNgay,
           thamDinhHieuLucThang: MUC_MAC_DINH.thamDinhHieuLucThang,
           actorSessionId: sTc1,
-        }),
+        }, apiPool),
       );
-      const ky = await withTenant(apiPool, orgA, (c) => kyPhienBanChinhSach(c, orgA, { policyId: cs.id, actorSessionId: sTc2 }));
+      const ky = await withTenant(apiPool, orgA, (c) => kyPhienBanChinhSach(c, orgA, { policyId: cs.id, actorSessionId: sTc2 }, apiPool));
       expect(ky.daBat, "luồng S3: lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức").toBe(true);
     }
     // [S1.201 / S3.6a] Luồng S3: người tài chính dựng nhóm hàng, người mua chọn nó lúc tạo gói — tổ chức đã bật không nộp duyệt
@@ -373,7 +373,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
           dualApprovalThreshold: "500000000.00",
           currency: "VND",
           actorSessionId: sMua,
-        });
+        }, apiPool);
       }
       const rfq = await createRfq(c, orgA, {
         title: "Mua thep tam cho nha may Q4",

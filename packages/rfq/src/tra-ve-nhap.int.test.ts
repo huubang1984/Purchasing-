@@ -113,7 +113,7 @@ async function taoToChuc(): Promise<ToChuc> {
   const mua = await nguoi("BUYER");
   const tc = await nguoi("FINANCE");
   await withTenant(apiPool, org, (c) =>
-    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pm.s }),
+    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pm.s }, apiPool),
   );
   return { org, pm, pm2, pm3, mua, tc };
 }
@@ -609,7 +609,7 @@ async function phienBanTco(t: ToChuc, version: number, evalComponents: readonly 
       bafoTopN: 0,
       tco,
       actorSessionId: t.pm.s,
-    }),
+    }, apiPool),
   );
 }
 const TP_TRE = [
@@ -850,7 +850,7 @@ describe("S4.7a — nhóm khoá `tco` của phiên bản chính sách: hình d�
     const tao = async (tco: Record<string, string> | null): Promise<LoiBat | null> => {
       const kq = await loi(
         withTenant(apiPool, t.org, (c) =>
-          createProcurementPolicy(c, t.org, { version: v, dualApprovalThreshold: "100000000.00", currency: "VND", tco, actorSessionId: t.pm.s }),
+          createProcurementPolicy(c, t.org, { version: v, dualApprovalThreshold: "100000000.00", currency: "VND", tco, actorSessionId: t.pm.s }, apiPool),
         ),
       );
       if (kq === null) v += 1;

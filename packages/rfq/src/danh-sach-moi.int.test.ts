@@ -118,7 +118,7 @@ async function taoToChuc(): Promise<ToChuc> {
       dualApprovalThreshold: "100000000.00",
       currency: "VND",
       actorSessionId: pm.s,
-    }),
+    }, apiPool),
   );
   return { org, pm, pm2, pm3, tc };
 }

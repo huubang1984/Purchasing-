@@ -1041,6 +1041,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // ca ngay trên vừa tạo; cờ có mở thì lời gọi cũng dừng ở trigger (bản không bậc), không bật S3 cho tổ chức.
         // [S1.174 / S3.1d] Luồng S3 chạy trên máy chủ CỜ BẬT: lời gọi tới trigger, và người gọi chính là người khai bản v2
         // ⇒ 422 *"khong duoc tu ky"* có tên — bản v2 không thành hiệu lực, kịch bản không đổi chính sách giữa chừng.
+        // [S1.295 / S3.9b / K12] Nhánh ấy nay mang tên ràng buộc `k1_nguoi_tao_tu_ky`: lời đi ra là thông điệp của bảng chốt (K1) và
+        // lần quét để lại một hàng `CONTROL_DENIED` trỏ bản v2 — không phép đếm sổ nào của kịch bản đọc tài nguyên ấy.
         case "POST /policy/:policyId/sign":
           return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };
         // [S1.201 / S3.6a] Nhóm hàng HY SINH: người tài chính dựng, rồi ngừng dùng — không chạm nhóm của kịch bản. Bảng route đặt
