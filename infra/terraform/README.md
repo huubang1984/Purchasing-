@@ -152,6 +152,10 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 4. Stack 90: `sms = { danh_tinh_gui = "<BRANDNAME>", configuration_set = "tp-sms" }` trong `prod.tfvars`.
 
 **Zalo ZNS.** Cần Official Account đã xác thực, ứng dụng Zalo liên kết OA, số dư ZNS.
+**[2026-10-10] Zalo trước SMS:** `sender_id` nay để trống được. Chưa có brandname thì `terraform apply` thư mục
+`85-sms-zalo` KHÔNG truyền `-var sender_id` — stack chỉ dựng secret `tp/api/zalo-oa` (rỗng) và quyền Get/Put của `tp-api`
+trên nó; output `sms` là null và biến `sms` của stack 90 để null. Bước 3 dưới cần secret đã tồn tại, nên apply trước.
+Có brandname rồi thì apply lại với `-var sender_id=<BRANDNAME>`.
 1. Tạo ba template ZNS và chờ Zalo duyệt; tên tham số là hợp đồng với mã: OTP `otp`, lời mời `duong_dan`
    (đường dẫn `https://<ten_mien>/i#…` — Zalo có thể đòi khai báo tên miền), gia hạn `han_nop`.
 2. Cấp quyền OA cho ứng dụng (OAuth v4 trên developers.zalo.me) để có **refresh token**.
@@ -167,6 +171,24 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
    một BOM ở đầu (`kho-token-zalo.ts`). Tệp ở `$env:TEMP`, không trong thư mục kho: nó mang khoá ứng dụng và refresh token.
    Từ đó `api` tự làm mới token và ghi lại. Refresh token dùng MỘT lần: đừng thử nó bằng tay sau khi nạp.
 4. Stack 90: `zalo = { template_otp, template_invitation, template_deadline }` trong `prod.tfvars`.
+5. **[2026-10-11] Gửi thử trước khi mời nhà cung cấp thật.** `gui-zalo.ts` chưa từng gọi API thật; `pnpm thu-zalo`
+   (`apps/api/src/thu-zalo.ts`) gọi ĐÚNG adapter ấy qua ĐÚNG kho token ở secret `tp/api/zalo-oa`. Chạy từ gốc kho, khi
+   `api` CHƯA chạy trên prod — hai bên cùng làm mới token có thể giẫm nhau:
+   ```powershell
+   $env:AWS_PROFILE = "tp-prod"
+   pnpm thu-zalo --chi-doc-secret                                       # đọc secret, không gọi Zalo
+   pnpm thu-zalo --loai otp --so <số của bạn> --template <ID template OTP>
+   pnpm thu-zalo --loai loi-moi --so <số> --template <ID template lời mời>
+   pnpm thu-zalo --loai gia-han --so <số> --template <ID template gia hạn>
+   ```
+   Lần gửi đầu xoay refresh token rồi ghi lại vào secret — đúng như `api`. Tin mời mang một đường dẫn GIẢ cùng độ dài
+   thật. Mã thoát: 0 xong, 1 Zalo hay AWS từ chối (dòng `HỎNG:` mang mã lỗi), 2 sai tham số, **3 token đã xoay mà
+   không ghi được vào secret — cấp lại refresh token NGAY** (bước 2–3).
+
+**[2026-10-10] Chưa đo, nói thẳng:** `apps/api/src/adapters/gui-zalo.ts` chưa từng gọi API thật của Zalo. Tham số
+`duong_dan` là `https://<ten_mien>/i#<mã tổ chức>:<token>` — khoảng 112 ký tự với tên miền hiện tại; `han_nop` là chuỗi
+ISO UTC (vd `2026-10-01T10:00:00.000Z`). Lúc tạo template, kiểm giới hạn độ dài và kiểu của từng tham số trước khi gửi
+duyệt — Zalo không nhận thì phải đổi mã (rút gọn đường dẫn, định dạng giờ), không phải đổi template.
 
 **Kiểm:** mời một nhà cung cấp khai kênh SMS/Zalo; log `/tp/api` không có `GuiKenhError`/`ZaloTokenMatError`.
 `ZaloTokenMatError` nghĩa là token đã xoay mà không ghi được vào secret — cấp lại refresh token (bước 2–3).

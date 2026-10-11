@@ -32,7 +32,8 @@
     "canh-dang-ky:dong-goi-lambda": "node tools/canh-dang-ky/dong-goi-lambda.mjs",
     "bang-chung": "node --experimental-transform-types --import ./tools/bo-xuat-danh-gia/register-ts-resolve.mjs tools/bo-xuat-danh-gia/src/index.ts",
     "cap-so": "node --experimental-transform-types tools/cap-so/src/index.ts",
-    "khoi-tao": "node --experimental-transform-types --import ./tools/khoi-tao-to-chuc/register-ts-resolve.mjs tools/khoi-tao-to-chuc/src/index.ts"
+    "khoi-tao": "node --experimental-transform-types --import ./tools/khoi-tao-to-chuc/register-ts-resolve.mjs tools/khoi-tao-to-chuc/src/index.ts",
+    "thu-zalo": "node --experimental-transform-types --import ./apps/api/register-ts-resolve.mjs apps/api/src/thu-zalo.ts"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
