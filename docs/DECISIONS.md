@@ -9226,7 +9226,7 @@ không ghi gì. Đo lại qua HTTP ở nền của vòng này: mời lúc gói c
 ## ADR-116 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm đề xuất của lượt bàn S4.2 ngày 2026-09-29 (tách S4.2a/S4.2b,
-luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id` — **[S1.9101 / S4.8]** nay ở bảng phiên bản, ADR-9201 —, `ma` do người quản lý dữ liệu nhập) · **[S1.197]** ·
+luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id` — **[S1.298 / S4.8]** nay ở bảng phiên bản, ADR-169 —, `ma` do người quản lý dữ liệu nhập) · **[S1.197]** ·
 **Liên quan:** spec S4 §4.2 (L4 ⑴⑵⑶), §4.3, §2.4 ⑺ (vai `DATA_STEWARD`), §5.1 L1 · L3 · L4; ADR-097 (bảy quyết định sau lượt soi);
 ADR-084 ⑶ (mã vào CSDL ở hạng mục dựng hành vi); ADR-016 (cổng quyền ở tầng ứng dụng); `033` (khuôn *thước không cùng tay*) ·
 **Biên bản:** `evidence/security-reviews.md` §S1.197
@@ -13146,13 +13146,13 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13); chữ ký số trên bộ bằng chứng.
 
 
-## ADR-9201 — S4.8: nhóm hàng của hàng chuẩn ở bảng phiên bản — tuỳ chọn; gán MỚI chỉ nhóm còn dùng của chính tổ chức, giữ nhóm của phiên bản trước thì được; người quản lý dữ liệu gán
+## ADR-169 — S4.8: nhóm hàng của hàng chuẩn ở bảng phiên bản — tuỳ chọn; gán MỚI chỉ nhóm còn dùng của chính tổ chức, giữ nhóm của phiên bản trước thì được; người quản lý dữ liệu gán
 
 **Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Tiếp S4.8"*, rồi chốt ba câu theo đề xuất:
 ⑴ cột TUỲ CHỌN; ⑵ gán mới chỉ nhóm còn dùng, giữ nhóm của phiên bản trước thì được dù nhóm ấy đã ngừng; ⑶ một PR, người giữ
-`item.manage` gán trong chính phiên bản hàng chuẩn · **[S1.9101]** · **Migration:** `9501_nhom_hang_cua_hang_chuan` · **Liên quan:**
+`item.manage` gán trong chính phiên bản hàng chuẩn · **[S1.298]** · **Migration:** `126_nhom_hang_cua_hang_chuan` · **Liên quan:**
 ADR-084 ⑶, ADR-097, ADR-116, ADR-119 mục 4 · **Spec:** S4 §3.4 (dòng *"Nhóm hàng"*), §4.3, §9 (S4.8) · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101
+`evidence/security-reviews.md` §S1.298
 
 ### Bối cảnh
 
@@ -13188,8 +13188,8 @@ vai khác người (`083`, `085`); ADR-084 ⑶ không cần mã nào.
 
 ⑸ **`gieo:demo --s3`** thêm phiên bản thứ hai cho ba hàng chuẩn demo mang nhóm `KET-CAU`; không `--s3`, hàng chuẩn không nhóm hàng.
 
-⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 5) — một CAO, một TRUNG, sáu THẤP:
-- **CAO-1** — ba danh sách tệp `migrate()` áp trong `migrations.int` dừng ở `123`: bộ CSDL đỏ mỗi lượt. Sửa: thêm `9501` vào cả ba.
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.298 mục 5) — một CAO, một TRUNG, sáu THẤP:
+- **CAO-1** — ba danh sách tệp `migrate()` áp trong `migrations.int` dừng ở `123`: bộ CSDL đỏ mỗi lượt. Sửa: thêm `126` vào cả ba.
 - **TRUNG-1** — ô *Phiên bản mới* chỉ chọn sẵn được nhóm có trong danh sách màn đang giữ; đọc nhóm hàng hỏng hay danh sách cũ hơn lần
   gán thì trình duyệt để ô trống, và phiên bản bản-chụp-đầy-đủ kế tiếp lặng lẽ BỎ nhóm — nhóm đã ngừng thì không gán lại được nữa.
   Sửa: `luaChonNhomHang` giữ nhóm đang chọn không có trong danh sách thành một lựa chọn nhãn *"không đọc được — giữ nguyên"*.

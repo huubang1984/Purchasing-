@@ -35,7 +35,7 @@ let dangXuLy = null;
 /** [S1.272 / S4.6a] Lô đang mở ở bước 7 — `{ loai, loNhapId }`, `null` khi khối đóng. */
 let loDangMo = null;
 /**
- * [S1.9101 / S4.8] Nhóm hàng của tổ chức (`GET /categories`, mọi người mua đọc được) — nhãn của cột nhóm hàng và ba ô chọn. Đọc hỏng thì
+ * [S1.298 / S4.8] Nhóm hàng của tổ chức (`GET /categories`, mọi người mua đọc được) — nhãn của cột nhóm hàng và ba ô chọn. Đọc hỏng thì
  * rỗng: cột nói *"không đọc được"*, ô chỉ còn dòng *"không nhóm hàng"* — máy chủ vẫn là nơi phán nhóm còn dùng.
  */
 let nhomHang = [];
@@ -175,7 +175,7 @@ function dongCacBuoc() {
   hangDoi = { dong: [], conNua: false };
   $("bang-hang-doi").querySelector("tbody").replaceChildren();
   trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
-  // [S1.9101 / rà soát THẤP-4] Mã và tên nhóm hàng của người trước không ở lại trong ba ô chọn.
+  // [S1.298 / rà soát THẤP-4] Mã và tên nhóm hàng của người trước không ở lại trong ba ô chọn.
   nhomHang = [];
   for (const id of ["tao-nhom-hang", "pb-nhom-hang", "xl-nhom-hang"]) $(id).replaceChildren();
   bao($("hoi-phien"), "");
@@ -263,7 +263,7 @@ async function napHangChuan() {
 }
 
 /**
- * [S1.9101 / S4.8] Đọc lại nhóm hàng cùng mỗi lần đọc danh sách hàng chuẩn, rồi vẽ lại hai ô chọn không gắn với hàng đang mở ở bước 4
+ * [S1.298 / S4.8] Đọc lại nhóm hàng cùng mỗi lần đọc danh sách hàng chuẩn, rồi vẽ lại hai ô chọn không gắn với hàng đang mở ở bước 4
  * — giữ lựa chọn đang có của người dùng.
  */
 async function napNhomHang() {
@@ -364,7 +364,7 @@ async function moChiTiet(id) {
   $("pb-thuoc-tinh").value = vietThuocTinh(h.thuocTinh);
   $("pb-trong-yeu").value = h.thuocTinhTrongYeu.join(", ");
   $("pb-ngung").checked = h.trangThai === "NGUNG_DUNG";
-  // [S1.9101 / S4.8] Phiên bản là bản chụp đầy đủ: ô chọn sẵn nhóm hiện tại, kể cả khi nhóm ấy đã ngừng dùng (giữ được, CSDL cho).
+  // [S1.298 / S4.8] Phiên bản là bản chụp đầy đủ: ô chọn sẵn nhóm hiện tại, kể cả khi nhóm ấy đã ngừng dùng (giữ được, CSDL cho).
   veChonNhomHang("pb-nhom-hang", typeof h.nhomHangId === "string" ? h.nhomHangId : null);
   const bd = $("bang-bi-danh").querySelector("tbody");
   bd.replaceChildren();

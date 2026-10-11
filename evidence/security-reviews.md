@@ -27711,11 +27711,11 @@ Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng c
 
 ---
 
-# §S1.9101 — S4.8: NHÓM HÀNG CỦA HÀNG CHUẨN Ở BẢNG PHIÊN BẢN — TUỲ CHỌN, GÁN MỚI CHỈ NHÓM CÒN DÙNG, GIỮ NHÓM CỦA PHIÊN BẢN TRƯỚC THÌ ĐƯỢC
+# §S1.298 — S4.8: NHÓM HÀNG CỦA HÀNG CHUẨN Ở BẢNG PHIÊN BẢN — TUỲ CHỌN, GÁN MỚI CHỈ NHÓM CÒN DÙNG, GIỮ NHÓM CỦA PHIÊN BẢN TRƯỚC THÌ ĐƯỢC
 
 **Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi hành vi — nhóm hàng của hàng chuẩn chưa vào phép đếm, chấm hay
 cổng nào. Đổi ở bề mặt: `/du-lieu` có cột và ô chọn nhóm hàng; ba route ghi hàng chuẩn nhận `nhomHangId`; hai hàng sổ mang nó.
-Migration `9501_nhom_hang_cua_hang_chuan`. ADR-9201. Không bất biến mới (L1, L3), không khoản mới.
+Migration `126_nhom_hang_cua_hang_chuan`. ADR-169. Không bất biến mới (L1, L3), không khoản mới.
 
 ## 1. Vòng này là gì
 Chủ dự án, 2026-10-11: *"Tiếp S4.8"*, rồi chốt ba câu theo đề xuất — cột tuỳ chọn; gán mới chỉ nhóm còn dùng, giữ nhóm của phiên bản
@@ -27731,7 +27731,7 @@ nhóm hàng qua phiên bản hàng chuẩn) — việc §3.4 để lại *"sau k
   bộ đọc benchmark không nhắc nhóm hàng. `GET /categories` đọc được bởi mọi người mua (`agent: false`).
 
 ## 3. Thay đổi
-- **CSDL** (`9501`): cột `canonical_item_versions.category_id` (NULL được, khoá ngoại theo (tổ chức, nhóm)); trigger
+- **CSDL** (`126`): cột `canonical_item_versions.category_id` (NULL được, khoá ngoại theo (tổ chức, nhóm)); trigger
   `hang_chuan_kiem_nhom_hang` — chỉ READ COMMITTED khi có nhóm, khoá chia sẻ theo nhóm, nhóm còn dùng ⇒ qua, đã ngừng ⇒ chỉ khi phiên bản
   mới nhất của cùng hàng mang đúng nhóm ấy; tên xếp sau cổng ghi; quyền cột `INSERT`. Ghim ở hardening (thân, `provolatile`, trigger),
   `TRIGGER_DUOC_PHEP`, `HAM_KHONG_PHAI_CANH`, sổ hàm của `migrations.int`, ba danh sách tệp áp, quyền cột của `rls-coverage`.
@@ -27743,7 +27743,7 @@ nhóm hàng qua phiên bản hàng chuẩn) — việc §3.4 để lại *"sau k
 - **`gieo:demo --s3`**: phiên bản thứ hai mang `KET-CAU` cho ba hàng chuẩn demo.
 - **Test**: `hang-chuan.int` khối S4.8 (8 ca); `du-lieu.int` ⑸ (2 ca); `anh-xa.int` (tạo-và-ánh-xạ mang nhóm); `phuc-vu` (2 ca);
   `nhom-hang.test` (2 ca).
-- **Tài liệu**: ADR-9201; ADR-116 và STATE chú thích tại chỗ; spec §3.4, §4.3, §9; TEST-PLAN L1, L3; mốc STATE.
+- **Tài liệu**: ADR-169; ADR-116 và STATE chú thích tại chỗ; spec §3.4, §4.3, §9; TEST-PLAN L1, L3; mốc STATE.
 
 ## 4. Đột biến
 
@@ -27760,9 +27760,9 @@ nhóm hàng qua phiên bản hàng chuẩn) — việc §3.4 để lại *"sau k
 | M9 | bộ đọc bỏ `nhomHangId` | ĐỎ — 3 ca |
 | M10 | thân trigger: bỏ chốt READ COMMITTED | ĐỎ (ca REPEATABLE READ, trong test) |
 
-## 5. Rà soát đối kháng (một agent đọc-không-sửa trên diff `e4721ca..8ab8e84` và tệp `9501`)
-**Một CAO, một TRUNG, sáu THẤP** — xử lý ở ADR-9201 ⑹:
-- **CAO-1 — ba danh sách tệp áp của `migrations.int` thiếu `9501`** (dừng ở `123`): bộ CSDL đỏ mỗi lượt. **Sửa:** thêm vào cả ba.
+## 5. Rà soát đối kháng (một agent đọc-không-sửa trên diff `e4721ca..8ab8e84` và tệp `126`)
+**Một CAO, một TRUNG, sáu THẤP** — xử lý ở ADR-169 ⑹:
+- **CAO-1 — ba danh sách tệp áp của `migrations.int` thiếu `126`** (dừng ở `123`): bộ CSDL đỏ mỗi lượt. **Sửa:** thêm vào cả ba.
 - **TRUNG-1 — ô *Phiên bản mới* lặng lẽ bỏ nhóm.** Ô chỉ chọn sẵn được nhóm có trong danh sách màn đang giữ; đọc nhóm hàng hỏng hay
   danh sách cũ (Tài chính tạo nhóm Z sau khi trang nạp, người quản lý khác gán Z) ⇒ trình duyệt để ô trống, lần sửa tên kế tiếp bỏ Z;
   Z đã ngừng thì không gán lại được. DOM giả của `phuc-vu` giữ mọi `value` nên test cũ không thấy. **Sửa:** `luaChonNhomHang` thêm
@@ -27779,3 +27779,13 @@ từ chối, bỏ rồi gán lại trong một giao dịch vẫn bị từ chố
 chỉ mang UUID, `gieo:demo`, độ vững của ca ĐUA.
 
 ## 6. Số đo
+- Trên `b3f7840` (sau gộp #277): `pnpm t0` sạch; `pnpm test` 165 tệp / 2937 ca; `hang-chuan.int` 22/22, `du-lieu.int` 11/11,
+  `anh-xa.int` 16/16; `phuc-vu` + `nhom-hang.test` 377/377.
+- `db/` + `tests/architecture/` (trước gộp, sau các sửa của rà soát): 80 tệp, 1245 ca đạt; lượt đầu đỏ 5 ca của `so-no-tu-doi-chieu`
+  (lời khai đếm ADR, migration ở STATE và `Handoff.md`) ⇒ `cap-so --dem`, 45/45. Một lượt sớm hơn đỏ ở `rls-coverage`,
+  `hardening-suy-tu`: tệp `126` bị sửa tạm (đột biến M4) và sửa thật (THẤP-1) TRONG lúc bộ chạy — `migrate()` thấy tệp đã áp đổi nội
+  dung; lượt ấy bị huỷ, không tính.
+- `pnpm evidence` trên `b3f7840`: vitest thoát mã 0, 5423 khẳng định, **92/92** (70/70 nghiệp vụ + 22/22 hàng rào), cổng XANH. Ma
+  trận: L1 46 → 52 ca, L3 23 → 24.
+- `gieo:demo --s3` trên Postgres 16 mới (cụm `pilot:gia-lap`, 120 migration): thoát 0; ba hàng chuẩn demo mỗi hàng hai phiên bản — bản
+  đầu không nhóm, bản mới nhất `KET-CAU`.

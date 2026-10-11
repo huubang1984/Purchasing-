@@ -241,7 +241,7 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // [S1.290 / J1] `luot_cham_kiem_phien_ban` (BEFORE INSERT của `rfq_evaluation_lines`) từ chối CÓ ĐIỀU KIỆN — phiên bản đã bị một bản
   // mở mới hơn thay, hay lời mời đã thu hồi. Hàng chấm của `dungKichBan()` (phiên bản mới nhất của luồng, lời mời còn sống) đi qua.
   "public.luot_cham_kiem_phien_ban",
-  // [S1.9101 / S4.8] `hang_chuan_kiem_nhom_hang` (BEFORE INSERT của `canonical_item_versions`) từ chối CÓ ĐIỀU KIỆN — nhóm đã ngừng dùng mà
+  // [S1.298 / S4.8] `hang_chuan_kiem_nhom_hang` (BEFORE INSERT của `canonical_item_versions`) từ chối CÓ ĐIỀU KIỆN — nhóm đã ngừng dùng mà
   // phiên bản trước không mang nó. Phiên bản không nhóm hàng của `dungKichBan()` đi qua.
   "public.hang_chuan_kiem_nhom_hang",
   // [S1.285 / S3.6d / K10b] `award_kiem_tin_hieu_khai_thap` (chữ ký — tín hiệu khai thấp chưa ai ghi nhận ⇒ NÉM). Tổ chức chưa bật, hay không tín hiệu, đi qua.

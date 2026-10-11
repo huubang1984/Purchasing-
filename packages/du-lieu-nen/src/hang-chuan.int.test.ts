@@ -408,10 +408,10 @@ describe("[S1.197 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
 });
 
 // =============================================================================================
-// [S1.9101 / S4.8] NHÓM HÀNG CỦA HÀNG CHUẨN — ở bảng phiên bản (`9501_nhom_hang_cua_hang_chuan`, ADR-9201). Chủ dự án chốt 2026-10-11:
+// [S1.298 / S4.8] NHÓM HÀNG CỦA HÀNG CHUẨN — ở bảng phiên bản (`126_nhom_hang_cua_hang_chuan`, ADR-169). Chủ dự án chốt 2026-10-11:
 // tuỳ chọn; gán mới chỉ nhóm CÒN DÙNG của chính tổ chức; giữ đúng nhóm của phiên bản trước thì được dù nhóm ấy đã ngừng.
 // =============================================================================================
-describe("[S1.9101 / S4.8] nhóm hàng của hàng chuẩn — L1 (phiên bản), L3 (người ghi)", () => {
+describe("[S1.298 / S4.8] nhóm hàng của hàng chuẩn — L1 (phiên bản), L3 (người ghi)", () => {
   /** Nhóm hàng dựng bằng câu của `app_api` dưới một người FINANCE (`category.manage`) — đúng đường của `taoNhomHang`. */
   async function taoNhom(orgId: string, ma: string): Promise<string> {
     const tc = await taoNguoi(orgId, ["FINANCE"]);
@@ -587,7 +587,7 @@ describe("[S1.9101 / S4.8] nhóm hàng của hàng chuẩn — L1 (phiên bản)
     expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc2.id))).toMatchObject({ nhomHangId: nhom2 });
   });
 
-  it("[INV-L1] [rà soát §S1.9101 — THẤP-1] chỉ READ COMMITTED: ở REPEATABLE READ ảnh chụp cố định từ câu INSERT không thấy lần ngừng dùng vừa commit — gán nhóm bị từ chối; không nhóm thì đi qua; ĐỘT BIẾN bỏ chốt ⇒ đi qua", async () => {
+  it("[INV-L1] [rà soát §S1.298 — THẤP-1] chỉ READ COMMITTED: ở REPEATABLE READ ảnh chụp cố định từ câu INSERT không thấy lần ngừng dùng vừa commit — gán nhóm bị từ chối; không nhóm thì đi qua; ĐỘT BIẾN bỏ chốt ⇒ đi qua", async () => {
     const nhom = await taoNhom(orgA, "S48-RR");
     const hc = await taoHang("S48-RR1", null);
     const duoiRR = async (nhomHangId: string | null, thayThan?: (goc: string) => string): Promise<string> => {

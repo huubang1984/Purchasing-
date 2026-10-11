@@ -285,14 +285,14 @@ describe("[S1.199 / S4.2b] ⑷ từ chối có tên", () => {
   });
 });
 
-// [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn qua HTTP — Tài chính dựng và ngừng nhóm ở `/categories`, người quản lý dữ liệu gán trong
-// phiên bản. Luật gán ở CSDL (`9501`); route chỉ đọc hình dạng (UUID hay null) và chuyển lời từ chối có tên thành 422.
-describe("[S1.9101 / S4.8] ⑸ nhóm hàng của hàng chuẩn", () => {
+// [S1.298 / S4.8] Nhóm hàng của hàng chuẩn qua HTTP — Tài chính dựng và ngừng nhóm ở `/categories`, người quản lý dữ liệu gán trong
+// phiên bản. Luật gán ở CSDL (`126`); route chỉ đọc hình dạng (UUID hay null) và chuyển lời từ chối có tên thành 422.
+describe("[S1.298 / S4.8] ⑸ nhóm hàng của hàng chuẩn", () => {
   it("tạo và thêm phiên bản mang `nhomHangId`; danh sách và chi tiết đọc lại; nhóm đã ngừng ⇒ 422 có tên, giữ nhóm của phiên bản trước thì được", async () => {
     const tao = async (ma: string) => (await goi("POST", "/categories", taiChinh, { ma, ten: `Nhom ${ma}` })).body.nhomHang as { id: string };
     const thep = await tao("S48-THEP");
     const cu = await tao("S48-CU");
-    // [rà soát §S1.9101 — THẤP-3] Gửi id viết HOA: cột và hàng sổ cùng mang chữ thường.
+    // [rà soát §S1.298 — THẤP-3] Gửi id viết HOA: cột và hàng sổ cùng mang chữ thường.
     const r = await goi("POST", "/items", quanLy, { ma: "S48-D16", donViGoc: "kg", ten: "Thép D16", nhomHangId: thep.id.toUpperCase() });
     expect(r.status, r.text).toBe(201);
     const id = (r.body.hangChuan as { id: string }).id;

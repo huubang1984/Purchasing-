@@ -52,7 +52,7 @@ export class DuLieuNenError extends Error {
       | "NHA_CUNG_CAP_SAI_HINH_DANG"
       | "KHONG_CO_HANG_DU_LIEU"
       | "DA_RUT"
-      // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn (`9501_nhom_hang_cua_hang_chuan`).
+      // [S1.298 / S4.8] Nhóm hàng của hàng chuẩn (`126_nhom_hang_cua_hang_chuan`).
       | "KHONG_CO_NHOM_HANG"
       | "NHOM_HANG_DA_NGUNG_DUNG",
     message: string,
@@ -114,7 +114,7 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   external_price_references_nguon_hinh_dang: "NGUON_SAI_HINH_DANG",
   external_purchase_history_nguon_hinh_dang: "NGUON_SAI_HINH_DANG",
   external_purchase_history_nha_cung_cap_hinh_dang: "NHA_CUNG_CAP_SAI_HINH_DANG",
-  // [S1.9101 / S4.8] Khoá ngoại theo (tổ chức, nhóm) và luật gán của `hang_chuan_kiem_nhom_hang`.
+  // [S1.298 / S4.8] Khoá ngoại theo (tổ chức, nhóm) và luật gán của `hang_chuan_kiem_nhom_hang`.
   canonical_item_versions_category_fkey: "KHONG_CO_NHOM_HANG",
   hang_chuan_nhom_hang_da_ngung_dung: "NHOM_HANG_DA_NGUNG_DUNG",
 };
@@ -193,7 +193,7 @@ export interface TaoHangChuanInput {
   readonly thuocTinh?: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu?: readonly string[];
   /**
-   * [S1.9101 / S4.8] Nhóm hàng (`procurement_categories.id`) — tuỳ chọn. Gán mới chỉ nhóm CÒN DÙNG; CSDL chốt
+   * [S1.298 / S4.8] Nhóm hàng (`procurement_categories.id`) — tuỳ chọn. Gán mới chỉ nhóm CÒN DÙNG; CSDL chốt
    * (`hang_chuan_kiem_nhom_hang`).
    */
   readonly nhomHangId?: string | null;
@@ -280,7 +280,7 @@ export interface TaoPhienBanInput {
   readonly thuocTinhTrongYeu?: readonly string[];
   readonly trangThai?: "DANG_DUNG" | "NGUNG_DUNG";
   /**
-   * [S1.9101 / S4.8] Nhóm hàng của phiên bản. Phiên bản là bản chụp ĐẦY ĐỦ — bỏ trống là bỏ nhóm, như bỏ trống thuộc tính; giữ nhóm
+   * [S1.298 / S4.8] Nhóm hàng của phiên bản. Phiên bản là bản chụp ĐẦY ĐỦ — bỏ trống là bỏ nhóm, như bỏ trống thuộc tính; giữ nhóm
    * thì gửi lại đúng nhóm của phiên bản trước (được cả khi nhóm ấy đã ngừng dùng).
    */
   readonly nhomHangId?: string | null;
@@ -520,7 +520,7 @@ export interface HangChuan {
   readonly thuocTinh: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu: readonly string[];
   readonly trangThai: "DANG_DUNG" | "NGUNG_DUNG";
-  /** [S1.9101 / S4.8] Nhóm hàng của phiên bản mới nhất — `null` khi không gán. */
+  /** [S1.298 / S4.8] Nhóm hàng của phiên bản mới nhất — `null` khi không gán. */
   readonly nhomHangId: string | null;
   readonly phienBanSeq: string;
 }
@@ -611,7 +611,7 @@ export interface PhienBanHangChuan {
   readonly thuocTinh: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu: readonly string[];
   readonly trangThai: "DANG_DUNG" | "NGUNG_DUNG";
-  /** [S1.9101 / S4.8] Nhóm hàng của phiên bản này. */
+  /** [S1.298 / S4.8] Nhóm hàng của phiên bản này. */
   readonly nhomHangId: string | null;
   readonly ghiLuc: string;
   readonly tacGia: string;

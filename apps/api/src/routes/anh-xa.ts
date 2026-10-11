@@ -77,12 +77,12 @@ function trongYeuTuyChon(body: unknown): readonly string[] | undefined {
   if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new HttpError(422, 'trường "thuocTinhTrongYeu" phải là mảng chuỗi');
   return v as readonly string[];
 }
-/** [S1.9101 / S4.8] Nhóm hàng: vắng hay `null` là không gán; có thì phải là UUID — nhóm có thật, còn dùng là việc của CSDL (`9501`). */
+/** [S1.298 / S4.8] Nhóm hàng: vắng hay `null` là không gán; có thì phải là UUID — nhóm có thật, còn dùng là việc của CSDL (`126`). */
 function nhomHangTuyChon(body: unknown): string | null {
   const v = truong(body, "nhomHangId");
   if (v === undefined || v === null) return null;
   if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, 'trường "nhomHangId" phải là UUID hoặc null');
-  // Chữ thường như cột lưu — hàng sổ mang đúng cách viết của cột (rà soát §S1.9101 — THẤP-3).
+  // Chữ thường như cột lưu — hàng sổ mang đúng cách viết của cột (rà soát §S1.298 — THẤP-3).
   return v.toLowerCase();
 }
 /**

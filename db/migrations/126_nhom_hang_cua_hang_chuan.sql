@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 9501_nhom_hang_cua_hang_chuan — [S1.9101 / S4.8] NHÓM HÀNG CỦA HÀNG CHUẨN, Ở BẢNG PHIÊN BẢN
+-- 126_nhom_hang_cua_hang_chuan — [S1.298 / S4.8] NHÓM HÀNG CỦA HÀNG CHUẨN, Ở BẢNG PHIÊN BẢN
 --
 -- Spec S4 §3.4 (dòng *"Nhóm hàng"*), §4.3, §9 (S4.8); ADR-084 ⑶ — `category_id` vào CSDL ở hạng mục dựng hành vi của nó, sau khi
--- S3.6 vào `master` (S3.6 khép). Chủ dự án chốt 2026-10-11 (ADR-9201): cột TUỲ CHỌN; gán mới chỉ nhóm CÒN DÙNG, giữ nguyên nhóm
+-- S3.6 vào `master` (S3.6 khép). Chủ dự án chốt 2026-10-11 (ADR-169): cột TUỲ CHỌN; gán mới chỉ nhóm CÒN DÙNG, giữ nguyên nhóm
 -- của phiên bản trước thì được dù nhóm ấy đã ngừng; người gán là người giữ `item.manage` (vai `DATA_STEWARD`, mù giá), trong
 -- chính phiên bản hàng chuẩn — không mã quyền mới.
 --

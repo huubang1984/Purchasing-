@@ -458,7 +458,7 @@ describe("[S1.234 / S4.3b] ⑷ năm route ánh xạ", () => {
     expect(duyet.status, duyet.text).toBe(201);
     const bacCoLyDo = await goi("POST", `/rfqs/${rfqId}/items/3/mapping`, quanLy, { hangChuanId: null, lyDo: "vat lieu dia phuong" });
     expect(bacCoLyDo.status, bacCoLyDo.text).toBe(201);
-    // [S1.9101 / S4.8] Hàng chuẩn tạo từ hàng đợi mang nhóm hàng người duyệt chọn — route chuyển `nhomHangId` xuống gói.
+    // [S1.298 / S4.8] Hàng chuẩn tạo từ hàng đợi mang nhóm hàng người duyệt chọn — route chuyển `nhomHangId` xuống gói.
     const nhom = (await goi("POST", "/categories", A.taiChinh, { ma: "VAT-LIEU-XAY", ten: "Vat lieu xay dung" })).body as { nhomHang: { id: string } };
     const moi = await goi("POST", `/rfqs/${rfqId}/items/2/mapping/new-item`, quanLy, {
       ma: "GACH-THE-DO", ten: "Gạch thẻ đỏ", donViGoc: "kg", taoBiDanh: true, nhomHangId: nhom.nhomHang.id,

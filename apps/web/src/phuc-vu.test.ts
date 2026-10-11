@@ -240,7 +240,7 @@ describe("bề mặt tệp", () => {
       // [S1.234 / S4.3b] …rồi hàng đợi ánh xạ.
       // [S1.249 / khoản 291] Bước 1 của `/du-lieu` nay là `/lib/dang-nhap.js`: link đăng nhập gần đây TRƯỚC lời gọi riêng của màn.
       // [S1.272 / S4.6a] …và khi `choGhi`, danh sách lô mốc ngoài / lịch sử ngoài ngay sau danh sách hàng chuẩn (bước 7).
-      // [S1.9101 / S4.8] …và danh sách nhóm hàng ngay sau danh sách hàng chuẩn — cột nhóm hàng và ba ô chọn.
+      // [S1.298 / S4.8] …và danh sách nhóm hàng ngay sau danh sách hàng chuẩn — cột nhóm hàng và ba ô chọn.
       "du-lieu": ["GET /auth/login-links", "GET /items", "GET /categories", "GET /external-data/batches", "GET /uom", "GET /mapping-queue"],
       // [S1.216 / khoản 195] `/login` hỏi link đăng nhập gần đây của chính mình sau khi các bước mở.
       "mo-thau": ["GET /auth/login-links"],
@@ -3818,7 +3818,7 @@ describe("bề mặt tệp", () => {
         if (l === "POST /items/h-1/external-references") return Promise.resolve({ status: 201, body: { moc: { loNhapId: "l-9" } } });
         return undefined;
       });
-      // [S1.9101 / S4.8] Nút Xem ở cột thứ sáu — cột nhóm hàng đứng trước cột trạng thái.
+      // [S1.298 / S4.8] Nút Xem ở cột thứ sáu — cột nhóm hàng đứng trước cột trạng thái.
       const xem = p.el("bang-hang").querySelector("tbody").con[0]?.con[5]?.con[0];
       await xem?.nghe["click"]?.[0]?.();
       await cho();
@@ -3910,12 +3910,12 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).not.toContain("POST /rfqs/r-9/items/2/mapping/new-item");
     });
 
-    // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn — tuỳ chọn; ô chọn chỉ mời nhóm còn dùng, nhóm đã ngừng chỉ hiện khi hàng đang mang nó.
+    // [S1.298 / S4.8] Nhóm hàng của hàng chuẩn — tuỳ chọn; ô chọn chỉ mời nhóm còn dùng, nhóm đã ngừng chỉ hiện khi hàng đang mang nó.
     const NHOM = { nhomHang: [
       { id: "n-1", ma: "THEP", ten: "Thép", conDung: true, createdAt: "2026-10-01T00:00:00Z" },
       { id: "n-2", ma: "CU", ten: "Nhóm cũ", conDung: false, createdAt: "2026-10-01T00:00:00Z" },
     ] };
-    it("[S1.9101 / S4.8] du-lieu: cột nhóm hàng ở danh sách; tạo gửi nhóm đã chọn (trống ⇒ null); phiên bản mới chọn sẵn nhóm đã ngừng mà hàng đang mang, và gửi nó", async () => {
+    it("[S1.298 / S4.8] du-lieu: cột nhóm hàng ở danh sách; tạo gửi nhóm đã chọn (trống ⇒ null); phiên bản mới chọn sẵn nhóm đã ngừng mà hàng đang mang, và gửi nó", async () => {
       const HANG = [
         { id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", trangThai: "DANG_DUNG", nhomHangId: "n-2" },
         { id: "h-2", ma: "GACH", ten: "Gạch", donViGoc: "cai", trangThai: "DANG_DUNG", nhomHangId: null },
@@ -3960,7 +3960,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.than.filter((t) => t.lenh === "POST /items/h-1/versions").map((t) => (t.than as { nhomHangId: unknown }).nhomHangId)).toEqual(["n-2", null]);
     });
 
-    it("[S1.9101 / S4.8] du-lieu: hàng đợi — «Tạo hàng chuẩn rồi duyệt» gửi nhóm đã chọn; đọc nhóm hàng hỏng ⇒ ô chỉ còn «không nhóm hàng», cột nói «không đọc được»", async () => {
+    it("[S1.298 / S4.8] du-lieu: hàng đợi — «Tạo hàng chuẩn rồi duyệt» gửi nhóm đã chọn; đọc nhóm hàng hỏng ⇒ ô chỉ còn «không nhóm hàng», cột nói «không đọc được»", async () => {
       const p = await moDuLieu({ ...HANG_D12, hangChuan: [{ ...HANG_D12.hangChuan[0], nhomHangId: "n-1" }] }, (l) => {
         if (l === "GET /categories") return Promise.resolve({ status: 200, body: NHOM });
         if (l === "GET /mapping-queue") return Promise.resolve({ status: 200, body: HANG_DOI });
@@ -3986,7 +3986,7 @@ describe("bề mặt tệp", () => {
       });
       expect(hong.el("tao-nhom-hang").con.map((x) => x.textContent)).toEqual(["— không nhóm hàng —"]);
       expect(hong.el("bang-hang").querySelector("tbody").con[0]?.con[3]?.textContent).toBe("(nhóm hàng không đọc được)");
-      // [rà soát §S1.9101 — TRUNG-1] Nhóm của hàng không có trong danh sách: ô vẫn mang nó (trình duyệt thật để ô trống khi không có
+      // [rà soát §S1.298 — TRUNG-1] Nhóm của hàng không có trong danh sách: ô vẫn mang nó (trình duyệt thật để ô trống khi không có
       // lựa chọn khớp), và phiên bản mới gửi lại đúng nhóm ấy — không lặng lẽ bỏ.
       await hong.el("bang-hang").querySelector("tbody").con[0]?.con[5]?.con[0]?.nghe["click"]?.[0]?.();
       await cho();

@@ -17324,10 +17324,10 @@ $ham$;
                   'hàm public.luot_cham_kiem_phien_ban() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_phien_ban() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.8] Nhom hang cua hang chuan: gan moi chi nhom con dung (duoi khoa chia se theo nhom, chi READ COMMITTED), giu nhom cua phien ban truoc thi duoc. Than `RETURN NEW` cho mot phien ban tro nhom da ngung, hay vuot lan ngung dung dang chay; ham STABLE dung lai anh chup cua cau INSERT nen cung vuot — ghim ca provolatile.
+    -- [S1.298 / S4.8] Nhom hang cua hang chuan: gan moi chi nhom con dung (duoi khoa chia se theo nhom, chi READ COMMITTED), giu nhom cua phien ban truoc thi duoc. Than `RETURN NEW` cho mot phien ban tro nhom da ngung, hay vuot lan ngung dung dang chay; ham STABLE dung lai anh chup cua cau INSERT nen cung vuot — ghim ca provolatile.
     ARRAY[
-      $q$hàm + trigger hang_chuan_kiem_nhom_hang (9501_nhom_hang_cua_hang_chuan)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang_cua_hang_chuan.sql')$q$,
+      $q$hàm + trigger hang_chuan_kiem_nhom_hang (126_nhom_hang_cua_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '126_nhom_hang_cua_hang_chuan.sql')$q$,
       $q$DO $fn350$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

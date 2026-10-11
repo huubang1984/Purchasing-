@@ -423,7 +423,7 @@ async function chinh(): Promise<void> {
         })()
       : null;
 
-    // [S1.9101 / S4.8] `--s3`: người quản lý dữ liệu gắn nhóm hàng `KET-CAU` cho ba hàng chuẩn demo — một PHIÊN BẢN mới mỗi hàng, như
+    // [S1.298 / S4.8] `--s3`: người quản lý dữ liệu gắn nhóm hàng `KET-CAU` cho ba hàng chuẩn demo — một PHIÊN BẢN mới mỗi hàng, như
     // ở bước 4 của `/du-lieu` (bản chụp đầy đủ: tên, thuộc tính, trọng yếu giữ nguyên). Nhóm hàng có sau hàng chuẩn vì F1 dựng nó ở
     // đây; demo thấy cột nhóm hàng và hai phiên bản ở chi tiết. Không `--s3`: hàng chuẩn không nhóm hàng — cột tuỳ chọn.
     if (nhomHang !== null) {
