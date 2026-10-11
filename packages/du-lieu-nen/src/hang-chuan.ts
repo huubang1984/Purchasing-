@@ -51,7 +51,10 @@ export class DuLieuNenError extends Error {
       | "NGUON_SAI_HINH_DANG"
       | "NHA_CUNG_CAP_SAI_HINH_DANG"
       | "KHONG_CO_HANG_DU_LIEU"
-      | "DA_RUT",
+      | "DA_RUT"
+      // [S1.298 / S4.8] Nhóm hàng của hàng chuẩn (`126_nhom_hang_cua_hang_chuan`).
+      | "KHONG_CO_NHOM_HANG"
+      | "NHOM_HANG_DA_NGUNG_DUNG",
     message: string,
   ) {
     super(message);
@@ -111,6 +114,9 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   external_price_references_nguon_hinh_dang: "NGUON_SAI_HINH_DANG",
   external_purchase_history_nguon_hinh_dang: "NGUON_SAI_HINH_DANG",
   external_purchase_history_nha_cung_cap_hinh_dang: "NHA_CUNG_CAP_SAI_HINH_DANG",
+  // [S1.298 / S4.8] Khoá ngoại theo (tổ chức, nhóm) và luật gán của `hang_chuan_kiem_nhom_hang`.
+  canonical_item_versions_category_fkey: "KHONG_CO_NHOM_HANG",
+  hang_chuan_nhom_hang_da_ngung_dung: "NHOM_HANG_DA_NGUNG_DUNG",
 };
 
 /**
@@ -148,6 +154,8 @@ const CAU_THEO_MA: Readonly<Partial<Record<DuLieuNenError["ma"], string>>> = {
   NHA_CUNG_CAP_SAI_HINH_DANG: "tên nhà cung cấp dài 1 đến 300 ký tự",
   KHONG_CO_HANG_DU_LIEU: "không có hàng dữ liệu ngoài nào còn hiệu lực ở đây để rút",
   DA_RUT: "hàng này vừa được rút",
+  KHONG_CO_NHOM_HANG: "không có nhóm hàng này trong tổ chức",
+  NHOM_HANG_DA_NGUNG_DUNG: "nhóm hàng đã ngừng dùng — chọn nhóm khác, hoặc giữ đúng nhóm của phiên bản trước",
 };
 
 /** Chạy một lần ghi; lần từ chối của một ràng buộc có tên thành `DuLieuNenError`. Dùng chung trong gói, không ra mặt tiền. */
@@ -184,6 +192,11 @@ export interface TaoHangChuanInput {
   readonly ten: string;
   readonly thuocTinh?: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu?: readonly string[];
+  /**
+   * [S1.298 / S4.8] Nhóm hàng (`procurement_categories.id`) — tuỳ chọn. Gán mới chỉ nhóm CÒN DÙNG; CSDL chốt
+   * (`hang_chuan_kiem_nhom_hang`).
+   */
+  readonly nhomHangId?: string | null;
   readonly actorSessionId: string;
 }
 
@@ -219,7 +232,7 @@ export async function taoHangChuan(client: pg.PoolClient, orgId: string, input: 
       action: "ITEM_CREATED",
       resourceType: "canonical_item",
       resourceId: hang.id,
-      payload: { ma: input.ma, donViGoc },
+      payload: { ma: input.ma, donViGoc, nhomHangId: input.nhomHangId ?? null },
     });
     return { id: hang.id, ma: input.ma, donViGoc, phienBanSeq };
   });
@@ -229,15 +242,20 @@ async function chenPhienBan(
   client: pg.PoolClient,
   orgId: string,
   hangChuanId: string,
-  input: { readonly ten: string; readonly thuocTinh?: Readonly<Record<string, string>>; readonly thuocTinhTrongYeu?: readonly string[] },
+  input: {
+    readonly ten: string;
+    readonly thuocTinh?: Readonly<Record<string, string>>;
+    readonly thuocTinhTrongYeu?: readonly string[];
+    readonly nhomHangId?: string | null;
+  },
   trangThai: "DANG_DUNG" | "NGUNG_DUNG",
   actor: { readonly id: string; readonly sessionId: string },
 ): Promise<string> {
   const { rows } = await client.query<{ seq: string }>(
     "INSERT INTO public.canonical_item_versions " +
-      "(org_id, canonical_item_id, ten, thuoc_tinh, thuoc_tinh_trong_yeu, trang_thai, tac_gia, session_id) " +
+      "(org_id, canonical_item_id, ten, thuoc_tinh, thuoc_tinh_trong_yeu, trang_thai, tac_gia, session_id, category_id) " +
       "VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.text, $4::pg_catalog.jsonb, $5::pg_catalog.text[], " +
-      "$6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid) RETURNING seq::pg_catalog.text AS seq",
+      "$6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid, $9::pg_catalog.uuid) RETURNING seq::pg_catalog.text AS seq",
     [
       orgId,
       hangChuanId,
@@ -247,6 +265,7 @@ async function chenPhienBan(
       trangThai,
       actor.id,
       actor.sessionId,
+      input.nhomHangId ?? null,
     ],
   );
   const seq = rows[0]?.seq;
@@ -260,6 +279,11 @@ export interface TaoPhienBanInput {
   readonly thuocTinh?: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu?: readonly string[];
   readonly trangThai?: "DANG_DUNG" | "NGUNG_DUNG";
+  /**
+   * [S1.298 / S4.8] Nhóm hàng của phiên bản. Phiên bản là bản chụp ĐẦY ĐỦ — bỏ trống là bỏ nhóm, như bỏ trống thuộc tính; giữ nhóm
+   * thì gửi lại đúng nhóm của phiên bản trước (được cả khi nhóm ấy đã ngừng dùng).
+   */
+  readonly nhomHangId?: string | null;
   readonly actorSessionId: string;
 }
 
@@ -279,7 +303,7 @@ export async function taoPhienBanHangChuan(
       action: "ITEM_VERSION_CREATED",
       resourceType: "canonical_item",
       resourceId: input.hangChuanId,
-      payload: { seq, trangThai: input.trangThai ?? "DANG_DUNG" },
+      payload: { seq, trangThai: input.trangThai ?? "DANG_DUNG", nhomHangId: input.nhomHangId ?? null },
     });
     return { seq };
   });
@@ -496,6 +520,8 @@ export interface HangChuan {
   readonly thuocTinh: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu: readonly string[];
   readonly trangThai: "DANG_DUNG" | "NGUNG_DUNG";
+  /** [S1.298 / S4.8] Nhóm hàng của phiên bản mới nhất — `null` khi không gán. */
+  readonly nhomHangId: string | null;
   readonly phienBanSeq: string;
 }
 
@@ -503,7 +529,8 @@ export interface HangChuan {
 export async function docHangChuan(client: pg.PoolClient, orgId: string, hangChuanId: string): Promise<HangChuan | null> {
   await assertTenantBound(client, orgId, "docHangChuan");
   const { rows } = await client.query<HangHangChuan>(
-    "SELECT i.id, i.ma, i.don_vi_goc, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, v.seq::pg_catalog.text AS seq " +
+    "SELECT i.id, i.ma, i.don_vi_goc, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, v.category_id, " +
+      "v.seq::pg_catalog.text AS seq " +
       "FROM public.canonical_items i " +
       "JOIN public.canonical_item_versions v ON v.org_id OPERATOR(pg_catalog.=) i.org_id " +
       "AND v.canonical_item_id OPERATOR(pg_catalog.=) i.id " +
@@ -523,6 +550,7 @@ interface HangHangChuan {
   readonly thuoc_tinh: Record<string, string>;
   readonly thuoc_tinh_trong_yeu: string[];
   readonly trang_thai: "DANG_DUNG" | "NGUNG_DUNG";
+  readonly category_id: string | null;
   readonly seq: string;
 }
 
@@ -535,6 +563,7 @@ function hangChuanTuHang(h: HangHangChuan): HangChuan {
     thuocTinh: h.thuoc_tinh,
     thuocTinhTrongYeu: h.thuoc_tinh_trong_yeu,
     trangThai: h.trang_thai,
+    nhomHangId: h.category_id,
     phienBanSeq: h.seq,
   };
 }
@@ -559,8 +588,8 @@ export async function lietKeHangChuan(
   const q = input.q?.trim() ?? "";
   // Đọc thêm MỘT hàng để biết còn hay hết mà không cần một câu đếm thứ hai.
   const { rows } = await client.query<HangHangChuan>(
-    "SELECT h.id, h.ma, h.don_vi_goc, h.ten, h.thuoc_tinh, h.thuoc_tinh_trong_yeu, h.trang_thai, h.seq FROM (" +
-      "SELECT DISTINCT ON (i.id) i.id, i.ma, i.don_vi_goc, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, " +
+    "SELECT h.id, h.ma, h.don_vi_goc, h.ten, h.thuoc_tinh, h.thuoc_tinh_trong_yeu, h.trang_thai, h.category_id, h.seq FROM (" +
+      "SELECT DISTINCT ON (i.id) i.id, i.ma, i.don_vi_goc, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, v.category_id, " +
       "v.seq::pg_catalog.text AS seq " +
       "FROM public.canonical_items i " +
       "JOIN public.canonical_item_versions v ON v.org_id OPERATOR(pg_catalog.=) i.org_id " +
@@ -582,6 +611,8 @@ export interface PhienBanHangChuan {
   readonly thuocTinh: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu: readonly string[];
   readonly trangThai: "DANG_DUNG" | "NGUNG_DUNG";
+  /** [S1.298 / S4.8] Nhóm hàng của phiên bản này. */
+  readonly nhomHangId: string | null;
   readonly ghiLuc: string;
   readonly tacGia: string;
 }
@@ -630,10 +661,12 @@ export async function docChiTietHangChuan(
     thuoc_tinh: Record<string, string>;
     thuoc_tinh_trong_yeu: string[];
     trang_thai: "DANG_DUNG" | "NGUNG_DUNG";
+    category_id: string | null;
     ghi_luc: Date;
     tac_gia: string;
   }>(
-    "SELECT v.seq::pg_catalog.text AS seq, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, v.ghi_luc, u.full_name AS tac_gia " +
+    "SELECT v.seq::pg_catalog.text AS seq, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai, v.category_id, v.ghi_luc, " +
+      "u.full_name AS tac_gia " +
       "FROM public.canonical_item_versions v " +
       "JOIN public.users u ON u.org_id OPERATOR(pg_catalog.=) v.org_id AND u.id OPERATOR(pg_catalog.=) v.tac_gia " +
       "WHERE v.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND v.canonical_item_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
@@ -669,6 +702,7 @@ export async function docChiTietHangChuan(
       thuocTinh: r.thuoc_tinh,
       thuocTinhTrongYeu: r.thuoc_tinh_trong_yeu,
       trangThai: r.trang_thai,
+      nhomHangId: r.category_id,
       ghiLuc: r.ghi_luc.toISOString(),
       tacGia: r.tac_gia,
     })),

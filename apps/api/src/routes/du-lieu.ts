@@ -63,6 +63,14 @@ function trangThaiTuyChon(body: unknown): "DANG_DUNG" | "NGUNG_DUNG" | undefined
   if (v !== "DANG_DUNG" && v !== "NGUNG_DUNG") throw new HttpError(422, 'trường "trangThai" phải là DANG_DUNG hoặc NGUNG_DUNG');
   return v;
 }
+/** [S1.298 / S4.8] Nhóm hàng: vắng hay `null` là không gán; có thì phải là UUID — nhóm có thật, còn dùng là việc của CSDL (`126`). */
+function nhomHangTuyChon(body: unknown): string | null {
+  const v = truong(body, "nhomHangId");
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, 'trường "nhomHangId" phải là UUID hoặc null');
+  // Chữ thường như cột lưu — hàng sổ mang đúng cách viết của cột (rà soát §S1.298 — THẤP-3).
+  return v.toLowerCase();
+}
 /** Tham số đường dẫn UUID; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). */
 export function itemIdParam(req: ApiRequest): string {
   const v = req.params["itemId"] ?? "";
@@ -135,6 +143,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         ten: chuoiBatBuoc(ctx.req.body, "ten"),
         thuocTinh: thuocTinhTuyChon(ctx.req.body),
         thuocTinhTrongYeu: trongYeuTuyChon(ctx.req.body),
+        nhomHangId: nhomHangTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { hangChuan } };
@@ -155,6 +164,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         thuocTinh: thuocTinhTuyChon(ctx.req.body),
         thuocTinhTrongYeu: trongYeuTuyChon(ctx.req.body),
         trangThai: trangThaiTuyChon(ctx.req.body),
+        nhomHangId: nhomHangTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { phienBan } };

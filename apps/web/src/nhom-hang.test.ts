@@ -40,6 +40,24 @@ describe("S3.6a — nhóm hàng trên màn", () => {
     expect(luaChonNhomHang(DS, "b").map((l) => l.nhan)).toEqual(["— chọn nhóm hàng —", "THEP — Thép", "CU — Cũ (đã ngừng dùng)"]);
   });
 
+  it("[S1.298 / S4.8] ô của hàng chuẩn: dòng trống mang nhãn của màn gọi; nhóm đã ngừng chỉ hiện khi đang chọn", () => {
+    expect(luaChonNhomHang(DS, null, "— không nhóm hàng —")).toEqual([
+      { value: "", nhan: "— không nhóm hàng —" },
+      { value: "a", nhan: "THEP — Thép" },
+    ]);
+    expect(luaChonNhomHang(DS, "b", "— không nhóm hàng —").map((l) => l.value)).toEqual(["", "a", "b"]);
+  });
+
+  it("[S1.298 / rà soát TRUNG-1] nhóm đang chọn không có trong danh sách vẫn là một lựa chọn — ô không lặng lẽ về trống", () => {
+    expect(luaChonNhomHang(DS, "z", "— không nhóm hàng —")).toEqual([
+      { value: "", nhan: "— không nhóm hàng —" },
+      { value: "a", nhan: "THEP — Thép" },
+      { value: "z", nhan: "(nhóm hàng không đọc được — giữ nguyên)" },
+    ]);
+    expect(luaChonNhomHang([], "z").map((l) => l.value)).toEqual(["", "z"]);
+    expect(luaChonNhomHang(DS, "").map((l) => l.value), "chuỗi rỗng là không chọn").toEqual(["", "a"]);
+  });
+
   it("nhóm của gói nói bằng lời; chưa có ⇒ null; id lạ ⇒ nói là không đọc được", () => {
     expect(nhanNhomHangCuaGoi(DS, "a")).toBe("THEP — Thép");
     expect(nhanNhomHangCuaGoi(DS, "b")).toBe("CU — Cũ (đã ngừng dùng)");

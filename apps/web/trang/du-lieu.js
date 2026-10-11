@@ -17,6 +17,7 @@ import {
   nhanGoiY, TEN_LOAI, thanLoVuotTran, TIEU_DE_MAU, vietThuocTinh,
 } from "/lib/du-lieu.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
+import { docNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -33,6 +34,12 @@ let hangDoi = { dong: [], conNua: false };
 let dangXuLy = null;
 /** [S1.272 / S4.6a] Lô đang mở ở bước 7 — `{ loai, loNhapId }`, `null` khi khối đóng. */
 let loDangMo = null;
+/**
+ * [S1.298 / S4.8] Nhóm hàng của tổ chức (`GET /categories`, mọi người mua đọc được) — nhãn của cột nhóm hàng và ba ô chọn. Đọc hỏng thì
+ * rỗng: cột nói *"không đọc được"*, ô chỉ còn dòng *"không nhóm hàng"* — máy chủ vẫn là nơi phán nhóm còn dùng.
+ */
+let nhomHang = [];
+const KHONG_NHOM = "— không nhóm hàng —";
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -168,6 +175,9 @@ function dongCacBuoc() {
   hangDoi = { dong: [], conNua: false };
   $("bang-hang-doi").querySelector("tbody").replaceChildren();
   trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
+  // [S1.298 / rà soát THẤP-4] Mã và tên nhóm hàng của người trước không ở lại trong ba ô chọn.
+  nhomHang = [];
+  for (const id of ["tao-nhom-hang", "pb-nhom-hang", "xl-nhom-hang"]) $(id).replaceChildren();
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
@@ -240,6 +250,7 @@ async function napHangChuan() {
     soNguoiQuanLy: typeof r.body?.soNguoiQuanLy === "number" ? r.body.soNguoiQuanLy : 0,
   };
   bao($("vai-quan-ly"), cauVaiQuanLy(trangThai.choGhi, trangThai.soNguoiQuanLy) ?? "");
+  await napNhomHang();
   hien($("b3"), trangThai.choGhi);
   for (const id of ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv", "khoi-moc-ngoai"]) hien($(id), trangThai.choGhi);
   // [S1.272 / S4.6a] Bước 7 chỉ cho người ghi được: danh sách lô đọc dưới `item.manage` ở máy chủ, nên người khác chỉ nhận 403.
@@ -251,12 +262,40 @@ async function napHangChuan() {
   veHangChuan();
 }
 
+/**
+ * [S1.298 / S4.8] Đọc lại nhóm hàng cùng mỗi lần đọc danh sách hàng chuẩn, rồi vẽ lại hai ô chọn không gắn với hàng đang mở ở bước 4
+ * — giữ lựa chọn đang có của người dùng.
+ */
+async function napNhomHang() {
+  const r = await goi("GET", "/categories");
+  nhomHang = r.status === 200 ? docNhomHang(r.body) : [];
+  for (const id of ["tao-nhom-hang", "xl-nhom-hang"]) veChonNhomHang(id, $(id).value === "" ? null : $(id).value);
+}
+
+function veChonNhomHang(id, dangChon) {
+  const chon = $(id);
+  chon.replaceChildren();
+  for (const l of luaChonNhomHang(nhomHang, dangChon, KHONG_NHOM)) {
+    const op = document.createElement("option");
+    op.value = l.value;
+    op.textContent = l.nhan;
+    chon.append(op);
+  }
+  chon.value = dangChon ?? "";
+}
+
+/** Nhóm hàng của một hàng hay một phiên bản, nói bằng lời — `—` khi không gán. */
+const nhanNhom = (id) => nhanNhomHangCuaGoi(nhomHang, id) ?? "—";
+/** Giá trị gửi lên máy chủ: dòng trống là không nhóm hàng. */
+const nhomDaChon = (id) => ($(id).value === "" ? null : $(id).value);
+
 function veHangChuan() {
   const tb = $("bang-hang").querySelector("tbody");
   tb.replaceChildren();
   for (const h of locHangChuan(trangThai.hangChuan, $("loc").value)) {
     const tr = document.createElement("tr");
-    tr.append(o(h.ma), o(h.ten), o(h.donViGoc), o(TRANG_THAI[h.trangThai] ?? h.trangThai), oNut("Xem", () => { void moChiTiet(h.id); }));
+    tr.append(o(h.ma), o(h.ten), o(h.donViGoc), o(nhanNhom(h.nhomHangId)), o(TRANG_THAI[h.trangThai] ?? h.trangThai),
+      oNut("Xem", () => { void moChiTiet(h.id); }));
     tb.append(tr);
   }
 }
@@ -278,6 +317,7 @@ $("nut-tao").addEventListener("click", motLan($("nut-tao"), async () => {
   if (!ty.ok) { bao($("loi3"), ty.loi); return; }
   const r = await goi("POST", "/items", {
     ma, donViGoc: $("tao-don-vi").value.trim(), ten: $("tao-ten").value.trim(), thuocTinh: tt.thuocTinh, thuocTinhTrongYeu: ty.khoa,
+    nhomHangId: nhomDaChon("tao-nhom-hang"),
   });
   if (r.status !== 201) { bao($("loi3"), loiCua(r, "Không tạo được hàng chuẩn")); return; }
   bao($("ok3"), `Đã tạo ${r.body?.hangChuan?.ma ?? ma}, đơn vị gốc ${r.body?.hangChuan?.donViGoc ?? ""}.`);
@@ -307,6 +347,7 @@ async function moChiTiet(id) {
     ["Mã", h.ma],
     ["Đơn vị gốc", h.donViGoc],
     ["Tên", h.ten],
+    ["Nhóm hàng", nhanNhom(h.nhomHangId)],
     ["Trạng thái", TRANG_THAI[h.trangThai] ?? h.trangThai],
   ]);
   const pb = $("bang-phien-ban").querySelector("tbody");
@@ -316,13 +357,15 @@ async function moChiTiet(id) {
   for (const [i, p] of dangXem.phienBan.entries()) {
     const tr = document.createElement("tr");
     tr.append(o(String(dangXem.phienBan.length - i), "so"), o(p.ten), o(vietThuocTinh(p.thuocTinh).replace(/\n/gu, "; ")), o(p.thuocTinhTrongYeu.join(", ")),
-      o(TRANG_THAI[p.trangThai] ?? p.trangThai), o(p.tacGia), o(luc(p.ghiLuc)));
+      o(nhanNhom(p.nhomHangId)), o(TRANG_THAI[p.trangThai] ?? p.trangThai), o(p.tacGia), o(luc(p.ghiLuc)));
     pb.append(tr);
   }
   $("pb-ten").value = h.ten;
   $("pb-thuoc-tinh").value = vietThuocTinh(h.thuocTinh);
   $("pb-trong-yeu").value = h.thuocTinhTrongYeu.join(", ");
   $("pb-ngung").checked = h.trangThai === "NGUNG_DUNG";
+  // [S1.298 / S4.8] Phiên bản là bản chụp đầy đủ: ô chọn sẵn nhóm hiện tại, kể cả khi nhóm ấy đã ngừng dùng (giữ được, CSDL cho).
+  veChonNhomHang("pb-nhom-hang", typeof h.nhomHangId === "string" ? h.nhomHangId : null);
   const bd = $("bang-bi-danh").querySelector("tbody");
   bd.replaceChildren();
   for (const b of dangXem.biDanh) {
@@ -364,6 +407,7 @@ $("nut-phien-ban").addEventListener("click", motLan($("nut-phien-ban"), async ()
   if (!ty.ok) { bao($("loi4"), ty.loi); return; }
   await ghiChiTiet("versions", {
     ten: $("pb-ten").value.trim(), thuocTinh: tt.thuocTinh, thuocTinhTrongYeu: ty.khoa, trangThai: $("pb-ngung").checked ? "NGUNG_DUNG" : "DANG_DUNG",
+    nhomHangId: nhomDaChon("pb-nhom-hang"),
   }, "Đã thêm phiên bản.");
 }));
 
@@ -477,7 +521,7 @@ function xoaXuLy() {
   dangXuLy = null;
   $("tt-dong").replaceChildren();
   $("xl-hang").replaceChildren();
-  for (const id of ["xl-ly-do", "xl-ma", "xl-don-vi", "xl-ten"]) $(id).value = "";
+  for (const id of ["xl-ly-do", "xl-ma", "xl-don-vi", "xl-ten", "xl-nhom-hang"]) $(id).value = "";
   hien($("khoi-xu-ly"), false);
 }
 
@@ -506,6 +550,7 @@ function moXuLy(d) {
   $("xl-ma").value = "";
   $("xl-don-vi").value = "";
   $("xl-ten").value = d.moTa;
+  $("xl-nhom-hang").value = "";
   hien($("khoi-xu-ly"), true);
 }
 
@@ -561,7 +606,8 @@ $("nut-tao-duyet").addEventListener("click", motLanKhoi(async () => {
   if (!maHopLe(ma)) { bao($("loi6"), "Mã viết hoa, bắt đầu bằng chữ hoặc số, chỉ chữ, số, dấu chấm, gạch ngang, gạch dưới — tối đa 40 ký tự."); return; }
   const d = dangXuLy;
   const ok = await ghiDong(`items/${d?.lineNo}/mapping/new-item`, {
-    ma, ten: $("xl-ten").value.trim(), donViGoc: $("xl-don-vi").value.trim(), lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam,
+    ma, ten: $("xl-ten").value.trim(), donViGoc: $("xl-don-vi").value.trim(), nhomHangId: nhomDaChon("xl-nhom-hang"), lyDo: lyDoNhap(),
+    taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam,
   }, 201, `Đã tạo ${ma} và duyệt dòng ${d?.lineNo} sang nó.`);
   if (ok) await napHangChuan();
 }));

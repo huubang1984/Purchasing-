@@ -18,7 +18,9 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   DuLieuNenError,
   KHONG_QUY_DOI_DUOC,
+  docChiTietHangChuan,
   docHangChuan,
+  lietKeHangChuan,
   khaiBiDanhHang,
   khaiQuyDoiRieng,
   quyDoiDonVi,
@@ -402,5 +404,248 @@ describe("[S1.197 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
       c.release();
     }
     expect(await quyDoi(orgA, hc.id, "bao", "kg", truoc)).toEqual({ quyDoiDuoc: false, ma: KHONG_QUY_DOI_DUOC });
+  });
+});
+
+// =============================================================================================
+// [S1.298 / S4.8] NHÓM HÀNG CỦA HÀNG CHUẨN — ở bảng phiên bản (`126_nhom_hang_cua_hang_chuan`, ADR-169). Chủ dự án chốt 2026-10-11:
+// tuỳ chọn; gán mới chỉ nhóm CÒN DÙNG của chính tổ chức; giữ đúng nhóm của phiên bản trước thì được dù nhóm ấy đã ngừng.
+// =============================================================================================
+describe("[S1.298 / S4.8] nhóm hàng của hàng chuẩn — L1 (phiên bản), L3 (người ghi)", () => {
+  /** Nhóm hàng dựng bằng câu của `app_api` dưới một người FINANCE (`category.manage`) — đúng đường của `taoNhomHang`. */
+  async function taoNhom(orgId: string, ma: string): Promise<string> {
+    const tc = await taoNguoi(orgId, ["FINANCE"]);
+    return trong(orgId, async (c) =>
+      (
+        await c.query<{ id: string }>(
+          "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+          [orgId, ma, `Nhom ${ma}`, tc.nguoi, tc.phien],
+        )
+      ).rows[0]!.id,
+    );
+  }
+  async function doiNhom(orgId: string, nhom: string, loai: "RETIRED" | "REACTIVATED"): Promise<void> {
+    const tc = await taoNguoi(orgId, ["FINANCE"]);
+    await trong(orgId, (c) =>
+      c.query("INSERT INTO procurement_category_changes (org_id, category_id, loai, created_by, created_by_session_id) VALUES ($1, $2, $3, $4, $5)", [
+        orgId,
+        nhom,
+        loai,
+        tc.nguoi,
+        tc.phien,
+      ]),
+    );
+  }
+  const taoHang = (ma: string, nhomHangId: string | null) =>
+    trong(orgA, (c) => taoHangChuan(c, orgA, { ma, donViGoc: "kg", ten: `Hàng ${ma}`, nhomHangId, actorSessionId: quanLyA.phien }));
+  const phienBan = (hangChuanId: string, nhomHangId: string | null, trangThai: "DANG_DUNG" | "NGUNG_DUNG" = "DANG_DUNG") =>
+    trong(orgA, (c) => taoPhienBanHangChuan(c, orgA, { hangChuanId, ten: "Tên mới", trangThai, nhomHangId, actorSessionId: quanLyA.phien }));
+
+  it("[INV-L1] nhóm hàng là một trường của PHIÊN BẢN: đổi nhóm là phiên bản mới, phiên bản cũ giữ nhóm cũ; ba bộ đọc và hàng sổ mang nó; không gán ⇒ null", async () => {
+    const thep = await taoNhom(orgA, "S48-THEP");
+    const gach = await taoNhom(orgA, "S48-GACH");
+    const hc = await taoHang("S48-A", thep);
+    const khong = await taoHang("S48-B", null);
+    await phienBan(hc.id, gach);
+    expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc.id))).toMatchObject({ nhomHangId: gach });
+    expect(await trong(orgA, (c) => docHangChuan(c, orgA, khong.id))).toMatchObject({ nhomHangId: null });
+    const ds = (await trong(orgA, (c) => lietKeHangChuan(c, orgA))).hangChuan;
+    expect(ds.find((h) => h.id === hc.id)?.nhomHangId).toBe(gach);
+    expect(ds.find((h) => h.id === khong.id)?.nhomHangId).toBeNull();
+    const chiTiet = await trong(orgA, (c) => docChiTietHangChuan(c, orgA, hc.id));
+    expect(chiTiet?.phienBan.map((p) => p.nhomHangId), "mới nhất trước — phiên bản đầu giữ nhóm của nó").toEqual([gach, thep]);
+    const { rows } = await db.pool.query<{ action: string; nhom: string | null }>(
+      "SELECT action, payload->>'nhomHangId' AS nhom FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+      [orgA, hc.id],
+    );
+    expect(rows.map((r) => [r.action, r.nhom])).toEqual([
+      ["ITEM_CREATED", thep],
+      ["ITEM_VERSION_CREATED", gach],
+    ]);
+  });
+
+  it("[INV-L1] gán MỚI chỉ nhóm còn dùng của chính tổ chức: nhóm tổ chức khác ⇒ KHONG_CO_NHOM_HANG; nhóm đã ngừng ⇒ NHOM_HANG_DA_NGUNG_DUNG — không hàng nào", async () => {
+    const cuaB = await taoNhom(orgB, "S48-B");
+    const ngung = await taoNhom(orgA, "S48-NGUNG");
+    await doiNhom(orgA, ngung, "RETIRED");
+    expect(await maLoi(taoHang("S48-C", cuaB))).toBe("KHONG_CO_NHOM_HANG");
+    expect(await maLoi(taoHang("S48-D", ngung))).toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    const hc = await taoHang("S48-E", null);
+    expect(await maLoi(phienBan(hc.id, ngung))).toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    expect(await maLoi(phienBan(hc.id, cuaB))).toBe("KHONG_CO_NHOM_HANG");
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM canonical_items WHERE org_id = $1 AND ma IN ('S48-C', 'S48-D')", [orgA]);
+    expect(rows[0]!.n).toBe("0");
+    expect((await trong(orgA, (c) => docChiTietHangChuan(c, orgA, hc.id)))?.phienBan).toHaveLength(1);
+    // Câu viết tay dưới `app_api` gặp cùng trigger.
+    expect(
+      await maLoi(
+        trong(orgA, (c) =>
+          c.query(
+            "INSERT INTO canonical_item_versions (org_id, canonical_item_id, ten, tac_gia, session_id, category_id) VALUES ($1, $2, 'Viet tay', $3, $4, $5)",
+            [orgA, hc.id, quanLyA.nguoi, quanLyA.phien, ngung],
+          ),
+        ),
+      ),
+    ).toBe("23514");
+  });
+
+  it("[INV-L1] nhóm ngừng SAU khi gán: phiên bản mới GIỮ đúng nhóm ấy được (kể cả ngừng dùng hàng); đổi sang nhóm đã ngừng khác, hay bỏ rồi gán lại ⇒ từ chối; dùng lại nhóm ⇒ gán được", async () => {
+    const x = await taoNhom(orgA, "S48-X");
+    const y = await taoNhom(orgA, "S48-Y");
+    const hc = await taoHang("S48-F", x);
+    const hk = await taoHang("S48-G", y);
+    await doiNhom(orgA, x, "RETIRED");
+    await doiNhom(orgA, y, "RETIRED");
+    await phienBan(hc.id, x);
+    await phienBan(hc.id, x, "NGUNG_DUNG");
+    expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc.id))).toMatchObject({ nhomHangId: x, trangThai: "NGUNG_DUNG" });
+    expect(await maLoi(phienBan(hk.id, x)), "nhóm đã ngừng KHÁC nhóm của phiên bản trước").toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    await phienBan(hc.id, null);
+    expect(await maLoi(phienBan(hc.id, x)), "phiên bản trước đã bỏ nhóm — gán lại là gán MỚI").toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    await doiNhom(orgA, x, "REACTIVATED");
+    await phienBan(hc.id, x);
+    expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc.id))).toMatchObject({ nhomHangId: x });
+  });
+
+  it("[INV-L3] người không giữ item.manage nghe lời từ chối QUYỀN trước — kể cả khi nhóm đã ngừng (trigger nhóm hàng xếp sau cổng ghi); ĐỘT BIẾN đổi tên cho trigger xếp trước ⇒ lời từ chối nhóm hàng lộ ra", async () => {
+    const ngung = await taoNhom(orgA, "S48-Q");
+    await doiNhom(orgA, ngung, "RETIRED");
+    const hc = await taoHang("S48-H", null);
+    const ghiCuaKyThuat = (c: pg.PoolClient) =>
+      taoPhienBanHangChuan(c, orgA, { hangChuanId: hc.id, ten: "X", nhomHangId: ngung, actorSessionId: kyThuatA.phien });
+    expect(await maLoi(trong(orgA, ghiCuaKyThuat))).toBe("CAN_ITEM_MANAGE");
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("ALTER TRIGGER canonical_item_versions_nhom_hang ON canonical_item_versions RENAME TO canonical_item_versions_a_nhom_hang");
+      await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      expect(await maLoi(ghiCuaKyThuat(c)), "trigger nhóm hàng chạy trước cổng ghi").toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  });
+
+  /** Chờ tới khi backend `pid` ĐỨNG CHỜ một khoá tư vấn — khuôn `nhom-hang.int` (S3.6a). */
+  async function choKhoaTuVan(pid: number): Promise<boolean> {
+    for (let lan = 0; lan < 250; lan += 1) {
+      const { rows } = await db.pool.query<{ cho: boolean }>(
+        "SELECT (wait_event_type = 'Lock' AND wait_event = 'advisory') AS cho FROM pg_stat_activity WHERE pid = $1",
+        [pid],
+      );
+      if (rows[0]?.cho === true) return true;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return false;
+  }
+  async function moGiaoDich(): Promise<{ c: pg.PoolClient; pid: number }> {
+    const c = await api.connect();
+    await c.query("BEGIN");
+    await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgA]);
+    return { c, pid: (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid };
+  }
+  /** Lần ngừng dùng ĐANG DỞ (giữ khoá độc quyền theo nhóm, chưa commit) và một lần gán chen vào — trả kết quả của lần gán. */
+  async function duaNgungVaGan(nhom: string, hangChuanId: string): Promise<{ cho: boolean; ma: string }> {
+    const tc = await taoNguoi(orgA, ["FINANCE"]);
+    const ngung = await moGiaoDich();
+    const gan = await moGiaoDich();
+    try {
+      await ngung.c.query(
+        "INSERT INTO procurement_category_changes (org_id, category_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'RETIRED', $3, $4)",
+        [orgA, nhom, tc.nguoi, tc.phien],
+      );
+      const lanGan = maLoi(
+        taoPhienBanHangChuan(gan.c, orgA, { hangChuanId, ten: "Gan khi dang ngung", nhomHangId: nhom, actorSessionId: quanLyA.phien }),
+      );
+      const cho = await choKhoaTuVan(gan.pid);
+      await ngung.c.query("COMMIT");
+      const ma = await lanGan;
+      await gan.c.query(ma === "KHONG_NEM" ? "COMMIT" : "ROLLBACK");
+      return { cho, ma };
+    } finally {
+      ngung.c.release();
+      gan.c.release();
+    }
+  }
+
+  it("[INV-L1] ĐUA: lần ngừng dùng đang dở thì lần gán chen vào ĐỨNG CHỜ khoá chia sẻ theo nhóm, rồi bị từ chối — ĐỘT BIẾN không chờ khoá ⇒ gán trúng nhóm vừa ngừng", async () => {
+    const nhom = await taoNhom(orgA, "S48-DUA");
+    const hc = await taoHang("S48-I", null);
+    expect(await duaNgungVaGan(nhom, hc.id)).toEqual({ cho: true, ma: "NHOM_HANG_DA_NGUNG_DUNG" });
+
+    const nhom2 = await taoNhom(orgA, "S48-DUA2");
+    const hc2 = await taoHang("S48-J", null);
+    const goc = (await db.pool.query<{ def: string }>("SELECT pg_get_functiondef('public.hang_chuan_kiem_nhom_hang()'::regprocedure) AS def")).rows[0]!.def;
+    const cu = "pg_catalog.pg_advisory_xact_lock_shared(";
+    expect(goc.split(cu).length - 1, "đột biến phải khớp ĐÚNG một chỗ").toBe(1);
+    await db.pool.query(goc.replace(cu, "pg_catalog.pg_try_advisory_xact_lock_shared("));
+    try {
+      expect(await duaNgungVaGan(nhom2, hc2.id), "không chờ khoá: lần gán đọc nhóm còn dùng trên ảnh chụp cũ và đi qua").toEqual({ cho: false, ma: "KHONG_NEM" });
+    } finally {
+      await db.pool.query(goc);
+    }
+    expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc2.id))).toMatchObject({ nhomHangId: nhom2 });
+  });
+
+  it("[INV-L1] [rà soát §S1.298 — THẤP-1] chỉ READ COMMITTED: ở REPEATABLE READ ảnh chụp cố định từ câu INSERT không thấy lần ngừng dùng vừa commit — gán nhóm bị từ chối; không nhóm thì đi qua; ĐỘT BIẾN bỏ chốt ⇒ đi qua", async () => {
+    const nhom = await taoNhom(orgA, "S48-RR");
+    const hc = await taoHang("S48-RR1", null);
+    const duoiRR = async (nhomHangId: string | null, thayThan?: (goc: string) => string): Promise<string> => {
+      const c = thayThan === undefined ? await api.connect() : await db.pool.connect();
+      try {
+        await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+        if (thayThan !== undefined) {
+          const goc = (await c.query<{ def: string }>("SELECT pg_get_functiondef('public.hang_chuan_kiem_nhom_hang()'::regprocedure) AS def")).rows[0]!.def;
+          await c.query(thayThan(goc));
+        }
+        await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgA]);
+        return await maLoi(taoPhienBanHangChuan(c, orgA, { hangChuanId: hc.id, ten: "RR", nhomHangId, actorSessionId: quanLyA.phien }));
+      } finally {
+        await c.query("ROLLBACK");
+        c.release();
+      }
+    };
+    expect(await duoiRR(nhom)).toBe("23514");
+    expect(await duoiRR(null)).toBe("KHONG_NEM");
+    const cu = "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN";
+    expect(await duoiRR(nhom, (goc) => {
+      expect(goc.split(cu).length - 1, "đột biến phải khớp ĐÚNG một chỗ").toBe(1);
+      return goc.replace(cu, "IF false THEN");
+    })).toBe("KHONG_NEM");
+    expect(await maLoi(phienBan(hc.id, nhom)), "đối chứng: READ COMMITTED đi qua").toBe("KHONG_NEM");
+  });
+
+  it("[INV-L1] ĐỘT BIẾN thân hàm: bỏ câu hỏi còn dùng ⇒ nhóm đã ngừng gán được; bỏ vế giữ nhóm của phiên bản trước ⇒ lần giữ bị từ chối", async () => {
+    const ngung = await taoNhom(orgA, "S48-DB");
+    const hc = await taoHang("S48-K", ngung);
+    await doiNhom(orgA, ngung, "RETIRED");
+    const hk = await taoHang("S48-L", null);
+    const goc = (await db.pool.query<{ def: string }>("SELECT pg_get_functiondef('public.hang_chuan_kiem_nhom_hang()'::regprocedure) AS def")).rows[0]!.def;
+    const chay = async (cu: string, moi: string, viec: (c: pg.PoolClient) => Promise<unknown>): Promise<string> => {
+      expect(goc.split(cu).length - 1, `đột biến phải khớp ĐÚNG một chỗ: ${cu}`).toBe(1);
+      const c = await db.pool.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query(goc.replace(cu, moi));
+        await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        return await maLoi(viec(c));
+      } finally {
+        await c.query("ROLLBACK");
+        c.release();
+      }
+    };
+    expect(
+      await chay("IF public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN", "IF true THEN", (c) =>
+        taoPhienBanHangChuan(c, orgA, { hangChuanId: hk.id, ten: "X", nhomHangId: ngung, actorSessionId: quanLyA.phien }),
+      ),
+    ).toBe("KHONG_NEM");
+    expect(
+      await chay("IS NOT DISTINCT FROM NEW.category_id THEN", "IS NOT DISTINCT FROM NEW.category_id AND false THEN", (c) =>
+        taoPhienBanHangChuan(c, orgA, { hangChuanId: hc.id, ten: "X", nhomHangId: ngung, actorSessionId: quanLyA.phien }),
+      ),
+    ).toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    // Đối chứng trên thân thật: hai lần ấy cho đúng điều ngược lại.
+    expect(await maLoi(phienBan(hk.id, ngung))).toBe("NHOM_HANG_DA_NGUNG_DUNG");
+    expect(await maLoi(phienBan(hc.id, ngung))).toBe("KHONG_NEM");
   });
 });

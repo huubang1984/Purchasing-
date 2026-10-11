@@ -90,7 +90,8 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.191 / S3.2c2] `tao-thau` — thứ tự bước, nút của dòng lời mời và câu báo của màn tạo gói theo luồng mời của tổ chức.
  *
- * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
+ * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`;
+ * [S1.298 / S4.8] và cột, ô chọn nhóm hàng của hàng chuẩn ở `/du-lieu`.
  *
  * [S1.199 / S4.2b] `du-lieu` — ô thuộc tính, lọc hiển thị, câu §8.10 và dòng quy đổi của màn dữ liệu nền.
  *

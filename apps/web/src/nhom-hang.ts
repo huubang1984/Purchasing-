@@ -60,12 +60,23 @@ export function nutDoiTrangThai(conDung: boolean): { readonly nhan: string; read
 /**
  * Lựa chọn của ô chọn nhóm hàng ở `/tao-thau`: một dòng trống, rồi các nhóm CÒN DÙNG theo thứ tự máy chủ trả (theo mã). Nhóm
  * mà gói đang giữ mà đã ngừng dùng vẫn hiện, có nhãn — ngừng dùng chỉ chặn lần gán mới, gói đang giữ nó vẫn nộp duyệt được.
+ * [S1.298 / S4.8] Cùng ô ở `/du-lieu` cho hàng chuẩn, nơi dòng trống là một lựa chọn (*"không nhóm hàng"* — cột tuỳ chọn): nhãn
+ * của nó là tham số. Luật nhóm đã ngừng giữ nguyên — CSDL cho giữ đúng nhóm của phiên bản trước. Nhóm đang chọn mà KHÔNG có trong danh
+ * sách (đọc nhóm hàng hỏng, hay danh sách cũ hơn lần gán) vẫn là một lựa chọn, nhãn nói không đọc được: thiếu nó, trình duyệt để ô trống
+ * và phiên bản bản-chụp-đầy-đủ kế tiếp lặng lẽ bỏ nhóm (rà soát §S1.298 — TRUNG-1).
  */
-export function luaChonNhomHang(ds: readonly NhomHangMan[], dangChon: string | null): { readonly value: string; readonly nhan: string }[] {
-  const ra: { value: string; nhan: string }[] = [{ value: "", nhan: "— chọn nhóm hàng —" }];
+export function luaChonNhomHang(
+  ds: readonly NhomHangMan[],
+  dangChon: string | null,
+  nhanTrong = "— chọn nhóm hàng —",
+): { readonly value: string; readonly nhan: string }[] {
+  const ra: { value: string; nhan: string }[] = [{ value: "", nhan: nhanTrong }];
   for (const n of ds) {
     if (n.conDung) ra.push({ value: n.id, nhan: `${n.ma} — ${n.ten}` });
     else if (n.id === dangChon) ra.push({ value: n.id, nhan: `${n.ma} — ${n.ten} (đã ngừng dùng)` });
+  }
+  if (dangChon !== null && dangChon !== "" && !ds.some((n) => n.id === dangChon)) {
+    ra.push({ value: dangChon, nhan: "(nhóm hàng không đọc được — giữ nguyên)" });
   }
   return ra;
 }

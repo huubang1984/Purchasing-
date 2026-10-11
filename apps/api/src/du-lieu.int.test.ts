@@ -284,3 +284,51 @@ describe("[S1.199 / S4.2b] ⑷ từ chối có tên", () => {
     expect(am.status, am.text).toBe(422);
   });
 });
+
+// [S1.298 / S4.8] Nhóm hàng của hàng chuẩn qua HTTP — Tài chính dựng và ngừng nhóm ở `/categories`, người quản lý dữ liệu gán trong
+// phiên bản. Luật gán ở CSDL (`126`); route chỉ đọc hình dạng (UUID hay null) và chuyển lời từ chối có tên thành 422.
+describe("[S1.298 / S4.8] ⑸ nhóm hàng của hàng chuẩn", () => {
+  it("tạo và thêm phiên bản mang `nhomHangId`; danh sách và chi tiết đọc lại; nhóm đã ngừng ⇒ 422 có tên, giữ nhóm của phiên bản trước thì được", async () => {
+    const tao = async (ma: string) => (await goi("POST", "/categories", taiChinh, { ma, ten: `Nhom ${ma}` })).body.nhomHang as { id: string };
+    const thep = await tao("S48-THEP");
+    const cu = await tao("S48-CU");
+    // [rà soát §S1.298 — THẤP-3] Gửi id viết HOA: cột và hàng sổ cùng mang chữ thường.
+    const r = await goi("POST", "/items", quanLy, { ma: "S48-D16", donViGoc: "kg", ten: "Thép D16", nhomHangId: thep.id.toUpperCase() });
+    expect(r.status, r.text).toBe(201);
+    const id = (r.body.hangChuan as { id: string }).id;
+    const so = await db.pool.query<{ nhom: string }>(
+      "SELECT payload->>'nhomHangId' AS nhom FROM audit_events WHERE org_id = $1 AND action = 'ITEM_CREATED' AND resource_id = $2",
+      [orgA, id],
+    );
+    expect(so.rows.map((x) => x.nhom)).toEqual([thep.id]);
+    const ds = await goi("GET", "/items", taiChinh);
+    expect((ds.body.hangChuan as { id: string; nhomHangId: string | null }[]).find((h) => h.id === id)?.nhomHangId).toBe(thep.id);
+
+    expect((await goi("PUT", `/categories/${thep.id}/status`, taiChinh, { conDung: false })).status).toBe(200);
+    expect((await goi("PUT", `/categories/${cu.id}/status`, taiChinh, { conDung: false })).status).toBe(200);
+    const giu = await goi("POST", `/items/${id}/versions`, quanLy, { ten: "Thép D16 CB400", nhomHangId: thep.id });
+    expect(giu.status, `giữ nhóm của phiên bản trước: ${giu.text}`).toBe(201);
+    const doi = await goi("POST", `/items/${id}/versions`, quanLy, { ten: "Thép D16 CB400", nhomHangId: cu.id });
+    expect(doi.status, doi.text).toBe(422);
+    expect(doi.text).toContain("NHOM_HANG_DA_NGUNG_DUNG");
+    const moi = await goi("POST", "/items", quanLy, { ma: "S48-D18", donViGoc: "kg", ten: "Thép D18", nhomHangId: thep.id });
+    expect(moi.status, moi.text).toBe(422);
+    expect(moi.text).toContain("NHOM_HANG_DA_NGUNG_DUNG");
+    const ct = await goi("GET", `/items/${id}`, quanLy);
+    expect((ct.body.phienBan as { nhomHangId: string | null }[]).map((p) => p.nhomHangId)).toEqual([thep.id, thep.id]);
+  });
+
+  it("`nhomHangId` sai hình dạng ⇒ 422 gọi tên trường, không 500; nhóm của tổ chức khác ⇒ 422 KHONG_CO_NHOM_HANG; người FINANCE gửi kèm nhóm ⇒ 403", async () => {
+    for (const nhomHangId of ["khong-phai-uuid", 7, { id: UUID0 }]) {
+      const r = await goi("POST", "/items", quanLy, { ma: "S48-SAI", donViGoc: "kg", ten: "Sai", nhomHangId });
+      expect(r.status, `${JSON.stringify(nhomHangId)}: ${r.text}`).toBe(422);
+      expect(r.text).toContain("nhomHangId");
+    }
+    const taiChinhB = await nguoi(orgB, ["FINANCE"]);
+    const cuaB = (await goi("POST", "/categories", taiChinhB, { ma: "S48-B", ten: "Nhom B" })).body.nhomHang as { id: string };
+    const r = await goi("POST", "/items", quanLy, { ma: "S48-B1", donViGoc: "kg", ten: "Chiếm", nhomHangId: cuaB.id });
+    expect(r.status, r.text).toBe(422);
+    expect(r.text).toContain("KHONG_CO_NHOM_HANG");
+    expect((await goi("POST", "/items", taiChinh, { ma: "S48-TC", donViGoc: "kg", ten: "X", nhomHangId: null })).status).toBe(403);
+  });
+});

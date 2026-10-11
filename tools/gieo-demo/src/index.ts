@@ -55,7 +55,15 @@ import pg from "pg";
 import { ReceiptSigningKeyRing, createLocalDevReceiptSigner, type ReceiptKeyPair, type ReceiptSigner } from "@trustprocure/bidding";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
-import { NHOM_BENCHMARK_MAU, chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, nhapDuLieuNgoai, taoHangChuan } from "@trustprocure/du-lieu-nen";
+import {
+  NHOM_BENCHMARK_MAU,
+  chuanHoaSauNop,
+  khaiBiDanhHang,
+  khaiQuyDoiRieng,
+  nhapDuLieuNgoai,
+  taoHangChuan,
+  taoPhienBanHangChuan,
+} from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import {
@@ -414,6 +422,26 @@ async function chinh(): Promise<void> {
           )).id;
         })()
       : null;
+
+    // [S1.298 / S4.8] `--s3`: người quản lý dữ liệu gắn nhóm hàng `KET-CAU` cho ba hàng chuẩn demo — một PHIÊN BẢN mới mỗi hàng, như
+    // ở bước 4 của `/du-lieu` (bản chụp đầy đủ: tên, thuộc tính, trọng yếu giữ nguyên). Nhóm hàng có sau hàng chuẩn vì F1 dựng nó ở
+    // đây; demo thấy cột nhóm hàng và hai phiên bản ở chi tiết. Không `--s3`: hàng chuẩn không nhóm hàng — cột tuỳ chọn.
+    if (nhomHang !== null) {
+      await withTenant(pool, org, async (c) => {
+        for (const h of HANG_CHUAN_DEMO) {
+          const id = hangChuanTheoMa.get(h.ma);
+          if (id === undefined) throw new GieoError(`--s3: thiếu hàng chuẩn ${h.ma}`);
+          await taoPhienBanHangChuan(c, org, {
+            hangChuanId: id,
+            ten: h.ten,
+            thuocTinh: h.thuocTinh,
+            thuocTinhTrongYeu: h.thuocTinhTrongYeu,
+            nhomHangId: nhomHang,
+            actorSessionId: phienDuLieu,
+          });
+        }
+      });
+    }
 
     const rfq = (await q<{ id: string }>(
       "INSERT INTO public.rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id) " +

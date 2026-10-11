@@ -9226,7 +9226,7 @@ không ghi gì. Đo lại qua HTTP ở nền của vòng này: mời lúc gói c
 ## ADR-116 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm đề xuất của lượt bàn S4.2 ngày 2026-09-29 (tách S4.2a/S4.2b,
-luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.197]** ·
+luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id` — **[S1.298 / S4.8]** nay ở bảng phiên bản, ADR-169 —, `ma` do người quản lý dữ liệu nhập) · **[S1.197]** ·
 **Liên quan:** spec S4 §4.2 (L4 ⑴⑵⑶), §4.3, §2.4 ⑺ (vai `DATA_STEWARD`), §5.1 L1 · L3 · L4; ADR-097 (bảy quyết định sau lượt soi);
 ADR-084 ⑶ (mã vào CSDL ở hạng mục dựng hành vi); ADR-016 (cổng quyền ở tầng ứng dụng); `033` (khuôn *thước không cùng tay*) ·
 **Biên bản:** `evidence/security-reviews.md` §S1.197
@@ -13209,3 +13209,72 @@ nút *Đọc benchmark* và mọi nút *Xem dải* khoá trong lúc một lần 
 ### Điều ADR này KHÔNG nói
 
 Trần theo người hay theo tổ chức; trần ở tầng hạ tầng (WAF, ALB); hạn mức cho các route đọc khác của lớp trên.
+
+---
+
+## ADR-169 — S4.8: nhóm hàng của hàng chuẩn ở bảng phiên bản — tuỳ chọn; gán MỚI chỉ nhóm còn dùng của chính tổ chức, giữ nhóm của phiên bản trước thì được; người quản lý dữ liệu gán
+
+**Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Tiếp S4.8"*, rồi chốt ba câu theo đề xuất:
+⑴ cột TUỲ CHỌN; ⑵ gán mới chỉ nhóm còn dùng, giữ nhóm của phiên bản trước thì được dù nhóm ấy đã ngừng; ⑶ một PR, người giữ
+`item.manage` gán trong chính phiên bản hàng chuẩn · **[S1.298]** · **Migration:** `126_nhom_hang_cua_hang_chuan` · **Liên quan:**
+ADR-084 ⑶, ADR-097, ADR-116, ADR-119 mục 4 · **Spec:** S4 §3.4 (dòng *"Nhóm hàng"*), §4.3, §9 (S4.8) · **Biên bản:**
+`evidence/security-reviews.md` §S1.298
+
+### Bối cảnh
+
+Spec S4 §3.4 đặt khoá ngoại nhóm hàng của hàng chuẩn ở hạng mục đầu tiên SAU khi S3.6 vào `master`; §4.3 [S1.159] đặt `trang_thai` và
+`category_id` ở bảng PHIÊN BẢN, không ở danh tính; `083` (ADR-116) dựng hàng chuẩn KHÔNG có cột ấy (ADR-084 ⑶ — cột vào CSDL ở hạng
+mục dựng hành vi của nó). S3.6 đã khép. Đo trước (đọc mã trên `e4721ca`): không một phép đọc nào của sản phẩm cần nhóm hàng của HÀNG
+CHUẨN — tín hiệu chia nhỏ (`088`) khoá theo nhóm hàng của GÓI, hiệu suất (`123`) và benchmark không đọc nhóm hàng; người đọc tương lai
+là S4b (F4, *"theo hàng chuẩn hay nhóm hàng"*). Người ghi hàng chuẩn giữ `item.manage` (`DATA_STEWARD`, mù giá); danh sách nhóm hàng do
+người giữ `category.manage` (`FINANCE`) quản lý, mọi người mua đọc được (`GET /categories`).
+
+### Quyết định
+
+⑴ **Cột ở bảng phiên bản, tuỳ chọn.** `canonical_item_versions.category_id` cho phép `NULL`, khoá ngoại theo (tổ chức, nhóm) như
+`rfq_packages` (`085` (5)) — nhóm của tổ chức khác không gán được. Đổi nhóm là một phiên bản mới, nên nhóm hàng của hàng chuẩn tại một
+mốc đọc lại được (L1). Hàng chuẩn cũ không được điền ngược.
+
+⑵ **Luật gán ở CSDL.** Trigger `hang_chuan_kiem_nhom_hang` (BEFORE INSERT): nhóm khác `NULL` thì lấy khoá tư vấn CHIA SẺ theo nhóm —
+cùng khoá mà lần ngừng dùng giữ ĐỘC QUYỀN (ADR-119 mục 4) — rồi hỏi `nhom_hang_con_dung`; nhóm đã ngừng chỉ qua được khi phiên bản MỚI
+NHẤT của cùng hàng chuẩn mang đúng nhóm ấy (`hang_chuan_nhom_hang_da_ngung_dung`). Khác gói vì hàng chuẩn không có DRAFT: mọi lần
+sửa là một phiên bản bản-chụp-đầy-đủ, nên cấm giữ nhóm đã ngừng thì ngừng dùng một nhóm buộc mọi hàng của nhóm ấy đổi nhóm ở lần sửa
+tới — kể cả lần NGỪNG DÙNG hàng. Tên `canonical_item_versions_nhom_hang` xếp sau `…_kiem_quyen_ghi`: người không giữ `item.manage`
+nghe lời từ chối quyền trước. `…_dat_thu_tu` chạy trước cả hai và giữ khoá độc quyền theo (bảng, tổ chức), nên phép đọc *"phiên bản
+mới nhất"* không bị một lần ghi chen ngang.
+
+⑶ **Người gán là người quản lý dữ liệu, không mã quyền mới.** Thước (danh sách nhóm) của Tài chính, phép gán của `DATA_STEWARD` — hai
+vai khác người (`083`, `085`); ADR-084 ⑶ không cần mã nào.
+
+⑷ **Gói, route, màn.** `nhomHangId` tuỳ chọn ở `taoHangChuan`, `taoPhienBanHangChuan` và `taoHangChuanVaAnhXa` (phiên bản là bản chụp
+đầy đủ — bỏ trống là bỏ nhóm); bộ đọc trả `nhomHangId` ở hàng chuẩn và ở từng phiên bản; hai mã `KHONG_CO_NHOM_HANG`,
+`NHOM_HANG_DA_NGUNG_DUNG`; route đọc UUID hay `null` (sai hình dạng ⇒ 422 gọi tên trường); hàng sổ `ITEM_CREATED` và
+`ITEM_VERSION_CREATED` mang `nhomHangId`. `/du-lieu`: cột nhóm hàng ở danh sách và ở bảng phiên bản, ô chọn ở *Tạo hàng chuẩn*, ở
+*Phiên bản mới* (chọn sẵn nhóm hiện tại, kể cả nhóm đã ngừng) và ở hàng đợi — ô chỉ mời nhóm còn dùng (`luaChonNhomHang` của `/tao-thau`).
+
+⑸ **`gieo:demo --s3`** thêm phiên bản thứ hai cho ba hàng chuẩn demo mang nhóm `KET-CAU`; không `--s3`, hàng chuẩn không nhóm hàng.
+
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.298 mục 5) — một CAO, một TRUNG, sáu THẤP:
+- **CAO-1** — ba danh sách tệp `migrate()` áp trong `migrations.int` dừng ở `123`: bộ CSDL đỏ mỗi lượt. Sửa: thêm `126` vào cả ba.
+- **TRUNG-1** — ô *Phiên bản mới* chỉ chọn sẵn được nhóm có trong danh sách màn đang giữ; đọc nhóm hàng hỏng hay danh sách cũ hơn lần
+  gán thì trình duyệt để ô trống, và phiên bản bản-chụp-đầy-đủ kế tiếp lặng lẽ BỎ nhóm — nhóm đã ngừng thì không gán lại được nữa.
+  Sửa: `luaChonNhomHang` giữ nhóm đang chọn không có trong danh sách thành một lựa chọn nhãn *"không đọc được — giữ nguyên"*.
+- **THẤP-1** — ở REPEATABLE READ ảnh chụp cố định từ câu INSERT, nên phép hỏi sau khi được khoá không thấy lần ngừng dùng vừa commit.
+  Sửa: trigger chỉ nhận READ COMMITTED khi có nhóm (khuôn `107`); đường ứng dụng luôn ở mức ấy. **THẤP-2** — bản ghim không đòi
+  `provolatile`: một `ALTER FUNCTION … STABLE` dùng lại ảnh chụp của câu INSERT. Sửa: ghim `provolatile = 'v'`. Cùng hai khe ở
+  `rfq_kiem_nhom_hang` (`085`) — ngoài vòng này, ghi ở biên bản. **THẤP-3** — id viết HOA đi nguyên vào hàng sổ trong khi cột lưu chữ
+  thường: route hạ chữ thường. **THẤP-4** — đăng xuất để lại mã và tên nhóm của người trước trong ba ô chọn: xoá. **THẤP-5** — hàng chuẩn
+  không có mà nhóm đã ngừng nhận `NHOM_HANG_DA_NGUNG_DUNG` thay vì `KHONG_CO_HANG_CHUAN` (trigger chạy trước khoá ngoại): GIỮ — vẫn là
+  một lời từ chối có tên, không lộ gì. **THẤP-6** — tài liệu: biên bản và một chú thích ở `phuc-vu.ts`.
+
+### Giới hạn nói ra
+
+- **Chưa ai đọc cột này.** Khi một phép đếm của S4b đọc nó, câu *"nhóm tại mốc nào"* là việc của ADR ấy — dữ liệu để trả lời đã có
+  (hàng mới nhất theo `seq` có `ghi_luc` trước mốc).
+- **Nhóm của hàng chuẩn và nhóm của gói độc lập nhau:** gói nhóm *"thép"* có dòng ánh xạ sang hàng chuẩn nhóm *"gạch"* không bị kiểm.
+- **Hàng chuẩn có trước vòng này không nhóm hàng**, tới lần sửa đầu tiên có chọn nhóm.
+
+### Điều ADR này KHÔNG nói
+
+Nhóm hàng bắt buộc cho hàng chuẩn; luật khớp nhóm của gói với nhóm của hàng chuẩn; mã hàng chuẩn quốc gia, quốc tế (UNSPSC, HS — spec
+S4 §10).
