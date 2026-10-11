@@ -84,6 +84,11 @@ function loiCua(r, macDinh) {
     return `${macDinh}: tài khoản đang đăng nhập không có quyền làm việc này — vai hiện tại không được cấp quyền ấy. ` +
       "Đổi sang người phù hợp ở bước 1.";
   }
+  // [khoản 351 / ADR-168] 429 thân `qua nhieu yeu cau`: trần đọc theo phiên (benchmark, *Xem dải*) hay trần từ chối — cùng thân,
+  // nên câu chung; in nguyên văn thì người dùng đọc một chuỗi không dấu.
+  if (r.status === 429 && r.body?.error === "qua nhieu yeu cau") {
+    return `${macDinh}: phiên này vừa gọi quá nhiều lần, hoặc một lần gọi trước chưa xong — đợi một lúc rồi thử lại.`;
+  }
   if (r.body !== null && typeof r.body === "object" && typeof r.body.error === "string") return r.body.error;
   return `${macDinh} (mã ${r.status})`;
 }
@@ -629,7 +634,16 @@ async function veBenchmark() {
         const nut = document.createElement("button");
         nut.className = "phu";
         nut.textContent = "Xem dải";
-        nut.addEventListener("click", () => veDai(lineNo));
+        // [khoản 351] Khoá mọi nút *Xem dải* trong lúc một lần đang chạy: máy chủ chỉ cho một lượt mỗi phiên mỗi route (429 ngay).
+        nut.addEventListener("click", async () => {
+          const cacNut = [...$("bang-benchmark").querySelectorAll("button")];
+          for (const x of cacNut) x.disabled = true;
+          try {
+            await veDai(lineNo);
+          } finally {
+            for (const x of cacNut) x.disabled = false;
+          }
+        });
         o.append(chu, nut);
       }
       const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
@@ -694,7 +708,16 @@ async function veDai(lineNo) {
   hien($("khoi-dai"), true);
 }
 
-$("nut-benchmark").addEventListener("click", veBenchmark);
+// [khoản 351] Nút khoá trong lúc đọc: lần đọc đầu sau mở thầu tốn tới hàng chục giây ở quy mô lớn, và máy chủ chỉ cho một lượt mỗi
+// phiên mỗi route — cú bấm đúp nhận 429 thay vì lặng lẽ tính lần hai.
+$("nut-benchmark").addEventListener("click", async () => {
+  $("nut-benchmark").disabled = true;
+  try {
+    await veBenchmark();
+  } finally {
+    $("nut-benchmark").disabled = false;
+  }
+});
 
 /** Ô cột Benchmark của bảng xếp hạng đang vẽ — `veXepHang` đặt lại, `veCotBenchmark` viết lại chữ sau mỗi lần đọc benchmark. */
 let oCotBenchmark = [];

@@ -1429,6 +1429,31 @@ describe("bề mặt tệp", () => {
         expect(p.el("bang-benchmark").querySelector("tbody").con[1]?.con[0]?.con, "chỉ hàng đầu của một dòng mang nút").toEqual([]);
       });
 
+      it("[khoản 351] nút Đọc benchmark khoá trong lúc gọi, bật lại sau; 429 của trần theo phiên ⇒ câu đọc được, không chuỗi không dấu", async () => {
+        let tra: (v: { status: number; body: unknown }) => void = () => undefined;
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "UNSEALED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/benchmark`) return new Promise((r) => { tra = r; });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        const dang = p.bam("nut-benchmark");
+        expect(p.el("nut-benchmark").disabled, "nút khoá ngay khi lời gọi đi").toBe(true);
+        tra({ status: 429, body: { error: "qua nhieu yeu cau" } });
+        await dang;
+        expect(p.el("nut-benchmark").disabled, "nút bật lại sau lời gọi, kể cả khi lỗi").toBe(false);
+        const loi = p.el("loi4b").textContent;
+        expect(loi).toMatch(/^Chưa đọc được benchmark: phiên này vừa gọi quá nhiều lần, hoặc một lần gọi trước chưa xong/u);
+        expect(loi).not.toContain("qua nhieu yeu cau");
+      });
+
       it("vòng chào lại đang mở: in câu có tên, không hàng nào, cột Benchmark của bảng xếp hạng là gạch", async () => {
         const p = await dung({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_OPEN" });
         await p.bam("nut-benchmark");
