@@ -390,9 +390,9 @@ async function chinh(): Promise<void> {
               chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
               thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
               actorSessionId: f1.sessionId,
-            }),
+            }, pool),
           );
-          const ky = await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: cs.id, actorSessionId: f2.sessionId }));
+          const ky = await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: cs.id, actorSessionId: f2.sessionId }, pool));
           if (!ky.daBat) throw new GieoError("--s3: ký xong mà tổ chức chưa bật S3");
           return cs.id;
         })()
@@ -779,9 +779,9 @@ async function chinh(): Promise<void> {
               chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
               thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
               actorSessionId: f1.sessionId,
-            }),
+            }, pool),
           );
-          await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: v2.id, actorSessionId: f2.sessionId }));
+          await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: v2.id, actorSessionId: f2.sessionId }, pool));
           const nhom = (await withTenant(pool, org, (c) =>
             taoNhomHang(c, org, { ma: "TCO", ten: "Vat tu goi TCO", actorSessionId: f1.sessionId }, pool),
           )).id;

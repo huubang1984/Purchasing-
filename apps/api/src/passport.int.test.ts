@@ -98,7 +98,7 @@ async function taoToChuc(batS3 = true, tco: Readonly<Record<string, string>> | n
   const tc = await nguoi("FINANCE");
   const tc2 = await nguoi("FINANCE");
   await withTenant(apiPool, org, (c) =>
-    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "1000000000.00", currency: "VND", actorSessionId: pm.s }),
+    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "1000000000.00", currency: "VND", actorSessionId: pm.s }, auditPool),
   );
   if (batS3) {
     const v2 = (
@@ -202,6 +202,8 @@ interface PhanHoi {
   readonly body: Record<string, unknown>;
   readonly text: string;
   readonly setCookie: string[];
+  /** [S1.9101 / S3.9b] Header `retry-after` — ca đường đua đo 429 của trần yêu cầu. */
+  readonly retryAfter: string | null;
 }
 async function goi(method: string, duong: string, cookie: string | null, than?: unknown): Promise<PhanHoi> {
   const headers: Record<string, string> = {};
@@ -215,7 +217,7 @@ async function goi(method: string, duong: string, cookie: string | null, than?: 
   } catch {
     // thân không phải JSON — để `text` nói
   }
-  return { status: res.status, body, text, setCookie: res.headers.getSetCookie() };
+  return { status: res.status, body, text, setCookie: res.headers.getSetCookie(), retryAfter: res.headers.get("retry-after") };
 }
 
 const hoSo = (n: Ncc, soTaiKhoan: string): HoSoPassport => ({
@@ -667,6 +669,27 @@ const tokenIdCua = async (token: string): Promise<string> =>
     .id;
 
 describe("[S1.287 / S3.7a1] F — đột biến lớp CSDL", () => {
+  // [S1.9101 / S3.9b — phép điều tra K12] Đường ĐUA của yêu cầu: hàm vị từ ở tầng gói cho qua, trigger của câu INSERT từ chối với tên
+  // `lower(ly_do)`. Dựng tất định bằng cách cho trigger ném đúng một mã dù hàm vị từ nói qua. Trước vòng này `PassportYeuCauError` đi ra 500
+  // (không có trong `LOI_NGHIEP_VU_422` của bộ điều phối); nay cùng hợp đồng với nhánh thường: 422 mang mã, 429 + `retry-after` cho trần.
+  it("[S1.9101 / S3.9b] đường đua: trigger từ chối sau khi hàm vị từ cho qua ⇒ 422 mang mã (không 500); trần ⇒ 429 kèm retry-after", async () => {
+    const t = await taoToChuc();
+    for (const [ma, trangThai] of [["PASSPORT_NCC_CHUA_XAC_MINH", 422], ["PASSPORT_QUA_TRAN_YEU_CAU", 429]] as const) {
+      const n = await ncc(t);
+      await voiDotBien(
+        "public.passport_kiem_yeu_cau()",
+        "ly_do := public.passport_chot_yeu_cau(NEW.org_id, NEW.supplier_id, NEW.contact_id);",
+        `ly_do := '${ma}';`,
+        async () => {
+          const r = await goi("POST", `/suppliers/${n.ncc}/passport-requests`, t.tc.cookie, { contactId: n.lh });
+          expect(r.status, r.text).toBe(trangThai);
+          expect(r.body.ma).toBe(ma);
+          expect(r.retryAfter).toBe(trangThai === 429 ? "3600" : null);
+        },
+      );
+    }
+  });
+
   it("vế K8a của hàm vị từ tắt ⇒ nhà cung cấp CHƯA xác minh nhận được yêu cầu (đối chứng: bật lại thì 422)", async () => {
     const t = await taoToChuc();
     const n = await ncc(t, { xacMinh: false });

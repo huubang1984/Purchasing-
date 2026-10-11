@@ -421,6 +421,8 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   // [S1.241 / khoản 279] Mã chốt kiểm soát — `MaChotKiemSoat`, tập khoá của `CHOT_VAO_SO` (`./chot-kiem-soat.ts`).
   "BAC_LECH_HAM_PHAN_BAC",
   "D2_NGUOI_TAO_TU_DUYET",
+  "K1_BAN_KHONG_BAC",
+  "K1_NGUOI_TAO_TU_KY",
   "D2_PHIEN_KHONG_HOP_LE",
   "D2_PHIEN_NGUOI_KHAC",
   "J3_NGUOI_DE_XUAT_TU_DUYET",

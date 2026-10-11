@@ -187,7 +187,7 @@ beforeAll(async () => {
       dualApprovalThreshold: "100000000.00",
       currency: "VND",
       actorSessionId: s1,
-    }),
+    }, apiPool),
   );
 }, 180000);
 
@@ -1093,7 +1093,7 @@ describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
         dualApprovalThreshold: "500000.00",
         currency: "VND",
         actorSessionId: s1,
-      }),
+      }, apiPool),
     );
 
     const { rows } = await db.pool.query<{ requires_dual_approval: boolean; version: number }>(
@@ -1535,7 +1535,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
 describe("[INV-D2] [035] version chính sách không chọn được, không ghim được", () => {
   const tao = (version: number, nguong: string) =>
     withTenant(apiPool, orgA, (c) =>
-      createProcurementPolicy(c, orgA, { version, dualApprovalThreshold: nguong, currency: "VND", actorSessionId: s1 }),
+      createProcurementPolicy(c, orgA, { version, dualApprovalThreshold: nguong, currency: "VND", actorSessionId: s1 }, apiPool),
     );
   const hienHanh = async () => {
     const { rows } = await db.pool.query<{ v: number; t: string }>(

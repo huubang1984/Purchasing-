@@ -208,7 +208,7 @@ async function taoToChuc(): Promise<ToChuc> {
   const pm2 = await nguoi("PROCUREMENT_MANAGER");
   const tc = await nguoi("FINANCE");
   await withTenant(apiPool, org, (c) =>
-    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pm.s }),
+    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pm.s }, auditPool),
   );
   return { org, pm, pm2, tc };
 }

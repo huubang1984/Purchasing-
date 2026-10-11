@@ -2410,11 +2410,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: bậc hỏng, tự ký, bật rồi tạo bản không bậc,
     // hay ghim ngân sách vào một phiên bản chưa ký.
     { ham: "chinh_sach_kiem_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_kiem_bac"] },
-    { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
+    // [S1.9101 / S3.9b / K12] Thân từ `9501_k1_chinh_sach_co_ten`: nhánh từ chối mang tên `k1_ban_khong_bac`.
+    { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "9501_k1_chinh_sach_co_ten.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     // [S1.236 / khoản 261] Thân từ `097_chan_bat_s3_khi_con_goi_cho`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
-    { ham: "chinh_sach_kiem_nguoi_ky", migration: "097_chan_bat_s3_khi_con_goi_cho.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
+    // [S1.9101 / S3.9b / K12] Thân từ `9501_k1_chinh_sach_co_ten`: nhánh người tạo tự ký mang tên ràng buộc `k1_nguoi_tao_tu_ky`.
+    { ham: "chinh_sach_kiem_nguoi_ky", migration: "9501_k1_chinh_sach_co_ten.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
     // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
@@ -4324,6 +4326,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S3.9b / K12] Người tạo tự ký phiên bản chính sách: nhánh ấy của `chinh_sach_kiem_nguoi_ky` mang tên ràng buộc, vào sổ.
+        "9501_k1_chinh_sach_co_ten.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -9003,6 +9007,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S3.9b / K12] Người tạo tự ký phiên bản chính sách: nhánh ấy của `chinh_sach_kiem_nguoi_ky` mang tên ràng buộc, vào sổ.
+        "9501_k1_chinh_sach_co_ten.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9362,6 +9368,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S3.9b / K12] Người tạo tự ký phiên bản chính sách: nhánh ấy của `chinh_sach_kiem_nguoi_ky` mang tên ràng buộc, vào sổ.
+        "9501_k1_chinh_sach_co_ten.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

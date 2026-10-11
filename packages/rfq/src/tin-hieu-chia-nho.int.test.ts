@@ -126,7 +126,7 @@ async function taoToChuc(daBat = true): Promise<ToChuc> {
   const tc = await nguoi("FINANCE");
   const tc2 = await nguoi("FINANCE");
   await withTenant(apiPool, org, (c) =>
-    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pmCs.s }),
+    createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: pmCs.s }, apiPool),
   );
   let v2: string | null = null;
   if (daBat) {

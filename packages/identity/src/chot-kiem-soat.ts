@@ -58,6 +58,12 @@
 // tên ràng buộc, nên một câu mở thô cũng vào sổ. Năm mã vào sổ; `K9_KHAI_BAO_LOI_THOI` không: danh sách mời đổi SAU khi khai là dữ
 // liệu đổi dưới chân người khai (ADR-060), và lối ra là khai lại.
 //
+// [S1.9101 / S3.9b / K12] `K1_NGUOI_TAO_TU_KY` — người tạo một phiên bản chính sách tự ký nó. Phép điều tra K12 đo: nhánh ấy của
+// `chinh_sach_kiem_nguoi_ky` là `RAISE` không tên, nên lần cố đi ra 422 không hàng sổ — trong khi `D2_NGUOI_TAO_TU_DUYET` cùng loại thì vào
+// sổ. Khuôn ADR-108: `9501_k1_chinh_sach_co_ten` đặt tên ràng buộc, `kyPhienBanChinhSach` bắt nó. Chủ dự án chốt 2026-10-11: sửa, vào sổ.
+// `K1_BAN_KHONG_BAC` — cùng phép điều tra, cùng ngày: phiên bản KHÔNG bậc ở tổ chức đã bật (có hiệu lực mà không cần chữ ký thứ hai);
+// `createProcurementPolicy` bắt tên `k1_ban_khong_bac`.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -85,6 +91,8 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
   | "J5_LUOT_CHAM_KHONG_MOI_NHAT"
+  | "K1_BAN_KHONG_BAC"
+  | "K1_NGUOI_TAO_TU_KY"
   | "K2_DAU_THAU_CHINH_THUC"
   | "K2_THIEU_CANH_TRANH"
   | "K3_KHONG_XOAY_VONG"
@@ -164,6 +172,24 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "chính sách đổi SAU khi gói đặt ngân sách — cấu hình đổi dưới chân người dùng, không ai cố lách, và CSDL chặn sẵn; " +
       "ghi sổ thì mỗi lần đổi chính sách, mỗi gói nháp để lại một hàng vĩnh viễn",
     thongDiep: "Chính sách mua sắm đã đổi từ khi đặt ngân sách: đặt lại ngân sách để gói nhận bậc theo chính sách hiện hành.",
+  },
+  K1_BAN_KHONG_BAC: {
+    chot: "K1",
+    vaoSo: true,
+    lyDo:
+      "một người thêm phiên bản chính sách KHÔNG bậc ở tổ chức đã bật S3 — phiên bản ấy có hiệu lực mà không cần chữ ký thứ hai " +
+      "(`chinh_sach_hieu_luc`), nên đó là lối một người đổi trọng số chấm, ngưỡng kép hay cửa sổ xoá khoá mà không ai ký; cùng hình " +
+      "dạng `THIEU_NGAN_SACH` (bỏ bước là thoát mọi chốt). Kiểm toán viên hỏi tới đúng lần cố ấy (ADR-060)",
+    thongDiep: "Tổ chức đã bật kiểm soát theo bậc: phiên bản chính sách mới phải khai bậc giá trị — và chờ một người khác ký (K1).",
+  },
+  K1_NGUOI_TAO_TU_KY: {
+    chot: "K1",
+    vaoSo: true,
+    lyDo:
+      "người tạo một phiên bản chính sách ký chính phiên bản ấy — chữ ký thứ hai (ADR-082 ⑺) là thứ K1 đòi trước khi phiên bản nhận " +
+      "gói, và một người giữ trọn cặp *khai → ký* là đúng cặp nguyên tắc 1 (PRODUCT §4) cấm; cùng loại `D2_NGUOI_TAO_TU_DUYET`. Lần cố " +
+      "ấy kiểm toán viên hỏi tới (ADR-060) — trước S3.9b nó đi ra 422 mà không để lại dấu vết",
+    thongDiep: "Người tạo phiên bản chính sách không được tự ký phiên bản ấy — cần một người khác giữ quyền quản lý chính sách ký (K1).",
   },
   BAC_LECH_HAM_PHAN_BAC: {
     chot: "K1",
@@ -607,6 +633,10 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
   // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`093`).
   j5_luot_cham_khong_moi_nhat: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
+  // [S1.9101 / S3.9b] Nhánh người tạo tự ký của `chinh_sach_kiem_nguoi_ky` (`9501_k1_chinh_sach_co_ten`).
+  k1_nguoi_tao_tu_ky: "K1_NGUOI_TAO_TU_KY",
+  // [S1.9101 / S3.9b] Nhánh từ chối của `chinh_sach_da_bat_thi_phai_co_bac` (cùng migration).
+  k1_ban_khong_bac: "K1_BAN_KHONG_BAC",
   // [S1.265 / S3.3b] Nhánh DRAFT của `ngoai_le_kiem` (`105_ngoai_le_canh_tranh`).
   k4a_ngoai_le_sai_trang_thai: "K4A_NGOAI_LE_SAI_TRANG_THAI",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",

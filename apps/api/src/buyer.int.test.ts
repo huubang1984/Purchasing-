@@ -1337,16 +1337,25 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     const ky = (id: string, ai: Nguoi): Promise<PhanHoi> => goi("POST", `/policy/${id}/sign`, ai, undefined, gocKy);
 
     // ⑴ Route không chép lại luật nào của `chinh_sach_kiem_nguoi_ky`: mỗi lời từ chối là lời của trigger, đi ra 422.
+    // [S1.9101 / S3.9b / K12] Trừ người tạo tự ký: nhánh ấy mang tên ràng buộc, tầng gói ghi `CONTROL_DENIED` và nói bằng thông điệp
+    // của bảng chốt — vẫn 422.
     const tuChoi = [
       [await ky(v1, tcB), "Chi phien ban chinh sach CO BAC moi nhan chu ky thu hai"],
       [await ky(v2, tcB), "Chi ky duoc phien ban chinh sach MOI NHAT"],
-      [await ky(v3, tcA), "Nguoi tao phien ban chinh sach khong duoc tu ky"],
+      [await ky(v3, tcA), "Người tạo phiên bản chính sách không được tự ký phiên bản ấy"],
       [await ky(UUID0, tcB), "tham chieu khong hop le"],
     ] as const;
     for (const [r, loi] of tuChoi) {
       expect(r.status, r.text).toBe(422);
       expect(r.text).toContain(loi);
     }
+    const { rows: chot } = await db.pool.query<{ actor: string; res: string; payload: unknown }>(
+      "SELECT actor_id::text AS actor, resource_id::text AS res, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED'",
+      [org],
+    );
+    expect(chot, "đúng một hàng sổ: lần người tạo tự ký; ba lời từ chối kia không vào sổ").toEqual([
+      { actor: tcA.id, res: v3, payload: { ma: "K1_NGUOI_TAO_TU_KY" } },
+    ]);
     // ⑵ Không giữ `policy.manage`: cổng của bộ điều phối, trước handler — 403 và một PERMISSION_DENIED trỏ ĐÚNG phiên bản.
     expect((await ky(v3, pm)).status).toBe(403);
     const { rows: tuChoiQuyen } = await db.pool.query<{ res: string; loai: string }>(

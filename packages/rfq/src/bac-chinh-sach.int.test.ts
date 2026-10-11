@@ -6,8 +6,9 @@ import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { nhaCungCapDemDuoc, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, cancelRfq, createRfq, openRfq, submitRfqForApproval } from "./rfq.js";
-import { createProcurementPolicy, getActiveProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
+import { createProcurementPolicy, getActiveProcurementPolicy, kyPhienBanChinhSach, setRfqBudget } from "./procurement-policy.js";
 import { CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
+import { CHOT_THEO_RANG_BUOC, type MaChotKiemSoat } from "@trustprocure/identity";
 
 // =============================================================================================
 // [S1.156 / S3.1a] BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ PHIÊN BẢN HIỆU LỰC — ĐO TRÊN
@@ -129,7 +130,7 @@ async function taoToChuc(): Promise<ToChuc> {
         dualApprovalThreshold: "100000000.00",
         currency: "VND",
         actorSessionId: pm.s,
-      }),
+      }, apiPool),
     )
   ).id;
   return { org, pm, pm2, tc, tc2, gd, nm, v1 };
@@ -469,8 +470,68 @@ describe("S3.1a — chữ ký thứ hai của phiên bản chính sách (ADR-082
     const l = await loi(ky(t, v2, t.tc));
     expect(l?.message).toMatch(/Nguoi tao phien ban chinh sach khong duoc tu ky/u);
     expect(l?.where).toMatch(/function chinh_sach_kiem_nguoi_ky\(/u);
+    // [S1.9101 / S3.9b / K12] Nhánh ấy mang tên ràng buộc (`9501_k1_chinh_sach_co_ten`) — tầng gói nhận diện bằng TÊN, không bằng câu.
+    expect([l?.code, l?.constraint]).toEqual(["23514", "k1_nguoi_tao_tu_ky"]);
     expect(await daBat(t)).toBe(false);
     expect(await loi(ky(t, v2, t.tc2))).toBeNull();
+  });
+
+  // [S1.9101 / S3.9b / K12] Trước vòng này lần cố ấy đi ra 422 mà không hàng sổ nào (phép điều tra K12 đo), trong khi
+  // `D2_NGUOI_TAO_TU_DUYET` cùng loại thì vào sổ. Chủ dự án chốt 2026-10-11: sửa, vào sổ.
+  it("[S1.9101 / S3.9b / K12] người tạo tự ký qua `kyPhienBanChinhSach` ⇒ `ChotKiemSoatError` mang `K1_NGUOI_TAO_TU_KY` và ĐÚNG MỘT hàng `CONTROL_DENIED` ở giao dịch độc lập; nhánh khác (bản không mới nhất) đi ra như trước, không hàng sổ", async () => {
+    const t = await taoToChuc();
+    const v2 = await chenPhienBan(t, { tiers: BAC_CHUAN, nguoi: t.tc });
+    const soChot = async (): Promise<unknown[]> =>
+      (await db.pool.query<{ actor: string; loai: string; res: string; payload: unknown }>(
+        "SELECT actor_id::text AS actor, resource_type AS loai, resource_id::text AS res, payload FROM audit_events " +
+          "WHERE org_id = $1 AND action = 'CONTROL_DENIED' ORDER BY seq",
+        [t.org],
+      )).rows;
+    const kyGoi = (ai: Nguoi, id: string): Promise<unknown> =>
+      withTenant(apiPool, t.org, (c) => kyPhienBanChinhSach(c, t.org, { policyId: id, actorSessionId: ai.s }, apiPool)).catch((e: unknown) => e);
+    const e = await kyGoi(t.tc, v2);
+    expect(e).toBeInstanceOf(ChotKiemSoatError);
+    expect((e as ChotKiemSoatError).lyDo).toBe("K1_NGUOI_TAO_TU_KY");
+    expect((e as ChotKiemSoatError).message).toBe(CHOT_VAO_SO.K1_NGUOI_TAO_TU_KY.thongDiep);
+    expect(await soChot()).toEqual([{ actor: t.tc.u, loai: "PROCUREMENT_POLICY", res: v2, payload: { ma: "K1_NGUOI_TAO_TU_KY" } }]);
+    expect(await daBat(t)).toBe(false);
+    // Nhánh không vào sổ: bản không còn mới nhất — cấu hình đổi dưới chân người ký (ADR-060), lời của trigger đi ra nguyên văn.
+    await chenPhienBan(t, { tiers: BAC_CHUAN });
+    const e2 = await kyGoi(t.tc2, v2);
+    expect(e2).not.toBeInstanceOf(ChotKiemSoatError);
+    expect((e2 as { message: string }).message).toMatch(/Chi ky duoc phien ban chinh sach MOI NHAT/u);
+    expect(await soChot(), "nhánh không tên không để hàng sổ").toHaveLength(1);
+  });
+
+  // [S1.9101 / S3.9b / K12] Phiên bản KHÔNG bậc ở tổ chức đã bật có hiệu lực mà không cần chữ ký thứ hai — lối né chữ ký thứ hai. Trước vòng
+  // này lần cố ấy đi ra 422 không hàng sổ. Chủ dự án chốt 2026-10-11: sửa, vào sổ.
+  it("[S1.9101 / S3.9b / K12] tổ chức ĐÃ BẬT: `createProcurementPolicy` một phiên bản KHÔNG bậc ⇒ `ChotKiemSoatError` mang `K1_BAN_KHONG_BAC` và ĐÚNG MỘT hàng `CONTROL_DENIED` trỏ tổ chức; phiên bản có bậc vẫn thêm được, không hàng sổ", async () => {
+    const t = await taoToChuc();
+    const v2 = await chenPhienBan(t, { tiers: BAC_CHUAN });
+    await ky(t, v2, t.tc);
+    expect(await daBat(t)).toBe(true);
+    const soChot = async (): Promise<unknown[]> =>
+      (await db.pool.query<{ actor: string; loai: string; res: string; payload: unknown }>(
+        "SELECT actor_id::text AS actor, resource_type AS loai, resource_id::text AS res, payload FROM audit_events " +
+          "WHERE org_id = $1 AND action = 'CONTROL_DENIED' ORDER BY seq",
+        [t.org],
+      )).rows;
+    const tao = (bac: boolean): Promise<unknown> =>
+      withTenant(apiPool, t.org, (c) =>
+        createProcurementPolicy(
+          c,
+          t.org,
+          { version: 3, dualApprovalThreshold: "100000000.00", currency: "VND", ...(bac ? { tiers: BAC_CHUAN.map((x) => ({ ...x })), chiaNhoCuaSoNgay: 30, thamDinhHieuLucThang: 12 } : {}), actorSessionId: t.tc2.s },
+          apiPool,
+        ),
+      ).catch((e: unknown) => e);
+    const e = await tao(false);
+    expect(e).toBeInstanceOf(ChotKiemSoatError);
+    expect((e as ChotKiemSoatError).lyDo).toBe("K1_BAN_KHONG_BAC");
+    expect(await soChot()).toEqual([{ actor: t.tc2.u, loai: "PROCUREMENT_POLICY", res: t.org, payload: { ma: "K1_BAN_KHONG_BAC" } }]);
+    const ok = await tao(true);
+    expect(ok, "phiên bản có bậc thêm được").not.toBeInstanceOf(Error);
+    expect(await soChot()).toHaveLength(1);
   });
 
   it("người ký phải giữ `policy.manage`: BUYER, PROCUREMENT_MANAGER và DIRECTOR đều bị từ chối", async () => {
@@ -604,6 +665,8 @@ describe("S3.1a — công tắc ADR-080", () => {
     const l = await loi(chenPhienBan(t, {}));
     expect(l?.message).toMatch(/To chuc da bat S3 \(ADR-080\): phien ban chinh sach moi phai khai bac gia tri/u);
     expect(l?.where).toMatch(/function chinh_sach_da_bat_thi_phai_co_bac\(/u);
+    // [S1.9101 / S3.9b / K12] Nhánh ấy mang tên ràng buộc — tầng gói nhận diện bằng TÊN và ghi `CONTROL_DENIED` (ca kế).
+    expect([l?.code, l?.constraint]).toEqual(["23514", "k1_ban_khong_bac"]);
     // Phiên bản có bậc thì vẫn thêm được; chưa ký thì chưa có hiệu lực.
     await chenPhienBan(t, { tiers: BAC_CHUAN });
     expect(await hieuLuc(t)).toBe(v4);
@@ -1362,8 +1425,10 @@ describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `C
   it("mã của `rfq_chot_ngan_sach` BẰNG tập mã K1 của `CHOT_VAO_SO` — hàm SQL và bảng không trôi khỏi nhau", async () => {
     const src = (await db.pool.query<{ s: string }>("SELECT prosrc AS s FROM pg_proc WHERE oid = $1::regprocedure", [HAM_CHOT])).rows[0]!.s;
     const trongHam = [...src.matchAll(/RETURN '([A-Z_]+)'/gu)].map((m) => m[1]!).sort();
+    // [S1.9101 / S3.9b] Trừ mã K1 đến từ TÊN RÀNG BUỘC của trigger (`K1_NGUOI_TAO_TU_KY`, khuôn ADR-108) — chúng không đi qua hàm vị từ.
+    const theoTen = new Set(Object.values(CHOT_THEO_RANG_BUOC));
     const trongBang = Object.entries(CHOT_VAO_SO)
-      .filter(([, d]) => d.chot === "K1")
+      .filter(([ma, d]) => d.chot === "K1" && !theoTen.has(ma as MaChotKiemSoat))
       .map(([ma]) => ma)
       .sort();
     expect(trongHam.length, "bộ đọc không thấy mã nào — đang mù").toBeGreaterThan(0);
