@@ -27787,5 +27787,9 @@ lệch). Mã nguyên bản trước: 6 + 2 + 1 ca xanh. Máy rảnh trước m�
 - Không đo lại ở quy mô 5.000 gói: cổng và bộ đếm đứng trước handler, không phụ thuộc thời gian tính; ca ⒠ đo cổng bằng đúng câu khoá.
 
 ## 7. Số đo
-- `cap-so` cấp số vòng và số ADR (trailer `Cap-So` ở commit cấp số); `cap-so --kiem` sạch.
+- `cap-so` cấp S1.297, ADR-168, giữ khoản 351 (trailer `Cap-So` ở `76a86c30`); `cap-so --kiem` sạch. **S1.296 và ADR-167 là LỖ:** lần
+  chạy đầu ở một nhánh tên khác (`khoan-351-tran-doc-phien`) coi số 351 — nhánh của #280 giữ — là của người khác, thu hồi rồi cấp
+  khoản 354, vòng 296, ADR-167 và giữ ba số ấy trên remote dưới tên nhánh ấy. Lần cấp ấy chưa commit, đã gỡ; nhánh được đổi tên thành
+  nhánh của #280 rồi chạy lại. Ba nhánh giữ `cap-so/vong/296`, `cap-so/adr/167`, `cap-so/khoan/354` vẫn còn trên remote — lệnh xoá
+  bị chặn ở phiên này; `--don` không dọn chúng (số chưa vào base).
 - `pnpm t0`, `pnpm test`, `pnpm evidence` trên cây đã gộp `master`: ghi ở thân PR và thân merge (lệ S1.70).
