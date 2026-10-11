@@ -94,6 +94,11 @@ const HAM_DOI_TRANG_THAI = [
   "thuHoiXacMinhNhaCungCap",
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
   "xacMinhNhaCungCap",
+  // [S1.293 / S3.7a2 / K8b] Thẩm định và thu hồi thẩm định — route đòi `supplier.qualify`, hàm hỏi lại cùng mã. Yêu cầu Passport tự
+  // sinh lúc đề xuất (`AWARD_PROPOSED`) — route đề xuất trao thầu đòi `award.recommend`, hàm hỏi lại cùng mã.
+  "thamDinhNhaCungCap",
+  "thuHoiThamDinhNhaCungCap",
+  "taoYeuCauPassportTuDeXuat",
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
@@ -202,6 +207,9 @@ const HAM_CHI_DOC = [
   // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docXacMinhNhaCungCap",
+  // [S1.293 / S3.7a2 / K8b] Trạng thái thẩm định của một nhà cung cấp — cùng hạng `docXacMinhNhaCungCap`. Vế *ai gọi được* đóng ở route
+  // (`agent: false`).
+  "docThamDinhNhaCungCap",
   // [S1.273 / S3.3e1] Hồ sơ xác minh của MỌI nhà cung cấp — gộp `docXacMinhNhaCungCap` và `listSupplierContacts`, cùng hạng hai
   // hàm ấy. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docHoSoXacMinh",

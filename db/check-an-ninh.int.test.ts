@@ -118,6 +118,9 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   passport_otp_challenges_so_lan_sai: "SO",
   passport_sessions_kenh: "MIEN",
   supplier_passport_requests_ly_do_check: "MIEN",
+  // [S1.293 / S3.7a2 / K8b] Gói đi kèm lý do `AWARD_PROPOSED` — nhất quán cột; vế chịu lực (yêu cầu tự sinh ràng vào đề xuất sống của
+  // chính người yêu cầu) ở trigger `passport_kiem_yeu_cau`.
+  supplier_passport_requests_rfq_theo_ly_do: "MIEN",
   supplier_passport_versions_danh_sach: "DO_DAI",
   supplier_passport_versions_mst: "DINH_DANG",
   otp_rate_limits_hits_check: "SO",
@@ -236,6 +239,9 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   supplier_contacts_phone_check: "DINH_DANG",
   supplier_contacts_status_check: "MIEN",
   // [S1.196 / S3.3a] Độ dài lý do thu hồi xác minh — ba CHECK kia của bảng (loại, lý do theo loại, đủ cột) nằm ở tập an ninh.
+  // [S1.293 / S3.7a2 / K8b] Lý do thu hồi thẩm định: độ dài. Bốn ràng buộc còn lại của bảng (loại, lý do theo loại, phiên bản theo loại,
+  // đủ cột) ở `CHECK_AN_NINH_KHAI` — chúng là thứ K8b đọc.
+  supplier_qualifications_ly_do_check: "DO_DAI",
   supplier_verifications_ly_do_check: "DO_DAI",
   suppliers_legal_name_check: "DO_DAI",
   suppliers_level_check: "MIEN",

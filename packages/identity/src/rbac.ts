@@ -437,6 +437,13 @@ export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
   "K8A_LIEN_HE_HO_SO_NGUOI_KHAC",
   "K8A_NGUOI_MOI_XAC_MINH",
   "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.293 / S3.7a2] Sáu mã K8b của thẩm định đầy đủ (`124_tham_dinh_nha_cung_cap`).
+  "K8B_CHUA_THAM_DINH",
+  "K8B_NGUOI_MOI_THAM_DINH",
+  "K8B_NGUOI_TAO_TU_THAM_DINH",
+  "K8B_NGUOI_THAM_DINH_TRAO_THAU",
+  "K8B_NGUOI_THAM_DINH_TRONG_GOI",
+  "K8B_NGUOI_TRAO_THAU_THAM_DINH",
   // [S1.281 / S3.4a] Sáu mã K9 của khai báo xung đột lợi ích (`114_khai_bao_xung_dot`).
   "K9_CHUA_KHAI_XUNG_DOT",
   "K9_CHU_KY_CO_XUNG_DOT",

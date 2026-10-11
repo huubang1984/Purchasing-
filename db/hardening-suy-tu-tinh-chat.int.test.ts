@@ -167,6 +167,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Phiên bản là thứ thẩm định (S3.7a2) trỏ tới: sửa được một hàng là tráo tài khoản ngân hàng.
   "supplier_passport_requests",
   "supplier_passport_versions",
+  // [S1.293 / S3.7a2 / K8b] Thẩm định nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
+  // `ENABLE ALWAYS`. Chữ ký trao thầu chụp id thẩm định: sửa được một hàng là đổi điều người ký đã dựa vào.
+  "supplier_qualifications",
   "supplier_verifications",
   // [S1.192 / S4.1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức (L1) và hai danh mục toàn cục — khuôn `047`/`061`:
   // `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Danh mục toàn cục là THƯỚC:
@@ -1773,7 +1776,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // và `tc` (FINANCE, không khai phiên bản 2, không dựng hồ sơ) xác minh sau khi người liên hệ đã có. Câu DỰNG dữ liệu dưới chủ sở
   // hữu: các bộ ba (bảng, sự kiện) ấy đã có nhân chứng ở trên.
   const nhapNcc = await nguoi("TECHNICAL");
-  const nccDemDuoc: { readonly ncc: string; readonly lh: string }[] = [];
+  const nccDemDuoc: { readonly ncc: string; readonly lh: string; readonly mst: string }[] = [];
   for (let i = 0; i < 3; i += 1) {
     const duoi = randomBytes(5).toString("hex");
     const mst = String(1_000_000_000 + Math.floor(Math.random() * 8_999_999_999));
@@ -1791,7 +1794,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
         "VALUES ($1, $2, 'VERIFIED', $3, $4) RETURNING id",
       [org, nccD, tc.u, tc.s],
     );
-    nccDemDuoc.push({ ncc: nccD, lh: lhD });
+    nccDemDuoc.push({ ncc: nccD, lh: lhD, mst });
   }
   const moiDemDuoc = async (goi: string, i: number, ai: { readonly u: string; readonly s: string }): Promise<void> => {
     await dungId(
@@ -2257,14 +2260,27 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       { org_id: org, supplier_id: nccPp.ncc, contact_id: nccPp.lh, challenge_id: ttPp },
     ),
   );
-  await chenNC(
+  // [S1.293 / S3.7a2] MST của phiên bản BẰNG MST bản ghi — thẩm định bên dưới từ chối MST lệch (`tham_dinh_mst_lech`).
+  const pbPp = await chenNC(
     "public.supplier_passport_versions",
     api(
       "INSERT INTO supplier_passport_versions (org_id, supplier_id, passport_session_id, legal_name, tax_code, nguoi_dai_dien, dia_chi, " +
-        "ngan_hang, so_tai_khoan, chung_nhan, nhom_hang) VALUES ($1, $2, $3, 'Cong ty Nhan Chung', '0101010101', 'Nguoi Dai Dien', " +
+        "ngan_hang, so_tai_khoan, chung_nhan, nhom_hang) VALUES ($1, $2, $3, 'Cong ty Nhan Chung', $4, 'Nguoi Dai Dien', " +
         "'Ha Noi', 'Ngan hang A', '123456789', '{}', '{}') RETURNING id, org_id, supplier_id, passport_session_id",
-      [org, nccPp.ncc, phPp],
+      [org, nccPp.ncc, phPp, nccPp.mst],
       { org_id: org, supplier_id: nccPp.ncc, passport_session_id: phPp },
+    ),
+  );
+  // ---- [S1.293 / S3.7a2 / K8b] Thẩm định trên phiên bản vừa nộp: `tc` (FINANCE, giữ `supplier.qualify`, không giữ `rfq.invite`, không
+  // dựng hồ sơ; nhà cung cấp thứ ba không được mời gói nào nên không ai trao thầu nó) — nhân chứng của `ncc_kiem_tham_dinh`,
+  // `coi_kiem_tham_dinh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
+  await chenNC(
+    "public.supplier_qualifications",
+    api(
+      "INSERT INTO supplier_qualifications (org_id, supplier_id, loai, passport_version_id, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'QUALIFIED', $3, $4, $5) RETURNING id, org_id, supplier_id, loai, created_by, created_by_session_id",
+      [org, nccPp.ncc, pbPp, tc.u, tc.s],
+      { org_id: org, supplier_id: nccPp.ncc, loai: "QUALIFIED", created_by: tc.u, created_by_session_id: tc.s },
     ),
   );
   doiSoHang(

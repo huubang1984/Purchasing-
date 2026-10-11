@@ -208,6 +208,12 @@ const COMMIT_TRAN_DA_KHAI: Record<string, { readonly so: number; readonly lyDo: 
       "[ADR-066] giao dịch đảm bảo MỘT vai đăng nhập trên kết nối DEPLOY của task tp-migrate (vai master RDS), không phải pool " +
       "ứng dụng; chạy SAU migrate() của cùng pool — mọi phép từ chối GUC vận hành của migrate() đã chạy trên cụm ấy",
   },
+  "packages/test-support/src/passport-tho.ts": {
+    so: 1,
+    lyDo:
+      "[S1.293 / S3.7a2] hạ tầng test — fixture Passport thô: năm câu ghi của đường Passport trên pool CHỦ CỤM trong MỘT giao dịch " +
+      "(trigger token đòi `now()` bằng nhau với yêu cầu), không phải pool ứng dụng; cụm thử không có replica",
+  },
   "packages/db/src/migrate.ts": {
     so: 2,
     lyDo:
@@ -353,6 +359,12 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     cau: 0,
     lyDo: "hạ tầng test — pg.Client dựng CSDL của cụm thử",
   },
+  "packages/test-support/src/passport-tho.ts": {
+    lay: 1,
+    cau: 0,
+    lyDo:
+      "[S1.293 / S3.7a2] hạ tầng test — fixture Passport thô lấy MỘT client của pool chủ cụm cho giao dịch năm câu ghi (cùng `now()`)",
+  },
   "packages/test-support/src/nha-cung-cap-dem-duoc.ts": {
     lay: 0,
     cau: 3,
@@ -416,6 +428,12 @@ function soLanLayClient(sach: string): number {
 
 /** Vế ⒟: số chỗ lấy client KHÔNG có listener 'error' tương ứng được phép theo tệp, kèm lý do. */
 const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyDo: string }> = {
+  "packages/test-support/src/passport-tho.ts": {
+    so: 1,
+    lyDo:
+      "[S1.293 / S3.7a2] hạ tầng test — client một giao dịch của fixture Passport thô; kết nối đứt ở đó làm bộ test đỏ, " +
+      "không có tiến trình sản xuất nào để chết",
+  },
   "packages/test-support/src/postgres.ts": {
     so: 1,
     lyDo:

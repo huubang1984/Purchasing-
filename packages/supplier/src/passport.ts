@@ -112,6 +112,81 @@ export async function taoYeuCauPassport(
   return { ok: true, requestId };
 }
 
+/** Kết quả yêu cầu tự sinh: `ok` kèm người liên hệ ĐƯỢC MỜI nhận link; `ok: false` kèm mã — đề xuất KHÔNG bị chặn vì nó. */
+export type KetQuaYeuCauTuDeXuat =
+  | { readonly ok: true; readonly requestId: string; readonly contactId: string; readonly email: string }
+  | { readonly ok: false; readonly ma: MaTuChoiPassport | "PASSPORT_KHONG_CO_LOI_MOI" };
+
+/**
+ * [S1.293 / S3.7a2 / K8b] Yêu cầu hồ sơ TỰ SINH lúc đề xuất trao thầu ở bậc `tham_dinh_truoc_trao` cho nhà cung cấp chưa có thẩm định
+ * còn hiệu lực (spec §4.8: *kích hoạt tự động khi đề xuất award*; chủ dự án chốt 2026-10-10). Dưới quyền ĐỀ XUẤT (`award.recommend`),
+ * KHÔNG đòi `supplier.qualify`: trigger `passport_kiem_yeu_cau` (thân `124`) đòi một đề xuất `PROPOSED` còn sống của chính người gọi
+ * cho nhà cung cấp ấy. Người liên hệ nhận link là người ĐƯỢC MỜI của gói — không ai chọn đích. Hàm vị từ `passport_chot_yeu_cau` từ chối
+ * (chưa K8a, thiếu điện thoại, quá trần…) ⇒ `ok: false` có mã, giao dịch còn lành, đề xuất vẫn ghi; chữ ký bị K8b chặn tới khi thẩm định.
+ * Người gọi đúc link (`ducTokenPassport`) trong CÙNG giao dịch và gửi sau commit — khuôn route yêu cầu tay.
+ */
+export async function taoYeuCauPassportTuDeXuat(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly supplierId: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
+): Promise<KetQuaYeuCauTuDeXuat> {
+  await assertTenantBound(client, orgId, "taoYeuCauPassportTuDeXuat");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  await requirePermission(
+    client,
+    { userId: actor.id, orgId, permission: PERMISSIONS.AWARD_RECOMMEND, resourceType: "RFQ", resourceId: input.rfqId },
+    auditPool,
+  );
+  const { rows: lienHe } = await client.query<{ contact_id: string; email: string }>(
+    `SELECT i.contact_id, c.email
+       FROM public.rfq_invitations i
+       JOIN public.supplier_contacts c ON c.org_id OPERATOR(pg_catalog.=) i.org_id AND c.id OPERATOR(pg_catalog.=) i.contact_id
+      WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND i.supplier_id OPERATOR(pg_catalog.=) $3::pg_catalog.uuid
+        AND i.revoked_at IS NULL
+      ORDER BY i.created_at DESC
+      LIMIT 1`,
+    [orgId, input.rfqId, input.supplierId],
+  );
+  const lh = lienHe[0];
+  if (lh === undefined) return { ok: false, ma: "PASSPORT_KHONG_CO_LOI_MOI" };
+  const { rows: hoi } = await client.query<{ ma: string | null }>(
+    "SELECT public.passport_chot_yeu_cau($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS ma",
+    [orgId, input.supplierId, lh.contact_id],
+  );
+  const ma = hoi[0]?.ma ?? null;
+  if (ma !== null) {
+    if (!laMaTuChoiPassport(ma)) throw new SupplierError("Hàm vị từ yêu cầu Passport trả một mã lạ — từ chối thay vì đoán.");
+    return { ok: false, ma };
+  }
+  let requestId: string | undefined;
+  try {
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO public.supplier_passport_requests (org_id, supplier_id, contact_id, ly_do, rfq_id, requested_by, requested_by_session_id)
+       VALUES ($1, $2, $3, 'AWARD_PROPOSED', $4, $5, $6) RETURNING id`,
+      [orgId, input.supplierId, lh.contact_id, input.rfqId, actor.id, actor.sessionId],
+    );
+    requestId = rows[0]?.id;
+  } catch (loi) {
+    const rangBuoc = (loi as { constraint?: unknown }).constraint;
+    const maTrigger = typeof rangBuoc === "string" ? rangBuoc.toUpperCase() : null;
+    if (laMaTuChoiPassport(maTrigger)) throw new PassportYeuCauError(maTrigger);
+    throw loi;
+  }
+  if (requestId === undefined) throw new SupplierError("Câu INSERT yêu cầu Passport không trả về hàng nào");
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "PASSPORT_REQUESTED",
+    resourceType: "supplier",
+    resourceId: input.supplierId,
+    payload: { requestId, contactId: lh.contact_id, lyDo: "AWARD_PROPOSED", rfqId: input.rfqId },
+  });
+  return { ok: true, requestId, contactId: lh.contact_id, email: lh.email };
+}
+
 /** Hồ sơ nhà cung cấp nộp — mọi trường đọc từ thân yêu cầu và KIỂM ở đây trước CHECK của CSDL. */
 export interface HoSoPassport {
   readonly legalName: string;

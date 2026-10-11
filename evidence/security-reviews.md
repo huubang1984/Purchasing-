@@ -27708,3 +27708,126 @@ Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng c
 - T4 là lượt đi thử một lần, không phải cổng (TEST-PLAN T4).
 - Số trên màn đứng ĐÚNG ở sàn 5 cho ba nhà cung cấp — bớt một gói đã chấm khỏi bộ gieo là về dưới sàn (ADR-163 ⑼⒠).
 - Phép quét chữ đánh giá chỉ ở ba tệp của màn; một luật chung cho mọi màn cần một hàng §5 của `docs/PRODUCT.md` — việc của chủ dự án.
+
+---
+
+# §S1.293 — S3.7a2: K8b — THẨM ĐỊNH ĐẦY ĐỦ TRÊN PHIÊN BẢN PASSPORT MỚI NHẤT CHẶN CHỮ KÝ DUYỆT TRAO THẦU; CHỮ KÝ CHỤP ID THẨM ĐỊNH; YÊU CẦU HỒ SƠ TỰ SINH LÚC ĐỀ XUẤT; CỔNG K9 THỨ TÁM — ADR-164
+
+**Ngày:** 2026-10-10 · **Nhánh:** `s3-7a2-tham-dinh-k8b` (từ `cc807f97`, master sau #265) · **Migration:** `124_tham_dinh_nha_cung_cap` ·
+**ADR:** 164 · **Hàng sổ bất biến:** K8b (~~92 = 70 + 22~~ 93 = 71 + 22 sau gộp #271) · **Chủ dự án:** *"tiếp S3.7a2 và S3.7b"*; bốn câu chốt theo đề xuất.
+
+## 1. Vòng này là gì
+
+Phần hai của S3.7 theo ADR-159 ⑴: thẩm định đầy đủ (`supplier_qualifications`), K8b ở chữ ký trao thầu và hàng `APPROVED`, yêu cầu hồ sơ
+tự sinh lúc đề xuất, cổng K9 thứ tám, cặp trigger khuôn `033`, kịch bản 41 đi qua Passport. Cộng ADR (c) chốt hướng cho S3.7b (PR riêng).
+
+## 2. Đo trước (đọc mã trên `cc807f97`)
+
+- `tham_dinh_truoc_trao` là cờ CHƯA ai đọc: `113` ghi *"CHƯA cưỡng chế (K8b là S3.7)"*; bậc một tỷ của `BAC_MAC_DINH` (web, kịch bản 41) và
+  `BAC_DEMO` bật cờ ấy — kịch bản 41 luồng S3 trao gói một tỷ mà không hồ sơ nào.
+- Lượt soi B của S3.7a1 để lại 2 CAO (C1 ký trước rồi thẩm định sau; C2 K8b không đòi K8a) và 6 TRUNG — đều xử ở đây (ADR-164 ⑴ ⑶ ⑷).
+- `award_tap_loai_tru` đã loại người XÁC MINH mới nhất khỏi chữ ký độc lập; không có vế người thẩm định.
+- `passport_kiem_yeu_cau` đòi `supplier.qualify` cho mọi yêu cầu — người đề xuất (PM) không giữ, nên yêu cầu tự sinh phải có lý do riêng.
+- `rfq_award_approvals` một người một chữ ký (UNIQUE) và chỉ-ghi-thêm ⇒ *ký lại* của cùng người là bất khả — ghi thành cái giá.
+- `tests/architecture` và `rfq.int` so tên ràng buộc trong thân 13 hàm trigger với `CHOT_THEO_RANG_BUOC` hai chiều: tên dữ liệu `tham_dinh_*`
+  phải được ghim và loại khỏi phép so (bài S3.6c).
+
+## 3. Hình dạng (ADR-164) — bốn câu chốt
+
+| # | Câu | Chốt |
+|---|---|---|
+| 1 | Chữ ký cũ khi thẩm định đổi (phiên bản Passport mới) | chụp `tham_dinh_id`, thôi đếm; không huỷ đề xuất; người KHÁC ký |
+| 2 | Yêu cầu tự sinh lúc đề xuất | `AWARD_PROPOSED` dưới `award.recommend`, link tới người liên hệ ĐƯỢC MỜI, bỏ qua có lý do |
+| 3 | Mã K9 ở thẩm định | tái dùng `K9_XAC_MINH_NCC_XUNG_DOT` — một hàm vị từ `coi_chot_xac_minh` |
+| 4 | ADR (c) cho S3.7b | bytes thô qua `PUT`, kho tệp adapter, trần 10 MB, PDF/JPG/PNG, cờ đã quét, chỉ `supplier.qualify` đọc, giữ 12 tháng |
+
+## 4. Thay đổi
+
+- **db** `124`: (0) `award_ncc_cua_bao_gia`; (1) `supplier_passport_requests` mở `AWARD_PROPOSED` + `rfq_id`, `passport_kiem_yeu_cau` viết
+  lại; (2) `supplier_qualifications` (RLS, policy khách đóng, GRANT, ba trigger khuôn bảng) + `UNIQUE (org_id, id)` ở phiên bản Passport; (3)
+  `ncc_kiem_tham_dinh`; (8) `coi_kiem_tham_dinh`; (4) `ncc_tham_dinh_hien_hanh`/`_con_hieu_luc`; (5) `award_doi_tham_dinh`,
+  `award_chot_tham_dinh`, `award_chot_tham_dinh_duyet`; (6) `rfq_award_approvals.tham_dinh_id`, `award_chu_ky_con_hieu_luc` viết lại, hai trigger
+  trao thầu; (7) `award_tap_loai_tru` viết lại. Hardening: 6 khối hàm mới, 4 khối trigger mới, 3 khối ghi lại, TRIGGER_DUOC_PHEP (+2 bảng cũ,
+  +1 bảng mới), BANG_TENANT_KHAI, CHECK_AN_NINH_KHAI (4), bốn khối trigger khuôn bảng, chuỗi sở hữu — sinh bằng script từ văn bản migration, đo
+  trên cụm dùng một lần (`migrate()` ×2: 118 tệp / 0 tệp).
+- **identity**: sáu mã `K8B_*` (vào sổ) + `CHOT_THEO_RANG_BUOC` + `DANH_MUC_VE_CONG`; `K9_XAC_MINH_NCC_XUNG_DOT` nói cả thẩm định.
+- **supplier**: `tham-dinh.ts` (ba hàm), `taoYeuCauPassportTuDeXuat`; **danh-gia**: `DeXuatTraoThau.thamDinh`, ba lần hỏi K8b; **api**: ba
+  route + route đề xuất tự sinh yêu cầu và gửi link sau commit; **mcp**: khai route đọc; **test-support**: `phienBanPassportTho`.
+- **Sổ đăng ký**: rls-coverage (+9 hàng, bảng đóng với khách), check-an-ninh (+2), migration-shape, migrations.int (+6 hàm, +4 trigger, 3 con trỏ,
+  3 danh sách, hai danh sách trigger khuôn), rfq.int (16 thân + 6 vị từ, ghim ba tên `tham_dinh_*`), bac-chinh-sach (`ncc_kiem_tham_dinh`
+  QUA_HAM), barrel-exports (+4), so-khai-nhan (K8b 4 tệp; K9 +1), MOC_GHIM 92.
+- **Test**: `tham-dinh.int` 12 ca; `trao-thau-theo-bac.int` ⑹ 5 ca; `tham-dinh-http.int` 2 ca; kịch bản 41 bước 12h (yêu cầu tự sinh) + 12h2
+  (Passport trọn đường + thẩm định) + thân quét hai route mới.
+- **Docs**: ADR-164, TEST-PLAN hàng K8b (K7/K9 sửa, tổng 92), spec §4.8/§5.1/§9, STATE cột mốc + lời khai, Handoff lời khai đếm.
+
+## 5. Điểm phát hiện lúc đo
+
+- **Hardening DROP trigger lạ trên bảng cũ, chỉ PHÁN XÉT trên bảng mới:** lượt đo đầu, hai trigger trao thầu mới biến mất im lặng (bảng
+  `rfq_awards`/`rfq_award_approvals` có trong `TRIGGER_DUOC_PHEP`) còn bảng thẩm định thì ném — đo định nghĩa trigger bằng cách tạo lại trên cụm rồi
+  đọc `pg_get_triggerdef`; `WHEN (NEW.status IN (…))` chuẩn hoá thành `WHEN ((new.status = ANY (ARRAY[…])))`.
+- **Khối ghim hàm kiểm `prolang`:** hàm `LANGUAGE sql` cần `lanname = 'sql'` — bộ sinh suy từ câu tạo.
+- **Spread không chép `name`/`message` của Error:** helper `loi` ở `trao-thau-theo-bac` đỏ bốn ca vì `{...e}` rỗng — chép tường minh.
+- **Mỗi người một chữ ký:** *ký lại sau thẩm định mới* (lời câu hỏi 1) không ký được bởi cùng người — đề xuất cần người KHÁC; ghi vào ADR
+  như cái giá, ca ⑹ đo đúng thế (gd1 cũ không đếm, gd2 + tc2 ký ⇒ APPROVED).
+- **Vòng quét rò của kịch bản 41** nay chạm được hai route ghi của phiên Passport tới nghiệp vụ (bước 12h2 mở phiên thật) — giới hạn ADR-159
+  ⑴ đóng.
+
+- **Evidence lượt 1 đỏ — tám tệp kiến trúc chưa chạy trước nó, cộng tổng điều tra hardening.** `pnpm test` chưa chạy trên cây trước
+  lượt ấy (máy bị các phiên khác giữ sáu giờ; chuỗi đặt evidence trước t0/test để giữ khe). Sửa: route đề xuất bỏ hàm phụ chạy SQL và
+  `import pg` (cổng g9) — nhà cung cấp của báo giá nay đi cùng câu trạng thái thẩm định ở `deXuatTraoThau` (`nhaCungCapId`); bước bù
+  sau commit của route đề xuất (`thuHoiTokenPassport`) khai dưới `AWARD_RECOMMEND` — hàm ấy không tự đòi quyền, chỉ thu hồi token của
+  chính yêu cầu vừa qua `award.recommend`; bốn hàm gói mới phân loại (ba ghi, một đọc); fixture Passport thô khai ở ba bảng ngoại lệ
+  đường SQL (COMMIT trần, lấy client, không listener — pool chủ cụm, một giao dịch), ghim toán tử (QT3), vào danh sách trắng barrel và
+  sổ số tài khoản (INSERT mang `so_tai_khoan` nay đúng hai tệp: đường nộp thật và fixture); nhãn `[INV-D5]` của route thẩm định vào sổ
+  khai nhãn; bốn hàm trigger mới vào `HAM_KHONG_PHAI_CANH`; `supplier_qualifications` vào tập chỉ-ghi-thêm khai sẵn; kịch bản nhân chứng
+  thẩm định phiên bản Passport của nhà cung cấp thứ ba (MST phiên bản nay bằng MST bản ghi — trước đó cố định, sẽ bị `tham_dinh_mst_lech`).
+
+## 6. Đột biến (định nghĩa lại hàm lúc chạy, khôi phục tự kiểm sha256)
+| # | Đột biến | Ca chứng | Kết quả |
+|---|---|---|---|
+| 1 | `ncc_tham_dinh_hien_hanh` xếp phiên bản ASC (vế *mới nhất* tắt) | phiên bản mới sau thẩm định | vẫn hiện hành ⇒ bản thật NULL |
+| 2 | `award_chu_ky_con_hieu_luc` `OR true` ở vế `tham_dinh_id` | chữ ký cũ sau phiên bản mới | vẫn đếm ⇒ bản thật thôi đếm |
+| 3 | `award_chot_tham_dinh` `RETURN NULL` thay `K8B_CHUA_THAM_DINH` | chữ ký thô chưa thẩm định | đi qua, không `tham_dinh_id` ⇒ bản thật 23514 `k8b_chua_tham_dinh` |
+Lớp chặn cuối: chữ ký thô ⇒ `23514 k8b_chua_tham_dinh`, không hàng sổ. K12: sáu mã K8b trong thân ba hàm = sáu dòng `chot: K8b`; sáu tên
+`k8b_*` ở `CHOT_THEO_RANG_BUOC`; ba tên `tham_dinh_*` ghim ở `rfq.int` và loại khỏi phép so.
+
+## 7. Giới hạn còn lại
+- Màn thẩm định, chỉ dẫn K8b ở `/mo-thau`, `gieo:demo --s3`, kịch bản pilot (bước ký ở bậc một tỷ sẽ dừng ở K8b), lượt T4 — S3.7a3.
+- Hàng `APPROVED` thô khi người thẩm định đã ký chỉ đo qua vị từ (K12) — không ca chèn thô.
+- Yêu cầu tự sinh thất bại chỉ trả `boQua` cho người đề xuất; không tin báo người giữ `supplier.qualify`.
+- Lượt soi hình dạng do chính vòng làm (chủ dự án chốt theo đề xuất; lượt B của S3.7a1 là lượt đối kháng gần nhất).
+
+## 8. Số đo
+Cây stage cuối, 2026-10-10 (máy chung với ba phiên khác — evidence chạy trong khe rảnh, không tiến trình vitest nào khác trên máy suốt lượt).
+
+| Bước | Kết quả |
+|---|---|
+| `pnpm evidence` lượt 2 | vitest thoát mã **0**; **92/92** bất biến (70/70 nghiệp vụ + 22/22 hàng rào); 5228 khẳng định (5205 đạt, 23 bỏ qua); 2 172 s |
+| `pnpm t0` | xanh, 54 s (depcruise 580 mô-đun, 2 567 phụ thuộc, không vi phạm) |
+| `pnpm test` | 157 tệp đạt, 2 bỏ qua; 2833 ca đạt, 14 bỏ qua; 383 s |
+| `[INV-K8b]` | 19/19 ca — `tham-dinh.int` 12/12, `trao-thau-theo-bac.int` 37/37 (khối ⑹ 5 ca), `tham-dinh-http.int` 2/2, kịch bản 41 HTTP 96/96 |
+| `hardening-suy-tu-tinh-chat.int` | 38/38, 1 037 s |
+| `migrations.int` | 128/128, 2 168 s |
+| `passport.int` | 20/20 |
+
+Ma trận: hàng K8b MỚI (19 ca); D5 187 → 188 (route thẩm định); K9 14 → 15; K7 lời *chưa cưỡng chế* gạch. Evidence lượt 1 (17:32–18:15, cùng
+cây trước bản sửa §5): vitest thoát mã 1, 5228 khẳng định, 2 573 s — tám tệp kiến trúc và `hardening-suy-tu-tinh-chat.int` đỏ, sổ khai nhãn chặn
+`[INV-D5]` ở `tham-dinh-http.int`; chữ ký là sổ đăng ký thiếu khai, không phải tranh chấp (máy không có vitest nào khác).
+Trước evidence: mười hai tệp int chạy lẻ tuần tự (kịch bản 41 96/96, trao-thau 37/37, passport 20/20, xác minh 10/10, xung đột 13/13,
+rfq 60/60, check-an-ninh 4/4, rls 61/61, bac-chinh-sach 42/42, cạnh tranh 36/36; `migrations.int` 3 ca đỏ vì ba danh sách xếp `124` trước
+`121` — sửa thứ tự, lượt evidence xanh).
+
+### 8b. Số đo cây gộp `64a24d12` (origin/master #268, #270, #271 + `cap-so`: vòng 293, ADR-164, migration 124)
+
+| Bước | Kết quả |
+|---|---|
+| `pnpm test` | xanh, 201 s |
+| `pnpm t0` | xanh, 65 s |
+| `migrate()` hai lần, cụm dùng một lần | lượt 1 áp trọn chuỗi migration, 23,4 s; lượt 2 0 tệp, không ném, 6,3 s |
+| CI run `38053834698` trên `64a24d12` | Evidence pack: vitest thoát mã **0**, **93/93** bất biến (71/71 nghiệp vụ + 22/22 hàng rào), 5287 khẳng định; T3 tích hợp xanh, 49 phút 53 giây; T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh. Bước so ma trận đỏ vì `evidence/INV-matrix.md` đã commit còn bản trước gộp — commit này đưa ma trận của bộ sinh CI vào (71/71, cộng 93, D5 189) |
+| `pnpm evidence` cục bộ | vitest thoát mã 1, 6 115 s, 30 ca hỏng (F1, K6, H19) — **lượt chồng**: bắt đầu 20:19:03 trong khe rảnh, rồi phiên worktree `s0-foundation` chạy `pnpm evidence` từ 20:31:44 tới sau khi lượt này xong |
+
+Chữ ký tranh chấp của §S1.115 và §S1.280, không phải hồi quy: 24 ca quá hạn, hai ca `tuple concurrently updated`, phần còn lại chạy nhanh
+nhưng đọc trạng thái mà ca quá hạn trước nó bỏ lại (RULE chưa gỡ ⇒ `CAU_RULE_SAI` khác rỗng); `boundaries.test.ts` 671 s, `migrations.int`
+6 106 s, `hardening-suy-tu-tinh-chat.int` 3 554 s — gấp ba lượt sạch trước gộp (2 168 s, 1 037 s); ca K6 đỏ là phép đo thời gian (3 673 ms,
+trần 3 000 ms). CI cùng HEAD, trên máy không chung, xanh cả hai tầng. Một lượt cục bộ chạy lại đã xếp hàng sau phiên kia.

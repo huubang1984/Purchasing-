@@ -365,7 +365,9 @@ export interface MocGhim {
 // [S1.285 / S3.6d] 89 -> 90: K10b (tín hiệu khai thấp ước lượng ở chữ ký trao thầu, `116_tin_hieu_khai_thap`) vào sổ đăng ký.
 // [S1.291 / S3.8a] 91 -> 92: K11 (hiệu suất nhà cung cấp chỉ đọc gói đã lộ giá, `123_hieu_suat_nha_cung_cap`) vào sổ đăng ký. Cổng
 // CHẶN đúng một lượt trước khi dòng này được viết.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 92, coDanhSachToiDa: 0 };
+// [S1.293 / S3.7a2] 92 -> 93 (sau gộp #271): K8b (thẩm định đầy đủ trên phiên bản Passport mới nhất ở chữ ký trao thầu,
+// `124_tham_dinh_nha_cung_cap`) vào sổ đăng ký.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 93, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

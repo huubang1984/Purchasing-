@@ -901,6 +901,9 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       ngan_sach_xep_bac: "THEO_ID",
       // [S1.196 / S3.3a] Hạn hiệu lực của xác minh nhà cung cấp đọc phiên bản chính sách hiện hành QUA hàm chọn.
       ncc_kiem_xac_minh: "QUA_HAM",
+      // [S1.293 / S3.7a2 / K8b] Hạn hiệu lực của thẩm định đọc `tham_dinh_hieu_luc_thang` của phiên bản HIỆU LỰC qua `chinh_sach_hieu_luc`
+      // — cùng khuôn xác minh (chủ dự án chốt 2026-09-29: hạn dùng chung).
+      ncc_kiem_tham_dinh: "QUA_HAM",
       // [S1.235 / S4.4a] Tiền tệ của gói trong lịch sử giá: phiên bản ngân sách ghim (theo id), không có ngân sách thì phiên bản hiệu
       // lực lúc gói ra đời QUA hàm chọn — không tự xếp phiên bản.
       quan_sat_gia: "QUA_HAM",

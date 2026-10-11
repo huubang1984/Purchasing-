@@ -1746,15 +1746,20 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
         "'public.ncc_kiem_them_lien_he()'::regprocedure, " +
         "'public.coi_kiem_khai_bao()'::regprocedure, 'public.coi_kiem_trao_thau()'::regprocedure, " +
         "'public.coi_chot_hanh_dong(uuid, uuid, uuid)'::regprocedure, 'public.coi_chot_xac_minh(uuid, uuid, uuid)'::regprocedure, " +
-        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure)",
+        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure, " +
+        // [S1.293 / S3.7a2 / K8b] Ba trigger của thẩm định: trigger bảng thẩm định đặt ba tên tĩnh `k8b_*`; hai trigger trao thầu đặt
+        // `lower(ly_do)` từ hai vị từ K8b (`viTu` dưới).
+        "'public.ncc_kiem_tham_dinh()'::regprocedure, 'public.award_kiem_tham_dinh()'::regprocedure, " +
+        "'public.award_kiem_tham_dinh_chu_ky()'::regprocedure)",
     );
-    expect(rows).toHaveLength(13);
+    expect(rows).toHaveLength(16);
     const { rows: viTu } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_bac(uuid, uuid, uuid)'::regprocedure, " +
         "'public.award_chot_nguoi_ky(uuid, uuid, uuid)'::regprocedure, 'public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'::regprocedure, " +
-        "'public.award_chot_doc_lap(uuid, uuid)'::regprocedure)",
+        "'public.award_chot_doc_lap(uuid, uuid)'::regprocedure, " +
+        "'public.award_chot_tham_dinh(uuid, uuid, uuid, uuid)'::regprocedure, 'public.award_chot_tham_dinh_duyet(uuid, uuid)'::regprocedure)",
     );
-    expect(viTu).toHaveLength(4);
+    expect(viTu).toHaveLength(6);
     const { rows: triggerBac } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_kiem_theo_bac_khi_de_xuat()'::regprocedure, " +
         "'public.award_kiem_theo_bac_khi_duyet()'::regprocedure, 'public.award_kiem_vai_theo_bac()'::regprocedure)",
@@ -1768,13 +1773,17 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
     // hai tên ấy rồi loại chúng khỏi phép so hai chiều.
     const tenK10c = [...new Set(rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(k10c_\w+)'/gu)].map((m) => m[1]!)))].sort();
     expect(tenK10c).toEqual(["k10c_thu_hoi_thieu_canh_tranh", "k10c_thu_hoi_thieu_ly_do"]);
+    // [S1.293 / S3.7a2 / K8b] Trigger thẩm định (`124`) đặt thêm ba tên DỮ LIỆU `tham_dinh_*` (chưa xác minh, phiên bản không mới nhất, MST
+    // lệch) — không phải chốt, không vào bảng tên → mã (tầng gói nói *đọc lại*, không hàng sổ). Ghim đúng ba tên ấy rồi loại khỏi phép so.
+    const tenDuLieu = [...new Set(rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(tham_dinh_\w+)'/gu)].map((m) => m[1]!)))].sort();
+    expect(tenDuLieu).toEqual(["tham_dinh_chua_xac_minh", "tham_dinh_mst_lech", "tham_dinh_phien_ban_khong_moi_nhat"]);
     const trongThan = [
       ...new Set([
         ...rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1]!)),
         ...[...rows, ...viTu].flatMap((r) => [...r.prosrc.matchAll(/RETURN '(K\w+)'/gu)].map((m) => m[1]!.toLowerCase())),
       ]),
     ]
-      .filter((t) => !t.startsWith("k10c_"))
+      .filter((t) => !t.startsWith("k10c_") && !t.startsWith("tham_dinh_"))
       .sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
