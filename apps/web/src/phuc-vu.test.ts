@@ -3974,10 +3974,25 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-tao-duyet");
       expect(p.trangThai.than.find((t) => t.lenh === "POST /rfqs/r-9/items/2/mapping/new-item")?.than).toMatchObject({ ma: "THEP-VAN-D12", nhomHangId: "n-1" });
 
-      const hong = await moDuLieu({ ...HANG_D12, hangChuan: [{ ...HANG_D12.hangChuan[0], nhomHangId: "n-1" }] }, (l) =>
-        (l === "GET /categories" ? Promise.resolve({ status: 500, body: null }) : undefined));
+      const hong = await moDuLieu({ ...HANG_D12, hangChuan: [{ ...HANG_D12.hangChuan[0], nhomHangId: "n-1" }] }, (l) => {
+        if (l === "GET /categories") return Promise.resolve({ status: 500, body: null });
+        if (l === "GET /items/h-12") {
+          return Promise.resolve({ status: 200, body: {
+            hangChuan: { ...HANG_D12.hangChuan[0], nhomHangId: "n-1", thuocTinh: {}, thuocTinhTrongYeu: [] }, phienBan: [], biDanh: [], quyDoi: [],
+          } });
+        }
+        if (l === "POST /items/h-12/versions") return Promise.resolve({ status: 201, body: { phienBan: { seq: "11" } } });
+        return undefined;
+      });
       expect(hong.el("tao-nhom-hang").con.map((x) => x.textContent)).toEqual(["— không nhóm hàng —"]);
       expect(hong.el("bang-hang").querySelector("tbody").con[0]?.con[3]?.textContent).toBe("(nhóm hàng không đọc được)");
+      // [rà soát §S1.9101 — TRUNG-1] Nhóm của hàng không có trong danh sách: ô vẫn mang nó (trình duyệt thật để ô trống khi không có
+      // lựa chọn khớp), và phiên bản mới gửi lại đúng nhóm ấy — không lặng lẽ bỏ.
+      await hong.el("bang-hang").querySelector("tbody").con[0]?.con[5]?.con[0]?.nghe["click"]?.[0]?.();
+      await cho();
+      expect(hong.el("pb-nhom-hang").con.map((x) => [x.value, x.textContent])).toEqual([["", "— không nhóm hàng —"], ["n-1", "(nhóm hàng không đọc được — giữ nguyên)"]]);
+      await hong.bam("nut-phien-ban");
+      expect((hong.trangThai.than.find((t) => t.lenh === "POST /items/h-12/versions")?.than as { nhomHangId: unknown }).nhomHangId).toBe("n-1");
     });
 
     it("[S1.199 / S4.2b · lượt đi thử T4] du-lieu: mở chi tiết hỏng ⇒ bước 4 không giữ hàng trước, nút ghi không ghi vào hàng trước", async () => {

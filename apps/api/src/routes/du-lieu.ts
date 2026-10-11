@@ -68,7 +68,8 @@ function nhomHangTuyChon(body: unknown): string | null {
   const v = truong(body, "nhomHangId");
   if (v === undefined || v === null) return null;
   if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, 'trường "nhomHangId" phải là UUID hoặc null');
-  return v;
+  // Chữ thường như cột lưu — hàng sổ mang đúng cách viết của cột (rà soát §S1.9101 — THẤP-3).
+  return v.toLowerCase();
 }
 /** Tham số đường dẫn UUID; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). */
 export function itemIdParam(req: ApiRequest): string {

@@ -4327,6 +4327,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn ở bảng phiên bản; gán mới chỉ nhóm còn dùng (ADR-9201).
+        "9501_nhom_hang_cua_hang_chuan.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -9006,6 +9008,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn ở bảng phiên bản; gán mới chỉ nhóm còn dùng (ADR-9201).
+        "9501_nhom_hang_cua_hang_chuan.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9365,6 +9369,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "122_hang_cham_phien_ban_moi_nhat.sql",
         // [S1.291 / S3.8a / K11] View hiệu suất nhà cung cấp `security_invoker` chỉ đọc gói đã lộ giá; vị từ khách trong thân (ADR-163).
         "123_hieu_suat_nha_cung_cap.sql",
+        // [S1.9101 / S4.8] Nhóm hàng của hàng chuẩn ở bảng phiên bản; gán mới chỉ nhóm còn dùng (ADR-9201).
+        "9501_nhom_hang_cua_hang_chuan.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

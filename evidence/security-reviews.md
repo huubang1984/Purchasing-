@@ -27708,3 +27708,74 @@ Ngày 2026-10-10 → 2026-10-11, giờ máy UTC+7. Mọi lượt đi qua vòng c
 - T4 là lượt đi thử một lần, không phải cổng (TEST-PLAN T4).
 - Số trên màn đứng ĐÚNG ở sàn 5 cho ba nhà cung cấp — bớt một gói đã chấm khỏi bộ gieo là về dưới sàn (ADR-163 ⑼⒠).
 - Phép quét chữ đánh giá chỉ ở ba tệp của màn; một luật chung cho mọi màn cần một hàng §5 của `docs/PRODUCT.md` — việc của chủ dự án.
+
+---
+
+# §S1.9101 — S4.8: NHÓM HÀNG CỦA HÀNG CHUẨN Ở BẢNG PHIÊN BẢN — TUỲ CHỌN, GÁN MỚI CHỈ NHÓM CÒN DÙNG, GIỮ NHÓM CỦA PHIÊN BẢN TRƯỚC THÌ ĐƯỢC
+
+**Rổ và mảnh (ADR-043):** không mảnh nào của `docs/PRODUCT.md` §11 đổi hành vi — nhóm hàng của hàng chuẩn chưa vào phép đếm, chấm hay
+cổng nào. Đổi ở bề mặt: `/du-lieu` có cột và ô chọn nhóm hàng; ba route ghi hàng chuẩn nhận `nhomHangId`; hai hàng sổ mang nó.
+Migration `9501_nhom_hang_cua_hang_chuan`. ADR-9201. Không bất biến mới (L1, L3), không khoản mới.
+
+## 1. Vòng này là gì
+Chủ dự án, 2026-10-11: *"Tiếp S4.8"*, rồi chốt ba câu theo đề xuất — cột tuỳ chọn; gán mới chỉ nhóm còn dùng, giữ nhóm của phiên bản
+trước thì được dù nhóm ấy đã ngừng; một PR, người giữ `item.manage` gán trong chính phiên bản. Hàng S4.8 của spec S4 §9 (khoá ngoại
+nhóm hàng qua phiên bản hàng chuẩn) — việc §3.4 để lại *"sau khi S3.6 vào `master`"*.
+
+## 2. Đo trước (đọc mã trên `e4721ca`)
+- `083`: `canonical_item_versions` không có `category_id` (dòng 21–22 của tệp nói rõ: *"đợi nhóm hàng của S3.6"*); khuôn L1 của `079`
+  (`du_lieu_nen_dat_thu_tu` giữ khoá độc quyền theo (bảng, tổ chức), đặt `seq`), cổng ghi `du_lieu_nen_kiem_quyen_ghi` (`item.manage`).
+- `085`: `procurement_categories` + `procurement_category_changes`; `nhom_hang_con_dung` là câu hỏi duy nhất; lần ngừng dùng giữ khoá
+  tư vấn ĐỘC QUYỀN theo nhóm (hạt giống 8), lần gán nhóm cho gói giữ khoá CHIA SẺ cùng khoá.
+- Không phép đọc nào cần nhóm hàng của hàng chuẩn: `088` (chia nhỏ) khoá theo `rfq_packages.category_id`; `123` (hiệu suất) và mọi
+  bộ đọc benchmark không nhắc nhóm hàng. `GET /categories` đọc được bởi mọi người mua (`agent: false`).
+
+## 3. Thay đổi
+- **CSDL** (`9501`): cột `canonical_item_versions.category_id` (NULL được, khoá ngoại theo (tổ chức, nhóm)); trigger
+  `hang_chuan_kiem_nhom_hang` — chỉ READ COMMITTED khi có nhóm, khoá chia sẻ theo nhóm, nhóm còn dùng ⇒ qua, đã ngừng ⇒ chỉ khi phiên bản
+  mới nhất của cùng hàng mang đúng nhóm ấy; tên xếp sau cổng ghi; quyền cột `INSERT`. Ghim ở hardening (thân, `provolatile`, trigger),
+  `TRIGGER_DUOC_PHEP`, `HAM_KHONG_PHAI_CANH`, sổ hàm của `migrations.int`, ba danh sách tệp áp, quyền cột của `rls-coverage`.
+- **Gói** (`hang-chuan.ts`): `nhomHangId` ở `taoHangChuan`, `taoPhienBanHangChuan` (và qua đó `taoHangChuanVaAnhXa`); ba bộ đọc trả
+  nó; hai mã lỗi; hai hàng sổ mang nó.
+- **Route** (`du-lieu.ts`, `anh-xa.ts`): `nhomHangId` UUID hay `null`, hạ chữ thường; sai hình dạng ⇒ 422 gọi tên trường.
+- **Màn** (`/du-lieu`): cột nhóm hàng ở danh sách và bảng phiên bản; ô chọn ở bước 3, bước 4 (chọn sẵn nhóm hiện tại) và hàng đợi;
+  `luaChonNhomHang` của `/tao-thau` nhận nhãn dòng trống và giữ nhóm đang chọn không có trong danh sách.
+- **`gieo:demo --s3`**: phiên bản thứ hai mang `KET-CAU` cho ba hàng chuẩn demo.
+- **Test**: `hang-chuan.int` khối S4.8 (8 ca); `du-lieu.int` ⑸ (2 ca); `anh-xa.int` (tạo-và-ánh-xạ mang nhóm); `phuc-vu` (2 ca);
+  `nhom-hang.test` (2 ca).
+- **Tài liệu**: ADR-9201; ADR-116 và STATE chú thích tại chỗ; spec §3.4, §4.3, §9; TEST-PLAN L1, L3; mốc STATE.
+
+## 4. Đột biến
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | thân trigger: bỏ câu hỏi còn dùng (`IF true`) | ĐỎ (trong test) |
+| M2 | thân trigger: bỏ vế giữ nhóm của phiên bản trước | ĐỎ (trong test) |
+| M3 | thân trigger: không chờ khoá (`pg_try_advisory_xact_lock_shared`) | ĐỎ (ca ĐUA, trong test) |
+| M4 | migration bỏ khoá ngoại theo tổ chức | ĐỎ — nhóm của tổ chức B gán được |
+| M5 | tầng gói luôn ghi `category_id` NULL | ĐỎ — 6 ca |
+| M6 | route phiên bản bỏ `nhomHangId` | ĐỎ (`du-lieu.int` ⑸) |
+| M7 | màn không gửi lựa chọn | ĐỎ — 2 ca `phuc-vu` |
+| M8 | đổi tên trigger cho xếp trước cổng ghi | ĐỎ (ca L3, trong test) |
+| M9 | bộ đọc bỏ `nhomHangId` | ĐỎ — 3 ca |
+| M10 | thân trigger: bỏ chốt READ COMMITTED | ĐỎ (ca REPEATABLE READ, trong test) |
+
+## 5. Rà soát đối kháng (một agent đọc-không-sửa trên diff `e4721ca..8ab8e84` và tệp `9501`)
+**Một CAO, một TRUNG, sáu THẤP** — xử lý ở ADR-9201 ⑹:
+- **CAO-1 — ba danh sách tệp áp của `migrations.int` thiếu `9501`** (dừng ở `123`): bộ CSDL đỏ mỗi lượt. **Sửa:** thêm vào cả ba.
+- **TRUNG-1 — ô *Phiên bản mới* lặng lẽ bỏ nhóm.** Ô chỉ chọn sẵn được nhóm có trong danh sách màn đang giữ; đọc nhóm hàng hỏng hay
+  danh sách cũ (Tài chính tạo nhóm Z sau khi trang nạp, người quản lý khác gán Z) ⇒ trình duyệt để ô trống, lần sửa tên kế tiếp bỏ Z;
+  Z đã ngừng thì không gán lại được. DOM giả của `phuc-vu` giữ mọi `value` nên test cũ không thấy. **Sửa:** `luaChonNhomHang` thêm
+  lựa chọn *"(nhóm hàng không đọc được — giữ nguyên)"*; ca `phuc-vu` đọc nhóm hỏng ⇒ ô mang nhóm và thân gửi đúng nhóm ấy; ca đơn vị.
+- **THẤP-1 — REPEATABLE READ vượt được lần ngừng dùng** (ảnh chụp cố định từ câu INSERT). **Sửa:** chốt READ COMMITTED (khuôn `107`),
+  ca REPEATABLE READ + đột biến M10. **THẤP-2 — bản ghim không đòi `provolatile`.** **Sửa:** ghim `'v'` và in nó ở chẩn đoán.
+  Hai khe này cũng có ở `rfq_kiem_nhom_hang` (`085`) — chưa sửa ở vòng này (ngoài phạm vi; đường ứng dụng luôn ở READ COMMITTED).
+- **THẤP-3** — id viết hoa vào hàng sổ khác cách viết của cột: route hạ chữ thường, ca `du-lieu.int` đọc hàng sổ. **THẤP-4** — đăng
+  xuất để lại nhóm của người trước trong ba ô chọn: xoá. **THẤP-5** — hàng chuẩn không có + nhóm đã ngừng ⇒ `NHOM_HANG_DA_NGUNG_DUNG`
+  thay vì `KHONG_CO_HANG_CHUAN`: giữ. **THẤP-6** — tài liệu (biên bản này; chú thích `phuc-vu.ts`).
+Đã kiểm không phải lỗi: văn bản ghim khớp thân migration (so bằng máy), thứ tự trigger, ảnh chụp mới mỗi câu dưới READ COMMITTED,
+không vòng khoá chết với lần ngừng dùng hay lần gán nhóm cho gói, vế giữ nhóm không lạm được (theo hàng và tổ chức, hàng không có thì
+từ chối, bỏ rồi gán lại trong một giao dịch vẫn bị từ chối), không lộ xuyên tổ chức qua mã lỗi, `textContent` ở mọi chữ mới, hàng sổ
+chỉ mang UUID, `gieo:demo`, độ vững của ca ĐUA.
+
+## 6. Số đo

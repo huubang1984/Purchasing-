@@ -17324,7 +17324,7 @@ $ham$;
                   'hàm public.luot_cham_kiem_phien_ban() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.luot_cham_kiem_phien_ban() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.8] Nhom hang cua hang chuan: gan moi chi nhom con dung (duoi khoa chia se theo nhom), giu nhom cua phien ban truoc thi duoc. Than `RETURN NEW` cho mot phien ban tro nhom da ngung, hay vuot lan ngung dung dang chay.
+    -- [S1.9101 / S4.8] Nhom hang cua hang chuan: gan moi chi nhom con dung (duoi khoa chia se theo nhom, chi READ COMMITTED), giu nhom cua phien ban truoc thi duoc. Than `RETURN NEW` cho mot phien ban tro nhom da ngung, hay vuot lan ngung dung dang chay; ham STABLE dung lai anh chup cua cau INSERT nen cung vuot — ghim ca provolatile.
     ARRAY[
       $q$hàm + trigger hang_chuan_kiem_nhom_hang (9501_nhom_hang_cua_hang_chuan)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang_cua_hang_chuan.sql')$q$,
@@ -17340,6 +17340,10 @@ $ham$;
 BEGIN
   IF NEW.category_id IS NULL THEN
     RETURN NEW;
+  END IF;
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'Gan nhom hang cho hang chuan chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay lan ngung dung vua commit (S4.8)',
+      pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation';
   END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock_shared(
             pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8));
@@ -17372,8 +17376,9 @@ $ham$;
          END
          $fn350$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF NEW.category_id IS NULL THEN RETURN NEW; END IF; PERFORM pg_catalog.pg_advisory_xact_lock_shared( pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8)); IF public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN RETURN NEW; END IF; IF (SELECT v.category_id FROM public.canonical_item_versions v WHERE v.org_id = NEW.org_id AND v.canonical_item_id = NEW.canonical_item_id ORDER BY v.seq DESC LIMIT 1) IS NOT DISTINCT FROM NEW.category_id THEN RETURN NEW; END IF; RAISE EXCEPTION 'Nhom hang da ngung dung — chi giu duoc nhom cua phien ban truoc (S4.8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_chuan_nhom_hang_da_ngung_dung'; END$than$
+                = $than$BEGIN IF NEW.category_id IS NULL THEN RETURN NEW; END IF; IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN RAISE EXCEPTION 'Gan nhom hang cho hang chuan chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay lan ngung dung vua commit (S4.8)', pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation'; END IF; PERFORM pg_catalog.pg_advisory_xact_lock_shared( pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8)); IF public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN RETURN NEW; END IF; IF (SELECT v.category_id FROM public.canonical_item_versions v WHERE v.org_id = NEW.org_id AND v.canonical_item_id = NEW.canonical_item_id ORDER BY v.seq DESC LIMIT 1) IS NOT DISTINCT FROM NEW.category_id THEN RETURN NEW; END IF; RAISE EXCEPTION 'Nhom hang da ngung dung — chi giu duoc nhom cua phien ban truoc (S4.8)' USING ERRCODE = 'check_violation', CONSTRAINT = 'hang_chuan_nhom_hang_da_ngung_dung'; END$than$
             AND p.prosecdef IS FALSE
+            AND p.provolatile = 'v'
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
             AND p.prorettype = 'pg_catalog.trigger'::regtype
@@ -17389,6 +17394,7 @@ $ham$;
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
                           || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
                           || ' | secdef=' || p.prosecdef::text
+                          || ' | volatile=' || p.provolatile::text
                           || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
                           || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
                                                                            || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)

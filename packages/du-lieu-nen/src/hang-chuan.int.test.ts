@@ -587,6 +587,34 @@ describe("[S1.9101 / S4.8] nhóm hàng của hàng chuẩn — L1 (phiên bản)
     expect(await trong(orgA, (c) => docHangChuan(c, orgA, hc2.id))).toMatchObject({ nhomHangId: nhom2 });
   });
 
+  it("[INV-L1] [rà soát §S1.9101 — THẤP-1] chỉ READ COMMITTED: ở REPEATABLE READ ảnh chụp cố định từ câu INSERT không thấy lần ngừng dùng vừa commit — gán nhóm bị từ chối; không nhóm thì đi qua; ĐỘT BIẾN bỏ chốt ⇒ đi qua", async () => {
+    const nhom = await taoNhom(orgA, "S48-RR");
+    const hc = await taoHang("S48-RR1", null);
+    const duoiRR = async (nhomHangId: string | null, thayThan?: (goc: string) => string): Promise<string> => {
+      const c = thayThan === undefined ? await api.connect() : await db.pool.connect();
+      try {
+        await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+        if (thayThan !== undefined) {
+          const goc = (await c.query<{ def: string }>("SELECT pg_get_functiondef('public.hang_chuan_kiem_nhom_hang()'::regprocedure) AS def")).rows[0]!.def;
+          await c.query(thayThan(goc));
+        }
+        await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgA]);
+        return await maLoi(taoPhienBanHangChuan(c, orgA, { hangChuanId: hc.id, ten: "RR", nhomHangId, actorSessionId: quanLyA.phien }));
+      } finally {
+        await c.query("ROLLBACK");
+        c.release();
+      }
+    };
+    expect(await duoiRR(nhom)).toBe("23514");
+    expect(await duoiRR(null)).toBe("KHONG_NEM");
+    const cu = "IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN";
+    expect(await duoiRR(nhom, (goc) => {
+      expect(goc.split(cu).length - 1, "đột biến phải khớp ĐÚNG một chỗ").toBe(1);
+      return goc.replace(cu, "IF false THEN");
+    })).toBe("KHONG_NEM");
+    expect(await maLoi(phienBan(hc.id, nhom)), "đối chứng: READ COMMITTED đi qua").toBe("KHONG_NEM");
+  });
+
   it("[INV-L1] ĐỘT BIẾN thân hàm: bỏ câu hỏi còn dùng ⇒ nhóm đã ngừng gán được; bỏ vế giữ nhóm của phiên bản trước ⇒ lần giữ bị từ chối", async () => {
     const ngung = await taoNhom(orgA, "S48-DB");
     const hc = await taoHang("S48-K", ngung);

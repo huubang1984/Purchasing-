@@ -175,7 +175,9 @@ function dongCacBuoc() {
   hangDoi = { dong: [], conNua: false };
   $("bang-hang-doi").querySelector("tbody").replaceChildren();
   trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
+  // [S1.9101 / rà soát THẤP-4] Mã và tên nhóm hàng của người trước không ở lại trong ba ô chọn.
   nhomHang = [];
+  for (const id of ["tao-nhom-hang", "pb-nhom-hang", "xl-nhom-hang"]) $(id).replaceChildren();
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);

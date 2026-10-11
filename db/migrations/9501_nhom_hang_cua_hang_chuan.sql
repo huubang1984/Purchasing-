@@ -15,6 +15,9 @@
 --     MỚI NHẤT của cùng hàng chuẩn mang đúng nhóm ấy: phiên bản là bản chụp đầy đủ, nên sửa tên hay ngừng dùng một hàng chuẩn thuộc
 --     nhóm đã ngừng không bị buộc đổi nhóm (khác gói: nhóm của gói chỉ đổi ở DRAFT, `085` (5)). Từ chối ⇒ ràng buộc có tên
 --     `hang_chuan_nhom_hang_da_ngung_dung`.
+--     Chỉ dưới READ COMMITTED (khuôn `107`): ở REPEATABLE READ ảnh chụp cố định từ câu INSERT, nên phép hỏi sau khi được khoá vẫn thấy
+--     nhóm còn dùng dù lần ngừng dùng đã commit — chờ khoá thành vô nghĩa. Đường ứng dụng luôn ở READ COMMITTED; câu viết tay ở mức
+--     khác bị từ chối. Hàm là VOLATILE (mặc định) — mỗi câu một ảnh chụp mới; hardening ghim cả thuộc tính ấy.
 --     Tên trigger `canonical_item_versions_nhom_hang` xếp SAU `…_kiem_quyen_ghi` (BEFORE cùng sự kiện chạy theo thứ tự tên): người
 --     không giữ `item.manage` nghe lý do ấy trước. `…_dat_thu_tu` chạy trước cả hai và giữ khoá ĐỘC QUYỀN theo (bảng, tổ chức) tới
 --     hết giao dịch, nên hai phiên bản của cùng hàng chuẩn không chen nhau: phép đọc *"phiên bản mới nhất"* thấy phiên bản đã commit
@@ -38,6 +41,10 @@ AS $ham$
 BEGIN
   IF NEW.category_id IS NULL THEN
     RETURN NEW;
+  END IF;
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'Gan nhom hang cho hang chuan chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay lan ngung dung vua commit (S4.8)',
+      pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation';
   END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock_shared(
             pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8));

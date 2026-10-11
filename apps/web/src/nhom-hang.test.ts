@@ -48,6 +48,16 @@ describe("S3.6a — nhóm hàng trên màn", () => {
     expect(luaChonNhomHang(DS, "b", "— không nhóm hàng —").map((l) => l.value)).toEqual(["", "a", "b"]);
   });
 
+  it("[S1.9101 / rà soát TRUNG-1] nhóm đang chọn không có trong danh sách vẫn là một lựa chọn — ô không lặng lẽ về trống", () => {
+    expect(luaChonNhomHang(DS, "z", "— không nhóm hàng —")).toEqual([
+      { value: "", nhan: "— không nhóm hàng —" },
+      { value: "a", nhan: "THEP — Thép" },
+      { value: "z", nhan: "(nhóm hàng không đọc được — giữ nguyên)" },
+    ]);
+    expect(luaChonNhomHang([], "z").map((l) => l.value)).toEqual(["", "z"]);
+    expect(luaChonNhomHang(DS, "").map((l) => l.value), "chuỗi rỗng là không chọn").toEqual(["", "a"]);
+  });
+
   it("nhóm của gói nói bằng lời; chưa có ⇒ null; id lạ ⇒ nói là không đọc được", () => {
     expect(nhanNhomHangCuaGoi(DS, "a")).toBe("THEP — Thép");
     expect(nhanNhomHangCuaGoi(DS, "b")).toBe("CU — Cũ (đã ngừng dùng)");

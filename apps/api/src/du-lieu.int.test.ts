@@ -292,9 +292,15 @@ describe("[S1.9101 / S4.8] ⑸ nhóm hàng của hàng chuẩn", () => {
     const tao = async (ma: string) => (await goi("POST", "/categories", taiChinh, { ma, ten: `Nhom ${ma}` })).body.nhomHang as { id: string };
     const thep = await tao("S48-THEP");
     const cu = await tao("S48-CU");
-    const r = await goi("POST", "/items", quanLy, { ma: "S48-D16", donViGoc: "kg", ten: "Thép D16", nhomHangId: thep.id });
+    // [rà soát §S1.9101 — THẤP-3] Gửi id viết HOA: cột và hàng sổ cùng mang chữ thường.
+    const r = await goi("POST", "/items", quanLy, { ma: "S48-D16", donViGoc: "kg", ten: "Thép D16", nhomHangId: thep.id.toUpperCase() });
     expect(r.status, r.text).toBe(201);
     const id = (r.body.hangChuan as { id: string }).id;
+    const so = await db.pool.query<{ nhom: string }>(
+      "SELECT payload->>'nhomHangId' AS nhom FROM audit_events WHERE org_id = $1 AND action = 'ITEM_CREATED' AND resource_id = $2",
+      [orgA, id],
+    );
+    expect(so.rows.map((x) => x.nhom)).toEqual([thep.id]);
     const ds = await goi("GET", "/items", taiChinh);
     expect((ds.body.hangChuan as { id: string; nhomHangId: string | null }[]).find((h) => h.id === id)?.nhomHangId).toBe(thep.id);
 

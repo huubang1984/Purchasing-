@@ -13188,6 +13188,19 @@ vai khác người (`083`, `085`); ADR-084 ⑶ không cần mã nào.
 
 ⑸ **`gieo:demo --s3`** thêm phiên bản thứ hai cho ba hàng chuẩn demo mang nhóm `KET-CAU`; không `--s3`, hàng chuẩn không nhóm hàng.
 
+⑹ **Sau rà soát đối kháng** (`evidence/security-reviews.md` §S1.9101 mục 5) — một CAO, một TRUNG, sáu THẤP:
+- **CAO-1** — ba danh sách tệp `migrate()` áp trong `migrations.int` dừng ở `123`: bộ CSDL đỏ mỗi lượt. Sửa: thêm `9501` vào cả ba.
+- **TRUNG-1** — ô *Phiên bản mới* chỉ chọn sẵn được nhóm có trong danh sách màn đang giữ; đọc nhóm hàng hỏng hay danh sách cũ hơn lần
+  gán thì trình duyệt để ô trống, và phiên bản bản-chụp-đầy-đủ kế tiếp lặng lẽ BỎ nhóm — nhóm đã ngừng thì không gán lại được nữa.
+  Sửa: `luaChonNhomHang` giữ nhóm đang chọn không có trong danh sách thành một lựa chọn nhãn *"không đọc được — giữ nguyên"*.
+- **THẤP-1** — ở REPEATABLE READ ảnh chụp cố định từ câu INSERT, nên phép hỏi sau khi được khoá không thấy lần ngừng dùng vừa commit.
+  Sửa: trigger chỉ nhận READ COMMITTED khi có nhóm (khuôn `107`); đường ứng dụng luôn ở mức ấy. **THẤP-2** — bản ghim không đòi
+  `provolatile`: một `ALTER FUNCTION … STABLE` dùng lại ảnh chụp của câu INSERT. Sửa: ghim `provolatile = 'v'`. Cùng hai khe ở
+  `rfq_kiem_nhom_hang` (`085`) — ngoài vòng này, ghi ở biên bản. **THẤP-3** — id viết HOA đi nguyên vào hàng sổ trong khi cột lưu chữ
+  thường: route hạ chữ thường. **THẤP-4** — đăng xuất để lại mã và tên nhóm của người trước trong ba ô chọn: xoá. **THẤP-5** — hàng chuẩn
+  không có mà nhóm đã ngừng nhận `NHOM_HANG_DA_NGUNG_DUNG` thay vì `KHONG_CO_HANG_CHUAN` (trigger chạy trước khoá ngoại): GIỮ — vẫn là
+  một lời từ chối có tên, không lộ gì. **THẤP-6** — tài liệu: biên bản và một chú thích ở `phuc-vu.ts`.
+
 ### Giới hạn nói ra
 
 - **Chưa ai đọc cột này.** Khi một phép đếm của S4b đọc nó, câu *"nhóm tại mốc nào"* là việc của ADR ấy — dữ liệu để trả lời đã có
