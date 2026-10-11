@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Hiệu suất nhà cung cấp — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Hiệu suất nhà cung cấp</h1>
+    <span class="vai">Mua sắm · Tài chính · Giám đốc</span>
+    <nav><a href="/mo-thau">Màn mở thầu</a> · <a href="/chinh-sach">Màn chính sách</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa <strong>bí mật ghi danh</strong>
+      để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Chỉ người giữ quyền xem báo giá — mặc định là vai mua sắm, tài chính
+      và giám đốc — đọc được bảng này.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <!-- [S1.240 / khoản 282] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login`. -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước. -->
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
+    <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Số liệu theo nhà cung cấp</h2>
+    <!-- [S1.291 / ADR-163] Chỉ gói ĐÃ LỘ GIÁ — kể cả ở cột phản hồi: so bảng trước và sau lúc một gói đóng không được nói ai đã nộp. -->
+    <p class="ghi">Chỉ đếm gói đã mở niêm phong. Một gói mới đóng mà chưa mở niêm phong không đổi con số nào, kể cả số lần nộp và
+      thời gian phản hồi; vòng BAFO chỉ vào sau khi chính vòng ấy được mở niêm phong. Thời gian phản hồi tính từ lúc mở gói — hay lúc
+      mời, nếu mời sau — tới báo giá đầu. Hạng và khoảng cách đọc từ lượt chấm mới nhất của mỗi gói; thắng là trao thầu đã duyệt.</p>
+    <!-- [lượt soi §S1.292 THẤP-4] Sàn là giả định chờ pilot và máy chủ trả nó (`sanLichSu`): câu tóm tắt và từng ô đọc con số ấy, trang
+         không viết cứng. -->
+    <p class="ghi">Tỷ lệ và trung vị cần một số gói tối thiểu của chính nhà cung cấp ấy (giả định, chờ số liệu pilot — con số ở câu
+      tóm tắt dưới đây); dưới đó ô hiện «chưa đủ lịch sử» kèm số gói đã có trên số gói cần. Không có điểm tổng hợp và không có trọng số: mỗi cột là một số đo riêng. Mỗi lần đọc bảng để lại
+      một hàng trong sổ kiểm toán.</p>
+    <p class="ghi" id="tom-tat"></p>
+    <table class="xep" id="bang-hieu-suat">
+      <thead><tr><th>Nhà cung cấp</th><th>Được mời</th><th>Đã nộp</th><th>Tỷ lệ phản hồi</th><th>Phản hồi trung vị</th>
+        <th>Lần sửa báo giá</th><th>Gói xếp hạng</th><th>Hạng trung vị</th><th>Cách hạng nhất (trung vị)</th><th>Vào BAFO</th>
+        <th>Thắng</th><th>Tỷ lệ thắng</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="nut-doc-hieu-suat" class="phu">Đọc lại</button>
+    <div class="bao loi" id="loi2" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — số liệu chỉ từ gói đã mở niêm phong trong tổ chức này; giao hàng, chất lượng và khiếu nại nằm ở
+    hệ thống ERP, chưa có ở đây.</footer>
+</main>
+<script type="module" src="/hieu-suat.js"></script>
+</body>
+</html>

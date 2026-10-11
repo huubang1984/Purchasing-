@@ -11275,11 +11275,15 @@ Giới hạn nói thêm:
   commit sau câu ấy có thể đứng TRƯỚC hàng `BENCHMARK_READ`/`BENCHMARK_BAND_READ` của lượt đọc. Bảng so sánh, chuẩn *"bảng so sánh
   mở"* của L6, đã chấp nhận đúng điều ấy cho dữ liệu nhạy hơn (`buildComparisonTable` đọc trạng thái một lần, không khoá, rồi ghi
   `COMPARISON_VIEWED`); không ai dựa vào thứ tự sổ của hai hàng ấy. Khoá còn lại ở đường ghi mở MỘT cửa sổ cho mỗi lần mở thầu (bản
-  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; xấu nhất ở
-  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.
+  lưu `UNIQUE` theo lần mở thầu), lấy SAU phép tính, nên chỉ những lần đọc đầu bắt đầu trước lần commit đầu cùng giữ được; ~~xấu nhất ở
+  quy mô lớn (phép tính 18–19 s) là một loạt lần đọc đầu trải đều giữ hàng gói quá 15 s — một lần cạnh hỏng cho mỗi lần mở thầu.~~
+  **[2026-10-11 / khoản 342 — ĐO]** mỗi lần chỉ giữ từ câu khoá tới commit (ghi hay gặp bản lưu, một hàng sổ), không suốt phép tính.
+  Ở 5.000 gói, tám lần đọc đầu dồn hay trải 2,4 s, cạnh thử mỗi 100 ms ⇒ chờ hàng lâu nhất 22,0 ms, 0/317 lần hỏng.
   Đường đọc không còn khoá hàng nên không dựng được vòng chờ với các cạnh (khoản 126). Đo, cạnh trọn (khoá hàng gói, một hàng sổ,
   COMMIT), `UNSEALED`: sáu luồng đọc liên tục ⇒ lâu nhất 11,6 ms (trước 13,0 s, 6/30 hỏng), mười hai ⇒ 26,6 ms (trước 30/30 hỏng);
-  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274.
+  hàng đợi còn lại là khoá chuỗi sổ của tổ chức (lâu nhất 21,7 ms, trần 2 s). Biên bản §S1.274. **[2026-10-11]** Qua HTTP thật
+  (`GET /rfqs/:id/benchmark`, phiên người mua thật), mười hai vòng đọc liên tục ⇒ cạnh lâu nhất 27,2 ms, 0/60 hỏng; khi hai đường đọc
+  khoá lại như trước ⇒ 29/30 hỏng. Biên bản §S1.274 mục 8.
 
 ---
 
@@ -13048,8 +13052,33 @@ HTTP, sổ, sàn, fail-closed), phép đếm view ở `db/rls-coverage.int.test.
 
 ### Điều ADR này KHÔNG nói
 
-Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b); KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa chọn); hiệu suất từ ERP (S5, spec §10);
-Supplier Score (S5, ADR-100).
+~~Màn `/hieu-suat`, `gieo:demo --s3`, lượt đi thử T4 (S3.8b);~~ **[S1.292]** (nay ở ⑼ dưới) KPI tỷ lệ ở `/chinh-sach` (S3.9c — chưa
+chọn); hiệu suất từ ERP (S5, spec §10); Supplier Score (S5, ADR-100).
+
+### ⑼ [S1.292 / S3.8b] Màn `/hieu-suat`, bộ gieo, kịch bản 41 đọc màn
+
+Chủ dự án, 2026-10-10: *"ok, làm theo hình dạng đó"* — hình dạng trình ở cuộc trò chuyện sau khi S3.8a mở PR.
+
+⒜ **Màn chỉ đọc, một bước sau đăng nhập**, cho người giữ `bid.view`; link từ header của `/mo-thau` và `/chinh-sach` (hai trang người giữ
+`bid.view` được in link tới). Thứ tự hàng là thứ tự route trả (tên, rồi id) — không xếp, không tô màu theo con số, không điểm tổng hợp.
+⒝ **Màn không tự xét sàn.** Ô *"chưa đủ lịch sử (m/s gói)"* đọc `chuaDuLichSu` máy chủ trả; `m` là mẫu số của CHÍNH chỉ số ấy, khớp
+lời gọi `giu(…)` của `packages/kiem-soat/src/hieu-suat.ts` — gói được mời cho tỷ lệ phản hồi, gói đã nộp cho thời gian phản hồi, gói xếp
+hạng cho hạng, khoảng cách và tỷ lệ thắng. Trường không bị giữ mà vẫn rỗng (mọi lượt có chi phí hạng nhất bằng 0) hiện "—".
+⒞ **Khoảng cách trên `Number.MAX_SAFE_INTEGER` phần vạn hiện cận dưới** (*"hơn 90.071.992.547.409,91%"*): `numeric` của CSDL đi qua JSON
+thành `double`, và chữ số cuối của một số lớn hơn thế không còn là chữ số của CSDL (lượt soi THẤP-6 của §S1.291 cho một giá trị như vậy).
+⒟ **Ngôn ngữ mô tả, đo ở phạm vi màn.** Kho chưa có luật chung cấm chữ đánh giá (bảng §5 của `docs/PRODUCT.md` không có hàng ấy, và
+`cau-cam-tren-giao-dien` khớp 1:1 với bảng), nên `apps/web/src/hieu-suat.test.ts` quét ba tệp của màn và chữ module sinh ra, biên chữ theo
+Unicode, có đối chứng dương và âm. Một hàng §5 cho mọi màn là việc của chủ dự án, không của vòng này.
+⒠ **`gieo:demo --s3` chấm ba gói đã mở thay vì thêm gói.** Không lượt chấm ấy, ba nhà cung cấp đầu có 5 gói mời, 5 nộp mà chỉ 2 gói xếp
+hạng (trao thầu, TCO) — màn chỉ nói *"chưa đủ lịch sử"* ở hạng, khoảng cách, tỷ lệ thắng. Thêm gói thì đụng K10a (nhóm `DA-MO` đã 90
+triệu, cận 100 triệu) hay K3 (bậc từ 100 triệu, N = 5, cửa sổ theo người chọn). Cái giá: ba gói rời `UNSEALED` sang `EVALUATING` (lịch sử
+giá và benchmark không đổi — `gia_da_lo` không đọc trạng thái, `EVALUATING` vẫn trong tập của benchmark); số đứng ĐÚNG ở sàn — bớt một
+gói đã chấm là về dưới sàn.
+⒡ **Kịch bản 41 đọc màn.** Phép đo T1 của màn chạy trên thân viết tay; khối `[INV-K11]` cuối của kịch bản 41 HTTP đưa thân THẬT của route
+qua `docHieuSuat` và `oCuaHang` (import tương đối xuyên app như `tco.ts`), nên một trường đổi tên hay đổi kiểu ở route làm nó đỏ.
+
+Đo bằng: `apps/web/src/hieu-suat.test.ts`, các ca `/hieu-suat` của `apps/web/src/phuc-vu.test.ts`, khối kịch bản 41 ở ⒡, lượt đi thử T4
+(biên bản §S1.292).
 
 ## ADR-165 — S4.7c2: bộ bằng chứng phiên bản 3 — phép quy đổi TCO tính lại được ở mọi hàng mọi lượt, cam kết của đề xuất là điều khoản của bộ, bộ kiểm ngoại tuyến hai lớp phán cả khớp lẫn luật giải trình
 

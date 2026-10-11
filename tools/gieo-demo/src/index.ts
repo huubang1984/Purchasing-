@@ -830,6 +830,12 @@ async function chinh(): Promise<void> {
     if (traoThau !== null) await chamGoiTraoThau(pool, org, traoThau.rfqId, nguoi("soan2."));
     // [S1.286 / S4.7b2] Lượt chấm của gói TCO — dưới phiên bản 2, năm mã có nguồn; `/mo-thau` hiện hai hạng và phép tính.
     if (goiTco !== null) await chamGoiTraoThau(pool, org, goiTco.rfqId, nguoi("soan2."));
+    // [S1.292 / S3.8b] `--s3`: soan2 chấm cả ba gói đã mở (đã khai *không xung đột* ở từng gói — `goi-da-mo.ts`). Màn `/hieu-suat`
+    // đọc hạng, khoảng cách và thắng từ lượt chấm MỚI NHẤT của mỗi gói, và giữ lại mọi tỷ lệ, trung vị có mẫu dưới 5 gói theo TỪNG nhà
+    // cung cấp: không lượt này, ba nhà cung cấp đầu chỉ có 2 gói xếp hạng (gói trao thầu, gói TCO) và màn chỉ nói «chưa đủ lịch sử».
+    // Có nó: 5 gói mời, 5 nộp, 5 xếp hạng — ĐÚNG sàn; bớt một gói đã chấm là về dưới sàn. Lịch sử giá và benchmark không đổi —
+    // `gia_da_lo` không đọc trạng thái gói, EVALUATING vẫn trong tập trạng thái của benchmark.
+    if (S3) for (const g of daMo) await chamGoiTraoThau(pool, org, g.rfqId, nguoi("soan2."));
 
     const tokenNguoiMua: { readonly email: string; readonly token: string }[] = [];
     for (const nm of nguoiMua) {
@@ -885,6 +891,8 @@ async function chinh(): Promise<void> {
     for (const [ma, id] of hangChuanTheoMa) ra.push(`  ${ma.padEnd(24)} ${id}`);
     // [rà soát §S1.286 — THẤP-8] `--s3`: gói trao thầu và gói TCO đi cùng lượt worker trên ba dòng ấy — lịch sử đếm cả chúng.
     if (S3) ra.push("  Với --s3, gói trao thầu và gói TCO (dưới đây) cũng đã mở niêm phong trên ba hàng chuẩn ấy — lịch sử và benchmark đếm cả hai.");
+    // [S1.292 / S3.8b] Ba gói ấy nay ở EVALUATING, không còn ở UNSEALED.
+    if (S3) ra.push("  Với --s3, soan2 đã chấm ba gói ấy (EVALUATING) — cho màn hiệu suất nhà cung cấp dưới đây.");
     // [S1.260 / S4.5c1] Benchmark ở màn /mo-thau (spec S4 §4.6): ba gói trên là lịch sử của gói chính — đúng sàn 3 gói × 3 nhà cung
     // cấp của mẫu `NHOM_BENCHMARK_MAU` mà phiên bản 1 khai.
     ra.push("");
@@ -940,6 +948,21 @@ async function chinh(): Promise<void> {
       ra.push("  Bước 7 (soan2): «Chọn» hàng hạng 1 — hạng giá 2 — thì ô «Giải trình lệch hạng» hiện; đề xuất không giải trình bị");
       ra.push("  từ chối gọi tên, kèm giải trình thì đi qua và bước 7 hiện cam kết TCO: hai hạng lúc đề xuất, lời khai, giải trình.");
       ra.push(`  ${"gói TCO".padEnd(24)} ${goiTco.rfqId}`);
+    }
+    // [S1.292 / S3.8b] Màn hiệu suất (spec S3 §4.9, K11): chỉ gói đã mở niêm phong — năm gói ở trên (ba gói đã mở, trao thầu, TCO).
+    if (S3) {
+      ra.push("");
+      ra.push("HIỆU SUẤT NHÀ CUNG CẤP (S3.8, K11) — /hieu-suat, cho người giữ bid.view (mua sắm, tài chính, giám đốc): mỗi nhà cung cấp một");
+      ra.push("  hàng — gói được mời, đã nộp, tỷ lệ phản hồi, thời gian phản hồi trung vị, lần sửa báo giá, hạng và khoảng cách tới hạng nhất");
+      ra.push("  (trung vị), vào BAFO, thắng. Chỉ đếm gói ĐÃ MỞ NIÊM PHONG: ba nhà cung cấp đầu có đúng 5 gói (ba gói đã mở, gói trao thầu,");
+      ra.push("  gói TCO) nên hiện đủ số; Thep Hoa Sen và Vat lieu Phu My chỉ có 2 gói nên tỷ lệ và trung vị hiện «chưa đủ lịch sử», số đếm vẫn hiện.");
+      // [S1.292 / S3.8b — lượt đi thử T4] Công cụ nộp ngay sau lúc mở gói, nên ô «Phản hồi trung vị» hiện «0 giây» — nói trước để người
+      // demo không đọc nó thành một con số đo được.
+      ra.push("  «Phản hồi trung vị» hiện 0 giây vì công cụ nộp ngay sau lúc mở gói — số thật đến từ nhà cung cấp thật.");
+      ra.push("  Gói chính còn OPEN — khi nó được mở niêm phong, bảng đổi theo. Người không giữ bid.view (người quản lý dữ liệu) bị từ chối.");
+      for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("soan.") || n.email.startsWith("taichinh1.") || n.email.startsWith("duyet1.") || n.email.startsWith("dulieu."))) {
+        ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/hieu-suat#${org}:${nm.token}`);
+      }
     }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);

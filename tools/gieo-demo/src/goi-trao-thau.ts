@@ -1,7 +1,8 @@
 // ==============================================================================================
 // [S1.282 / S3.5b] GÓI TRAO THẦU — MỘT TỶ, BẬC 2, NĂM MỜI, BỐN NỘP, ĐI TỚI LƯỢT CHẤM (spec S3 §9 dòng S3.5; ADR-154 ⑼)
 //
-// `gieo:demo --s3` dừng gói chính ở OPEN (nhà cung cấp nộp tay từ link in ra) và ba gói nhỏ ở UNSEALED (lịch sử giá). Không gói nào
+// `gieo:demo --s3` dừng gói chính ở OPEN (nhà cung cấp nộp tay từ link in ra) và ba gói nhỏ ở ~~UNSEALED~~ **[S1.292 / S3.8b]** EVALUATING
+// (lịch sử giá; soan2 chấm cả ba cho màn hiệu suất). Không gói nào
 // tới trao thầu, nên người demo không gặp được một chốt nào của S3.5a. Gói này đi trọn đường sản phẩm bằng HÀM GÓI như ba gói của
 // `goi-da-mo.ts` — rồi WORKER THẬT giải mã (cùng tiến trình con, cùng lượt `chayWorkerToiKhiMo`) — và THÊM một lượt chấm, để dừng ĐÚNG
 // ở cạnh người demo phải đi tay (khuôn K10a, chủ dự án chốt 2026-10-07):
@@ -234,12 +235,15 @@ export async function gieoGoiTraoThauDenDieuPhoi(b: BoiCanhGoiTraoThau): Promise
   return { rfqId, tieuDe };
 }
 
-/** Sau khi worker đã mở: MỘT lượt chấm dưới phiên người chấm (`evaluation.perform`) — gói sang EVALUATING, cạnh người demo đi tay. */
+/**
+ * Sau khi worker đã mở: MỘT lượt chấm dưới phiên người chấm (`evaluation.perform`) — gói sang EVALUATING, cạnh người demo đi tay.
+ * [S1.292 / S3.8b] Cũng chấm gói TCO và ba gói đã mở (màn hiệu suất) — hàm không đọc gì riêng của gói trao thầu.
+ */
 export async function chamGoiTraoThau(pool: pg.Pool, org: string, rfqId: string, nguoiCham: NguoiGieo): Promise<string> {
   const luot = await withTenant(pool, org, (c) => taoLuotDanhGia(c, org, { rfqId, actorSessionId: nguoiCham.sessionId }, pool));
   const { rows } = await withTenant(pool, org, (c) =>
     c.query<{ status: string }>("SELECT p.status FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid", [rfqId]),
   );
-  if (rows[0]?.status !== "EVALUATING") throw new GoiTraoThauError(`gói trao thầu sau lượt chấm ở ${rows[0]?.status ?? "?"}, không phải EVALUATING`);
+  if (rows[0]?.status !== "EVALUATING") throw new GoiTraoThauError(`gói ${rfqId} sau lượt chấm ở ${rows[0]?.status ?? "?"}, không phải EVALUATING`);
   return luot.evaluationId;
 }

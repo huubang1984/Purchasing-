@@ -108,12 +108,16 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * trang trao vào, khuôn `dang-nhap`.
  *
  * [S1.287 / S3.7a1] `ho-so` — kiểm form, tách danh sách và che số tài khoản của màn hồ sơ Passport (`/ho-so`).
+ *
+ * [S1.292 / S3.8b] `hieu-suat` — đọc thân `GET /supplier-performance`, phần trăm, thời lượng và ô *chưa đủ lịch sử* của màn
+ * `/hieu-suat` (spec S3 §4.9, K11).
  */
 export const MODULE_WEB = [
   "so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark", "nha-cung-cap", "xung-dot",
   // [S1.286 / S4.7b2] Thước TCO ở `/nop-thau` (ô bắt buộc, lời quy đổi) và phép tính ở `/mo-thau`.
   "tco",
   "ho-so",
+  "hieu-suat",
 ] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
@@ -139,6 +143,9 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.287 / S3.7a1 / ADR-081] Màn hồ sơ Passport của NHÀ CUNG CẤP — nơi link `PASSPORT_LINK` (`/ho-so#<orgId>:<mã>`) dẫn tới.
   "/ho-so": "ho-so.html",
   "/ho-so.js": "ho-so.js",
+  // [S1.292 / S3.8b] Màn hiệu suất nhà cung cấp của người giữ `bid.view` (spec S3 §4.9, K11; ADR-163) — chỉ đọc.
+  "/hieu-suat": "hieu-suat.html",
+  "/hieu-suat.js": "hieu-suat.js",
   "/chung.css": "chung.css",
   // [S1.99 / khoản 198] HAI ĐƯỜNG MÀ SẢN PHẨM ĐÃ SINH RA LINK TỪ S1.12 MÀ KHO CHƯA BAO GIỜ PHỤC
   // VỤ. `apps/api/src/adapters/hop-thu-dev.ts` dựng `${baseUrl}/login#<mã>` cho người mua và
