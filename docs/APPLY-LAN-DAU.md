@@ -47,6 +47,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **SMS brandname Việt Nam** (tuần): hồ sơ sender ID ở AWS End User Messaging SMS, ba mẫu nội dung chép nguyên văn từ
       `apps/api/src/adapters/gui-sms.ts` (README, mục stack 85). Không có thì bỏ qua SMS ở lần đầu.
 - [ ] **Zalo OA**: xác thực OA, ứng dụng liên kết, ba template ZNS (`otp`, `duong_dan`, `han_nop`). Không có thì bỏ qua Zalo.
+      **[2026-10-10]** OA đã xác thực (chủ dự án báo). Còn: ứng dụng Zalo liên kết OA, ba template ZNS chờ duyệt, số dư ZNS,
+      refresh token — README, stack 85. Zalo nay KHÔNG cần chờ brandname SMS (5.3).
 - [ ] **[rà 2026-10-01] Ít nhất MỘT trong hai kênh trên phải xong trước khi nhà cung cấp THẬT nộp thầu** — "bỏ qua ở lần đầu"
       chỉ đúng cho lần apply. OTP không bao giờ đi cùng kênh với link (ADR-015 mục 1): `/guest/redeem` chỉ mời chọn OTP ở kênh
       KHÁC kênh link (`apps/api/src/routes/anon.ts`), link mời mặc định đi bằng thư, và kênh chưa bật thì NÉM chứ không rơi về
@@ -214,6 +216,10 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **5.3 `85-sms-zalo`** (~~tuỳ chọn,~~ **[rà 2026-10-01]** không bắt buộc cho lần apply nhưng BẮT BUỘC — nó hoặc Zalo — trước
       nhà cung cấp thật, 0.3; khi brandname đã duyệt): `-var sender_id=<BRANDNAME>`; output `sms.registered = true`.
       Xin ra khỏi sandbox SMS, đặt trần chi tiêu. Zalo: nạp secret `tp/api/zalo-oa` (README, stack 85, bước 3).
+      **[2026-10-10]** Chỉ Zalo, chưa có brandname: apply stack 85 KHÔNG truyền `sender_id` — stack chỉ dựng secret
+      `tp/api/zalo-oa` (rỗng) và quyền của `tp-api` trên nó, output `sms` là null. Apply TRƯỚC khi nạp secret.
+      **[2026-10-11]** Template duyệt xong và secret nạp xong: gửi thử ba loại tin bằng `pnpm thu-zalo` (README, stack 85,
+      bước 5) TRƯỚC khi bật `zalo` ở stack 90.
 
 ## 6. Stack 90 — chạy thật
 
