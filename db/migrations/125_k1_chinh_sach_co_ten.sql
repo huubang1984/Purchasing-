@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_k1_chinh_sach_co_ten — [S1.9101 / S3.9b / K12] HAI LỜI TỪ CHỐI CỦA ĐƯỜNG CHÍNH SÁCH CÓ TÊN, VÀO SỔ: NGƯỜI TẠO TỰ KÝ
+-- 125_k1_chinh_sach_co_ten — [S1.295 / S3.9b / K12] HAI LỜI TỪ CHỐI CỦA ĐƯỜNG CHÍNH SÁCH CÓ TÊN, VÀO SỔ: NGƯỜI TẠO TỰ KÝ
 -- PHIÊN BẢN, VÀ PHIÊN BẢN KHÔNG BẬC Ở TỔ CHỨC ĐÃ BẬT
 --
 -- Phép điều tra K12 (S3.9b) đo: nhánh *người tạo phiên bản tự ký* của `chinh_sach_kiem_nguoi_ky` là một `RAISE` không tên, nên
@@ -13,7 +13,7 @@
 -- Không vị từ hỏi trước: một câu hỏi trước câu ghi sẽ đọc người tạo mà không giữ khoá tư vấn của hàm này. Bảy nhánh còn lại (sáu
 -- `check_violation`, một `foreign_key_violation`) giữ nguyên — phép điều tra phân loại chúng (`db/dieu-tra-k12.int.test.ts`).
 --
--- THỨ TỰ KHOÁ (lượt soi trên mã §S1.9101): hàng sổ của lần từ chối ghi ở giao dịch ĐỘC LẬP trong khi giao dịch hỏng của người gọi còn
+-- THỨ TỰ KHOÁ (lượt soi trên mã §S1.295): hàng sổ của lần từ chối ghi ở giao dịch ĐỘC LẬP trong khi giao dịch hỏng của người gọi còn
 -- giữ khoá tư vấn (tổ chức, 2) tới lúc ROLLBACK. An toàn vì mọi đường lấy khoá 2 TRƯỚC khoá chuỗi sổ (tổ chức, 0) (`rfq.ts` lần mở gói);
 -- một đường tương lai lấy 0 rồi 2 sẽ làm lần ghi sổ chờ tới `lock_timeout` và lời từ chối mất sổ (55P03).
 --

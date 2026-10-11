@@ -8808,10 +8808,10 @@ $ham$;
     ],
 
     -- [S1.156 / ADR-080] Cong tac mot chieu: to chuc da bat khong tao duoc phien ban khong bac. Than no-op lat nguoc cong tac ma khong ai thay.
-    -- [S1.9101 / S3.9b / K12] Than tu `9501_k1_chinh_sach_co_ten`: nhanh tu choi mang ten rang buoc `k1_ban_khong_bac` — tang goi bat ten ay va ghi CONTROL_DENIED.
+    -- [S1.295 / S3.9b / K12] Than tu `125_k1_chinh_sach_co_ten`: nhanh tu choi mang ten rang buoc `k1_ban_khong_bac` — tang goi bat ten ay va ghi CONTROL_DENIED.
     ARRAY[
-      $q$hàm + trigger chinh_sach_da_bat_thi_phai_co_bac (069_bac_va_chu_ky_chinh_sach, thân từ 9501_k1_chinh_sach_co_ten)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_k1_chinh_sach_co_ten.sql')$q$,
+      $q$hàm + trigger chinh_sach_da_bat_thi_phai_co_bac (069_bac_va_chu_ky_chinh_sach, thân từ 125_k1_chinh_sach_co_ten)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '125_k1_chinh_sach_co_ten.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8878,10 +8878,10 @@ $ham$;
     -- [S1.156 / ADR-082 (7)] Chu ky thu hai cua phien ban chinh sach: khac nguoi tao, giu policy.manage, chi phien ban co bac. Than no-op cho mot nguoi tu ky — dung thu chu ky thu hai sinh ra de chan.
     -- [S1.166] Than tu `072_bac_cua_goi`: `signed_at` dong dau SAU khoa tu van, de thu tu gio trung thu tu khoa voi lan nop duyet (K1).
     -- [S1.236 / khoản 261] Than tu `097_chan_bat_s3_khi_con_goi_cho`: chu ky BAT S3 (chu ky dau tren phien ban co bac) bi tu choi khi to chuc con goi PENDING_APPROVAL.
-    -- [S1.9101 / S3.9b / K12] Than tu `9501_k1_chinh_sach_co_ten`: nhanh nguoi tao tu ky mang ten rang buoc `k1_nguoi_tao_tu_ky` — tang goi bat ten ay va ghi CONTROL_DENIED.
+    -- [S1.295 / S3.9b / K12] Than tu `125_k1_chinh_sach_co_ten`: nhanh nguoi tao tu ky mang ten rang buoc `k1_nguoi_tao_tu_ky` — tang goi bat ten ay va ghi CONTROL_DENIED.
     ARRAY[
-      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 9501_k1_chinh_sach_co_ten)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_k1_chinh_sach_co_ten.sql')$q$,
+      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 125_k1_chinh_sach_co_ten)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '125_k1_chinh_sach_co_ten.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

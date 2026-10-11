@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.9b / K12] BỘ ĐỌC CÂU `RAISE` TRONG THÂN HÀM PL/pgSQL
+// [S1.295 / S3.9b / K12] BỘ ĐỌC CÂU `RAISE` TRONG THÂN HÀM PL/pgSQL
 //
 // Phép điều tra K12 (`db/dieu-tra-k12.int.test.ts`) phân loại MỌI chỗ từ chối của lược đồ: mỗi câu `RAISE` mức EXCEPTION trong thân
 // cuối của mỗi hàm (`pg_proc.prosrc` sau `migrate()`). Bộ đọc này tách thân thành mã / chuỗi / chú thích trước khi tìm từ khoá — một
@@ -47,7 +47,7 @@ export function tachLoai(than: string): Loai[] {
       }
       continue;
     }
-    // [lượt soi §S1.9101 THẤP] Định danh trong nháy kép (`"it's"`) — một dấu nháy đơn bên trong không mở chuỗi. Gắn loại MÃ: tên cột hay
+    // [lượt soi §S1.295 THẤP] Định danh trong nháy kép (`"it's"`) — một dấu nháy đơn bên trong không mở chuỗi. Gắn loại MÃ: tên cột hay
     // biến không phải thông điệp, nhưng phải đi qua trọn khối để không đảo trạng thái.
     if (c === "\"") {
       i += 1;
@@ -109,7 +109,7 @@ export function boChuThich(than: string): string {
 /** Mọi câu `RAISE` của một thân hàm, theo thứ tự xuất hiện. */
 export function docRaise(than: string): CauRaise[] {
   const loai = tachLoai(than);
-  // Chú thích thành khoảng trắng; chuỗi giữ nguyên — vị trí khớp `loai`. [lượt soi §S1.9101 THẤP] Theo ĐƠN VỊ UTF-16 (`split("")`), cùng
+  // Chú thích thành khoảng trắng; chuỗi giữ nguyên — vị trí khớp `loai`. [lượt soi §S1.295 THẤP] Theo ĐƠN VỊ UTF-16 (`split("")`), cùng
   // phép đánh chỉ số của `tachLoai` — `[...s]` đi theo điểm mã và lệch một ô sau mỗi ký tự ngoài mặt phẳng cơ bản.
   const sach = than.split("").map((c, i) => (loai[i] === "K" ? " " : c)).join("");
   const ra: CauRaise[] = [];
@@ -155,7 +155,7 @@ export function docRaise(than: string): CauRaise[] {
         if (t === null) return null;
         const batDau = tuUsing + t.index + t[0].length;
         if (cauGoc[batDau] === "'") {
-          // [lượt soi §S1.9101 THẤP] Chuỗi hằng ĐỨNG MỘT MÌNH mới là tên: `'k1_' || x` là một biểu thức — tên lúc chạy khác `k1_`.
+          // [lượt soi §S1.295 THẤP] Chuỗi hằng ĐỨNG MỘT MÌNH mới là tên: `'k1_' || x` là một biểu thức — tên lúc chạy khác `k1_`.
           const ch = docChuoi(cauGoc, batDau);
           if (/^\s*(?:,|$)/u.test(matNa.slice(ch.sau))) return { chuoi: ch.giaTri, bieuThuc: null };
         }

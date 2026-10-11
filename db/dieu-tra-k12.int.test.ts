@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.9101 / S3.9b / K12] ĐIỀU TRA MỌI LỜI TỪ CHỐI TRONG THÂN HÀM — MỖI CHỖ ĐÚNG MỘT LỚP
+// [S1.295 / S3.9b / K12] ĐIỀU TRA MỌI LỜI TỪ CHỐI TRONG THÂN HÀM — MỖI CHỖ ĐÚNG MỘT LỚP
 //
 // K12 (spec S3 §5, §5.1; ADR-084 ⑷ ⑸; ADR-060): lần từ chối nói NGƯỜI DÙNG cố đi tắt một chốt thì để lại một hàng sổ; lần từ chối
 // nói dữ liệu hay cấu hình vừa đổi dưới chân họ thì không. Đo theo từng hạng mục từ S3.1 — đây là phép điều tra TRÊN TOÀN BỘ: mọi câu
 // `RAISE` mức EXCEPTION trong thân CUỐI của mọi hàm (`pg_proc` sau `migrate()`), không chỉ của S3 — chủ dự án chốt 2026-10-11, để một
-// `RAISE` mới ở BẤT KỲ đâu phải khai lớp của nó (ADR-9201).
+// `RAISE` mới ở BẤT KỲ đâu phải khai lớp của nó (ADR-166).
 //
 // Sáu lớp, mỗi chỗ đúng một (bảng `db/phan-loai-tu-choi.ts`):
 //   THEO_TEN     — tên ràng buộc có trong `CHOT_THEO_RANG_BUOC`, errcode `check_violation` (`maChotTuLoi` chỉ nhận 23514), khoá (tên, hàm,
@@ -92,7 +92,7 @@ const LA_CHECK = (ec: string): boolean => ec === "check_violation" || ec === "23
 function phanLoai(c: Cho): { readonly lop: string } | { readonly loi: string } {
   if (c.rangBuoc !== null) {
     if (Object.hasOwn(CHOT_THEO_RANG_BUOC, c.rangBuoc)) {
-      // [lượt soi §S1.9101 T1] `maChotTuLoi` chỉ nhận 23514: tên của bảng chốt dưới errcode khác không bao giờ vào sổ.
+      // [lượt soi §S1.295 T1] `maChotTuLoi` chỉ nhận 23514: tên của bảng chốt dưới errcode khác không bao giờ vào sổ.
       if (!LA_CHECK(c.errcode)) return { loi: `tên '${c.rangBuoc}' của CHOT_THEO_RANG_BUOC dưới errcode ${c.errcode} (${c.ham}) — maChotTuLoi chỉ nhận 23514` };
       const d = BANG_THEO_TEN.find((x) => x.ten === c.rangBuoc && x.ham === c.ham);
       return d === undefined ? { loi: `CHƯA PHÂN LOẠI — tên '${c.rangBuoc}' của bảng chốt ở hàm mới ${c.ham}: thêm dòng BANG_THEO_TEN kèm tệp bắt tên` } : { lop: "THEO_TEN" };
@@ -110,7 +110,7 @@ function phanLoai(c: Cho): { readonly lop: string } | { readonly loi: string } {
   return d === undefined ? { loi: `CHƯA PHÂN LOẠI — RAISE không tên (${c.ham}, ${c.errcode}): ${c.cau}` } : { lop: d.lop };
 }
 
-describe("[S1.9101 / S3.9b / K12] bộ đọc câu RAISE — văn bản mẫu đi qua từng nhánh", () => {
+describe("[S1.295 / S3.9b / K12] bộ đọc câu RAISE — văn bản mẫu đi qua từng nhánh", () => {
   it("mức, ERRCODE, tên tĩnh / động, điều kiện, SQLSTATE, ném lại; chuỗi chứa ; và '', chú thích chứa RAISE, $tag$, định danh nháy kép, chuỗi nối", () => {
     const mau = [
       "BEGIN",
@@ -147,7 +147,7 @@ describe("[S1.9101 / S3.9b / K12] bộ đọc câu RAISE — văn bản mẫu đ
   });
 });
 
-describe("[S1.9101 / S3.9b / K12] điều tra mọi lời từ chối trong thân hàm", () => {
+describe("[S1.295 / S3.9b / K12] điều tra mọi lời từ chối trong thân hàm", () => {
   it("không hàm nạp chồng nào mang RAISE — bảng khoá theo TÊN hàm; một hàm nạp chồng làm phép đo khoá theo chữ ký", async () => {
     const { rows } = await db.pool.query<{ ham: string; n: string }>(
       "SELECT p.proname AS ham, count(*)::text AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace " +
@@ -157,7 +157,7 @@ describe("[S1.9101 / S3.9b / K12] điều tra mọi lời từ chối trong thâ
     expect(rows).toEqual([]);
   });
 
-  it("[lượt soi §S1.9101 THẤP] ngoài tầm bộ đọc: không hàm nào ở ngôn ngữ thủ tục khác plpgsql, không câu ASSERT trong thân plpgsql", async () => {
+  it("[lượt soi §S1.295 THẤP] ngoài tầm bộ đọc: không hàm nào ở ngôn ngữ thủ tục khác plpgsql, không câu ASSERT trong thân plpgsql", async () => {
     const { rows } = await db.pool.query<{ ham: string; ngon: string }>(
       "SELECT p.proname AS ham, l.lanname AS ngon FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace JOIN pg_language l ON l.oid = p.prolang " +
         "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_%' AND l.lanname NOT IN ('plpgsql', 'sql', 'c', 'internal')",
@@ -233,7 +233,7 @@ describe("[S1.9101 / S3.9b / K12] điều tra mọi lời từ chối trong thâ
       const bien = bienCua(d.bieuThuc);
       if (bien === null) { lech.push(`${d.ham}: biểu thức '${d.bieuThuc}' không phải lower(<biến>)`); continue; }
       const goi = boChuThich(ham.find((h) => h.ham === d.ham)?.than ?? "");
-      // [lượt soi §S1.9101 T3] Mọi phép gán cho biến là lời gọi MỘT hàm vị từ của dòng; mọi hàm của dòng được gán; không `INTO <biến>`.
+      // [lượt soi §S1.295 T3] Mọi phép gán cho biến là lời gọi MỘT hàm vị từ của dòng; mọi hàm của dòng được gán; không `INTO <biến>`.
       const gan = [...goi.matchAll(new RegExp(String.raw`\b${bien}\s*:=\s*([^;]*);`, "gu"))].map((m) => (m[1] ?? "").trim());
       const duocGan = new Set<string>();
       for (const v of gan) {

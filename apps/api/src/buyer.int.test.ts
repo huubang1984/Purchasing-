@@ -1337,7 +1337,7 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     const ky = (id: string, ai: Nguoi): Promise<PhanHoi> => goi("POST", `/policy/${id}/sign`, ai, undefined, gocKy);
 
     // ⑴ Route không chép lại luật nào của `chinh_sach_kiem_nguoi_ky`: mỗi lời từ chối là lời của trigger, đi ra 422.
-    // [S1.9101 / S3.9b / K12] Trừ người tạo tự ký: nhánh ấy mang tên ràng buộc, tầng gói ghi `CONTROL_DENIED` và nói bằng thông điệp
+    // [S1.295 / S3.9b / K12] Trừ người tạo tự ký: nhánh ấy mang tên ràng buộc, tầng gói ghi `CONTROL_DENIED` và nói bằng thông điệp
     // của bảng chốt — vẫn 422.
     const tuChoi = [
       [await ky(v1, tcB), "Chi phien ban chinh sach CO BAC moi nhan chu ky thu hai"],

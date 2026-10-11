@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.9101 / S3.9b / K12] BẢNG PHÂN LOẠI LỜI TỪ CHỐI — dữ liệu của `db/dieu-tra-k12.int.test.ts`
+// [S1.295 / S3.9b / K12] BẢNG PHÂN LOẠI LỜI TỪ CHỐI — dữ liệu của `db/dieu-tra-k12.int.test.ts`
 //
 // Mỗi chỗ `RAISE` mức EXCEPTION trong thân cuối của mọi hàm thuộc ĐÚNG MỘT lớp. Tên ràng buộc có trong `CHOT_THEO_RANG_BUOC` không
 // có dòng ở đây (lớp THEO_TEN, vế vào sổ là `CHOT_VAO_SO`). Dòng không tên khoá theo (hàm, errcode) và đếm số câu: một câu mới cùng
 // khoá làm phép đếm lệch, và người viết phải phân loại lại. Lớp và lý do đọc từ mã lúc viết (ba lượt tra chỉ đọc, kiểm lại từng
-// khoảng trống — biên bản §S1.9101); khi một nhóm gom nhánh khác lớp, lý do nói nhánh khác ấy.
+// khoảng trống — biên bản §S1.295); khi một nhóm gom nhánh khác lớp, lý do nói nhánh khác ấy.
 //
 // Lớp (xem đầu tệp test): HOI_TRUOC — tầng ứng dụng hỏi trước và từ chối ở đó, câu RAISE là lớp chặn cuối; SO_RIENG — tầng gói bắt
 // CHÍNH lỗi theo tên và ghi một hàng sổ của riêng nó (`BID_STATE_DENIED`, `BID_DEADLINE_DENIED`, `UNSEAL_NOT_FOUND_DENIED`);
@@ -75,7 +75,7 @@ export const BANG_TEN: readonly DongTen[] = [
   { ten: "anh_xa_khong_co_hang_muc", ham: "goi_y_kiem_luat", so: 1, lop: "HOI_TRUOC", lyDo: "ghiAnhXa hỏi dòng trước (KHONG_CO_HANG_MUC)" },
   { ten: "anh_xa_ma_ly_do_danh_rieng", ham: "anh_xa_kiem_luat", so: 1, lop: "KHONG_VAO_SO", lyDo: "gửi lyDo dành riêng là lỗi nhập; 422 không sổ" },
   { ten: "anh_xa_nguoi_duyet_can_item_manage", ham: "anh_xa_kiem_luat", so: 1, lop: "HOI_TRUOC", lyDo: "ba route khai item.manage → PERMISSION_DENIED" },
-  { ten: "anh_xa_nguoi_duyet_trong_tap_loai_tru", ham: "anh_xa_kiem_luat", so: 1, lop: "KHOANG_TRONG", lyDo: "người trong tập loại trừ có item.manage tự ánh xạ gói mình: 422 TRONG_TAP_LOAI_TRU, không CONTROL_DENIED; spec S4 L12 (:806) đòi vào sổ (ERRCODE 42501 — maChotTuLoi chỉ nhận 23514) — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ten: "anh_xa_nguoi_duyet_trong_tap_loai_tru", ham: "anh_xa_kiem_luat", so: 1, lop: "KHOANG_TRONG", lyDo: "người trong tập loại trừ có item.manage tự ánh xạ gói mình: 422 TRONG_TAP_LOAI_TRU, không CONTROL_DENIED; spec S4 L12 (:806) đòi vào sổ (ERRCODE 42501 — maChotTuLoi chỉ nhận 23514) — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
   { ten: "anh_xa_sau_ban_ro_can_ly_do", ham: "anh_xa_kiem_luat", so: 1, lop: "KHONG_VAO_SO", lyDo: "thiếu lý do sau bản rõ (L13): lỗi nhập" },
   { ten: "anh_xa_tu_dong_da_co_anh_xa", ham: "anh_xa_kiem_luat", so: 1, lop: "BAT_BIEN", lyDo: "chuanHoaGoi bỏ dòng đã có, cùng khoá tư vấn" },
   { ten: "anh_xa_tu_dong_khong_khop_bi_danh", ham: "anh_xa_kiem_luat", so: 1, lop: "BAT_BIEN", lyDo: "TU_DONG chỉ khi app vừa đọc bí danh khớp dưới cùng khoá" },
@@ -226,7 +226,7 @@ export const BANG_KHONG_TEN: readonly DongKhongTen[] = [
   { ham: "ncc_kiem_xac_minh", errcode: "check_violation", so: 6, lop: "KHONG_VAO_SO", lyDo: "dữ liệu (chưa bật, thiếu MST, không ACTIVE...); supplier.qualify hỏi trước" },
   { ham: "ncc_kiem_xac_minh", errcode: "foreign_key_violation", so: 1, lop: "BAT_BIEN", lyDo: "supplierId sai" },
   { ham: "ngan_sach_khong_ghim_ban_chua_ky", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "setRfqBudget luôn ghim chinh_sach_hieu_luc" },
-  { ham: "ngoai_le_kiem", errcode: "check_violation", so: 5, lop: "KHONG_VAO_SO", lyDo: "dữ liệu (chưa bật, đã rút); nhánh rút ngoại lệ của GÓI KHÁC qua URL của gói mình là khoảng trống — khoản 9401" },
+  { ham: "ngoai_le_kiem", errcode: "check_violation", so: 5, lop: "KHONG_VAO_SO", lyDo: "dữ liệu (chưa bật, đã rút); nhánh rút ngoại lệ của GÓI KHÁC qua URL của gói mình là khoảng trống — khoản 353" },
   { ham: "ngoai_le_kiem", errcode: "foreign_key_violation", so: 1, lop: "BAT_BIEN", lyDo: "rfqId sai" },
   { ham: "nhom_hang_kiem_doi", errcode: "check_violation", so: 1, lop: "HOI_TRUOC", lyDo: "requirePermission(category.manage)" },
   { ham: "nhom_hang_kiem_nguoi_tao", errcode: "check_violation", so: 1, lop: "HOI_TRUOC", lyDo: "như 62" },
@@ -241,7 +241,7 @@ export const BANG_KHONG_TEN: readonly DongKhongTen[] = [
   { ham: "rfq_bac_cua", errcode: "check_violation", so: 4, lop: "BAT_BIEN", lyDo: "người gọi chỉ gọi khi có bậc và tiền tệ khớp; bậc đầu 0" },
   { ham: "rfq_bac_cua", errcode: "foreign_key_violation", so: 1, lop: "BAT_BIEN", lyDo: "policy_id luôn bản đã ghim; phiên bản không xoá được" },
   { ham: "rfq_bac_ghim", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "tier_tu_so_tien tính từ tiers của bản ghim" },
-  { ham: "rfq_budgets_chi_sua_khi_soan", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "setRfqBudget không hỏi trạng thái; sửa ngân sách gói đã nộp/mở 422 không sổ — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "rfq_budgets_chi_sua_khi_soan", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "setRfqBudget không hỏi trạng thái; sửa ngân sách gói đã nộp/mở 422 không sổ — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
   { ham: "rfq_can_phe_duyet_kep", errcode: "check_violation", so: 1, lop: "HOI_TRUOC", lyDo: "setRfqBudget so tiền tệ trước (RfqError lỗi nhập)" },
   { ham: "rfq_chot_canh_tranh", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "validator 069 đòi so_ncc_toi_thieu" },
   { ham: "rfq_chot_lan_nop_da_xem", errcode: "check_violation", so: 4, lop: "KHONG_VAO_SO", lyDo: "chủ dự án chốt: gói đổi sau lúc đọc, 422 không sổ" },
@@ -253,17 +253,17 @@ export const BANG_KHONG_TEN: readonly DongKhongTen[] = [
   { ham: "rfq_invitations_kiem_danh_sach", errcode: "check_violation", so: 2, lop: "BAT_BIEN", lyDo: "danhDauDaGui chỉ UNSENT→SENT khi OPEN" },
   { ham: "rfq_invitations_kiem_danh_sach", errcode: "foreign_key_violation", so: 1, lop: "KHONG_VAO_SO", lyDo: "rfqId lạ trên route CRUD; không-tìm-thấy hàng cha ngoài sổ (khoản 133 giữ CRUD)" },
   { ham: "rfq_items_cam_truncate", errcode: "insufficient_privilege", so: 1, lop: "BAT_BIEN", lyDo: "chỉ raw SQL TRUNCATE" },
-  { ham: "rfq_items_chi_sua_khi_soan", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "addRfqItem không hỏi trạng thái; thêm hạng mục sau DRAFT 422 không sổ — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "rfq_items_chi_sua_khi_soan", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "addRfqItem không hỏi trạng thái; thêm hạng mục sau DRAFT 422 không sổ — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
   { ham: "rfq_key_material_bat_bien", errcode: "check_violation", so: 10, lop: "BAT_BIEN", lyDo: "vật liệu khoá bất biến; purge không caller production" },
-  { ham: "rfq_khoa_chi_sinh_luc_mo", errcode: "check_violation", so: 1, lop: "KHOANG_TRONG", lyDo: "mở gói không ở PENDING_APPROVAL: vị từ cho qua, trigger C5, 422 không sổ (suy) — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "rfq_khoa_chi_sinh_luc_mo", errcode: "check_violation", so: 1, lop: "KHOANG_TRONG", lyDo: "mở gói không ở PENDING_APPROVAL: vị từ cho qua, trigger C5, 422 không sổ (suy) — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
   { ham: "rfq_khoa_chi_sinh_luc_mo", errcode: "foreign_key_violation", so: 1, lop: "KHONG_VAO_SO", lyDo: "rfqId lạ ở /open; không-tìm-thấy CRUD" },
   { ham: "rfq_khoa_chi_thu_hoi_khi_huy", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "chỉ cancelRfq thu hồi sau CANCELLED" },
   { ham: "rfq_khoa_phai_di_kem_lan_mo", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "đúc khoá rồi UPDATE OPEN; 0 hàng thì ném" },
   { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", errcode: "check_violation", so: 3, lop: "KHONG_VAO_SO", lyDo: "chữ ký K4b thiếu vì băm danh sách đổi sau lúc ký: dữ liệu đổi dưới chân người mở gói (ADR-060), cùng lý lẽ K9_KHAI_BAO_LOI_THOI — chủ dự án chốt 2026-10-11 (một trong hai nợ đã gọi tên của §S1.202)" },
-  { ham: "rfq_kiem_chuyen_trang_thai", errcode: "check_violation", so: 15, lop: "HOI_TRUOC", lyDo: "mọi câu đổi trạng thái có vế WHERE status; vế gia hạn ở PENDING_APPROVAL không hỏi trước — khoản 9401" },
+  { ham: "rfq_kiem_chuyen_trang_thai", errcode: "check_violation", so: 15, lop: "HOI_TRUOC", lyDo: "mọi câu đổi trạng thái có vế WHERE status; vế gia hạn ở PENDING_APPROVAL không hỏi trước — khoản 353" },
   { ham: "rfq_kiem_khoa_khi_mo", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "openRfq luôn đúc khoá trước UPDATE OPEN" },
   { ham: "rfq_kiem_ngan_sach_khi_nop", errcode: "check_violation", so: 1, lop: "HOI_TRUOC", lyDo: "kiemChot(CAU_CHOT_NGAN_SACH); THIEU_NGAN_SACH" },
-  { ham: "rfq_kiem_nguoi_duyet", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "duyệt gói không ở PENDING_APPROVAL (DRAFT, OPEN…): approveRfq không hỏi trạng thái, nhánh không tên đi thẳng 422 không hàng sổ — song sinh của nhánh *không PENDING* ở unseal_kiem_nguoi_duyet; lượt soi trên mã §S1.9101 T4: một luật cho cả hai — khoản 9401" },
+  { ham: "rfq_kiem_nguoi_duyet", errcode: "check_violation", so: 2, lop: "KHOANG_TRONG", lyDo: "duyệt gói không ở PENDING_APPROVAL (DRAFT, OPEN…): approveRfq không hỏi trạng thái, nhánh không tên đi thẳng 422 không hàng sổ — song sinh của nhánh *không PENDING* ở unseal_kiem_nguoi_duyet; lượt soi trên mã §S1.295 T4: một luật cho cả hai — khoản 353" },
   { ham: "rfq_kiem_nguoi_tao", errcode: "check_violation", so: 3, lop: "BAT_BIEN", lyDo: "người tạo và phiên dẫn xuất từ resolveSessionActor" },
   { ham: "rfq_kiem_nguong_phe_duyet_kep", errcode: "check_violation", so: 2, lop: "BAT_BIEN", lyDo: "chỉ setRfqBudget hạ cờ kép bằng chính hàm so" },
   { ham: "rfq_kiem_nhom_hang_khi_nop", errcode: "check_violation", so: 1, lop: "HOI_TRUOC", lyDo: "kiemChot(CAU_CHOT_NHOM_HANG); THIEU_NHOM_HANG" },
@@ -286,9 +286,9 @@ export const BANG_KHONG_TEN: readonly DongKhongTen[] = [
   { ham: "unseal_dieu_phoi_mot_lan", errcode: "check_violation", so: 1, lop: "BAT_BIEN", lyDo: "chỉ đặt khi IS NULL" },
   { ham: "unseal_kiem_chuyen_trang_thai", errcode: "check_violation", so: 3, lop: "BAT_BIEN", lyDo: "mọi câu đổi trạng thái có vế WHERE (3 câu thật — câu thứ 4 của regex là chú thích)" },
   { ham: "unseal_kiem_du_phe_duyet", errcode: "check_violation", so: 4, lop: "HOI_TRUOC", lyDo: "approveUnseal đếm phê duyệt trước UPDATE; break-glass qua HTTP luôn 422" },
-  { ham: "unseal_kiem_nguoi_duyet", errcode: "check_violation", so: 3, lop: "KHOANG_TRONG", lyDo: "vế \"không PENDING\" 422 không sổ, trái tiền lệ UNSEAL_CANCEL_DENIED; hai vế D2 đã vào sổ — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
-  { ham: "unseal_kiem_rfq_da_dong", errcode: "check_violation", so: 3, lop: "KHOANG_TRONG", lyDo: "requestUnseal không hỏi trạng thái gói; xin mở thầu gói chưa đóng (C3) 422 không sổ — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
-  { ham: "unseal_kiem_rfq_da_dong", errcode: "foreign_key_violation", so: 1, lop: "KHOANG_TRONG", lyDo: "rfqId lạ trên đường có cổng của bề mặt mở thầu → 23503 trần, không UNSEAL_NOT_FOUND_DENIED (khoản 133) — khoản 9401, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "unseal_kiem_nguoi_duyet", errcode: "check_violation", so: 3, lop: "KHOANG_TRONG", lyDo: "vế \"không PENDING\" 422 không sổ, trái tiền lệ UNSEAL_CANCEL_DENIED; hai vế D2 đã vào sổ — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "unseal_kiem_rfq_da_dong", errcode: "check_violation", so: 3, lop: "KHOANG_TRONG", lyDo: "requestUnseal không hỏi trạng thái gói; xin mở thầu gói chưa đóng (C3) 422 không sổ — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
+  { ham: "unseal_kiem_rfq_da_dong", errcode: "foreign_key_violation", so: 1, lop: "KHOANG_TRONG", lyDo: "rfqId lạ trên đường có cổng của bề mặt mở thầu → 23503 trần, không UNSEAL_NOT_FOUND_DENIED (khoản 133) — khoản 353, chủ dự án chốt 2026-10-11 ghi nợ, sửa vòng riêng" },
   { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", errcode: "check_violation", so: 2, lop: "BAT_BIEN", lyDo: "chỉ worker ghi bản rõ dưới yêu cầu APPROVED" },
   { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", errcode: "foreign_key_violation", so: 1, lop: "BAT_BIEN", lyDo: "worker dùng chính id yêu cầu đang chạy" },
 ];

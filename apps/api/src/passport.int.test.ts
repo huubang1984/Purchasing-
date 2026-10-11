@@ -202,7 +202,7 @@ interface PhanHoi {
   readonly body: Record<string, unknown>;
   readonly text: string;
   readonly setCookie: string[];
-  /** [S1.9101 / S3.9b] Header `retry-after` — ca đường đua đo 429 của trần yêu cầu. */
+  /** [S1.295 / S3.9b] Header `retry-after` — ca đường đua đo 429 của trần yêu cầu. */
   readonly retryAfter: string | null;
 }
 async function goi(method: string, duong: string, cookie: string | null, than?: unknown): Promise<PhanHoi> {
@@ -669,10 +669,10 @@ const tokenIdCua = async (token: string): Promise<string> =>
     .id;
 
 describe("[S1.287 / S3.7a1] F — đột biến lớp CSDL", () => {
-  // [S1.9101 / S3.9b — phép điều tra K12] Đường ĐUA của yêu cầu: hàm vị từ ở tầng gói cho qua, trigger của câu INSERT từ chối với tên
+  // [S1.295 / S3.9b — phép điều tra K12] Đường ĐUA của yêu cầu: hàm vị từ ở tầng gói cho qua, trigger của câu INSERT từ chối với tên
   // `lower(ly_do)`. Dựng tất định bằng cách cho trigger ném đúng một mã dù hàm vị từ nói qua. Trước vòng này `PassportYeuCauError` đi ra 500
   // (không có trong `LOI_NGHIEP_VU_422` của bộ điều phối); nay cùng hợp đồng với nhánh thường: 422 mang mã, 429 + `retry-after` cho trần.
-  it("[S1.9101 / S3.9b] đường đua: trigger từ chối sau khi hàm vị từ cho qua ⇒ 422 mang mã (không 500); trần ⇒ 429 kèm retry-after", async () => {
+  it("[S1.295 / S3.9b] đường đua: trigger từ chối sau khi hàm vị từ cho qua ⇒ 422 mang mã (không 500); trần ⇒ 429 kèm retry-after", async () => {
     const t = await taoToChuc();
     for (const [ma, trangThai] of [["PASSPORT_NCC_CHUA_XAC_MINH", 422], ["PASSPORT_QUA_TRAN_YEU_CAU", 429]] as const) {
       const n = await ncc(t);

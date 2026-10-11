@@ -205,7 +205,7 @@ function nhomChuoiJson(tho: unknown, ten: string): string | null {
  * `UPDATE`/`DELETE` trên bảng này (014). Sửa được ngưỡng của một phiên bản đã dùng nghĩa là phân
  * loại của mọi RFQ cũ đổi theo mà không ai biết — tức "tái lập được" thành một lời hứa rỗng.
  *
- * [S1.9101 / S3.9b / K12] Một lời từ chối vào sổ: phiên bản KHÔNG bậc ở tổ chức đã bật — trigger đặt tên `k1_ban_khong_bac`, hàm này bắt
+ * [S1.295 / S3.9b / K12] Một lời từ chối vào sổ: phiên bản KHÔNG bậc ở tổ chức đã bật — trigger đặt tên `k1_ban_khong_bac`, hàm này bắt
  * chính lời có tên ấy (`maChotTuLoi`, khuôn ADR-108) và ghi `CONTROL_DENIED` ở giao dịch độc lập (`auditPool`), tài nguyên là tổ chức (phiên
  * bản chưa có mã). Lời từ chối khác của câu INSERT đi ra như trước.
  */
@@ -293,15 +293,15 @@ export interface ChuKyChinhSach {
 /**
  * [S1.169 / S3.1c / ADR-082 ⑺] Ký một phiên bản chính sách có bậc — và lần ký đầu tiên như thế BẬT S3 cho tổ chức.
  *
- * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ ~~`097_chan_bat_s3_khi_con_goi_cho`~~ [S1.9101]
- * `9501_k1_chinh_sach_co_ten`): phiên bản
+ * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ ~~`097_chan_bat_s3_khi_con_goi_cho`~~ [S1.295]
+ * `125_k1_chinh_sach_co_ten`): phiên bản
  * có bậc, người ký khác người tạo và giữ `policy.manage`, là phiên bản MỚI NHẤT, đã tới ngày hiệu lực, dưới khoá tư vấn theo tổ
  * chức; [S1.236 / khoản 261] lần ký BẬT S3 (tổ chức chưa bật) chỉ nhận dưới READ COMMITTED và khi tổ chức không còn gói chờ
  * duyệt — gói nộp dưới luật MVP1 không đi qua lần bật; `signed_by` dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); mỗi phiên
  * bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ
  * để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
  *
- * [S1.9101 / S3.9b / K12] Một nhánh vào sổ: người TẠO phiên bản tự ký — trigger đặt tên `k1_nguoi_tao_tu_ky`, hàm này bắt CHÍNH lời
+ * [S1.295 / S3.9b / K12] Một nhánh vào sổ: người TẠO phiên bản tự ký — trigger đặt tên `k1_nguoi_tao_tu_ky`, hàm này bắt CHÍNH lời
  * từ chối có tên ấy (`maChotTuLoi`, khuôn ADR-108) và ghi một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP (`auditPool`) — giao dịch của
  * người gọi đã hỏng theo câu INSERT. Các nhánh còn lại đi ra như trước: phép điều tra K12 phân loại từng nhánh
  * (`db/dieu-tra-k12.int.test.ts`).
