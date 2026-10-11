@@ -50,6 +50,12 @@ import { TEP_DAC_TA, TEP_DU_LIEU, docBenchmark, docDaiBenchmark, dungBoBangChung
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
+// [khoản 352] Hai khẳng định "hàng sổ không mang giá" của ⑽ tìm DÃY CHỮ SỐ của giá (`112`, `107.5`, `103.25`) trong cả chuỗi JSON
+// của payload — mà payload mang `rfqId`, `snapshotId`, `viewedBySessionId` (UUID ngẫu nhiên), và ba chữ số `112` nằm trong một UUID
+// với xác suất cỡ 0,7 %: evidence cục bộ của S3.7a2 (2026-10-10) đỏ đúng hai ca ấy mà không giá nào lọt. Cùng lớp khoản 347 — lượt
+// tìm của khoản ấy chỉ quét dãy từ bốn chữ số. Thay mọi UUID bằng một nhãn cố định TRƯỚC khi tìm; mọi chỗ khác của chuỗi vẫn bị tìm.
+const MAU_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+const boUuid = (s: string): string => s.replace(MAU_UUID, "<uuid>");
 
 interface Nguoi {
   readonly nguoi: string;
@@ -1847,7 +1853,12 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.276 / S4.6b] lịch sử mua ngoài và m�
       [orgA, rfqN],
     );
     expect(rows[0]!.payload).toMatchObject({ soDongNgoai: 3, soMocNgoai: 1, nguon: "BAN_LUU" });
-    expect(JSON.stringify(rows[0]!.payload)).not.toMatch(/107\.5|112/u);
+    const json = boUuid(JSON.stringify(rows[0]!.payload));
+    expect(json, "chuỗi đã có UUID để bỏ — phép tìm dưới đây không rỗng ruột").toContain("<uuid>");
+    expect(json).not.toMatch(/107\.5|112/u);
+    // Đối chứng hai chiều của `boUuid`: một UUID mang `112` thôi khớp, một giá `112` ngoài UUID vẫn khớp.
+    expect(boUuid('{"rfqId":"6e112a0b-1120-4112-8112-000000000112"}')).not.toMatch(/112/u);
+    expect(boUuid('{"rfqId":"6e112a0b-1120-4112-8112-000000000112","gia":112}')).toMatch(/112/u);
   });
 
   it("Xem dải: số của dải ngoài, nguồn, ghi/rút SAU mốc chỉ đếm; mốc ngoài theo kg (không nhãn); độ lệch của từng báo giá; nhãn ngoài khớp bản lưu", async () => {
@@ -1870,7 +1881,9 @@ describe("[INV-L15] [INV-L1] ⑽ [S1.276 / S4.6b] lịch sử mua ngoài và m�
       [orgA, rfqN],
     );
     expect(rows[0]!.payload).toMatchObject({ soDai: 1, soDaiNgoai: 1, soMocNgoai: 1 });
-    expect(JSON.stringify(rows[0]!.payload)).not.toMatch(/107\.5|112|103\.25/u);
+    const json = boUuid(JSON.stringify(rows[0]!.payload));
+    expect(json, "chuỗi đã có UUID để bỏ — phép tìm dưới đây không rỗng ruột").toContain("<uuid>");
+    expect(json).not.toMatch(/107\.5|112|103\.25/u);
   });
 
   it("người giữ `bid.view` đọc được; TECHNICAL (không `bid.view`) bị từ chối ở cả hai bộ đọc", async () => {
