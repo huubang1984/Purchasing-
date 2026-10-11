@@ -11,6 +11,10 @@
 # Đường ra: SMS và Zalo đi qua NAT của subnet api (stack 90) — task api không có đường ra nào khác.
 #
 # Tài khoản: prod. Profile: tp-prod (AdministratorAccess). Chạy sau 30 (role tp-api).
+#
+# [2026-10-10] SMS là TUỲ CHỌN: `sender_id` để trống (mặc định null) thì stack chỉ dựng phần Zalo — secret và quyền
+# của `tp-api` trên nó. Brandname Việt Nam duyệt tính bằng tuần; bản trước bắt buộc `sender_id` nên kênh Zalo không
+# dựng được khi chưa có brandname. Có brandname rồi thì apply lại với `-var sender_id=<BRANDNAME>`.
 
 terraform {
   required_version = ">= 1.10"
@@ -30,11 +34,12 @@ terraform {
 module "chung" { source = "../chung" }
 
 variable "sender_id" {
-  description = "Brandname SMS (1–11 ký tự chữ/số), trùng tên đã đăng ký với nhà mạng Việt Nam."
+  description = "Brandname SMS (1–11 ký tự chữ/số), trùng tên đã đăng ký với nhà mạng Việt Nam. null = chưa bật SMS, chỉ dựng Zalo."
   type        = string
+  default     = null
   validation {
-    condition     = can(regex("^[A-Za-z0-9]{1,11}$", var.sender_id))
-    error_message = "sender_id là 1–11 ký tự chữ/số."
+    condition     = var.sender_id == null || can(regex("^[A-Za-z0-9]{1,11}$", var.sender_id))
+    error_message = "sender_id là 1–11 ký tự chữ/số, hoặc để trống khi chưa bật SMS."
   }
 }
 
@@ -49,12 +54,14 @@ locals {
   prod   = module.chung.account.prod
   region = module.chung.region
   role   = module.chung.role
+  co_sms = var.sender_id != null
 }
 
 # ---------------------------------------------------------------------------------------------
 # SMS
 # ---------------------------------------------------------------------------------------------
 resource "aws_pinpointsmsvoicev2_sender_id" "vn" {
+  count                       = local.co_sms ? 1 : 0
   sender_id                   = var.sender_id
   iso_country_code            = "VN"
   message_types               = ["TRANSACTIONAL"]
@@ -62,27 +69,30 @@ resource "aws_pinpointsmsvoicev2_sender_id" "vn" {
 }
 
 resource "aws_pinpointsmsvoicev2_configuration_set" "sms" {
+  count                = local.co_sms ? 1 : 0
   name                 = "tp-sms"
   default_message_type = "TRANSACTIONAL"
   default_sender_id    = var.sender_id
 }
 
 data "aws_iam_policy_document" "sms" {
+  count = local.co_sms ? 1 : 0
   statement {
     sid     = "GuiTuDungMotSenderId"
     actions = ["sms-voice:SendTextMessage"]
     resources = [
-      aws_pinpointsmsvoicev2_sender_id.vn.arn,
-      aws_pinpointsmsvoicev2_configuration_set.sms.arn,
+      aws_pinpointsmsvoicev2_sender_id.vn[0].arn,
+      aws_pinpointsmsvoicev2_configuration_set.sms[0].arn,
       "arn:aws:sms-voice:${local.region}:${local.prod}:opt-out-list/Default",
     ]
   }
 }
 
 resource "aws_iam_role_policy" "sms" {
+  count  = local.co_sms ? 1 : 0
   name   = "gui-sms"
   role   = local.role.api
-  policy = data.aws_iam_policy_document.sms.json
+  policy = data.aws_iam_policy_document.sms[0].json
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -109,12 +119,12 @@ resource "aws_iam_role_policy" "zalo" {
 }
 
 output "sms" {
-  description = "Giá trị cho biến `sms` của stack 90."
-  value = {
+  description = "Giá trị cho biến `sms` của stack 90; null khi chưa bật SMS (biến `sms` của stack 90 để null)."
+  value = local.co_sms ? {
     danh_tinh_gui     = var.sender_id
-    configuration_set = aws_pinpointsmsvoicev2_configuration_set.sms.name
-    registered        = aws_pinpointsmsvoicev2_sender_id.vn.registered
-  }
+    configuration_set = aws_pinpointsmsvoicev2_configuration_set.sms[0].name
+    registered        = aws_pinpointsmsvoicev2_sender_id.vn[0].registered
+  } : null
 }
 
 output "zalo_secret_arn" { value = aws_secretsmanager_secret.zalo.arn }
