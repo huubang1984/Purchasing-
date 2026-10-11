@@ -1394,9 +1394,17 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     expect(((await goi("GET", "/policy", tcA, undefined, gocKy)).body as { policy: { version: number } }).policy.version).toBe(3);
 
     // ⑹ Đã bật thì phiên bản mới phải có bậc, và bậc sai hình đi ra với lời của `069` — hai tầng, mỗi tầng một việc.
+    // [S1.295 / S3.9b / K12] Phiên bản KHÔNG bậc mang tên ràng buộc `k1_ban_khong_bac`: tầng gói ghi `CONTROL_DENIED` — tài nguyên là
+    // tổ chức, phiên bản chưa có mã (ADR-166 ⒡) — và nói bằng thông điệp của bảng chốt; bậc sai hình vẫn là lời của `069`.
     const moi = { version: 4, dualApprovalThreshold: "1000000000.00", currency: "VND" };
     const khongBac = await goi("POST", "/policy", tcA, moi, gocKy);
-    expect([khongBac.status, khongBac.text]).toEqual([422, expect.stringContaining("phien ban chinh sach moi phai khai bac gia tri")]);
+    expect([khongBac.status, khongBac.text]).toEqual([422, expect.stringContaining("phiên bản chính sách mới phải khai bậc giá trị")]);
+    const { rows: chotKhongBac } = await db.pool.query<{ actor: string; loai: string; res: string; payload: unknown }>(
+      "SELECT actor_id::text AS actor, resource_type AS loai, resource_id::text AS res, payload FROM audit_events " +
+        "WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND payload->>'ma' = 'K1_BAN_KHONG_BAC'",
+      [org],
+    );
+    expect(chotKhongBac).toEqual([{ actor: tcA.id, loai: "PROCUREMENT_POLICY", res: org, payload: { ma: "K1_BAN_KHONG_BAC" } }]);
     const bacLech = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: [{ ...BAC[0], tu_so_tien: 5 }, BAC[1]] }, gocKy);
     expect([bacLech.status, bacLech.text]).toEqual([422, expect.stringContaining("bac dau phai co tu_so_tien = 0")]);
     const khongMang = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: "bac" }, gocKy);

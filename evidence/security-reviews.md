@@ -27837,7 +27837,15 @@ Ngày 2026-10-11, giờ máy UTC+7.
   t0 mà không kiểm trước lượt đột biến. Mọi đột biến ra đúng tập dự kiến; lượt evidence của phiên kia có thể mang đỏ giả do lượt này.
 - Trên `3b17f44e` (sau gộp #277 và `cap-so`; bắt đầu 10:32 sau ~25 phút xếp hàng sau lượt evidence ấy): `pnpm t0` 60 s (depcruise 595
   module, 0 vi phạm); `pnpm test` 162 / 165 tệp qua, **5 ca đỏ ở một tệp** — P11 của H20: hàng 353 trỏ `§S1.295` khi biên bản này chưa nối
-  vào `evidence/security-reviews.md` (bốn ca kia của P11 đọc cùng tệp thật). Lượt chạy lại sau khi nối và lượt evidence: ở thân PR.
+  vào `evidence/security-reviews.md` (bốn ca kia của P11 đọc cùng tệp thật). Nối biên bản (`a390a5e5`): `pnpm test` 163 / 165 tệp,
+  2922 ca, 0 đỏ, 135 s.
+- Lượt evidence một, trên `a390a5e5` (10:40–11:16, máy chỉ có lượt này): **vitest thoát mã 1**, 2 151 s; 92/92, 5426 khẳng định, cổng
+  *XANH* — dòng *vitest thoát mã* mới là tín hiệu. Hai ca đỏ, CẢ HAI do vòng này: ⑴ `rfq.int` — phép so hai chiều giữa tên trong thân 13
+  hàm và `CHOT_THEO_RANG_BUOC` thiếu hai tên K1 mới (thêm hai trigger chính sách vào phép đọc, 15 hàm); ⑵ `buyer.int` ⑹ — bản không bậc
+  nay nói bằng thông điệp của bảng chốt chứ không bằng lời của `069` (sửa chuỗi, thêm khẳng định đúng một hàng `CONTROL_DENIED` trỏ tổ
+  chức ở tầng route). Lượt int trước commit chạy hai tệp ấy bằng `-t` — lọc theo tên bỏ qua mọi ca khác của tệp (khuôn đã có trong bộ
+  nhớ phiên, vi phạm lần nữa). Chú thích tự ký của kịch bản 41 HTTP sửa theo (kịch bản xanh — không khẳng định lời; hai phép đếm sổ của
+  nó lọc theo mã gói). Lượt chạy lại: ở thân PR.
 
 ## 10. Giới hạn
 - Lớp là LỜI KHAI có lý do đọc từ mã — phép đo giữ nó không trôi khỏi thân hàm, không chứng minh nó đúng (ADR-166 ⒜). Lớp theo nhóm (hàm, errcode).

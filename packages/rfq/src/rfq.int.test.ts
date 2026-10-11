@@ -1737,7 +1737,7 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // tên tĩnh ở mọi thân cộng mã `RETURN 'K9_…'` của ba hàm vị từ viết thường — một TẬP, vì một tên có thể đứng ở hai thân.
   // [S1.280 / S3.5a] Và ba trigger của award theo bậc (`113`): chúng đặt tên ràng buộc bằng `lower(ly_do)` — mã do bốn hàm vị từ trả —,
   // nên vế *tên trong thân* gom thêm mọi `RETURN 'K…'` của bốn hàm vị từ (viết thường); `ngoai_le_kiem` (thân `113`) đặt thêm một tên K2b.
-  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ), các trigger K9 (qua ba hàm vị từ) và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  it("tên ràng buộc ở ba trigger J3/D2, hai trigger K4a, ~~trigger K8a~~ [S1.278 / khoản 344] hai trigger K8a, trigger L14, ba trigger award theo bậc (qua bốn hàm vị từ), các trigger K9 (qua ba hàm vị từ), [S1.295 / S3.9b] hai trigger K1 của phiên bản chính sách và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
@@ -1746,9 +1746,10 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
         "'public.ncc_kiem_them_lien_he()'::regprocedure, " +
         "'public.coi_kiem_khai_bao()'::regprocedure, 'public.coi_kiem_trao_thau()'::regprocedure, " +
         "'public.coi_chot_hanh_dong(uuid, uuid, uuid)'::regprocedure, 'public.coi_chot_xac_minh(uuid, uuid, uuid)'::regprocedure, " +
-        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure)",
+        "'public.rfq_chot_chu_ky_xung_dot(uuid, uuid)'::regprocedure, " +
+        "'public.chinh_sach_kiem_nguoi_ky()'::regprocedure, 'public.chinh_sach_da_bat_thi_phai_co_bac()'::regprocedure)",
     );
-    expect(rows).toHaveLength(13);
+    expect(rows).toHaveLength(15);
     const { rows: viTu } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.award_chot_bac(uuid, uuid, uuid)'::regprocedure, " +
         "'public.award_chot_nguoi_ky(uuid, uuid, uuid)'::regprocedure, 'public.award_chot_hau_kiem(uuid, uuid, uuid, uuid)'::regprocedure, " +
