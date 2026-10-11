@@ -412,3 +412,34 @@ describe("[S1.216 / khoản 195] đường tự xem link đăng nhập gần đ�
     expect(timViPhamBangRoute(ROUTES)).toEqual([]);
   });
 });
+
+describe("[khoản 351 / ADR-9201] `tranDocPhien` — trần đọc theo phiên trên bảng route", () => {
+  const tim = (path: string): Route | undefined => ROUTES.find((r) => r.method === "GET" && r.path === path);
+
+  it("hai route benchmark khai 900 (đọc bản lưu) và 120 (*Xem dải*); không route nào khác khai", () => {
+    expect((tim("/rfqs/:rfqId/benchmark") as { tranDocPhien?: number } | undefined)?.tranDocPhien).toBe(900);
+    expect((tim("/rfqs/:rfqId/items/:lineNo/benchmark") as { tranDocPhien?: number } | undefined)?.tranDocPhien).toBe(120);
+    const coKhai = ROUTES.filter((r) => "tranDocPhien" in r).map((r) => `${r.method} ${r.path}`);
+    expect(coKhai).toEqual(["GET /rfqs/:rfqId/benchmark", "GET /rfqs/:rfqId/items/:lineNo/benchmark"]);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: số không nguyên dương (NaN, 0, -1, 1.5, chuỗi) và lời khai ngoài route đọc của người mua bị bắt", () => {
+    const goc = { method: "GET", audience: "BUYER", mutates: false, agent: false, handler: khongLam };
+    const xau = [
+      { ...goc, path: "/nan", tranDocPhien: Number.NaN },
+      { ...goc, path: "/khong", tranDocPhien: 0 },
+      { ...goc, path: "/am", tranDocPhien: -1 },
+      { ...goc, path: "/le", tranDocPhien: 1.5 },
+      { ...goc, path: "/chuoi", tranDocPhien: "900" },
+      { method: "POST", path: "/ghi", audience: "BUYER", mutates: true, permission: "rfq.create", resourceType: "X", handler: khongLam, tranDocPhien: 5 },
+      { method: "GET", path: "/cong-khai", audience: "PUBLIC", handler: khongLam, tranDocPhien: 5 },
+    ] as unknown as Route[];
+    const vp = timViPhamBangRoute(xau);
+    for (const d of ["/nan", "/khong", "/am", "/le", "/chuoi"]) {
+      expect(vp.some((v) => v.startsWith(`GET ${d}:`) && v.includes("số nguyên dương")), d).toBe(true);
+    }
+    expect(vp.some((v) => v.startsWith("POST /ghi:") && v.includes("không phải route đọc của người mua"))).toBe(true);
+    expect(vp.some((v) => v.startsWith("GET /cong-khai:") && v.includes("không phải route đọc của người mua"))).toBe(true);
+    expect(timViPhamBangRoute([{ ...goc, path: "/dung", tranDocPhien: 7 }] as unknown as Route[])).toEqual([]);
+  });
+});

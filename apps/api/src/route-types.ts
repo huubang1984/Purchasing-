@@ -387,6 +387,12 @@ export interface BuyerReadRoute extends RouteBase {
    * một cổng sẽ trôi, còn một trường bắt buộc thì không ai quên được.
    */
   readonly agent: boolean;
+  /**
+   * [khoản 351 / ADR-9201] Trần số lần đọc route này của MỘT phiên trong một cửa sổ `OTP_RATE_WINDOW_SECONDS` (900 s), cộng cổng
+   * MỘT-LƯỢT-MỘT-LÚC theo (phiên, route) — cả hai ở `dispatch.ts`, TRƯỚC handler và trước hàng sổ. Tuỳ chọn: chỉ route đọc mà mỗi lần
+   * ghi một hàng sổ và đắt khai nó (hai route benchmark); vắng ⇒ không trần, như trước. `timViPhamBangRoute` đòi số nguyên dương.
+   */
+  readonly tranDocPhien?: number;
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
@@ -572,6 +578,16 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     }
     if (!canKhaiAgent && "agent" in r) {
       viPham.push(`${khoa}: khai \`agent\` trên một route không phải route đọc/tự thân của người mua`);
+    }
+    // [khoản 351 / ADR-9201] `tranDocPhien` chỉ có nghĩa trên route ĐỌC của người mua — bộ điều phối chỉ đọc nó ở nhánh ấy —, và phải
+    // là số nguyên dương: `soLan > NaN` luôn sai, nên một lời khai `NaN` là một trần không bao giờ đóng (lượt soi hình dạng THẤP-1).
+    if ("tranDocPhien" in r) {
+      const tran = (r as { tranDocPhien?: unknown }).tranDocPhien;
+      if (!(r.audience === "BUYER" && r.mutates === false)) {
+        viPham.push(`${khoa}: khai \`tranDocPhien\` trên một route không phải route đọc của người mua`);
+      } else if (!(typeof tran === "number" && Number.isInteger(tran) && tran > 0)) {
+        viPham.push(`${khoa}: \`tranDocPhien\` phải là số nguyên dương`);
+      }
     }
     if (r.audience === "BUYER" && r.mutates && r.self === true) {
       if (!r.path.startsWith("/auth/")) {

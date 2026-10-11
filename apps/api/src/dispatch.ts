@@ -231,6 +231,11 @@ export interface DispatcherDeps {
    */
   readonly tranDocAgent?: number;
   /**
+   * [khoản 351 / ADR-9201] Đè `tranDocPhien` của MỌI route khai nó — test tiêm số nhỏ để đo 429 mà không phải gọi 900 lần; cùng khuôn
+   * `tranDocAgent`. Không khai ⇒ số của chính route.
+   */
+  readonly tranDocPhien?: number;
+  /**
    * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần từ chối của một phiên người mua mỗi cửa sổ — mặc định
    * `TU_CHOI_TRAN_MOI_CUA_SO`. Test tiêm số nhỏ; cùng khuôn `tranDocAgent`.
    */
@@ -473,6 +478,28 @@ function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResp
 function moTaRoute(route: Route): string {
   return `${route.method} ${route.path}`;
 }
+
+/**
+ * [khoản 351 / ADR-9201] Khoá của trần đọc theo phiên — DÙNG CHUNG cho bucket đếm (`caller_rate_limits`, băm qua pepper ở
+ * `tangBucketNguoiGoi`) và cho khoá tư vấn của cổng một-lượt-một-lúc (`CAU_THU_KHOA_DOC_PHIEN`). Tiền tố riêng `doc-phien|` — không lẫn
+ * với `agent-doc|`, `tu-choi|` hay khoá vô danh (bắt đầu bằng `/`). Mẫu route qua `moTaRoute` (nhận `Route`, không nhận chuỗi của người
+ * gọi); `sessionId` là id phiên đọc từ CSDL. Xuất cho test dựng đúng khoá ấy, không chép tay.
+ */
+export function khoaDocPhien(route: Route, sessionId: string): string {
+  return `doc-phien|${moTaRoute(route)}|${sessionId}`;
+}
+
+/**
+ * [khoản 351 / ADR-9201] Cổng MỘT-LƯỢT-MỘT-LÚC: khoá tư vấn THỬ — không chờ —, phạm vi giao dịch, theo (phiên, route). Hạt giống 10:
+ * 0–3 và 7–9 đã có chủ. Lượt soi hình dạng CAO-1: câu đếm (`INSERT … ON CONFLICT DO UPDATE`) khoá hàng đếm tới COMMIT, nên không có cổng
+ * này thì lượt cùng phiên cùng route thứ hai ĐỨNG CHỜ hàng ấy mà vẫn cầm một kết nối của pool — lần đọc đầu 11–19 s ở 5.000 gói ⇒ lượt chờ
+ * gãy ở trần 15 s thành 500, và mười lượt chờ giữ trọn pool. Có cổng thì lượt thứ hai nhận 429 ngay và nhả kết nối.
+ */
+export const CAU_THU_KHOA_DOC_PHIEN =
+  "SELECT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended($1::pg_catalog.text, 10)) AS duoc";
+
+/** [khoản 351 / ADR-9201] `retry-after` của 429 do cổng một-lượt-một-lúc: lượt kia đang chạy, không phải ngân sách cạn. */
+export const DOC_PHIEN_DANG_CHAY_RETRY_AFTER_S = 1;
 
 /** 500 thân cố định với MỘT dòng log — đích chung của lỗi handler ngoài bảng và của mọi lỗi thuộc KHUNG. */
 function loiNoiBo(err: unknown, requestId: string, route: Route): ApiResponse {
@@ -881,6 +908,37 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             if (laDocAgent) {
               const soLan = await tangBucketNguoiGoi(client, `agent-doc|${actor.sessionId}`, deps.services.pepper);
               if (soLan > tranDocAgent) {
+                return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+              }
+            }
+            // ==================================================================================
+            // [khoản 351 / ADR-9201] TRẦN ĐỌC THEO PHIÊN CỦA ROUTE KHAI `tranDocPhien` — CỔNG
+            // MỘT-LƯỢT-MỘT-LÚC, RỒI MỘT BỘ ĐẾM.
+            //
+            // Hai route benchmark của phiên NGƯỜI không có trần nào: một phiên lặp `GET /rfqs/:id/benchmark`
+            // ghi ~313 hàng sổ mỗi giây (đo qua HTTP, §S1.274 mục 8), và *Xem dải* mỗi lần hai lần đọc
+            // `quan_sat_gia` trên pool và CSDL dùng chung mọi tổ chức.
+            //
+            // ⑴ CỔNG trước: `pg_try_advisory_xact_lock` theo (phiên, route) — không chờ. Một lượt cùng
+            //    phiên cùng route đang chạy ⇒ 429 ngay, `retry-after` ngắn, KHÔNG đếm. Khoá sống tới hết
+            //    giao dịch này, tức qua cả handler — đúng "lượt đang chạy".
+            // ⑵ BỘ ĐẾM sau, trên chính `client` — khuôn khối agent ở trên: vượt trần thì `return` ⇒
+            //    COMMIT ⇒ lần đếm ở lại; 429 ra TRƯỚC handler và TRƯỚC hàng sổ, không chạm khoá chuỗi
+            //    sổ. Có cổng ⑴ nên không ai đứng chờ hàng đếm.
+            //
+            // RANH GIỚI, nói ra: handler NÉM (404, lỗi CSDL, trần 15 s của lần đọc đầu) thì giao dịch
+            // rollback và lần đếm biến theo — trần đếm lần đọc ĐÃ COMMIT, như trần agent (ADR-091); cổng
+            // ⑴ vẫn giữ lượt hỏng ở một-lượt-một-lúc. Cửa sổ NHẢY làm tròn theo epoch: quanh mốc tới 2×
+            // trần. Theo PHIÊN, không theo người: một người có nhiều phiên thì nhân lên (ADR-9201).
+            // ==================================================================================
+            if (!route.mutates && route.tranDocPhien !== undefined) {
+              const khoa = khoaDocPhien(route, actor.sessionId);
+              const { rows: cong } = await client.query<{ duoc: boolean }>(CAU_THU_KHOA_DOC_PHIEN, [khoa]);
+              if (cong[0]?.duoc !== true) {
+                return { status: 429, body: THAN_429, headers: { "retry-after": String(DOC_PHIEN_DANG_CHAY_RETRY_AFTER_S) } };
+              }
+              const soLan = await tangBucketNguoiGoi(client, khoa, deps.services.pepper);
+              if (soLan > (deps.tranDocPhien ?? route.tranDocPhien)) {
                 return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
               }
             }
