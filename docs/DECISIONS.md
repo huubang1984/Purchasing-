@@ -13145,7 +13145,7 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 
 Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13); chữ ký số trên bộ bằng chứng.
 
-## ADR-9201 — S3.9b: điều tra K12 — mọi câu `RAISE` của lược đồ thuộc đúng một lớp, đối chiếu hai chiều; hai lời từ chối của đường chính sách có tên và vào sổ; tám khoảng trống ghi nợ
+## ADR-9201 — S3.9b: điều tra K12 — mọi câu `RAISE` của lược đồ thuộc đúng một lớp, đối chiếu hai chiều; hai lời từ chối của đường chính sách có tên và vào sổ; chín khoảng trống ghi nợ
 
 **Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Làm S3.9b đi"*, rồi chốt sáu câu: phạm vi *"Mọi RAISE trong
 lược đồ"*; hai nợ đã gọi tên *"Phân loại 'không vào sổ có lý do'"*; người tạo tự ký *"Sửa trong vòng này"*; phiên bản không bậc ở tổ chức đã bật
@@ -13189,7 +13189,7 @@ về quyền trong trigger là lớp chặn cuối (HOI_TRUOC).
 
 ⒜ Lớp của một chỗ là LỜI KHAI có lý do, đọc từ mã lúc viết (ba lượt tra chỉ đọc, em kiểm lại từng khoảng trống) — phép đo giữ lời khai không trôi khỏi
 thân hàm, không chứng minh lời khai đúng. ⒝ Lớp theo NHÓM (hàm, errcode): một nhóm gom nhánh khác lớp thì lý do nói nhánh khác ấy, phép đo không
-tách. ⒞ Tám khoảng trống (khoản 9401) còn mở: sửa ngân sách hay thêm hạng mục sau khi nộp, mở gói chưa chờ duyệt, duyệt yêu cầu mở thầu không còn chờ,
+tách. ⒞ Chín khoảng trống (khoản 9401 — tám của lượt tra, một của lượt soi trên mã) còn mở: sửa ngân sách hay thêm hạng mục sau khi nộp, mở gói chưa chờ duyệt, duyệt yêu cầu mở thầu không còn chờ,
 xin mở thầu khi gói chưa đóng (C3), xin mở thầu với mã gói lạ (khoản 133), ánh xạ bởi người trong tập loại trừ (spec S4 L12), rút ngoại lệ của gói
 khác; cùng họ gia hạn ở PENDING_APPROVAL; **[lượt soi trên mã T4]** và duyệt gói không ở PENDING_APPROVAL (`rfq_kiem_nguoi_duyet`, song sinh của
 nhánh *không PENDING* ở `unseal_kiem_nguoi_duyet` — một luật cho cả hai). ⒟ Ca đua của các chốt hỏi trước (trigger chặn sau khi vị từ đã cho qua)
@@ -13213,4 +13213,4 @@ Hàng sổ của lần tạo phiên bản trỏ tài nguyên `PROCUREMENT_POLICY
 
 ### Điều ADR này KHÔNG nói
 
-Sửa tám khoảng trống (khoản 9401); lớp governance của bộ bằng chứng (S3.9a — chờ S3.7a2); KPI (S3.9c).
+Sửa chín khoảng trống (khoản 9401); lớp governance của bộ bằng chứng (S3.9a — chờ S3.7a2); KPI (S3.9c).
