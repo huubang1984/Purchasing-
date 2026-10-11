@@ -11263,6 +11263,8 @@ Giới hạn nói thêm:
 - **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước.
 - **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
   cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
+  **[2026-10-11 / khoản 9401 MỞ]** Câu ấy chỉ đúng ở vế sổ: pool API và CSDL dùng chung mọi tổ chức. Đo qua HTTP, một phiên lặp route
+  đọc bản lưu ghi ~313 hàng sổ mỗi giây (§S1.274 mục 8); *Xem dải* ở quy mô chưa đo.
 - ~~**Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.~~ **[S1.274]** Đột biến M4 nay ĐỎ: luôn tính lại đưa mọi lượt đọc về
   đường ghi, tức khoá hàng gói ở mỗi lượt — ca NOWAIT của lần đọc bản lưu bắt nó.
 - **[S1.271 / khoản 342] Lượt đọc gối nhau bỏ đói các cạnh trạng thái.** `FOR SHARE` của `kiemLaiDuoiKhoa` giữ tới hết giao dịch

@@ -25039,7 +25039,7 @@ chạy: hai đường đọc khoá lại `FOR SHARE` như trước bản sửa; 
   giữa 6 và 12 vòng.
 - Lượt *Trước* mất 445 s, phần lớn là 29 lần cạnh chờ tới trần 15 s ở mức mười hai vòng. Trong lúc ấy route phục vụ 139.442 lượt
   đọc, mã 200 cả, p50 36,6 ms. Mỗi lượt là một hàng sổ `BENCHMARK_READ`, tức ~313 hàng mỗi giây từ một phiên. Route đọc không có
-  hạn mức (ADR-143, *"tải của chính tổ chức, có hàng sổ"*); số này cho thấy cỡ của tải ấy.
+  hạn mức (ADR-143, *"tải của chính tổ chức, có hàng sổ"*); số này cho thấy cỡ của tải ấy. **[2026-10-11]** Mở thành khoản 9401.
 
 **Giới hạn còn lại.**
 - Một tiến trình API trên một máy; nhiều tiến trình không đo. Đường đọc không khoá nên số tiến trình không đổi nó; cửa sổ của lần đọc
