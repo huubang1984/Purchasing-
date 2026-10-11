@@ -284,26 +284,44 @@ class HetGioHandlerError extends Error {
 // ở vòng này; khoản 158 giữ chỗ cho lần đo lại khi tồn dư đổi hình dạng.
 // ============================================================================================
 
+// ============================================================================================
+// [khoản 350] `LIMIT` PHẢI ĐƯỢC TÔN TRỌNG DƯỚI MỌI KẾ HOẠCH — LÔ CHỌN NẰM TRONG MỘT CTE `MATERIALIZED`
+//
+// Bản trước chọn lô bằng `j.id = ANY (SELECT … LIMIT $2 FOR UPDATE SKIP LOCKED)`. PostgreSQL biến vế ấy thành một Nested Loop
+// Semi Join mà phía trong là truy vấn con, và CHẠY LẠI truy vấn con cho MỖI hàng ngoài. Hàng đầu đã bị chính câu UPDATE này sửa,
+// nên ở lần chạy lại `LockRows` gặp nó ở trạng thái "đã sửa bởi lệnh hiện tại" và BỎ QUA nó (tránh bài toán Halloween) — lần
+// chạy lại trả hàng KẾ TIẾP, và hàng ngoài kế tiếp khớp. Đo trên Postgres 16 thật, bốn job đã COMMIT của một tổ chức, `LIMIT 1`:
+// hàng ngoài quét TUẦN TỰ theo đúng thứ tự `ORDER BY` (kế hoạch mặc định trên bảng nhỏ) ⇒ giành CẢ BỐN; quét chỉ mục hay thứ
+// tự vật lý ngược ⇒ một. Kế hoạch đổi theo thống kê của bảng, nên lỗi hiện ra thưa và dưới tải: ca `[T10-M]` *thứ tự phục vụ
+// XOAY VÒNG* đỏ `[A,A,B,B]` thay `[A,B,B,A]` — suất A của lượt đầu giành cả hai job A. Hệ quả sản xuất: `batchSize` không
+// chặn được lô (một tổ chức giành hết hàng đợi của mình trong một lần claim, xoay vòng vô nghĩa), và mọi job của lô to cùng nhận
+// hạn thuê `leaseSeconds` mà được xử lý TUẦN TỰ — job cuối có thể hết hạn thuê trước khi tới lượt và bị runner khác claim lại.
+//
+// CTE `AS MATERIALIZED` chạy ĐÚNG MỘT LẦN: lô được chọn và khoá trước, câu UPDATE chỉ đọc lại tập đã chọn. Vế `org_id`/`kind` ở
+// `WHERE` ngoài giữ làm bản sao phòng thủ như trước (khối [QT3] và [S1.81] ở trên).
+// ============================================================================================
 const CAU_CLAIM = `
+  WITH chon AS MATERIALIZED (
+    SELECT s.id
+      FROM public.outbox_jobs s
+     WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+       AND s.kind OPERATOR(pg_catalog.=) ANY ($4::pg_catalog.text[])
+       AND ((s.status OPERATOR(pg_catalog.=) 'PENDING'::pg_catalog.text
+             AND s.run_after OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())
+         OR (s.status OPERATOR(pg_catalog.=) 'RUNNING'::pg_catalog.text
+             AND s.lease_expires_at OPERATOR(pg_catalog.<) pg_catalog.clock_timestamp()))
+     ORDER BY s.run_after, s.id
+     LIMIT $2::pg_catalog.int4
+     FOR UPDATE SKIP LOCKED)
   UPDATE public.outbox_jobs AS j
      SET status = 'RUNNING',
          attempts = j.attempts OPERATOR(pg_catalog.+) 1,
          lease_expires_at = pg_catalog.clock_timestamp()
              OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $3::pg_catalog.float8)
-   WHERE j.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+    FROM chon
+   WHERE j.id OPERATOR(pg_catalog.=) chon.id
+     AND j.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
      AND j.kind OPERATOR(pg_catalog.=) ANY ($4::pg_catalog.text[])
-     AND j.id OPERATOR(pg_catalog.=) ANY (
-           SELECT s.id
-             FROM public.outbox_jobs s
-            WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-              AND s.kind OPERATOR(pg_catalog.=) ANY ($4::pg_catalog.text[])
-              AND ((s.status OPERATOR(pg_catalog.=) 'PENDING'::pg_catalog.text
-                    AND s.run_after OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())
-                OR (s.status OPERATOR(pg_catalog.=) 'RUNNING'::pg_catalog.text
-                    AND s.lease_expires_at OPERATOR(pg_catalog.<) pg_catalog.clock_timestamp()))
-            ORDER BY s.run_after, s.id
-            LIMIT $2::pg_catalog.int4
-            FOR UPDATE SKIP LOCKED)
   RETURNING j.id, j.org_id, j.kind, j.payload, j.attempts`;
 
 // Vế `attempts = $3` là hàng rào chống GHI ĐÈ SAU KHI MẤT HẠN THUÊ: một runner bị treo quá
