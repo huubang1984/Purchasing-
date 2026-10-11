@@ -23,7 +23,7 @@ import { createSupplier } from "@trustprocure/supplier";
 import { withTenant } from "@trustprocure/tenancy";
 import { choQuaMocCuaSo, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
-import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
+import { BOI_TRAN_DIA_CHI, CAU_THU_KHOA_DOC_PHIEN, DOC_PHIEN_DANG_CHAY_RETRY_AFTER_S, createDispatcher, khoaDocPhien } from "./dispatch.js";
 import { THAN_429_MFA, agentGoiDuoc, type Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER, LOGIN_TOTP_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -2457,5 +2457,164 @@ describe("[S1.240 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, t
     for (const l of ds) expect(Date.parse(l.createdAt), "một mã ngoài cửa sổ 7 ngày lọt vào danh sách").toBeGreaterThan(bayNgayTruoc);
     expect(Date.parse(ds.at(-1)?.createdAt ?? ""), "mã sát mép (6 ngày 23 giờ) vẫn trong cửa sổ, và là hàng cuối").toBeLessThan(Date.now() - 6 * 24 * 3600 * 1000);
     expect(ds.filter((l) => l.status === "CONSUMED"), "chỉ mã dùng lúc đăng nhập — mã dùng 7 ngày 1 giờ trước nằm ngoài cửa sổ").toHaveLength(1);
+  });
+});
+
+// ==============================================================================================
+// [khoản 351 / ADR-168] TRẦN ĐỌC THEO PHIÊN CỦA HAI ROUTE BENCHMARK — cổng một-lượt-một-lúc rồi bộ đếm, TRƯỚC handler và trước
+// hàng sổ. Gói DRAFT: cả hai handler vẫn ghi đúng một hàng sổ (`trangThai: KHONG_HIEN`) mỗi lần cho qua — đủ để đếm "429 không hàng
+// sổ" mà không phải dựng một lần mở thầu. Bộ điều phối riêng tiêm `tranDocPhien` nhỏ (khuôn `tranDocAgent` của ca ⒟ khoản 142).
+// ==============================================================================================
+describe("[khoản 351 / ADR-168] trần đọc theo phiên của hai route benchmark", () => {
+  const TRAN = 3;
+  let s2: ReturnType<typeof createApiServer>;
+  let goc2 = "";
+  let rfq = "";
+  const ROUTE_BM = ROUTES.find((r) => r.method === "GET" && r.path === "/rfqs/:rfqId/benchmark");
+
+  /** Một phiên đã qua MFA của người `u`, dựng thẳng (khuôn `passport.int`). */
+  async function phienMoi(u: string): Promise<{ readonly s: string; readonly cookie: string }> {
+    const token = randomBytes(32).toString("base64url");
+    const s = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '20 minutes', now()) RETURNING id",
+        [orgA, u, createHash("sha256").update(token, "utf8").digest()],
+      )
+    ).rows[0]!.id;
+    return { s, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}` };
+  }
+
+  /** Một PM — giữ `bid.view` — với một phiên mới. */
+  async function pm(): Promise<{ readonly u: string; readonly s: string; readonly cookie: string }> {
+    const ten = `pm-tran-doc-${randomBytes(3).toString("hex")}`;
+    const u = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, $3, 'ACTIVE') RETURNING id",
+        [orgA, `${ten}@vd.test`, ten],
+      )
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [orgA, u]);
+    return { u, ...(await phienMoi(u)) };
+  }
+
+  /** Hàng sổ `action` của phiên `s` — payload mang `viewedBySessionId`. */
+  async function demHang(action: string, s: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = $2 AND payload->>'viewedBySessionId' = $3",
+      [orgA, action, s],
+    );
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  const bm = (cookie: string, id?: string): Promise<PhanHoi> => goi("GET", `/rfqs/${id ?? rfq}/benchmark`, { cookie, goc: goc2 });
+  const dai = (cookie: string): Promise<PhanHoi> => goi("GET", `/rfqs/${rfq}/items/1/benchmark`, { cookie, goc: goc2 });
+
+  beforeAll(async () => {
+    s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, tranDocPhien: TRAN }), {
+      remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+    });
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    const tao = await pm();
+    rfq = await withTenant(apiPool, orgA, async (c) => (await createRfq(c, orgA, { title: "goi do tran doc", createdBySessionId: tao.s })).id);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((xong) => s2.close(() => xong()));
+  });
+
+  // Mỗi ca đếm trong MỘT cửa sổ 900 s: sát mốc lật thì chờ qua mốc (khoản 346).
+  beforeEach(async () => {
+    await choQuaMocCuaSo(db.pool, { cuaSoGiay: OTP_RATE_WINDOW_SECONDS, bienGiay: 60 });
+  });
+
+  it("⒜ đọc bản lưu: TRAN lần 200, TRAN hàng sổ; lần sau 429 `retry-after` 900 TRƯỚC handler — không hàng sổ", async () => {
+    const a = await pm();
+    for (let i = 0; i < TRAN; i += 1) {
+      const r = await bm(a.cookie);
+      expect(r.status, `lần ${String(i + 1)}: ${r.text}`).toBe(200);
+      expect((r.body as { benchmark: { trangThai: string } }).benchmark.trangThai).toBe("KHONG_HIEN");
+    }
+    expect(await demHang("BENCHMARK_READ", a.s)).toBe(TRAN);
+    for (let i = 0; i < 2; i += 1) {
+      const r = await bm(a.cookie);
+      expect(r.status, r.text).toBe(429);
+      expect(r.text).toBe(JSON.stringify({ error: "qua nhieu yeu cau" }));
+      expect(r.headers.get("retry-after")).toBe(String(OTP_RATE_WINDOW_SECONDS));
+    }
+    expect(await demHang("BENCHMARK_READ", a.s), "429 KHÔNG được ghi hàng sổ").toBe(TRAN);
+  });
+
+  it("⒝ bucket theo ROUTE: *Xem dải* của cùng phiên vẫn 200 khi đọc bản lưu đã cạn, rồi tự cạn ở TRAN", async () => {
+    const a = await pm();
+    for (let i = 0; i < TRAN; i += 1) expect((await bm(a.cookie)).status).toBe(200);
+    expect((await bm(a.cookie)).status).toBe(429);
+    for (let i = 0; i < TRAN; i += 1) {
+      const r = await dai(a.cookie);
+      expect(r.status, `Xem dải lần ${String(i + 1)}: ${r.text}`).toBe(200);
+    }
+    const r = await dai(a.cookie);
+    expect(r.status).toBe(429);
+    expect(r.headers.get("retry-after")).toBe(String(OTP_RATE_WINDOW_SECONDS));
+    expect(await demHang("BENCHMARK_BAND_READ", a.s)).toBe(TRAN);
+  });
+
+  it("⒞ bucket theo PHIÊN: phiên khác của CÙNG người vẫn đọc được khi phiên đầu đã cạn", async () => {
+    const a = await pm();
+    for (let i = 0; i < TRAN; i += 1) expect((await bm(a.cookie)).status).toBe(200);
+    expect((await bm(a.cookie)).status).toBe(429);
+    const b = await phienMoi(a.u);
+    expect((await bm(b.cookie)).status).toBe(200);
+    expect(await demHang("BENCHMARK_READ", b.s)).toBe(1);
+  });
+
+  it("⒟ handler NÉM (404 — gói không có) thì lần đếm cuộn theo giao dịch: trần đếm lần đọc ĐÃ COMMIT", async () => {
+    const a = await pm();
+    const khongCo = "00000000-0000-4000-8000-000000000351";
+    for (let i = 0; i < TRAN + 2; i += 1) expect((await bm(a.cookie, khongCo)).status).toBe(404);
+    for (let i = 0; i < TRAN; i += 1) expect((await bm(a.cookie)).status, `lần ${String(i + 1)} sau ${String(TRAN + 2)} lần 404`).toBe(200);
+    expect((await bm(a.cookie)).status).toBe(429);
+  });
+
+  it("⒠ cổng một-lượt-một-lúc: khoá (phiên, route) đang bị giữ ⇒ 429 `retry-after` 1 NGAY, không hàng sổ, không tiêu ngân sách", async () => {
+    expect(ROUTE_BM, "route đọc bản lưu phải có trong bảng").toBeDefined();
+    const a = await pm();
+    const giu = await db.pool.connect();
+    try {
+      await giu.query("BEGIN");
+      // Đúng câu cổng của bộ điều phối, đúng khoá — một lượt cùng phiên cùng route "đang chạy".
+      const { rows } = await giu.query<{ duoc: boolean }>(CAU_THU_KHOA_DOC_PHIEN, [khoaDocPhien(ROUTE_BM!, a.s)]);
+      expect(rows[0]?.duoc).toBe(true);
+      const t0 = Date.now();
+      const r = await bm(a.cookie);
+      const ms = Date.now() - t0;
+      expect(r.status, r.text).toBe(429);
+      expect(r.text).toBe(JSON.stringify({ error: "qua nhieu yeu cau" }));
+      expect(r.headers.get("retry-after")).toBe(String(DOC_PHIEN_DANG_CHAY_RETRY_AFTER_S));
+      expect(ms, "cổng KHÔNG chờ khoá — trả ngay").toBeLessThan(1500);
+      // Phiên khác của cùng người: khoá khác — đi qua trong lúc khoá kia còn giữ.
+      expect((await bm((await phienMoi(a.u)).cookie)).status).toBe(200);
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+    expect(await demHang("BENCHMARK_READ", a.s), "429 của cổng không ghi hàng sổ").toBe(0);
+    // Cổng không đếm: sau khi nhả, phiên vẫn còn đủ TRAN lần.
+    for (let i = 0; i < TRAN; i += 1) expect((await bm(a.cookie)).status, `lần ${String(i + 1)} sau khi nhả`).toBe(200);
+    expect((await bm(a.cookie)).status).toBe(429);
+  });
+
+  it("⒡ N lượt CÙNG LÚC của một phiên: mỗi lượt 200 hay 429, không 500; không quá TRAN lần 200; hàng sổ đúng bằng số lần 200", async () => {
+    const a = await pm();
+    const kq = await Promise.all(Array.from({ length: 8 }, () => bm(a.cookie)));
+    const ma = kq.map((r) => r.status);
+    expect(ma.every((m) => m === 200 || m === 429), ma.join(",")).toBe(true);
+    const so200 = ma.filter((m) => m === 200).length;
+    expect(so200).toBeGreaterThanOrEqual(1);
+    expect(so200).toBeLessThanOrEqual(TRAN);
+    for (const r of kq.filter((x) => x.status === 429)) {
+      expect([String(DOC_PHIEN_DANG_CHAY_RETRY_AFTER_S), String(OTP_RATE_WINDOW_SECONDS)]).toContain(r.headers.get("retry-after"));
+    }
+    expect(await demHang("BENCHMARK_READ", a.s)).toBe(so200);
   });
 });
