@@ -11260,9 +11260,14 @@ Giới hạn nói thêm:
   `chinh_sach_ghim_id`, nay là cột của một khoá duy nhất, nên lần `UPDATE` ấy lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là
   cập nhật HOT — một lần chèn đồng thời có khoá ngoại tới gói chờ tới lúc commit. Một lần mỗi gói.
 - **Cột *Benchmark* của bảng xếp hạng là nhãn của BẢN LƯU**, không của lượt chấm đang xếp hạng (hai mốc đọc, mục "Hai bản" ở trên).
-- **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước.
-- **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
-  cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
+- **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước. **[S1.297 / ADR-168]** Của
+  HAI phiên; cùng một phiên thì lượt thứ hai nhận 429 `retry-after: 1` ở cổng một-lượt-một-lúc, không tính.
+- ~~**Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
+  cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.~~
+  **[2026-10-11 / khoản 351 MỞ]** Câu ấy chỉ đúng ở vế sổ: pool API và CSDL dùng chung mọi tổ chức. Đo qua HTTP, một phiên lặp route
+  đọc bản lưu ghi ~313 hàng sổ mỗi giây (§S1.274 mục 8); *Xem dải* ở quy mô chưa đo. **[S1.297 / khoản 351 ĐÓNG — ADR-168]** Cả
+  hai route khai `tranDocPhien`: một lượt mỗi (phiên, route) tại một lúc, rồi 900 lần đọc bản lưu và 120 lần *Xem dải* mỗi phiên mỗi
+  cửa sổ 900 s — 429 trước handler và trước hàng sổ.
 - ~~**Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.~~ **[S1.274]** Đột biến M4 nay ĐỎ: luôn tính lại đưa mọi lượt đọc về
   đường ghi, tức khoá hàng gói ở mỗi lượt — ca NOWAIT của lần đọc bản lưu bắt nó.
 - **[S1.271 / khoản 342] Lượt đọc gối nhau bỏ đói các cạnh trạng thái.** `FOR SHARE` của `kiemLaiDuoiKhoa` giữ tới hết giao dịch
@@ -13144,6 +13149,66 @@ Hai lớp bất đồng ⇒ đỏ và nói ra.
 ### Điều ADR này KHÔNG nói
 
 Đối chiếu lời khai với hoá đơn hay phiếu nhập kho (§8.13); chữ ký số trên bộ bằng chứng.
+
+
+---
+
+## ADR-168 — Trần đọc theo phiên cho hai route benchmark: cổng một-lượt-một-lúc theo (phiên, route), rồi một bộ đếm mỗi cửa sổ 900 s, trước handler và trước hàng sổ
+
+**Ngày:** 2026-10-11 · **Trạng thái:** **Đã chấp nhận** — chủ dự án ngày 2026-10-11: *"Sửa khoản 351, chốt theo đề xuất"* — trần theo
+PHIÊN; phạm vi hai route benchmark; *Xem dải* trần thấp hơn nhiều so với lần đọc bản lưu · **[S1.297 / khoản 351]** · **Migration:**
+không · **Liên quan:** ADR-015 §5, ADR-091, ADR-092, ADR-143 · **Biên bản:** `evidence/security-reviews.md` §S1.297
+
+### Bối cảnh
+
+`GET /rfqs/:rfqId/benchmark` và `GET /rfqs/:rfqId/items/:lineNo/benchmark` (*Xem dải*) là route đọc của phiên NGƯỜI (`agent: false`),
+mỗi lần cho qua ghi một hàng sổ trong giao dịch đọc. Không trần nào chạm tới chúng: hai trần theo phiên của `dispatch.ts` chỉ đếm lần
+TỪ CHỐI (ADR-092) và lần đọc của phiên AGENT (ADR-091). Đo qua HTTP (§S1.274 mục 8): một phiên, mười hai vòng đọc bản lưu ⇒ ~313 hàng
+sổ mỗi giây vào sổ chỉ-ghi-thêm. *Xem dải* mỗi lần hai lần đọc `quan_sat_gia` (~1 s ở 5.000 gói) trên pool API và CSDL dùng chung mọi
+tổ chức — câu *"tải của chính tổ chức"* của ADR-143 chỉ đúng ở vế sổ (khoản 351).
+
+### Quyết định
+
+⑴ **Trường tuỳ chọn `tranDocPhien` trên `BuyerReadRoute`.** Hai route benchmark khai nó: `BENCHMARK_DOC_TRAN_MOI_CUA_SO` = 900 (cùng
+số với trần đọc của phiên agent — trung bình một lần mỗi giây) và `XEM_DAI_TRAN_MOI_CUA_SO` = 120 (một cú bấm mỗi 7,5 s suốt cửa
+sổ). `timViPhamBangRoute` đòi số nguyên dương và chỉ trên route đọc của người mua: `soLan > NaN` luôn sai, nên một lời khai `NaN` là
+một trần không bao giờ đóng.
+
+⑵ **Cổng MỘT-LƯỢT-MỘT-LÚC trước.** `pg_try_advisory_xact_lock(hashtextextended('doc-phien|<phương thức> <mẫu route>|<id phiên>', 10))`
+— khoá THỬ, không chờ, phạm vi giao dịch; hạt giống 10 (0–3 và 7–9 đã có chủ). Một lượt cùng phiên cùng route đang chạy ⇒ 429 ngay,
+`retry-after: 1`, KHÔNG đếm, không hàng sổ. Lý do (lượt soi hình dạng CAO-1): câu đếm `INSERT … ON CONFLICT DO UPDATE` khoá hàng đếm
+tới COMMIT; không cổng thì lượt thứ hai ĐỨNG CHỜ hàng ấy mà vẫn cầm một kết nối của pool — lần đọc đầu 11–19 s ở 5.000 gói ⇒ lượt chờ
+gãy ở trần 15 s thành 500, và mười lượt chờ giữ trọn pool 10 kết nối của tiến trình.
+
+⑶ **Bộ đếm sau**, trên chính giao dịch của yêu cầu — khuôn ADR-091: `tangBucketNguoiGoi(client, <cùng khoá>)` trên `caller_rate_limits`,
+cửa sổ `OTP_RATE_WINDOW_SECONDS` (900 s). Vượt trần ⇒ `return` 429 (`retry-after: 900`, thân `qua nhieu yeu cau` chung với mọi 429)
+⇒ COMMIT ⇒ lần đếm ở lại; 429 ra TRƯỚC handler và TRƯỚC hàng sổ, không chạm khoá chuỗi sổ, không cần hàng sổ (khuôn ADR-091, ADR-092).
+Khoá bucket theo (phiên, route): hai route hai ngân sách; khoá theo tổ chức hay theo route thì một thành viên tiêu hết hạn mức của cả
+tổ chức (ADR-015 §5 — hạn mức chỉ được chặn chính người gọi).
+
+⑷ **`/mo-thau`**: `loiCua` đổi 429 thân `qua nhieu yeu cau` thành một câu đọc được (chung cho trần đọc và trần từ chối — cùng thân);
+nút *Đọc benchmark* và mọi nút *Xem dải* khoá trong lúc một lần gọi đang chạy, nên cú bấm đúp không chạm cổng ⑵.
+
+### Hệ quả và giới hạn nói ra
+
+- **Trần đếm lần đọc ĐÃ COMMIT.** Handler NÉM (404, lỗi CSDL, trần 15 s của lần đọc đầu) thì giao dịch rollback và lần đếm biến theo —
+  như trần agent (ADR-091). Cổng ⑵ vẫn giữ một lượt hỏng ở một-lượt-một-lúc: một phiên lặp mãi một lần đọc đầu luôn quá trần thì chiếm
+  một kết nối và một lõi CSDL, không hơn.
+- **Theo PHIÊN, không theo người.** Một người giữ nhiều phiên thì nhân lên: mỗi phiên đòi một lần đăng nhập có TOTP, link đăng nhập trần
+  5 mỗi 15 phút (`LOGIN_MAX_TOKENS_PER_WINDOW`), phiên sống mặc định 8 giờ (`USER_SESSION_DEFAULT_TTL_SECONDS`); không thấy trần số
+  phiên sống mỗi người (tìm `max_?sessions`, `MAX_ACTIVE`, phép đếm trên `sessions` ở migration: rỗng).
+- **Cửa sổ NHẢY làm tròn theo epoch** — quanh mốc tới 2× trần (khuôn ADR-091).
+- **Pool chỉ được che theo (phiên, route).** Mỗi phiên giữ tối đa một kết nối cho mỗi route đắt; nhiều phiên hay nhiều route đọc khác
+  của cùng tổ chức vẫn dùng chung pool như trước.
+- **Hai tab của CÙNG một phiên** bấm cùng lúc: một tab nhận 429 `retry-after: 1`. Trước ADR này cả hai cùng tính (ADR-143: *"Hai lần
+  đọc đầu đồng thời cùng tính"*).
+- **Lớp rộng hơn ngoài phạm vi** (chủ dự án chốt hai route): `RANKING_VIEWED`, `COMPARISON_VIEWED`, `PRICE_HISTORY_READ`,
+  `SUPPLIER_PERFORMANCE_READ`, `AWARD_COMMITMENT_VIEWED`, `PASSPORT_VIEWED` — route đọc của phiên người, mỗi lần một hàng sổ, chưa
+  khai `tranDocPhien`.
+
+### Điều ADR này KHÔNG nói
+
+Trần theo người hay theo tổ chức; trần ở tầng hạ tầng (WAF, ALB); hạn mức cho các route đọc khác của lớp trên.
 
 ## ADR-166 — S3.9b: điều tra K12 — mọi câu `RAISE` của lược đồ thuộc đúng một lớp, đối chiếu hai chiều; hai lời từ chối của đường chính sách có tên và vào sổ; chín khoảng trống ghi nợ
 
